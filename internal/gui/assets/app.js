@@ -1724,13 +1724,15 @@ function daemonRestart() {
 // connectPanel: a connected agent's row, opened
 function connectPanel(a, { fields, fieldBtn }) {
   const box = el("div", "ag-exp");
+  const settings = el("div", "ag-settings");
+  box.append(settings);
   box.onclick = (e) => e.stopPropagation();
   const kv = (k, ...v) => {
     const r = el("div", "ag-kv");
     const val = el("div", "ag-v");
     val.append(...v);
     r.append(el("div", "ag-k", k), val);
-    box.append(r);
+    settings.append(r);
     return val;
   };
   const line = (...parts) => {
