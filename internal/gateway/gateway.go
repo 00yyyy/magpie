@@ -548,7 +548,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /videos/{id}", s.videosGet)
 	mux.HandleFunc("GET /v1/videos/{id}/content", s.videosContent)
 	mux.HandleFunc("GET /videos/{id}/content", s.videosContent)
-	mux.HandleFunc("POST /_magpie/claude-mcp/{token}", s.subscription.mcpCall)
+	mux.HandleFunc("POST "+claudeMCPPath+"{token}", s.subscription.mcpCall)
 	mux.HandleFunc("/mcp/{name}", s.mcpProxy)
 	mux.HandleFunc(SearchMCPPath, s.searchMCP)
 	mux.HandleFunc(CodexPath+"/", s.codexBackend)

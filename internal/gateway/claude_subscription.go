@@ -531,6 +531,10 @@ func callbackBaseURL() string {
 	return "http://" + host + ":" + port
 }
 
+// claudeMCPPath is where the Claude subscription bridge's MCP helper hands
+// a tool call back: the path, then the run's callback token.
+const claudeMCPPath = "/_magpie/claude-mcp/"
+
 // from, when set, is the conversation's session a run let go past idleMost
 // saved (unshelve): Claude Code goes on with it, told only the messages
 // since. One that can't go on from it is let go with the session, and a
@@ -577,10 +581,18 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		return nil, nil, err
 	}
 
+	// the token lets the helper's calls in without a gateway key
+	// (ownCallback), so it is handed over in a file of the run's own, which
+	// only this user reads, never on Claude Code's command line, which every
+	// user of the computer can list
 	token := randomToken()
-	callback := callbackBaseURL() + "/_magpie/claude-mcp/" + token
+	callbackPath := filepath.Join(tmp, "callback")
+	if err := os.WriteFile(callbackPath, []byte(callbackBaseURL()+claudeMCPPath+token), 0o600); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	mcpConfig, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{
-		"magpie": map[string]any{"command": exe, "args": []string{"claude-mcp-helper", callback, toolsPath}},
+		"magpie": map[string]any{"command": exe, "args": []string{"claude-mcp-helper", callbackPath, toolsPath}},
 	}})
 	args := claudeCLIArgs(model, string(mcpConfig), req.Effort, req.WebSearch)
 	if req.ThinkOff {
@@ -671,6 +683,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	b.mu.Lock()
 	b.runs[token] = run
 	b.mu.Unlock()
+	addCallback(token)
 
 	run.outputs = []*os.File{stdout, stderr}
 	run.reading.Add(2)
@@ -3167,6 +3180,7 @@ func (b *subscriptionBridge) abortAll() {
 }
 
 func (b *subscriptionBridge) removeRun(run *subscriptionRun) {
+	dropCallback(run.token)
 	b.mu.Lock()
 	delete(b.runs, run.token)
 	if run.idleKey != "" && b.idle[run.idleKey] == run {

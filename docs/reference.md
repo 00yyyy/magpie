@@ -479,7 +479,9 @@ including a stale or disabled gateway key. Only a valid, enabled key is
 attributed to its named identity. Neither shared nor on the network, a
 remote request is refused (403). A `MAGPIE_ADDR` pinned to one interface's
 address asks a key even of this computer's agents calling that address;
-`0.0.0.0` with agents on `127.0.0.1` doesn't.
+`0.0.0.0` with agents on `127.0.0.1` doesn't. The Claude subscription's
+own tool calls back to magpie are let in there by their run's one-time
+token, without a key (#1546).
 Sharing listens on every interface, unless `MAGPIE_ADDR` names a host of its
 own: `MAGPIE_ADDR=127.0.0.1:3425` behind Tailscale Serve, or one interface's
 address, stays where it is while shared, and what reaches it from elsewhere
