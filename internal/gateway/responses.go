@@ -658,7 +658,7 @@ func orphanedToolOutputs(body []byte) []byte {
 			content = append(content, map[string]any{"type": "input_text", "text": text})
 		}
 		for _, image := range images {
-			content = append(content, map[string]any{"type": "input_image", "image_url": dataURL(image)})
+			content = append(content, map[string]any{"type": "input_image", "detail": "auto", "image_url": dataURL(image)})
 		}
 		if len(content) == 0 {
 			content = append(content, map[string]any{"type": "input_text", "text": "Tool result received."})
@@ -1033,7 +1033,7 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 				content = append(content, map[string]any{"type": t, "text": attachmentText(p)})
 			case Image:
 				if m.Role != "assistant" {
-					content = append(content, map[string]any{"type": "input_image", "image_url": dataURL(p)})
+					content = append(content, map[string]any{"type": "input_image", "detail": "auto", "image_url": dataURL(p)})
 				}
 			case Thinking:
 				if !replay && sealedReasoning(p) {
@@ -1067,7 +1067,7 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 						items = append(items, map[string]any{"type": "input_text", "text": p.Text})
 					}
 					for _, im := range p.Images {
-						items = append(items, map[string]any{"type": "input_image", "image_url": dataURL(im)})
+						items = append(items, map[string]any{"type": "input_image", "detail": "auto", "image_url": dataURL(im)})
 					}
 					output = items
 				}
