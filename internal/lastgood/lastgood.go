@@ -21,8 +21,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -130,19 +132,19 @@ var now = time.Now
 
 // KeepBad copies b, path's contents that aren't valid, aside as
 // path.bad-<time> and gives that name. Two bad files within one second
-// are both kept (.bad-<time>-2, …); the same bad bytes kept already are
-// not kept again.
+// are both kept (.bad-<time>-2, …); the same bad bytes kept already,
+// under any time, are not kept again.
 func KeepBad(path string, b []byte) (string, error) {
+	if name := keptAlready(path, b); name != "" {
+		return name, nil
+	}
 	stamp := path + ".bad-" + now().Format("20060102-150405")
 	for i := 1; i < 1000; i++ {
 		name := stamp
 		if i > 1 {
 			name += "-" + strconv.Itoa(i)
 		}
-		if old, err := os.ReadFile(name); err == nil {
-			if bytes.Equal(old, b) {
-				return name, nil
-			}
+		if _, err := os.Lstat(name); err == nil {
 			continue
 		}
 		f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -169,6 +171,30 @@ func KeepBad(path string, b []byte) (string, error) {
 		return name, nil
 	}
 	return "", fmt.Errorf("%s can't be read and there is no free name to keep it under", filepath.Base(path))
+}
+
+// keptAlready gives the name of a copy of b kept aside for path before,
+// whatever second it was kept in, or "" when there is none.
+func keptAlready(path string, b []byte) string {
+	names, _ := filepath.Glob(globEscape(path) + ".bad-*")
+	for _, name := range names {
+		if fi, err := os.Stat(name); err != nil || fi.Size() != int64(len(b)) {
+			continue
+		}
+		if old, err := os.ReadFile(name); err == nil && bytes.Equal(old, b) {
+			return name
+		}
+	}
+	return ""
+}
+
+// globEscape quotes the characters filepath.Glob treats as a pattern, so a
+// folder named with [ or * is matched as it is.
+func globEscape(s string) string {
+	if runtime.GOOS == "windows" {
+		return strings.NewReplacer("[", "[[]", "*", "[*]", "?", "[?]").Replace(s)
+	}
+	return strings.NewReplacer(`\`, `\\`, "[", `\[`, "*", `\*`, "?", `\?`).Replace(s)
 }
 
 // A Note is one file read back from its last good generation.

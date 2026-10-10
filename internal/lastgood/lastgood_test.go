@@ -129,6 +129,35 @@ func TestBadCopiesInOneSecondBothKept(t *testing.T) {
 	}
 }
 
+// The same bad bytes kept a second earlier are not kept again: the copy
+// is found whatever second its name was made in.
+func TestSameBadFileKeptOnceAcrossASecond(t *testing.T) {
+	p := filepath.Join(filepath.Dir(setup(t)), "[x]")
+	if err := os.MkdirAll(p, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	p = filepath.Join(p, "logins.json")
+	defer func() { now = time.Now }()
+	at := time.Date(2026, 10, 10, 22, 56, 1, 999_000_000, time.Local)
+	now = func() time.Time { return at }
+	first, err := KeepBad(p, zeros(10783))
+	if err != nil {
+		t.Fatal(err)
+	}
+	at = at.Add(2 * time.Millisecond)
+	again, err := KeepBad(p, zeros(10783))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != first {
+		t.Fatalf("kept again as %s, first as %s", filepath.Base(again), filepath.Base(first))
+	}
+	other, err := KeepBad(p, zeros(10784))
+	if err != nil || other == first {
+		t.Fatalf("a different bad file kept as %s (%v)", other, err)
+	}
+}
+
 // A bad file that can't be copied aside stops the write.
 func TestKeepFailsWhenTheBadFileCantBeKept(t *testing.T) {
 	if runtime.GOOS == "windows" {
