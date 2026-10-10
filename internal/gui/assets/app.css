@@ -2533,6 +2533,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .eps .detect-acts .text { margin: 0; }
 .detect-acts .pick-api.on { background: var(--pill); }
 .detect-acts .hint { font-size: 11.5px; color: var(--faint); }
+/* what is missing or went wrong, said under the buttons (#1545) */
+.detect-out .detect-say { font-size: 11.5px; overflow-wrap: anywhere; }
+.detect-out .detect-say.warn { color: var(--amber); }
+.detect-out .detect-say.err { color: var(--red); }
 .detect-row .detect-each { flex: none; }
 .add-models .detect-row input { flex: 1; min-width: 0; }
 .add-models-list { max-height: 260px; overflow-y: auto; }

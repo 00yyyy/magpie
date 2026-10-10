@@ -9467,31 +9467,50 @@ function detectAPIs(p, base, use) {
       out.append(e);
     }
   };
+  // what is missing, or what went wrong, said here under the buttons
+  // rather than in the toast at the top (#1545)
+  const say = (msg, kind) => { out.hidden = false; out.replaceChildren(el("span", "hint detect-say " + kind, msg)); };
+  // the models the form has picked, saved or not: a new provider's typed
+  // or ticked in its Models field (draft.extra), a saved one's chips with
+  // the ids still in its add box
+  const picked = () => p ? chosenIds() : (draft.extra || []).filter((id, i, all) => id && all.indexOf(id) === i);
+  // no key typed, none saved and none copied: a refusal is likely the key
+  const keyless = () => {
+    if ((draft.key || "").trim() || p?.key?.set || draft.vertex) return false;
+    const of = !p && draft.copyOf && providers.providers.find((x) => x.id === draft.copyOf);
+    return !of?.key?.set;
+  };
+  const noneAnswered = () => el("span", "hint", keyless() ? t("None answered, and no API key is typed: paste the key under API key and detect again")
+    : t("None answered: check the URL and the key, or type a model the vendor serves"));
   const ask = async (btn, extra) => {
     const typedBase = (base() || "").trim();
-    if (!typedBase && !(draft.chat || draft.responses || draft.anthropic || draft.gemini || "").trim()) { status(t("Type the base URL first"), "warn"); return null; }
+    if (!typedBase && !(draft.chat || draft.responses || draft.anthropic || draft.gemini || "").trim()) { say(t("Type the base URL first"), "warn"); return null; }
     btn.classList.add("busy");
     out.hidden = false;
     out.replaceChildren(el("span", "hint", t("Asking each API…")));
     try {
       // the URL typed is asked as each API takes it, not as the field
-      // holding it would send it; URLs given under More endpoints as they are
+      // holding it would send it; URLs given under More endpoints as they are.
+      // The form as it stands is asked and nothing is saved: a saved
+      // provider's key (or the copied one's) stands for a key not typed.
       const body = { ...asTyped(), id: p?.id, base: typedBase, ...extra };
+      if (!p && draft.copyOf) Object.assign(body, { new: true, copyOf: draft.copyOf });
       for (const k of ["chat", "responses", "anthropic", "gemini"]) if (body[k] === typedBase) body[k] = "";
       const r = await api("provider/detect", body);
       out.replaceChildren();
       return r;
-    } catch (e) { out.replaceChildren(); out.hidden = true; status(e.message, "err"); return null; }
+    } catch (e) { say(e.message, "err"); return null; }
     finally { btn.classList.remove("busy"); }
   };
   go.onclick = async () => {
     const m = model.value.trim();
-    const r = await ask(go, { model: m });
+    // no model typed: one of those the form has picked, else the vendor's
+    const r = await ask(go, m ? { model: m } : { model: "", picked: picked().slice(0, DETECT_MAX) });
     if (!r) return;
     byAPI(r.results);
     const ok = r.results.filter((x) => x.ok);
     const acts = el("div", "detect-acts");
-    if (!ok.length) acts.append(el("span", "hint", t("None answered: check the URL and the key, or type a model the vendor serves")));
+    if (!ok.length) acts.append(noneAnswered());
     else {
       const take = el("button", "text action", t("Use these"));
       take.title = t("Set the URLs of the APIs that answered; one not found there is cleared");
@@ -9528,9 +9547,9 @@ function detectAPIs(p, base, use) {
     if (!Object.keys(prefs[id]).length) delete prefs[id];
   };
   each.onclick = async () => {
-    if (draft.api === "decide") { status(t("A decision API is asked with one model: type it and press Detect APIs"), "warn"); return; }
-    const ids = chosenIds();
-    if (!ids.length) { status(t("Pick models first, or type one and press Detect APIs"), "warn"); return; }
+    if (draft.api === "decide") { say(t("A decision API is asked with one model: type it and press Detect APIs"), "warn"); return; }
+    const ids = picked();
+    if (!ids.length) { say(t("Pick models first, or type one and press Detect APIs"), "warn"); return; }
     const r = await ask(each, { detectModels: ids });
     if (!r) return;
     byAPI(r.results);
@@ -9564,7 +9583,7 @@ function detectAPIs(p, base, use) {
     out.append(grid);
     if (ids.length > r.models.length) out.append(el("span", "hint", t("Only the first {n} of {all} models were asked", { n: r.models.length, all: ids.length })));
     const acts = el("div", "detect-acts");
-    if (!r.results.some((x) => x.ok)) acts.append(el("span", "hint", t("None answered: check the URL and the key, or type a model the vendor serves")));
+    if (!r.results.some((x) => x.ok)) acts.append(noneAnswered());
     else {
       const take = el("button", "text action", t("Use these"));
       // only a saved provider's models are given an API; a new one's, in

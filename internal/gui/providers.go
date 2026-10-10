@@ -1016,6 +1016,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// DetectModels, for detect: models to ask on each API, each
 			// answered on its own, in place of Model
 			DetectModels []string `json:"detectModels"`
+			// Picked, for detect with no Model: the models the form has
+			// picked and not saved yet, one of which each API is asked
+			// for before the saved picks or the vendor's list (#1545)
+			Picked []string `json:"picked"`
 			// Account and Allow, for accountmodels: the account (its name)
 			// or key (its id) and the models it alone serves, none for all
 			// the provider's (#474)
@@ -1522,10 +1526,17 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		case "detect":
 			// which APIs answer at the URL typed (Model, or one from the
 			// list for each), the form as it stands: a new provider's,
-			// or a saved one's with its key when none is typed
+			// or a saved one's with its key when none is typed — a copy
+			// not saved yet with the key of the one it copies (CopyOf),
+			// as its Add takes it. Nothing is written: the provider is
+			// only asked, never kept, listed or routed to (#1545).
 			var p provider.Provider
-			if in.ID != "" {
-				saved, err := provider.Find(in.ID)
+			from := in.ID
+			if from == "" && req.New {
+				from = req.CopyOf
+			}
+			if from != "" {
+				saved, err := provider.Find(from)
 				if err != nil {
 					fail(rw, err)
 					return
@@ -1556,7 +1567,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 			ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 			defer cancel()
-			got, err := p.Detect(ctx, req.Base, req.Model)
+			got, err := p.Detect(ctx, req.Base, req.Model, req.Picked...)
 			if err != nil {
 				fail(rw, err)
 				return
