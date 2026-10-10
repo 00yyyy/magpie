@@ -17,7 +17,8 @@ import (
 
 // fifoWatch turns each path into a FIFO and notes every open of one for
 // reading: a non-blocking open for writing succeeds only while a reader
-// waits in its open, which is handed "{}" and an end of file.
+// waits in its open, which is handed "{}" (once more for each loop that
+// finds it still open) and an end of file.
 func fifoWatch(t *testing.T, paths []string) func() []string {
 	t.Helper()
 	for _, p := range paths {
@@ -89,9 +90,12 @@ func TestAccountDiscoveryOffAgentsReadNoSignIn(t *testing.T) {
 		ocAuth,
 	}
 	opened := fifoWatch(t, files)
-	if b, err := os.ReadFile(files[0]); err != nil || string(b) != "{}" {
+	// a reader slow to reach the end is handed "{}" again by the next
+	// loop's write, and noted again, so under load it reads "{}{}"
+	if b, err := os.ReadFile(files[0]); err != nil || len(b) == 0 || strings.ReplaceAll(string(b), "{}", "") != "" {
 		t.Fatalf("the watch didn't answer a read: %q %v", b, err)
 	}
+	checked := len(opened())
 
 	cfgDir := filepath.Join(home, ".config", "opencode")
 	os.MkdirAll(cfgDir, 0o755)
@@ -118,7 +122,7 @@ func TestAccountDiscoveryOffAgentsReadNoSignIn(t *testing.T) {
 	}
 
 	time.Sleep(100 * time.Millisecond)
-	if got := opened(); len(got) != 1 {
-		t.Errorf("with discovery off, reads of sign-ins: %s", strings.Join(got[1:], " "))
+	if got := opened()[checked:]; len(got) != 0 {
+		t.Errorf("with discovery off, reads of sign-ins: %s", strings.Join(got, " "))
 	}
 }
