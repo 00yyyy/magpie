@@ -120,6 +120,7 @@ func builtins(home, cfg string) []*Agent {
 		empryo(home),
 		ante(home),
 		astrbot(home),
+		jcode(home),
 		miniMax(home),
 		droid(home),
 		cline(home),
