@@ -51,6 +51,18 @@ type CLI struct {
 	// Admin: the update needs an administrator, which Windows asks for
 	// first (npm's global folder under Program Files)
 	Admin bool `json:"admin,omitempty"`
+	// Path is where the CLI was found: the file magpie runs, as PATH
+	// reached it
+	Path string `json:"path,omitempty"`
+	// OffPath says the CLI was found in a folder magpie adds to its own
+	// PATH (proc.UserPath: ~/.local/bin, npm's prefixes, nvm's newest
+	// Node, bun, Homebrew, ...) that a terminal opened now doesn't have,
+	// so that `which` there doesn't find it. A row of an agent the user
+	// believed uninstalled, with a version and nothing to say where it
+	// came from, read as magpie making it up (悠悠哥 on Discord: Codex
+	// 0.162.1 listed with no codex on PATH and no ~/.codex). False when
+	// the terminal's PATH can't be told.
+	OffPath bool `json:"offPath,omitempty"`
 }
 
 // cliSpec is where an agent's CLI is published.
@@ -584,6 +596,31 @@ var brewLatest = func(u *updater) (string, error) {
 	return v, nil
 }
 
+// loginPath is the PATH a terminal opened now has (proc.LoginPath); a var
+// so tests can fake it.
+var loginPath = proc.LoginPath
+
+// offPath reports whether bin's folder is none of dirs, a terminal's PATH;
+// false when dirs is nil, a PATH that can't be told.
+func offPath(bin string, dirs []string) bool {
+	if dirs == nil {
+		return false
+	}
+	at := filepath.Clean(filepath.Dir(bin))
+	for _, d := range dirs {
+		if d == "" {
+			continue
+		}
+		if abs, err := filepath.Abs(d); err == nil {
+			d = abs
+		}
+		if strings.EqualFold(filepath.Clean(d), at) && (runtime.GOOS == "windows" || filepath.Clean(d) == at) {
+			return false
+		}
+	}
+	return true
+}
+
 // cliBin is where the agent's CLI is, "" when it has none magpie knows or
 // it isn't on PATH.
 func (a *Agent) cliBin() (string, cliSpec) {
@@ -621,6 +658,8 @@ func (a *Agent) CLI() (c CLI, ok bool) {
 		return c, c.App != ""
 	}
 	c.Version = installedVersion(bin)
+	c.Path = bin
+	c.OffPath = a.Bin != "" && offPath(bin, loginPath())
 	u := howInstalled(spec, bin)
 	if u == nil {
 		return c, true

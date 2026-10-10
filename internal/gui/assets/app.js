@@ -1720,6 +1720,16 @@ function cliTag(a) {
       : c.update ? t("{agent} {v} is installed · {latest} is out", { agent: a.name, v: c.version, latest: c.latest })
       : t("{agent} {v} · up to date", { agent: a.name, v: c.version });
     box.append(v);
+    // found in a folder magpie adds to its own PATH that a terminal's
+    // doesn't have (an npm install under a Node nvm no longer uses):
+    // listed though `which` finds nothing, so it says where it is
+    // (悠悠哥 on Discord: Codex 0.162.1 with no codex on PATH); where the
+    // row is too tight for the note, the version's tip says it
+    if (c.offPath && c.path) {
+      const o = el("span", "ag-missing ag-offpath", t("Not on your terminal's PATH"));
+      o.title = v.title = t("magpie found {agent} {v} at {path}. That folder is one magpie looks in, but your terminal's PATH doesn't have it, so a terminal won't find {agent} there. If it was left behind by an uninstall, delete it.", { agent: a.name, v: c.version, path: c.path });
+      box.append(o);
+    }
   }
   if (c.update || cliBusy.has(a.id)) {
     const b = el("button", "ag-up");
