@@ -197,9 +197,7 @@ func delItem(raw, stripped []byte, r gjson.Result) []byte {
 		to = j + 1
 		if alone {
 			from = ls
-			if to < len(raw) && raw[to] == '\n' {
-				to++
-			}
+			to = pastLineEnd(raw, to)
 		}
 		out, _ := splice(raw, from, to-from, nil)
 		return out
@@ -210,9 +208,7 @@ func delItem(raw, stripped []byte, r gjson.Result) []byte {
 	}
 	if alone {
 		from = ls
-		if to < len(raw) && raw[to] == '\n' {
-			to++
-		}
+		to = pastLineEnd(raw, to)
 	}
 	out, _ := splice(raw, from, to-from, nil)
 	k := a
