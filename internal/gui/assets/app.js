@@ -114,6 +114,23 @@ async function api(path, body, heads, signal) {
       err.code = data.code;
       err.message = t("{agent} is signed in to {user} now: sign it in to another of its accounts first (Use on that account), then remove this one", { agent: { codex: "Codex", claude: "Claude Code" }[data.agent] || data.agent, user: data.user });
     }
+    // an agent's npm update whose global folder (Program Files) needs an
+    // administrator, or RTK's winget for every user, the prompt declined or
+    // not to be had (新v学员 on Discord): what to do, in the reader's language
+    if (data?.code === "needs_admin") {
+      err.code = data.code;
+      const v = { agent: data.agent, prefix: data.prefix, cmd: data.command, why: data.reason || "" };
+      const where = data.prefix
+        ? (data.canceled
+          ? t("{agent} is installed in {prefix}, which only an administrator can change, and the administrator prompt was declined.", v)
+          : t("{agent} is installed in {prefix}, which only an administrator can change, and magpie couldn't ask Windows for one ({why}).", v))
+        : (data.canceled
+          ? t("{agent} needs an administrator here, and the administrator prompt was declined.", v)
+          : t("{agent} needs an administrator here, and magpie couldn't ask Windows for one ({why}).", v));
+      err.message = where + " " + (data.via === "winget"
+        ? t("Try again and allow it, or run {cmd} in a terminal opened as administrator.", v)
+        : t("Update again and allow it, run {cmd} in a terminal opened as administrator, or move npm's global folder to one of your own (npm config set prefix \"%APPDATA%\\npm\") and install {agent} again.", v));
+    }
     throw err;
   }
   // the accounts it names, for Hide accounts to know them (#568); a
@@ -1707,7 +1724,8 @@ function cliTag(a) {
   if (c.update || cliBusy.has(a.id)) {
     const b = el("button", "ag-up");
     b.type = "button";
-    b.title = t("Updates with {cmd}", { cmd: c.command });
+    // npm's global folder under Program Files: Windows asks first
+    b.title = c.admin ? t("Updates with {cmd}, as administrator: Windows asks first", { cmd: c.command }) : t("Updates with {cmd}", { cmd: c.command });
     paintCLIButton(b, c, cliBusy.has(a.id));
     b.onclick = (e) => { e.stopPropagation(); updateCLI(a, b); };
     box.append(b);
@@ -1897,6 +1915,14 @@ async function loadInstalls() {
 // server gives each npm command Node's install first (node: nvm, nvm-mac
 // or winget), and the note says so, and what may still be asked for.
 function installNote(items) {
+  // npm's global folder is Node.js's own under Program Files (新v学员 on
+  // Discord): npm install -g there wants a terminal opened as administrator
+  const admin = items.flatMap((x) => x.commands).find((c) => c.admin)?.admin;
+  const note = installNoteFor(items);
+  return admin ? note + " " + t("npm installs into {prefix} here, which only an administrator can change: run the npm commands in a terminal opened as administrator, or first move npm's global folder to one of your own (npm config set prefix \"%APPDATA%\\npm\").", { prefix: admin }) : note;
+}
+
+function installNoteFor(items) {
   const node = items.flatMap((x) => x.commands).find((c) => c.node)?.node;
   const after = t("Run a command in a terminal, then come back: magpie lists the agent here once it is installed.");
   if (node === "winget") return t("No Node.js was found here, so the npm commands install it with winget first; run them in PowerShell. If npm isn't found after Node.js is installed, open a new terminal and run the npm install again.") + " " + after;

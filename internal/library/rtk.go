@@ -507,6 +507,10 @@ type RTKView struct {
 	// doesn't know how this rtk was installed
 	Latest  string `json:"latest,omitempty"`
 	Upgrade string `json:"upgrade,omitempty"`
+	// Admin is the folder rtk is in when only an administrator can change
+	// it (winget's for every user, under Program Files): Upgrade asks
+	// Windows for one first
+	Admin string `json:"admin,omitempty"`
 	// Waiting is the package manager this rtk was installed with (winget,
 	// Homebrew) when Latest is out but it has nothing newer than this rtk
 	// yet, WaitingHas what it has: an upgrade through it would change
@@ -636,7 +640,7 @@ func ReadRTK() *RTKView {
 		v.Version = strings.TrimSpace(strings.TrimPrefix(out, "rtk"))
 	}
 	if c := upgraderOf(v.Path); c != nil {
-		v.Upgrade = shown(c)
+		v.Upgrade, v.Admin = shown(c), rtkAdminFolder(c, v.Path)
 	}
 	v.Gain, v.Days, v.GainErr = rtkGain(v.Path)
 	if runtime.GOOS == "windows" {
@@ -870,7 +874,7 @@ func InstallRTK() (*RTKView, error) {
 	if c == nil {
 		return nil, fmt.Errorf("no way to install rtk here — get it from %s", RTKURL)
 	}
-	out, err := runInstaller(c, 5*time.Minute, "HOMEBREW_NO_AUTO_UPDATE=1")
+	out, err := runRTKInstaller(c, 5*time.Minute, "", "HOMEBREW_NO_AUTO_UPDATE=1")
 	if err != nil {
 		return nil, err
 	}

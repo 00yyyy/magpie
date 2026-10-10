@@ -1852,6 +1852,17 @@ func fail(rw http.ResponseWriter, err error) {
 	if errors.As(err, &signedIn) {
 		out["code"], out["agent"], out["user"] = "signed_in", signedIn.Agent, signedIn.User
 	}
+	// an agent's npm update, or RTK's winget, that needed an administrator
+	// and didn't get one, said in the reader's language
+	var admin *agent.AdminError
+	if errors.As(err, &admin) {
+		out["code"], out["agent"], out["prefix"], out["command"], out["via"] = "needs_admin", admin.Agent, admin.Prefix, admin.Command, admin.Via
+		if admin.Canceled {
+			out["canceled"] = "1"
+		} else if admin.Err != nil {
+			out["reason"] = admin.Err.Error()
+		}
+	}
 	_ = json.NewEncoder(rw).Encode(out)
 }
 

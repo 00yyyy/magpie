@@ -403,7 +403,7 @@ func UpgradeRTK() (*RTKView, error) {
 	// brew upgrade updates Homebrew first, for its newest rtk
 	// winget having no newer rtk than this one yet is no failure
 	none := false
-	if _, err := runInstaller(c, timeout, env...); err != nil {
+	if _, err := runRTKInstaller(c, timeout, rtkAdminFolder(c, bin), env...); err != nil {
 		var ie *installError
 		if none = errors.As(err, &ie) && c[0] == "winget" && uint32(ie.code) == wingetNoUpgrade; !none {
 			return nil, err
@@ -470,20 +470,21 @@ func (e *installError) Error() string { return e.msg }
 const wingetNoUpgrade uint32 = 0x8A15002B // APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE
 
 var wingetSays = map[uint32]string{
-	wingetNoUpgrade: "winget has no newer RTK than this one yet",
-	0x8A150014:      "winget finds no rtk-ai.rtk package",
-	0x8A150050:      "winget can't tell which version of RTK is installed, so it won't upgrade it",
-	0x8A150101:      "RTK is in use — close the agents running it and try again",
-	0x8A150111:      "RTK is in use — close the agents running it and try again",
-	0x8A150052:      "winget couldn't put the new rtk.exe in place — if an agent is running rtk, close it and try again",
-	0x8A150107:      "winget couldn't reach the network",
-	0x8A150008:      "winget couldn't download RTK",
-	0x8A150011:      "the download didn't match winget's checksum",
-	0x8A150045:      "winget couldn't open its package source",
-	0x8A150046:      "winget's source agreements weren't accepted",
-	0x8A15003A:      "a policy on this machine blocks winget",
-	0x8A15010F:      "a policy on this machine blocks the install",
-	0x8A15010C:      "the install was cancelled",
+	wingetNoUpgrade:  "winget has no newer RTK than this one yet",
+	0x8A150014:       "winget finds no rtk-ai.rtk package",
+	wingetNeedsAdmin: "winget needs an administrator for this RTK, installed for every user of this computer",
+	0x8A150050:       "winget can't tell which version of RTK is installed, so it won't upgrade it",
+	0x8A150101:       "RTK is in use — close the agents running it and try again",
+	0x8A150111:       "RTK is in use — close the agents running it and try again",
+	0x8A150052:       "winget couldn't put the new rtk.exe in place — if an agent is running rtk, close it and try again",
+	0x8A150107:       "winget couldn't reach the network",
+	0x8A150008:       "winget couldn't download RTK",
+	0x8A150011:       "the download didn't match winget's checksum",
+	0x8A150045:       "winget couldn't open its package source",
+	0x8A150046:       "winget's source agreements weren't accepted",
+	0x8A15003A:       "a policy on this machine blocks winget",
+	0x8A15010F:       "a policy on this machine blocks the install",
+	0x8A15010C:       "the install was cancelled",
 }
 
 // exitCode is a process's exit code as its platform writes it: a Windows
