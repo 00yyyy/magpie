@@ -197,8 +197,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await t.test("dark, and none", async () => {
       const { p, errors, context } = await open("en", { width: 1100, theme: "dark" });
       await p.locator("#ledHeat .heat-grid i").first().waitFor();
-      // a frame for the reduced-motion transitions the shades start with
-      await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      // the shades start with reduced motion's .01ms transitions, which
+      // Chromium under load can still hold at their start two frames later
+      await p.evaluate(async () => {
+        await new Promise((r) => requestAnimationFrame(r));
+        await Promise.all(document.querySelector("#ledHeat").getAnimations({ subtree: true }).map((a) => a.finished));
+      });
       const [l0, l4, card] = await p.evaluate(() => [".heat-grid i.l0", ".heat-grid i.l4", "#ledHeat"].map((s) => getComputedStyle(document.querySelector(s)).backgroundColor));
       assert(l0 !== l4 && l0 !== card, `dark shades: ${l0} ${l4} on ${card}`);
       if (shots) await p.locator("#ledHeat").screenshot({ path: path.join(shots, `heatmap-${engine}-dark.png`) });
