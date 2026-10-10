@@ -74,8 +74,9 @@ const modelFavorites = new Set(Array.isArray(savedModelFavorites) ? savedModelFa
 const favoriteKey = (o) => o.ref || o.value;
 const isFavorite = (o) => modelFavorites.has(favoriteKey(o)) || modelFavorites.has(o.value);
 
-// heads, when given, is shown the answer's headers (loadQuotas' X-Magpie-Reading)
-async function api(path, body, heads) {
+// heads, when given, is shown the answer's headers (loadQuotas' X-Magpie-Reading);
+// signal, when given, cancels the request (a read the reader moved on from)
+async function api(path, body, heads, signal) {
   if (web && path === "open") { window.open(body.url, "_blank", "noopener"); return null; }
   // a segment may be an agent id, and omp's named profiles are omp#<name>:
   // left raw, the browser reads #work as the fragment and the request
@@ -86,6 +87,7 @@ async function api(path, body, heads) {
     method: body === undefined ? "GET" : "POST",
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
   });
   heads?.(res.headers);
   if (res.status === 204) return null;
@@ -16003,12 +16005,36 @@ function ledParams(extra) {
   return q.toString();
 }
 
+// One read of the ledger at a time (Vantiboo1ean, ~750k requests): the page
+// asked again while it is read (the refresh button, the timer) waits for
+// that read, and another page or filter cancels it. Each pick and press
+// used to send one more, and a long history's reads, all still running,
+// took the browser's few connections to magpie, so the page never came.
+// flight: { want, ctl, p }
+const ledFlights = { page: null, heat: null };
+function ledRead(kind, path, want) {
+  const was = ledFlights[kind];
+  if (was?.want === want) return was.p;
+  was?.ctl.abort();
+  const ctl = new AbortController();
+  const f = { want, ctl, p: api(path + want, undefined, undefined, ctl.signal) };
+  ledFlights[kind] = f;
+  const done = () => { if (ledFlights[kind] === f) ledFlights[kind] = null; };
+  f.p.then(done, done);
+  return f.p;
+}
+const ledAborted = (e) => e?.name === "AbortError";
+
 // quiet: a refresh while it's looked at, redrawn only on a change
 async function loadLedger(quiet) {
   if (!ledger && !quiet) renderLedgerLoading();
   loadLedHeat().catch(() => {});
   const want = ledParams({ offset: ledOffset, limit: LED_PAGE });
-  const l = await api("usage/requests?" + want);
+  let l;
+  try { l = await ledRead("page", "usage/requests?", want); } catch (e) {
+    if (ledAborted(e)) return; // another page or filter was picked, and is read instead
+    throw e;
+  }
   if (want !== ledParams({ offset: ledOffset, limit: LED_PAGE })) return; // another page or filter was picked meanwhile
   if (quiet && JSON.stringify(l) === JSON.stringify(ledger)) return;
   ledger = l;
@@ -16721,7 +16747,8 @@ function ledHeatParams() {
 async function loadLedHeat() {
   const want = ledHeatParams();
   ledHeatWant = want;
-  const h = await api("usage/heatmap?" + want);
+  const h = await ledRead("heat", "usage/heatmap?", want).catch((e) => { if (ledAborted(e)) return ledAborted; throw e; });
+  if (h === ledAborted) return;
   if (want !== ledHeatWant) return; // another filter was picked meanwhile
   if (ledHeat && ledHeat.want === want && JSON.stringify(ledHeat.data) === JSON.stringify(h)) return;
   ledHeat = { want, data: h };

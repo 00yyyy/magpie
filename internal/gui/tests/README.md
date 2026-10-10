@@ -1068,6 +1068,15 @@ at its own time; a request the files can't tell says why (no session, an agent w
 files aren't read, no such call); a row opened again, or the list read anew, asks no
 more; the details fit the table's box at 560; in English and Chinese.
 
+`usage-ledger-abort.test.cjs` narrows the Requests tab three times while
+each read is still on its way (Vantiboo1ean, ~750k requests): the reads of the
+page and of the heatmap no longer wanted are cancelled, not left holding the
+browser's connections; Refresh pressed while the page is read sends no second
+read and turns until that one answers; the newest answer is drawn and a
+cancelled read is never said as an error; a refresh afterwards reads afresh.
+Chromium and WebKit, at 1180 and 560. `MAGPIE_ASSETS` points it at an older
+assets directory to see it fail there.
+
 `shared-skills.test.cjs` opens the Library's Skills tab with skills found in
 the user-wide `~/.agents/skills` (#227): one row for a skill there that
 agents link or junction to, "shared in ~/.agents/skills/…" with those

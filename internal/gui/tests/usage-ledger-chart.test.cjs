@@ -323,7 +323,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           blocked = true;
           asked.push(q);
           await held;
-          await route.fulfill({ json: page(q, "daily") });
+          // the read the second click moved on from is cancelled (Vantiboo1ean):
+          // there is no one left to answer
+          await route.fulfill({ json: page(q, "daily") }).catch(() => {});
           return;
         }
         await route.fallback();
@@ -336,7 +338,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       delay();
       const beforeClicks = asked.length, clickedDay = await days.nth(4).getAttribute("data-day");
       const requested = p.waitForRequest((r) => new URL(r.url()).searchParams.get("day") === clickedDay);
-      const selectedReply = reply(clickedDay), clearedReply = reply("");
+      // the first read either answers late or, as now, is cancelled by the second
+      const cancelled = p.waitForEvent("requestfailed", (r) => new URL(r.url()).pathname === "/api/usage/requests" && new URL(r.url()).searchParams.get("day") === clickedDay);
+      const selectedReply = Promise.race([reply(clickedDay), cancelled]), clearedReply = reply("");
       await days.nth(4).dispatchEvent("click");
       await requested;
       await days.nth(4).dispatchEvent("click");
