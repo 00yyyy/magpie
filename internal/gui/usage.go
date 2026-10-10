@@ -31,7 +31,7 @@ type (
 )
 
 var (
-	usageState   = usageapi.State
+	usageState   = usageapi.Page
 	ledgerPage   = usageapi.LedgerPage
 	periodOf     = usageapi.PeriodOf
 	ledgerFilter = usageapi.FilterOf

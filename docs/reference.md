@@ -1427,7 +1427,8 @@ in `served.json` beside `providers.json`, so a restart keeps it.
 An app of your own can read the Usage page's numbers too.
 `GET /v1/magpie/usage?period=<today|week|month|all>` is the page's summary,
 the same JSON as the window's `/api/usage` (`path` is left out for another
-machine). `GET /v1/magpie/usage/requests` is its requests a page at a time
+machine), with every session in `sessions` where the window's lists the
+top 100 by tokens; `sessionCount` is how many there are. `GET /v1/magpie/usage/requests` is its requests a page at a time
 (`offset`, `limit` up to 500), with the same filters as the Requests log:
 `period`, `day`, `agent`, `provider`, `model`, `account`, `callerKey`,
 `purpose`, `failed`, `q`, `via`, `computer`. What was said in a call is not

@@ -61,11 +61,20 @@ func HeatmapOf(f Filter) Heatmap {
 func heatmapOf(since, now time.Time, visit func(add func(Row))) *Heatmap {
 	h := &Heatmap{From: since.Format(time.DateOnly), To: now.In(time.Local).Format(time.DateOnly), Days: []Day{}}
 	at := map[string]*Day{}
+	// a day's name is made once for each day, not for each of its calls
+	type ymd struct{ y, yd int }
+	names := map[ymd]string{}
 	visit(func(r Row) {
 		if r.IsRejected() || r.Time.Before(since) {
 			return
 		}
-		d := r.Time.In(time.Local).Format(time.DateOnly)
+		t := r.Time.In(time.Local)
+		k := ymd{t.Year(), t.YearDay()}
+		d, ok := names[k]
+		if !ok {
+			d = t.Format(time.DateOnly)
+			names[k] = d
+		}
 		if d > h.To {
 			return
 		}

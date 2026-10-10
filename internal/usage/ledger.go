@@ -119,8 +119,11 @@ func (f Filter) computer(r Record) bool {
 }
 
 func (f Filter) keeps(r Record) bool {
-	if f.Day != "" && r.Time.In(time.Local).Format(time.DateOnly) != f.Day {
-		return false
+	if f.Day != "" {
+		var day [len(time.DateOnly)]byte
+		if string(r.Time.In(time.Local).AppendFormat(day[:0], time.DateOnly)) != f.Day {
+			return false
+		}
 	}
 	if f.CallerKey != "" && r.CallerKeyID != f.CallerKey {
 		return false
@@ -215,8 +218,19 @@ func LedgerOfAt(p Period, f Filter, now time.Time) Ledgered {
 	if reader == nil {
 		reader = sessions.Calls
 	}
-	rows, sum, agents, providers := ledgerWithShared(since, p.Until(now), f, Load(gatewaySince), reader(since), sharedRecords(since))
+	rows, sum, agents, providers := ledgerWithShared(since, p.Until(now), f, gatewayRecords(gatewaySince), reader(since), sharedRecords(since))
 	return Ledgered{rows, sum, agents, providers}
+}
+
+// gatewayRecords is the gateway's calls from since on, as the ledger's index
+// holds them: what Load reads, without parsing usage.jsonl again. The TUI,
+// magpie usage and the CSV export read a period's ledger this way, and over
+// a long history (Vantiboo1ean, ~750k requests) parsing the whole file took
+// seconds for each.
+func gatewayRecords(since time.Time) []Record {
+	var out []Record
+	Visit(since, func(r Record) { out = append(out, r) })
+	return out
 }
 
 // Filtered narrows one snapshot without reloading either log or repricing rows.
@@ -332,6 +346,12 @@ func ledgerWith(since time.Time, f Filter, recs []Record, logs []sessions.Call) 
 // priced and judged here as this computer's are, and none from until on (a
 // picked range's end, #1492; zero for none).
 func ledgerWithShared(since, until time.Time, f Filter, recs []Record, logs []sessions.Call, others []SharedCall) (rows []Row, sum Totals, agents, providers []string) {
+	return ledgerMatched(since, until, f, recs, logs, others, gatewayMatches(recs, logs))
+}
+
+// ledgerMatched is ledgerWithShared with the session files' calls the
+// gateway saw already told (matched, by their index in logs).
+func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessions.Call, others []SharedCall, matched map[int]bool) (rows []Row, sum Totals, agents, providers []string) {
 	renamed := provider.Renamed()
 	// the upstream names in force now, read once for the lot: a row is
 	// judged by the names standing today, which is what Ledger says, and
@@ -340,7 +360,6 @@ func ledgerWithShared(since, until time.Time, f Filter, recs []Record, logs []se
 	priceOf := pricer()
 	rows = make([]Row, 0, len(recs)+len(logs))
 	agents, providers = []string{}, []string{}
-	matched := gatewayMatches(recs, logs)
 	identities := newSessionResolver(logs)
 	add := func(r Record, pr *catalog.Price, source string) {
 		if a := AgentOf(r.Agent); !slices.Contains(agents, a) {

@@ -185,8 +185,8 @@ func printUsage(out io.Writer, s stats.Summary, title string, names map[string]s
 	if len(s.Sessions) > 0 {
 		top := s.Sessions[:min(len(s.Sessions), 10)]
 		head := "sessions"
-		if len(s.Sessions) > len(top) {
-			head = fmt.Sprintf("sessions · top %d of %d", len(top), len(s.Sessions))
+		if s.SessionCount > len(top) {
+			head = fmt.Sprintf("sessions · top %d of %d", len(top), s.SessionCount)
 		}
 		table(head, top, func(g stats.Group) string {
 			n := names[g.Agent]

@@ -23,12 +23,13 @@ const (
 	logStampSettle = time.Second
 )
 
-// Raw and priced chunks share the request cache budget. Oversized histories
-// remain queryable but their raw blocks are rebuilt instead of retained.
+// The blocks are always kept, however long the history: they are the index
+// every reader shares, about 80 bytes a call compressed. Dropping them over a
+// size budget (#563) made each read parse the whole file again, 6 s of CPU
+// for 750k calls, on every refresh and filter of the Requests page.
 
 type logSnapshot struct {
 	bytes        int64
-	uncached     bool
 	settled      bool
 	path         string
 	info         os.FileInfo
@@ -45,6 +46,7 @@ var logIndex struct {
 	sync.Mutex
 	snapshot *logSnapshot
 	version  uint64
+	reads    int // how many times the file was opened to be parsed, for the tests
 }
 
 var logIndexNow = time.Now
@@ -57,11 +59,7 @@ var logAppends struct {
 	base, last os.FileInfo
 }
 
-func readLogSnapshot() *logSnapshot { return logSnapshotFor(false) }
-
-// Metadata-only callers can use cached results without rebuilding a history
-// whose blocks do not fit the cache budget.
-func logSnapshotFor(metadataOnly bool) *logSnapshot {
+func readLogSnapshot() *logSnapshot {
 	logIndex.Lock()
 	defer logIndex.Unlock()
 	path := Path()
@@ -83,7 +81,7 @@ func logSnapshotFor(metadataOnly bool) *logSnapshot {
 			unchanged = old.settled && settled
 		}
 	}
-	if unchanged && (!old.uncached || metadataOnly) {
+	if unchanged {
 		return old
 	}
 	if !unchanged {
@@ -103,11 +101,12 @@ func logSnapshotFor(metadataOnly bool) *logSnapshot {
 	// The parse is the fingerprint: it hashes the lines it reads, continuing
 	// the old snapshot's hash when it continues its blocks.
 	sum := sha256.New()
-	if continued && !old.uncached && resumeLogHash(sum, old.digest) {
+	if continued && resumeLogHash(sum, old.digest) {
 		next.off, next.first = old.off, old.first
 		next.blocks = slices.Clone(old.blocks)
 		next.keyProviders = maps.Clone(old.keyProviders)
 	}
+	logIndex.reads++
 	f, err := os.Open(path)
 	if err != nil {
 		return next
@@ -168,14 +167,7 @@ func logSnapshotFor(metadataOnly bool) *logSnapshot {
 	for _, c := range next.blocks {
 		next.bytes += c.Bytes
 	}
-	if next.bytes > requestCacheBytes {
-		next.uncached = true
-		kept := *next
-		kept.blocks = nil
-		logIndex.snapshot = &kept
-	} else {
-		logIndex.snapshot = next
-	}
+	logIndex.snapshot = next
 	return next
 }
 
@@ -188,7 +180,8 @@ func (s *logSnapshot) visit(since time.Time, fn func(Record)) {
 		if c == nil {
 			continue
 		}
-		for i, p := range c.Rows {
+		for i := range c.Rows {
+			p := &c.Rows[i]
 			if !p.Time.Before(since) {
 				fn(c.row(i).Record)
 			}

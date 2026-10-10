@@ -157,6 +157,10 @@ func Path() string { return filepath.Join(filepath.Dir(provider.Path()), "usage.
 
 var mu sync.Mutex
 
+// loads counts Load's reads of the whole log, for the tests: the ledger
+// reads the gateway's calls from its index instead.
+var loads int
+
 // Append writes one record. Errors are swallowed: accounting must never
 // break a call.
 func Append(r Record) {
@@ -192,6 +196,7 @@ func (r Record) IsRejected() bool { return r.Rejected || r.Provider == "" && r.S
 // not retained by a global cache after the caller finishes with this snapshot.
 func Load(since time.Time) []Record {
 	mu.Lock()
+	loads++
 	f, err := os.Open(Path())
 	mu.Unlock()
 	if err != nil {
@@ -554,8 +559,11 @@ type Summary struct {
 	// account that answered (#557)
 	Accounts   []Group `json:"accounts"`
 	CallerKeys []Group `json:"callerKeys"`
-	// Sessions are the calls that named their session, by session.
-	Sessions []Group `json:"sessions"`
+	// Sessions are the calls that named their session, by session, the
+	// most tokens first: all of them, or the top few of SessionCount where
+	// it was asked for that way (SummarizeTop).
+	Sessions     []Group `json:"sessions"`
+	SessionCount int     `json:"sessionCount"`
 }
 
 // Summarize caches the four periods over an indexed log snapshot. Callers
@@ -752,6 +760,7 @@ func summarizeFrom(p Period, now time.Time, first time.Time, historicalKeys map[
 		s.Sessions = append(s.Sessions, *g)
 	}
 	byTokens(s.Sessions)
+	s.SessionCount = len(s.Sessions)
 	return s
 }
 
