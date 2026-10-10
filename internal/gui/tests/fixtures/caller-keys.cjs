@@ -22,7 +22,8 @@ function fixture(lang, theme, events, options = {}) {
   let lan = !!options.lan;
   let lanKeyID = "", rotations = 0, lanSecret = "";
   const secrets = new Map([["laptop", "fixture-laptop"], ["server", "fixture-server"], ["work", "fixture-work"]]);
-  const lanURLs = ["http://192.168.1.10:3999", "http://10.0.0.10:3999"];
+  // options.lanURLs is the test's own list, so it can take the network away
+  const lanURLs = options.lanURLs || ["http://192.168.1.10:3999", "http://10.0.0.10:3999"];
   const lanState = () => ({ lang, theme, lan,
     lanURLs: lan ? lanURLs : [], fx: { rate: 7.2, at: new Date().toISOString() } });
   const rows = [

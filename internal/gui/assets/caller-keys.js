@@ -11,6 +11,18 @@ let gatewayKeysRead = 0;
 // (#585): what is picked in it is sent only by its Save.
 let gatewayLimit = null;
 let connectURL = "", connectKeyID = "", connectSecret = null;
+// connectWant and connectKeyWant are the address and gateway key picked in
+// Gateway's Connect, kept across reloads, restarts and updates (coeo91 on
+// Discord: the LAN address went back to 127.0.0.1); "" for a key is This
+// computer
+let connectWant = "", connectKeyWant = "";
+try {
+  connectWant = localStorage.getItem("magpie.connectAddress") || "";
+  connectKeyWant = localStorage.getItem("magpie.connectKey") || "";
+} catch {}
+function keepPick(name, v) {
+  try { localStorage.setItem(name, v); } catch {}
+}
 
 function connectPick(id, label, text, options, value, choose) {
   const b = el("button", "val");

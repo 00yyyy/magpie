@@ -45,6 +45,13 @@ literal custom names and narrow layouts in Chinese and English on both engines.
 Sharing off keeps the original API-key field and hides the gateway-key picker;
 sharing on names the arbitrary local option separately from the Magpie key.
 
+`connect-address-kept.test.cjs` checks that the address and gateway key
+picked in Connect, and the address picked under Share on local network, are
+kept across a reload (a restart or an update opens the page again; coeo91 on
+Discord). With no local network address yet, this computer's is shown, and
+the pick comes back once the address does. It runs on both engines, at 1100
+and 420 wide, in every language.
+
 `gateway-takeover.test.cjs` checks the Gateway card's button: with an older
 magpie serving the gateway it reads "Quit magpie {v} and take over" and posts
 `/api/gateway/take-over`; once this magpie serves it is "Restart gateway" and

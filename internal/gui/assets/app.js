@@ -5857,7 +5857,10 @@ function renderConnect() {
   const langs = f.baseEnv ? LANGS : LANGS.filter(([id]) => id !== "shell");
   const snipLang = langs.some(([id]) => id === lang) ? lang : "curl";
   const urls = [g.url, ...(g.lanURLs || [])];
-  if (!urls.includes(connectURL)) connectURL = g.url;
+  // the address picked is kept (coeo91): an address not offered right now
+  // (the network not up yet after a start) shows this computer's, and the
+  // pick comes back with it
+  connectURL = urls.includes(connectWant) ? connectWant : g.url;
   // a gateway MAGPIE_ADDR puts on the network (a Docker image's, whose
   // host is another machine to it) is shown with a gateway key everywhere
   const remote = connectURL !== g.url || !!g.onNetwork;
@@ -5866,7 +5869,9 @@ function renderConnect() {
     connectKeyID = "";
     connectSecret = null;
   }
-  if (remote && !connectKeyID && keys.length) {
+  if (!connectKeyID && connectKeyWant && keys.some((k) => k.id === connectKeyWant)) {
+    queueMicrotask(() => selectConnectKey(connectKeyWant));
+  } else if (remote && !connectKeyID && keys.length) {
     queueMicrotask(() => selectConnectKey(keys[0].id));
   }
   const key = keys.find((k) => k.id === connectKeyID);
@@ -5888,7 +5893,7 @@ function renderConnect() {
   const b = el("div", "val");
   if (urls.length > 1) b.append(connectPick("connectAddress", "Address", base,
     urls.map((u) => ({ v: u, name: f.base(u), note: t(u === g.url ? "This computer" : "Local network") })), connectURL,
-    (u) => { connectURL = u; renderConnect(); }));
+    (u) => { connectWant = u; keepPick("magpie.connectAddress", u); renderConnect(); }));
   else b.append(el("code", "", base));
   b.append(copyBtn(base, "Base URL"));
   box.append(...field("Base URL", b, f.baseEnv ? t("What {env} takes.", { env: f.baseEnv }) : t("Requests go to POST {url}.", { url: base + "/systemone" })));
@@ -5899,7 +5904,7 @@ function renderConnect() {
   const keyLabel = remote || key ? "Gateway key" : "API key";
   if (!g.lan) k.append(el("code", "", "magpie"));
   else if (options.length) k.append(connectPick("connectKey", keyLabel, key ? key.name : remote ? t("Choose a gateway key") : t("This computer"),
-    options, connectKeyID, selectConnectKey));
+    options, connectKeyID, (id) => { connectKeyWant = id; keepPick("magpie.connectKey", id); selectConnectKey(id); }));
   else k.append(el("code", "", t("Create a gateway key above to connect")));
   if (key) k.append(copyCallerKeyBtn(key));
   else if (!remote) k.append(copyBtn("magpie", t("Key")));
@@ -20990,6 +20995,9 @@ function renderCORS(s) {
 // renderLAN: the gateway shared on the local network, for agents on other
 // machines. Gateway keys and connection examples live together in Gateway.
 let lanSelectedURL = "", lanProtocol = "openai";
+// the address picked under Share on local network is kept like Connect's
+let lanWant = "";
+try { lanWant = localStorage.getItem("magpie.lanAddress") || ""; } catch {}
 function renderLAN(s) {
   const box = $("#lanList");
   box.replaceChildren();
@@ -21026,7 +21034,7 @@ function renderLAN(s) {
   }
   if (!urls.length) row(t("Address"), t("This computer has no local network address right now"), "");
   else {
-    if (!urls.includes(lanSelectedURL)) lanSelectedURL = urls[0];
+    lanSelectedURL = urls.includes(lanWant) ? lanWant : urls[0];
     const controls = el("div", "lan-address-controls");
     const address = urls.length === 1 ? el("code", "lan-address-text") : el("button", "proto pick lan-interface");
     if (urls.length > 1) {
@@ -21037,7 +21045,7 @@ function renderLAN(s) {
         if (address.classList.contains("open")) return closeProtoMenu();
         const suffix = lanProtocol === "openai" ? "/v1" : "";
         openProtoMenu(address, urls.map((u) => ({ v: u, name: u + suffix, note: "" })), lanSelectedURL,
-          (v) => { lanSelectedURL = v; update(); }, "Address", "lan-address-menu");
+          (v) => { lanSelectedURL = lanWant = v; keepPick("magpie.lanAddress", v); update(); }, "Address", "lan-address-menu");
       };
     }
     const copyControl = el("span", "lan-copy");
