@@ -61,8 +61,10 @@ func keepCRLF(out, orig []byte) []byte {
 	return bytes.ReplaceAll(out, []byte("\n"), []byte("\r\n"))
 }
 
-// PatchJSON computes a config change without writing a file.
+// PatchJSON computes a config change without writing a file. A byte order
+// mark raw starts with is read through and kept.
 func PatchJSON(raw []byte, set []KV, del []string) ([]byte, error) {
+	raw, marked := bytes.CutPrefix(raw, bom)
 	if len(bytes.TrimSpace(raw)) == 0 {
 		raw = []byte("{}\n")
 	}
@@ -79,6 +81,9 @@ func PatchJSON(raw []byte, set []KV, del []string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+	if marked {
+		return append(append([]byte(nil), bom...), keepCRLF(raw, orig)...), nil
 	}
 	return keepCRLF(raw, orig), nil
 }

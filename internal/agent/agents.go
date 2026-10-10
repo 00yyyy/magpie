@@ -884,12 +884,12 @@ func (b beforeMagpie) restore() error {
 			continue
 		}
 		var now any
-		if json.Unmarshal(cur, &now) != nil {
+		if json.Unmarshal(edit.TrimBOM(cur), &now) != nil { // a BOM is the user's own (#1534)
 			continue
 		}
 		if was, err := os.ReadFile(f + ".before-magpie"); err == nil {
 			var then any
-			if json.Unmarshal(was, &then) == nil && reflect.DeepEqual(now, then) && !bytes.Equal(cur, was) {
+			if json.Unmarshal(edit.TrimBOM(was), &then) == nil && reflect.DeepEqual(now, then) && !bytes.Equal(cur, was) {
 				if err := edit.WriteAtomic(f, was); err != nil {
 					return err
 				}
@@ -1269,7 +1269,7 @@ func crushAt(at place, path, data string) *Agent {
 				var c struct {
 					Providers map[string]json.RawMessage `json:"providers"`
 				}
-				if json.Unmarshal(b, &c) == nil {
+				if json.Unmarshal(edit.TrimBOM(b), &c) == nil {
 					for p := range c.Providers {
 						if p != magpieID {
 							extra = append(extra, p)

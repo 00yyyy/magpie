@@ -203,3 +203,29 @@ func TestPrimeAgentDir(t *testing.T) {
 		t.Fatalf("%+v", a)
 	}
 }
+
+// A settings.json saved with a UTF-8 BOM and CRLF line ends (#1534) is
+// put back byte for byte too, its copy from before taken away: the JSON
+// beside the BOM is what Disconnect compares.
+func TestPrimeAgentRoundTripWithBOM(t *testing.T) {
+	home := syncHome(t)
+	a := primeAgent(home)
+	dir := filepath.Join(home, ".prime", "agent")
+	userSettings := []byte("\xef\xbb\xbf{\r\n  \"defaultProvider\": \"prime-inference\",\r\n  \"defaultModel\": \"glm-5.3\",\r\n  \"enabledModels\": [\"prime-inference/*\"]\r\n}\r\n")
+	writeFile(t, filepath.Join(dir, "settings.json"), string(userSettings))
+	if err := a.Connect(); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Wired() || a.Check() != "" {
+		t.Fatalf("not connected:\n%q", readFile(a.Path))
+	}
+	if err := a.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(a.Path); !bytes.Equal(b, userSettings) {
+		t.Fatalf("not put back:\n%q", b)
+	}
+	if _, err := os.Stat(a.Path + ".before-magpie"); !os.IsNotExist(err) {
+		t.Fatalf("the copy from before is left: %v", err)
+	}
+}
