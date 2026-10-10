@@ -59,10 +59,18 @@ func TestBuildCodeAssistForGemini(t *testing.T) {
 	if strings.Contains(s, "sig-from-claude") || strings.Contains(s, `"hm"`) {
 		t.Error("thinking was sent back")
 	}
-	// the tool result and the next question are one user turn
+	// the tool result is a user turn, and the next question one of its own
+	// after it: Gemini turns away the two in one (#1533)
 	contents := req["contents"].([]any)
-	if len(contents) != 3 || len(contents[2].(map[string]any)["parts"].([]any)) != 2 {
-		t.Errorf("contents = %v", contents)
+	if len(contents) != 4 {
+		t.Fatalf("contents = %v", contents)
+	}
+	tools, asked := contents[2].(map[string]any), contents[3].(map[string]any)
+	if tp := tools["parts"].([]any); tools["role"] != "user" || len(tp) != 1 || tp[0].(map[string]any)["functionResponse"] == nil {
+		t.Errorf("the tool's turn = %v", tools)
+	}
+	if ap := asked["parts"].([]any); asked["role"] != "user" || len(ap) != 1 || ap[0].(map[string]any)["text"] != "and?" {
+		t.Errorf("the question's turn = %v", asked)
 	}
 }
 
@@ -356,9 +364,21 @@ func TestCodeAssistToolImagesAfterEveryResponse(t *testing.T) {
 		if err := json.Unmarshal(buildCodeAssist(r, model, agent), &env); err != nil {
 			t.Fatal(err)
 		}
+		// every part after the model's last turn, "|" between two turns
 		cs := env.Request.Contents
 		var out []string
-		for _, p := range cs[len(cs)-1].Parts {
+		var parts []map[string]json.RawMessage
+		for _, c := range cs[2:] {
+			if len(parts) > 0 {
+				parts = append(parts, map[string]json.RawMessage{"turn": nil})
+			}
+			parts = append(parts, c.Parts...)
+		}
+		for _, p := range parts {
+			if _, ok := p["turn"]; ok {
+				out = append(out, "|")
+				continue
+			}
 			switch {
 			case p["functionResponse"] != nil:
 				var fr struct{ ID string }
@@ -391,7 +411,7 @@ func TestCodeAssistToolImagesAfterEveryResponse(t *testing.T) {
 	gem := []string{
 		"response toolu_bdrk_01AvFfWkjBwUMB97S9vUMAR7", "image QUFB",
 		"response toolu_bdrk_01TJixAcopSp2JamBfnbfF4V", "image QkJC",
-		"which is bigger?",
+		"|", "which is bigger?", // in a turn of its own (#1533)
 	}
 	if got := shape("gemini-3-flash", "antigravity"); !reflect.DeepEqual(got, gem) {
 		t.Errorf("Antigravity Gemini:\n got %q\nwant %q", got, gem)
