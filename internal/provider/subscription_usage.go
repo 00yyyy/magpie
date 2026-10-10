@@ -22,6 +22,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // QuotaWindow is one rolling allowance reported by a subscription provider.
@@ -188,6 +189,9 @@ var subscriptionTimeout = 20 * time.Second
 // cached it comes back at once, and a stale copy is refreshed in the
 // background; only the very first call waits, for as long as ctx allows.
 func SubscriptionUsage(ctx context.Context) []SubscriptionQuota {
+	if settings.AccountDiscoveryOff() {
+		return nil
+	}
 	c := &subscriptionUsageCache
 	c.Lock()
 	have, fresh := c.data != nil, time.Since(c.at) < time.Minute
@@ -327,6 +331,9 @@ func chosenWindows(ws []QuotaWindow, chosen map[string]bool, base func(string) s
 
 // fetchSubscriptionUsage asks every signed-in vendor at once.
 func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
+	if settings.AccountDiscoveryOff() {
+		return nil
+	}
 	ctx, _ = quotaReading(ctx)
 	// read for every card's caller alike, or for the one card ctx reads
 	// again (RefreshUsage), as long as a refresh of them all would be
@@ -828,7 +835,7 @@ func codexSubscriptionUsage(ctx context.Context, path string) SubscriptionQuota 
 		return q
 	}
 	q.Plan, q.Windows, q.Resets, q.Balance, q.Held, err = codexWindows(ctx, token, accountID)
-	if b, rerr := os.ReadFile(path); rerr == nil {
+	if b, rerr := readAccountFile(path); rerr == nil {
 		q.Until = codexUntil(b, time.Now())
 	}
 	if err != nil {

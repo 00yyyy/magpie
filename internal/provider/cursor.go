@@ -35,6 +35,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // CursorExecutable finds the cursor-agent CLI; a var so tests can fake it.
@@ -62,7 +63,12 @@ func isCursorAgent(path string) bool {
 var cursorStatus = &cliIdentity{name: "cursor", exe: func() string { return CursorExecutable() }, ask: askCursorStatus}
 
 // cursorIdentity is who Cursor's CLI says is signed in; see cliIdentity.
-func cursorIdentity() (user, plan string, ok bool) { return cursorStatus.get() }
+func cursorIdentity() (user, plan string, ok bool) {
+	if settings.AccountDiscoveryOff() {
+		return "", "", false
+	}
+	return cursorStatus.get()
+}
 
 // forgetCursorStatus has who is signed in, and the token, read afresh.
 func forgetCursorStatus() {
@@ -82,6 +88,9 @@ func askCursorIdentity() (user, plan string, ok bool) {
 // runs out of time (it asks Cursor's servers) or prints something other
 // than its JSON couldn't tell, and the account stays as it was (#154).
 func askCursorStatus() (user, plan string, ok bool, err error) {
+	if settings.AccountDiscoveryOff() {
+		return "", "", false, nil
+	}
 	path := CursorExecutable()
 	if path == "" {
 		return "", "", false, nil
@@ -341,6 +350,9 @@ const cursorTokenTTL = 10 * time.Second
 // cursorKeychainToken is cursor-agent's token in the Keychain, "" for none;
 // fresh reads it whatever was read last.
 func cursorKeychainToken(fresh bool) string {
+	if settings.AccountDiscoveryOff() {
+		return ""
+	}
 	cursorTok.Lock()
 	defer cursorTok.Unlock()
 	if !fresh && time.Since(cursorTok.at) < cursorTokenTTL {
@@ -359,12 +371,15 @@ func readCursorToken() string { return cursorTokenOf(false) }
 
 // cursorTokenOf is readCursorToken, fresh from the Keychain when asked.
 func cursorTokenOf(fresh bool) string {
+	if settings.AccountDiscoveryOff() {
+		return ""
+	}
 	if runtime.GOOS == "darwin" {
 		if t := cursorKeychainToken(fresh); t != "" {
 			return t
 		}
 	}
-	b, err := os.ReadFile(cursorAuthFile())
+	b, err := readAccountFile(cursorAuthFile())
 	if err != nil {
 		return ""
 	}

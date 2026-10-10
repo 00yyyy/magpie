@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/settings"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -45,6 +46,9 @@ func claudeDirService(dir string) string {
 // readClaudeDir is the sign-in Claude Code keeps in config directory dir,
 // where it looks first: the keychain on a Mac, then the file.
 func readClaudeDir(dir string) (claudeCredentials, bool) {
+	if settings.AccountDiscoveryOff() {
+		return claudeCredentials{}, false
+	}
 	if claudeKeychain {
 		out, err := proc.Command("security", "find-generic-password", "-s", claudeDirService(dir), "-a", claudeKeychainAccount(), "-w").Output()
 		if err == nil {
@@ -56,7 +60,7 @@ func readClaudeDir(dir string) (claudeCredentials, bool) {
 			}
 		}
 	}
-	b, err := os.ReadFile(filepath.Join(dir, ".credentials.json"))
+	b, err := readAccountFile(filepath.Join(dir, ".credentials.json"))
 	if err != nil {
 		return claudeCredentials{}, false
 	}
@@ -66,6 +70,9 @@ func readClaudeDir(dir string) (claudeCredentials, bool) {
 // clearClaudeDir takes the sign-in out of config directory dir, so the one
 // it was moved to is its only holder.
 func clearClaudeDir(dir string) {
+	if discoveryOff() {
+		return
+	}
 	if claudeKeychain {
 		_ = proc.Command("security", "delete-generic-password", "-s", claudeDirService(dir), "-a", claudeKeychainAccount()).Run()
 	}

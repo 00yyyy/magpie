@@ -25,6 +25,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // copilotCLIHeaders are what the CLI sends with its token.
@@ -76,6 +77,9 @@ var copilotWSL struct {
 // CLI keeps it when the distro has no keyring to put it in (WSL has none
 // unless one is set up): magpie can't reach a distro's keyring.
 func copilotCLILogin() (copilotApp, bool) {
+	if settings.AccountDiscoveryOff() {
+		return copilotApp{}, false
+	}
 	if app, ok := copilotCLILoginIn(copilotCLIHome(), copilotCLISecret); ok {
 		return app, true
 	}
@@ -103,7 +107,7 @@ func copilotCLILogin() (copilotApp, bool) {
 // dir is signed in to, with its token: from its config.json, else from
 // secret (the keychain), when given.
 func copilotCLILoginIn(dir string, secret func(string) string) (copilotApp, bool) {
-	raw, err := os.ReadFile(filepath.Join(dir, "config.json"))
+	raw, err := readAccountFile(filepath.Join(dir, "config.json"))
 	if err != nil {
 		return copilotApp{}, false
 	}
@@ -153,6 +157,9 @@ var copilotSecrets struct {
 // copilotCLISecret reads the CLI's token from the keychain, once in a
 // while: each read may ask the user to allow it.
 var copilotCLISecret = func(account string) string {
+	if settings.AccountDiscoveryOff() {
+		return ""
+	}
 	c := &copilotSecrets
 	c.Lock()
 	defer c.Unlock()

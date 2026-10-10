@@ -41,6 +41,9 @@ var cursorKeychain = runtime.GOOS == "darwin"
 // cursorToken is the access token cursor-agent signed in with: in the
 // Keychain on a Mac, in its auth.json elsewhere.
 func cursorToken() (string, error) {
+	if discoveryOff() {
+		return "", errAccountDiscoveryOff
+	}
 	if cursorKeychain {
 		if tok := cursorKeychainToken(false); tok != "" {
 			return tok, nil

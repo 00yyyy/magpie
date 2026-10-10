@@ -25,6 +25,9 @@ var savedTokenMu sync.Mutex
 // SetLoginOn puts a saved account in use beside the agent's own, or takes
 // it out. The account the agent is signed in to is always in use.
 func SetLoginOn(agent, user string, on bool) error {
+	if discoveryOff() {
+		return errAccountDiscoveryOff
+	}
 	if pp, ok := pluginOfAgent(agent); ok {
 		return setPluginLoginOn(pp, user, on)
 	}

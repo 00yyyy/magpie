@@ -431,9 +431,12 @@ func store(f file) error {
 // over, past the 5 s Codex waits for the list (#746).
 func All() []Provider {
 	held := heldOf("all", allProviders)
-	out := make([]Provider, len(held))
-	for i, p := range held {
-		out[i] = p.clone() // callers change theirs, Keys[i] and Headers included
+	out := make([]Provider, 0, len(held))
+	for _, p := range held {
+		if p.Account != nil && settings.AccountDiscoveryOff() {
+			continue
+		}
+		out = append(out, p.clone()) // callers change theirs, Keys[i] and Headers included
 	}
 	return out
 }

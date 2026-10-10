@@ -30,6 +30,7 @@ import (
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
 )
 
@@ -183,6 +184,9 @@ func validLogins(b []byte) bool {
 }
 
 func readLogins() []savedLogin {
+	if settings.AccountDiscoveryOff() {
+		return nil
+	}
 	// parsed once until the file changes: a state of the page asks for it
 	// dozens of times (every agent's drift and models), and with the
 	// accounts' credentials in it the file is large — a Save of a profile
@@ -220,6 +224,9 @@ func unreadBytes(path string) []byte {
 }
 
 func writeLogins(ls []savedLogin) error {
+	if settings.AccountDiscoveryOff() {
+		return errAccountDiscoveryOff
+	}
 	// every account gets its stable id before it is written (#905): the
 	// one it has, or the stand-in made of its name, there to stay
 	for i := range ls {
@@ -493,7 +500,7 @@ func codexAuthPath() string { return filepath.Join(appdir.CodexHome(), "auth.jso
 // sign-in is a key's, and spends no account a gateway key's list
 // governs.
 func CodexAPIKeySignedIn() bool {
-	b, err := os.ReadFile(codexAuthPath())
+	b, err := readAccountFile(codexAuthPath())
 	if err != nil {
 		return false
 	}
@@ -512,7 +519,7 @@ func claudeProfilePath() string {
 }
 
 func readClaudeProfile() (map[string]any, error) {
-	b, err := os.ReadFile(claudeProfilePath())
+	b, err := readAccountFile(claudeProfilePath())
 	if err != nil {
 		return nil, err
 	}
@@ -529,6 +536,9 @@ func readClaudeProfile() (map[string]any, error) {
 // signed in to, read again only when the file changes: it is large, and a
 // page asks for it for every provider it lists. It must not be changed.
 func claudeProfileAccount() (map[string]any, bool) {
+	if settings.AccountDiscoveryOff() {
+		return nil, false
+	}
 	acct, err := filememo.Read("claude account", claudeProfilePath(), func(b []byte) (map[string]any, error) {
 		var m struct {
 			OAuthAccount map[string]any `json:"oauthAccount"`
@@ -592,9 +602,12 @@ func savedButSignedOut() []Exclusion {
 
 // liveLogin reads the account an agent is signed in to now.
 func liveLogin(agent string) (savedLogin, bool) {
+	if settings.AccountDiscoveryOff() {
+		return savedLogin{}, false
+	}
 	switch agent {
 	case "codex":
-		b, err := os.ReadFile(codexAuthPath())
+		b, err := readAccountFile(codexAuthPath())
 		if err != nil {
 			return savedLogin{}, false
 		}
@@ -652,6 +665,9 @@ func accountRemoved(agent string) bool {
 }
 
 func rememberLogins(force bool) {
+	if settings.AccountDiscoveryOff() {
+		return
+	}
 	loginsMu.Lock()
 	defer loginsMu.Unlock()
 	if !force && time.Since(loginsSeenAt) < 30*time.Second {
@@ -689,6 +705,9 @@ func rememberLogins(force bool) {
 // Logins lists the remembered accounts of an agent ("" for every one),
 // the active one flagged.
 func Logins(agent string) []Login {
+	if settings.AccountDiscoveryOff() {
+		return nil
+	}
 	if pp, ok := pluginOfAgent(agent); ok {
 		return pluginLoginList(pp)
 	}
@@ -895,6 +914,9 @@ func loginRoom(agent string) func(user string) (known, spent bool) {
 // they restart; so does Codex's background app-server, which new Codex
 // sessions attach to (CodexDaemonStale says when it is).
 func SwitchLogin(agent, user string) error {
+	if settings.AccountDiscoveryOff() {
+		return errAccountDiscoveryOff
+	}
 	// the user's own choice: magpie doesn't sign the agent back in to the
 	// account it moved it off
 	if slices.Contains(loginAgents, agent) {
@@ -1082,6 +1104,9 @@ func putClaudeLogin(l savedLogin) error {
 // instead, as `codex logout` does (mamba on Discord: a single Codex account
 // couldn't be removed at all).
 func ForgetLogin(agent, user string) error {
+	if settings.AccountDiscoveryOff() {
+		return errAccountDiscoveryOff
+	}
 	if pp, ok := pluginOfAgent(agent); ok {
 		return forgetPluginLogin(pp, user)
 	}

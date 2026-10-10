@@ -23,6 +23,7 @@ import (
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Codex talks the OpenAI Responses API. Signed in to ChatGPT, it is
@@ -164,6 +165,16 @@ func codexIn(at place) *Agent {
 	// (#940: it read as not connected), the change told as drift. One
 	// picked on the Agents page still takes magpie out (set).
 	beside := func() bool { return viaBase() && stashLoad()[at.key("codex.beside")] == "1" }
+	// chatGPT is whether Codex is signed in to ChatGPT. With account
+	// discovery off (#1535) auth.json stays unread, and Codex is taken to be
+	// as magpie last wired it, beside a ChatGPT sign-in or not, so turning
+	// discovery off never rewires Codex by itself.
+	chatGPT := func() bool {
+		if settings.AccountDiscoveryOff() {
+			return joined() || beside()
+		}
+		return codexChatGPT(dir)
+	}
 	// magpie is in Codex's config: on one of magpie's models, or joined;
 	// or, routed, on the model of the group magpie set it to as Codex
 	// spells it (gpt-6.1-sol for group/auto-gpt-6-1-sol, #750), which the
@@ -689,7 +700,7 @@ func codexIn(at place) *Agent {
 			// that. Wired so for that alone, it is marked (codex.out), for
 			// Sync to put it back beside the sign-in once the account has
 			// room again.
-			chatgpt := !api() && codexChatGPT(dir)
+			chatgpt := !api() && chatGPT()
 			if chatgpt && !out() {
 				forget(at.key("codex.out"))
 				if err := dropProvider(); err != nil {
@@ -752,7 +763,7 @@ func codexIn(at place) *Agent {
 		}
 		// joined, a model of Codex's own is picked beside magpie's, as in
 		// Codex's /model: it stays connected
-		if joined() && !api() && codexChatGPT(dir) {
+		if joined() && !api() && chatGPT() {
 			if err := edit.SetTOMLTop(path, edit.KV{Path: "model", Value: v}); err != nil {
 				return err
 			}
@@ -806,7 +817,7 @@ func codexIn(at place) *Agent {
 		// was on, the one last picked in its /model (the owner: 让 Codex 记住
 		// 上次的选择), and magpie's models join its list
 		Join: func() (bool, error) {
-			if api() || !codexChatGPT(dir) || out() || isMagpie(get("model")) {
+			if api() || !chatGPT() || out() || isMagpie(get("model")) {
 				return false, nil
 			}
 			if p := get("model_provider"); p != "" && p != "openai" && !isCCSwitchMirror(p) {
@@ -869,7 +880,7 @@ func codexIn(at place) *Agent {
 			// on a magpie model by the base URL alone with no ChatGPT
 			// sign-in, as an older magpie left a Codex signed in with an
 			// API key: its picker never had magpie's models (#322)
-			if m := get("model"); isMagpie(m) && viaBase() && get("model_provider") == "" && !codexChatGPT(dir) {
+			if m := get("model"); isMagpie(m) && viaBase() && get("model_provider") == "" && !chatGPT() {
 				return set(m)
 			}
 			// the ChatGPT account ran out (of its allowance and its
@@ -879,7 +890,7 @@ func codexIn(at place) *Agent {
 			// becomes Codex's provider as set does for an account already
 			// out; and once the account has room again (or Codex is on
 			// one with room), Codex's own models join magpie's again
-			if m := get("model"); isMagpie(m) && !api() && codexChatGPT(dir) {
+			if m := get("model"); isMagpie(m) && !api() && chatGPT() {
 				switch {
 				case viaBase() && !asProvider() && out():
 					return set(m)
@@ -1453,6 +1464,9 @@ func CodexOwnOnly() bool {
 // its built-in provider then runs and asks for the model list at
 // openai_base_url. Signed in with an API key alone, it asks for none.
 func codexChatGPT(dir string) bool {
+	if settings.AccountDiscoveryOff() {
+		return false
+	}
 	var a struct {
 		Tokens struct {
 			Access string `json:"access_token"`

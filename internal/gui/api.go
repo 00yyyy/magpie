@@ -343,6 +343,9 @@ type settingsJSON struct {
 	TerminalApps    []terminalChoice `json:"terminalApps,omitempty"`
 	TerminalDefault string           `json:"terminalDefault,omitempty"`
 	OTelEnv         bool             `json:"otelEnv,omitempty"`
+	// NoAccountsEnv is MAGPIE_NO_ACCOUNTS set, which keeps account
+	// discovery off for this run whatever Settings has (#1535)
+	NoAccountsEnv bool `json:"noAccountsEnv,omitempty"`
 	// whether the page is in gateway mode and why (gatewayMode); Web says
 	// it is served by magpie web, where the mode can be set
 	GatewayOn  bool   `json:"gatewayOn,omitempty"`
@@ -518,6 +521,7 @@ func settingsState() settingsJSON {
 		s.NotifyProblem = notifyProblem()
 	}
 	s.ProxyNow, s.ProxySource = netproxy.Describe()
+	s.NoAccountsEnv = settings.AccountDiscoveryOff() && !s.NoAccountDiscovery
 	for _, name := range []string{"MAGPIE_OTEL_ENABLED", "MAGPIE_OTEL_ENDPOINT", "MAGPIE_OTEL_HEADERS", "MAGPIE_OTEL_METRICS", "MAGPIE_OTEL_BODIES", "MAGPIE_OTEL_BODIES_WHOLE", "MAGPIE_OTEL_SESSIONS"} {
 		if _, ok := os.LookupEnv(name); ok {
 			s.OTelEnv = true
@@ -1085,6 +1089,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.UpdateMirror = cur.UpdateMirror
 		// gateway mode, set on its own (gateway-mode)
 		in.GatewayMode = cur.GatewayMode
+		in.NoAccountDiscovery = cur.NoAccountDiscovery // set on its own (account-discovery below, or the CLI)
 		if v := strings.TrimSpace(in.Vision); v != "" && v != "off" && v != cur.Vision {
 			if _, _, ok := provider.Resolve(v); !ok {
 				fail(rw, fmt.Errorf("no model %s to describe images", v))
@@ -1178,6 +1183,25 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			fail(rw, err)
 			return
 		}
+		writeJSON(rw, settingsState())
+	})
+	// whether agents' sign-ins are read and served as subscriptions
+	// (#1535): saved, the accounts read before are forgotten at once
+	mux.HandleFunc("POST /api/settings/account-discovery", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Off bool `json:"off"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		s.NoAccountDiscovery = in.Off
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		provider.ForgetAccounts()
 		writeJSON(rw, settingsState())
 	})
 	// the version the header's Update pill is hidden for, until a newer one

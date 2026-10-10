@@ -185,6 +185,13 @@ type Settings struct {
 	// is stuck in a loop of the same few lines (#1359). Off, as by
 	// default, the gateway ends such a reply with an error.
 	NoLoopGuard bool `json:"noLoopGuard,omitempty"`
+	// NoAccountDiscovery leaves every agent's sign-in unread (#1535,
+	// MaxHaiCom): no credential file, Keychain item or agent CLI is asked
+	// who is signed in, and no subscription is offered; API-key providers
+	// work as before (see AccountDiscoveryOff, provider/discovery.go). Off,
+	// as by default, subscriptions are found as ever. This computer's own
+	// (KeepOwn), set only by its own switch or `magpie accounts discovery`.
+	NoAccountDiscovery bool `json:"noAccountDiscovery,omitempty"`
 	// NoStats stops the one event a day that counts magpie's users (see
 	// internal/stats).
 	NoStats bool `json:"noStats,omitempty"`
@@ -762,7 +769,7 @@ func (s Settings) Compact() int {
 
 // KeepOwn puts back cur's settings that are this computer's own, which a
 // sync or a restored backup never brings from another: the window's size
-// and whether it was maximised, the proxy, the gateway's port, the Dock, gateway mode, whether WSL is looked in, when allowances are read, and what the menu bar or tray shows beside magpie's
+// and whether it was maximised, the proxy, the gateway's port, the Dock, gateway mode, whether WSL is looked in, whether agents' sign-ins are read, when allowances are read, and what the menu bar or tray shows beside magpie's
 // icon (yoooo on Discord: usage turned off on a Mac came back from a
 // Windows box that shows it).
 func (s *Settings) KeepOwn(cur Settings) {
@@ -774,6 +781,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.GatewayMode = cur.GatewayMode
 	s.NoWSLAgents = cur.NoWSLAgents
 	s.QuotaReads = cur.QuotaReads
+	s.NoAccountDiscovery = cur.NoAccountDiscovery
 }
 
 // RenamePerModel moves what the user said of a provider's models to the id

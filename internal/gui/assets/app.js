@@ -19368,6 +19368,7 @@ function renderSettings() {
   renderSearch(s, keep);
   renderReplies(s, keep);
   renderRedact(s, keep);
+  renderDiscovery(s);
   renderOTel(s, keep);
   renderPort(s);
   renderLAN(s);
@@ -20752,6 +20753,31 @@ const REDACT_KINDS = [
   ["ip", "Public IP addresses", "Private, local and documentation addresses stay. Off by default: logs and configs are full of them", false],
   ["bucket", "Cloud storage buckets", "The bucket in s3://, gs://, oss://, cos:// and storage URLs; the path in it stays", false],
 ];
+
+// renderDiscovery: whether magpie reads the agents' own sign-ins —
+// Claude Code's and Codex's files, the Keychain, Copilot's, Cursor's and
+// the rest — and serves them as subscriptions (#1535). Set on its own:
+// saved, magpie forgets the accounts it read, and API-key providers go on.
+// MAGPIE_NO_ACCOUNTS keeps it off for that run whatever is saved.
+function renderDiscovery(s) {
+  const box = $("#discoveryList");
+  const r = el("div", "row pref");
+  const who = el("div", "who");
+  who.append(el("div", "name", t("Subscription accounts")),
+    el("div", "sub", s.noAccountsEnv
+      ? t("Off for this run: MAGPIE_NO_ACCOUNTS is set")
+      : t("Read the accounts your agents are signed in to (Claude Code, Codex, Copilot, Cursor and others: their files and the Keychain) and serve them. Off, magpie reads none of them; API-key providers work as before")));
+  const val = el("div", "val");
+  const on = !s.noAccountDiscovery && !s.noAccountsEnv;
+  val.append(segs([["off", t("Off")], ["on", t("On")]], on ? "on" : "off", (v) => {
+    if ((v === "on") === on) return;
+    writingPrefs(api("settings/account-discovery", { off: v === "off" }))
+      .then((ns) => { prefs = state.settings = ns; renderSettings(); refreshAfterSync(); })
+      .catch((e) => { status(t(e.message), "err"); renderSettings(); });
+  }));
+  r.append(who, val);
+  box.replaceChildren(r);
+}
 
 // renderRedact: what the gateway masks before a request goes to a vendor —
 // secrets, personal data, the user's own words — and puts back in what the

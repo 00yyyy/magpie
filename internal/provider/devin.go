@@ -34,6 +34,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // DevinExecutable finds the devin CLI; a var so tests can fake it.
@@ -68,7 +69,12 @@ func DevinCredentialsPath() string {
 var devinStatus = &cliIdentity{name: "devin", exe: func() string { return DevinExecutable() }, ask: askDevinStatus}
 
 // devinIdentity is who Devin's CLI says is signed in; see cliIdentity.
-func devinIdentity() (user, plan string, ok bool) { return devinStatus.get() }
+func devinIdentity() (user, plan string, ok bool) {
+	if settings.AccountDiscoveryOff() {
+		return "", "", false
+	}
+	return devinStatus.get()
+}
 
 func forgetDevinStatus() { devinStatus.forget() }
 
@@ -100,6 +106,9 @@ func askDevinIdentityAt(home string) (user, plan string, ok bool) {
 
 // askDevinStatusAt asks the CLI who is signed in in home ("" for its own).
 func askDevinStatusAt(home string) (user, plan string, ok bool, err error) {
+	if settings.AccountDiscoveryOff() {
+		return "", "", false, nil
+	}
 	path := DevinExecutable()
 	if path == "" {
 		return "", "", false, nil
@@ -718,7 +727,7 @@ func DevinAuth() (key, server string, err error) { return DevinAuthAt("") }
 // CLI's own.
 func DevinAuthAt(home string) (key, server string, err error) {
 	path := devinCredentialsAt(home)
-	b, err := os.ReadFile(path)
+	b, err := readAccountFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if home != "" {

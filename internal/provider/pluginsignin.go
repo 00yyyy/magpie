@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // StartPluginSignIn begins signing in to a plugin's provider (OpenCode's
@@ -19,6 +20,9 @@ import (
 // is. A built-in moved onto its plugin installs the CLI it runs through
 // first, as the built-in's sign-in did.
 func StartPluginSignIn(id string, method int, inputs map[string]string) (SignInState, error) {
+	if settings.AccountDiscoveryOff() {
+		return SignInState{}, errAccountDiscoveryOff
+	}
 	s := &signInFlow{done: make(chan struct{})}
 	s.st = SignInState{ID: randomToken(9), Agent: PluginID(id), State: "waiting"}
 	var cli agentCLI

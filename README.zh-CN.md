@@ -65,6 +65,8 @@ magpie quota                                    # 每个套餐还剩多少
 magpie tui                                      # 全部功能，在终端里
 ```
 
+magpie 通过读取智能体的登录信息（Claude Code 和 Codex 的文件、钥匙串）找到它们登录的订阅。不想让它读取，可以在 设置 → 隐私 里关闭「订阅账号」，或运行 `magpie accounts discovery off`（`on` 重新开启）。`MAGPIE_NO_ACCOUNTS=1` 只对这一次运行关闭，不改动保存的设置。API Key 服务商不受影响。
+
 ## 支持的 Agent
 
 <table>

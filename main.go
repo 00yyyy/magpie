@@ -82,6 +82,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie accounts [agent] [--json]  every subscription magpie knows, with each one's allowance used and when it resets
   magpie accounts add <agent>     sign in to one more Claude, ChatGPT or Google (Gemini CLI, Antigravity) subscription
   magpie accounts add copilot [--host <name>.ghe.com]   one more Copilot account, on github.com or an enterprise's GHE.com
+  magpie accounts discovery [on|off]   read agents' sign-ins (default on; MAGPIE_NO_ACCOUNTS=1 disables too)
   magpie accounts import <codex|claude|antigravity|factory> <file>... [--yes]   bring in accounts from other tools' files (Codex's auth.json, Cockpit Tools, CLIProxyAPI, Sub2API); the tool a ChatGPT or Claude file came from is signed out of it
   magpie accounts switch <agent> <email>   sign the agent in to another of them
   magpie accounts refresh         renew the saved ChatGPT sign-ins now (the gateway does it daily)
@@ -196,6 +197,9 @@ func run(args []string) error {
 		// home, for the Agents page to show what disconnecting changes
 		// (agent.DisconnectPreview)
 		return agent.DryRun(args[1])
+	}
+	if len(args) > 1 && (args[0] == "accounts" || args[0] == "account") && args[1] == "discovery" {
+		return accountsDiscoveryCmd(args[2:])
 	}
 	// started by an update, the magpie it replaces goes first: the moves
 	// below write the files it may still be writing

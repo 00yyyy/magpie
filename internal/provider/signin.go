@@ -26,6 +26,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // The vendors' sign-in pages; vars so tests can point them elsewhere.
@@ -122,6 +124,9 @@ func StartSignIn(agent string) (SignInState, error) {
 // StartSignInAt is StartSignIn on one of the sites an agent signs in on:
 // ZCode's "zai" (the default) or "bigmodel".
 func StartSignInAt(agent, site string) (SignInState, error) {
+	if settings.AccountDiscoveryOff() {
+		return SignInState{}, errAccountDiscoveryOff
+	}
 	// one moved onto its plugin signs in there: an account signed in to
 	// here would be the built-in's, which nothing serves now
 	if Moved(agent) {

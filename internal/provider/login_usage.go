@@ -7,10 +7,11 @@ package provider
 import (
 	"context"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 var loginUsageCache struct {
@@ -75,6 +76,9 @@ func LoginUsage(ctx context.Context, agent string) map[string]SubscriptionQuota 
 // one taken from the cache is up to a minute old already, and Allowances
 // counts its own minute from then, not from when it asked (#1295).
 func loginUsageAt(ctx context.Context, agent string) (map[string]SubscriptionQuota, time.Time) {
+	if settings.AccountDiscoveryOff() {
+		return nil, time.Time{}
+	}
 	asked := time.Now()
 	if out, ok := loginUsageStandIn(ctx, agent); ok {
 		return out, asked
@@ -413,7 +417,7 @@ func CodexUsedUp(ctx context.Context) bool {
 // file Codex is signed in with, or the one kept for it.
 func codexLoginAuth(l Login) []byte {
 	if l.Active {
-		b, _ := os.ReadFile(codexAuthPath())
+		b, _ := readAccountFile(codexAuthPath())
 		return b
 	}
 	loginsMu.Lock()
