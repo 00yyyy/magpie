@@ -17,6 +17,16 @@
 //
 // and it runs in moejs in magpie's own process, as gateway middleware
 // does: there is no Node here, so a package it imports is bundled into it.
+//
+// The agent export may also say where its agent reads what magpie's
+// Library gives (internal/library): an instructions file, an MCP file in
+// one of MCPFormats, and a skills folder; each is optional.
+//
+//	library: {
+//	  instructions: "~/.aider/AGENTS.md",
+//	  mcp: "~/.aider/mcp.json", mcpFormat: "claude",
+//	  skills: "~/.aider/skills",
+//	}
 package agentplug
 
 import (
@@ -26,6 +36,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -59,6 +70,29 @@ type Desc struct {
 	// Notice is advice shown after a change, as a built-in agent's is
 	// (an agent that reads its config at start-up needs a restart)
 	Notice string `json:"notice"`
+	// Library is where the agent reads the Library's instructions, MCP
+	// servers and skills
+	Library Places `json:"library"`
+}
+
+// Places are where an agent reads what the Library gives it, each a path
+// as Config is (~ and $VAR expanded); an empty one is a thing it isn't
+// given.
+type Places struct {
+	Instructions string `json:"instructions"`
+	MCP          string `json:"mcp"`
+	// MCPFormat is how its MCP file lists servers: one of MCPFormats
+	MCPFormat string `json:"mcpFormat"`
+	Skills    string `json:"skills"`
+}
+
+// MCPFormats are the MCP files an agent plugin's agent may keep, each
+// named for the agent whose file it is written as: "claude" is
+// {"mcpServers": {name: {type, command, args, env, url, headers}}}.
+var MCPFormats = []string{
+	"alma", "antigravity", "claude", "cline", "codex", "commandcode", "copilot",
+	"crush", "cursor", "devin", "gemini", "goose", "grok", "hermes", "kimi",
+	"omp", "opencode", "zed",
 }
 
 // Agent is one plugin's agent, compiled.
@@ -250,6 +284,17 @@ func (d *Desc) check() error {
 		return fmt.Errorf("agent.config %q: say its agent.format (json, yaml or env)", d.Config)
 	default:
 		return fmt.Errorf("agent.format %q: json, yaml or env", d.Format)
+	}
+	l := &d.Library
+	l.Instructions, l.MCP, l.Skills = strings.TrimSpace(l.Instructions), strings.TrimSpace(l.MCP), strings.TrimSpace(l.Skills)
+	l.MCPFormat = strings.ToLower(strings.TrimSpace(l.MCPFormat))
+	switch {
+	case l.MCP == "" && l.MCPFormat != "":
+		return errors.New("agent.library.mcpFormat names a format, but agent.library.mcp no file")
+	case l.MCP != "" && l.MCPFormat == "":
+		return fmt.Errorf("agent.library.mcp %q: say its agent.library.mcpFormat, one of %s", l.MCP, strings.Join(MCPFormats, ", "))
+	case l.MCP != "" && !slices.Contains(MCPFormats, l.MCPFormat):
+		return fmt.Errorf("agent.library.mcpFormat %q: one of %s", l.MCPFormat, strings.Join(MCPFormats, ", "))
 	}
 	for i, u := range d.UA {
 		d.UA[i] = strings.ToLower(u)

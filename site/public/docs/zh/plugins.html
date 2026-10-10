@@ -704,6 +704,7 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
       <tr><td><code>ua</code></td><td>Agent 的 User-Agent 里的词，请求没带它的 key 时，用来在用量里认出它。</td></tr>
       <tr><td><code>icon</code></td><td>这一行的图标：图标名、<code>https://</code> 或 <code>data:</code> URL。不写就用插件自己的图标，再没有就用通用图标。</td></tr>
       <tr><td><code>notice</code></td><td>换模型之后显示的提示，和内置 Agent 一样。</td></tr>
+      <tr><td><code>library</code></td><td>Agent 从哪里读<span class="ui">资源库</span>给它的东西：<code>instructions</code>（每次对话前读的 Markdown 文件）、<code>mcp</code>（它的 MCP 服务器文件）和 <code>mcpFormat</code>（这个文件的写法跟哪个 Agent 的一样：<code>alma</code>, <code>antigravity</code>, <code>claude</code>, <code>cline</code>, <code>codex</code>, <code>commandcode</code>, <code>copilot</code>, <code>crush</code>, <code>cursor</code>, <code>devin</code>, <code>gemini</code>, <code>goose</code>, <code>grok</code>, <code>hermes</code>, <code>kimi</code>, <code>omp</code>, <code>opencode</code>, <code>zed</code>；<code>claude</code> 即 <code>{"mcpServers": {…}}</code>），以及 <code>skills</code>（放 <code>SKILL.md</code> 文件夹的目录）。每项都可省略，<code>~</code> 和 <code>$VAR</code> 会展开：<code>library: { instructions: "~/.toy/AGENTS.md", mcp: "~/.toy/mcp.json", mcpFormat: "claude", skills: "~/.toy/skills" }</code>。不写的话，资源库不会给它任何东西，给它某一项时会被拒绝，并说明插件该写哪个键。</td></tr>
     </table></div>
     <h3>connect</h3>
     <p><code>connect(input)</code> 返回要在模型旁边一起写入的其他键，按键路径给出各自的值；可以是 <code>async</code>。它拿到 <code>gateway</code>（<code>url</code>、<code>v1</code>——以 <code>/v1</code> 结尾的地址——和 <code>key</code>，即这个 Agent 自己的 key，请求会按它的 id 计入用量）、<code>model</code>（<code>id</code>、<code>name</code>、<code>context</code>、<code>output</code>、<code>images</code>、<code>efforts</code>）、<code>models</code>（magpie 给这个 Agent 的所有模型，格式相同）和 <code>agent</code>（<code>id</code>、<code>config</code>）。没有 <code>connect</code> 的插件只写模型。</p>
@@ -713,6 +714,7 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
       <li><b>恢复。</b>重新选回 Agent 自己的模型，或关掉开关，每个键都恢复原值，原来没有的键会被删掉。文件从不整体覆盖。</li>
       <li><b>是否已接入。</b>只要存 magpie key 的那个键还是这个 key，这一行就显示已接入。之后手动改过的键会在这一行里指出，和内置 Agent 一样。</li>
       <li><b>运行方式。</b>和<a href="#middleware">中间件</a>一样：在 magpie 自己的进程里用 moejs 运行，只能导入插件内的文件，没有 Node API，<code>console.log</code> 进 magpie 的日志。加载和 <code>connect</code> 各有一秒。模块加载失败或 <code>connect</code> 抛错的插件，会在插件页它那一行写明原因，并且什么都不写入。</li>
+      <li><b>资源库。</b>写了 <code>library</code>，这个 Agent 就和内置 Agent 一样拿到资源库的内容：指令写在文件里 magpie 的两行标记之间，MCP 服务器和用户自己的写在同一个文件里（用户自己加的字段保留），技能以链接或副本放进文件夹。取消时只拿走 magpie 写的部分，文件原来的内容留在 magpie 的备份里。<code>mcpFormat</code> 不在列表中，或写了 <code>mcp</code> 却没写 <code>mcpFormat</code>，插件不会加载。</li>
       <li><b>声明方式。</b><code>package.json</code> 里写 <code>"magpie": { "agent": "./agent.js" }</code>，或者一个名为 <code>*.agent.js</code>（或 <code>.mjs</code>）的单文件。一个包可以同时是供应商、中间件和 Agent。插件市场里 Agent 条目写 <code>"kind": "agent"</code>，列在 <span class="ui">Agent</span> 下；社区包命名为 <code>@magpie-community/agent-&lt;name&gt;</code>。</li>
     </ul>
 

@@ -106,6 +106,13 @@ func pluggedAgents(home string, builtin []*Agent, errs map[string]string) []*Age
 	return out
 }
 
+// PluginPath is a path an agent plugin gives, as it reads its config's:
+// ~ and $VAR expanded against this user's home.
+func PluginPath(p string) string {
+	home, _ := homes()
+	return pluggedPath(home, p)
+}
+
 // pluggedPath is the file a plugin names, with ~ and $VAR as a shell
 // reads them.
 func pluggedPath(home, p string) string {

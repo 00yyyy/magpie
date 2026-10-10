@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/agentplug"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/desktopdir"
+	"github.com/yetone/magpie/internal/plugin"
 )
 
 // Target is where one agent keeps each of the three: an empty path is
@@ -344,6 +346,51 @@ func targetOf(a *agent.Agent) *Target {
 			t.Skills = filepath.Join(t.Desktop[0], "skills")
 		}
 	default:
+		if a.Plugin != "" {
+			return pluginTarget(a)
+		}
+		return nil
+	}
+	return t
+}
+
+// pluginMCP is each MCP format an agent plugin may name
+// (agentplug.MCPFormats), by name.
+var pluginMCP = map[string]mcpFormat{
+	"alma": fmtAlma, "antigravity": fmtAntigravity, "claude": fmtClaude,
+	"cline": fmtCline, "codex": fmtCodex, "commandcode": fmtCommandCode,
+	"copilot": fmtCopilot, "crush": fmtCrush, "cursor": fmtCursor,
+	"devin": fmtDevin, "gemini": fmtGemini, "goose": fmtGoose, "grok": fmtGrok,
+	"hermes": fmtHermes, "kimi": fmtKimi, "omp": fmtOmp, "opencode": fmtOpenCode,
+	"zed": fmtZed,
+}
+
+// pluginTarget is where an agent a plugin adds reads the Library's three,
+// as its agent.library says; nil when it names none. A path that isn't
+// absolute once ~ and $VAR are expanded is left out: relative to what, no
+// one knows.
+func pluginTarget(a *agent.Agent) *Target {
+	list, _ := agentplug.List()
+	var l agentplug.Places
+	for _, p := range list {
+		if p.Spec == a.Plugin {
+			l = p.Desc.Library
+		}
+	}
+	at := func(p string) string {
+		if p == "" {
+			return ""
+		}
+		if p = agent.PluginPath(p); !filepath.IsAbs(p) {
+			return ""
+		}
+		return p
+	}
+	t := &Target{Agent: a, Instructions: at(l.Instructions), Skills: at(l.Skills)}
+	if f, ok := pluginMCP[l.MCPFormat]; ok && at(l.MCP) != "" {
+		t.MCP = &mcpFile{Path: at(l.MCP), Format: f}
+	}
+	if t.Instructions == "" && t.MCP == nil && t.Skills == "" {
 		return nil
 	}
 	return t
@@ -584,6 +631,8 @@ func noPlace(a *agent.Agent, kind, what string) string {
 		// with the Claude account, not in a file; its Code tab is Claude
 		// Code, which reads Claude Code's CLAUDE.md
 		return "Claude Desktop keeps its instructions in its own settings, with your Claude account, not in a file magpie can write; its Code tab runs Claude Code, which reads Claude Code's · give them to claude"
+	case a.Plugin != "":
+		return fmt.Sprintf("%s's plugin (%s) says no place for %s: its agent.library.%s names none", a.Name, plugin.Name(a.Plugin), what, kind)
 	}
 	return fmt.Sprintf("%s has no user-wide place for %s that magpie knows of", a.Name, what)
 }
