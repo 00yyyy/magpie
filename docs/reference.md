@@ -294,6 +294,24 @@ write, and that time isn't seen. History is read the same way, as it keeps the
 reasoning, the first text and the flow; a record from before the flow was kept
 is told by its reasoning's pace alone.
 
+A call read from an agent's session file rather than seen by the gateway has
+no first token: Claude Code's file has only when the line that asked for a
+reply and the reply's last line were written. Such a row on the Requests tab
+shows the least its reply wrote at instead (`≥98 tok/s`): its output tokens
+over that whole time, the wait for the first token in it, so the speed after
+the first token is never under it. Only a reply of 1,000 tokens or more
+written over a second or more shows one; a shorter reply's wait is too much
+of its time to tell anything. Only Claude Code's and Claude Desktop's rows
+show one: their line that asked for a reply is written before it is sent. A
+Codex call in a turn of several is timed from the last tool output before
+its token count, and Codex can write the output of a tool that call itself
+asked for before the count, so its time can begin inside the call and a
+floor from it could read high; it shows none.
+A call whose session file timed it (a Codex
+turn of one call) shows its own speed as before. The floor is the row's
+alone: the period's output speed, the Speed trend and `magpie usage` count
+timed calls only.
+
 It lists **accounts** too: each Codex, Claude or other subscription account's
 tokens and cost, by the account that actually answered — the one that took
 over after a failover, the one `X-Magpie-Account` pinned. The account is named
