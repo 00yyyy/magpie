@@ -172,15 +172,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await posted(4)).balanceAlert, 2.5);
         await settled();
 
-        // another setting saved later keeps both alerts
-        await page.locator("#currencySegs .opt", { hasText: w.cny }).click();
+        // another setting saved later keeps both alerts. The currency row
+        // sits above the alert rows: in zh, since the Allowance reads row
+        // (e9221e96d), the wheel stops at the bottom with it 0.02px above
+        // the view, and Playwright scrolls a target into view before it
+        // clicks. So the alert clicks are checked here, and the currency
+        // click from where its row is in view.
+        assert.equal(await view(page), before, "no alert click moved the page");
+        const cny = page.locator("#currencySegs .opt", { hasText: w.cny });
+        await cny.scrollIntoViewIfNeeded();
+        const atCurrency = await view(page);
+        await cny.click();
         const c = await posted(5);
         assert.equal(c.currency, "cny");
         assert.equal(c.usageAlert, 90, "the usage alert is kept by another save");
         assert.equal(c.balanceAlert, 2.5, "the balance alert is kept by another save");
         await settled();
         assert.equal(await share.inputValue(), "90");
-        assert.equal(await view(page), before, "no click moved the page");
+        assert.equal(await view(page), atCurrency, "the currency click moved nothing");
 
         // Off saves 0, and the field goes
         await usageSegs.nth(0).click();
