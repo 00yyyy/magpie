@@ -1117,8 +1117,18 @@ const wslProbeVersion = 2
 // nvm's installers add theirs to PATH (whqtian on Discord: a WSL omp from
 // bun was never asked its version, so its models still offered xhigh).
 // It is asked with its own folder on PATH, where bun's script finds bun.
+//
+// Of nvm's Nodes, the one a terminal there gets is looked in first: the
+// version nvm's default alias resolves to, asked of nvm itself
+// (nvm_version default, nvm.sh read by bash with --no-use), then the rest
+// highest first. The glob this replaced took them in name order, so a
+// command under v18 was found before the default v22's, and v9's after
+// both (as proc.UserPath did on a Mac or Linux, 9f407cafa).
 var wslProbeScript = func() string {
-	s := `wslbin() { for d in "$HOME/.bun/bin" "$HOME/.local/bin" "$HOME/.npm-global/bin" "$HOME/.volta/bin" "$HOME/.local/share/pnpm" "$HOME"/.nvm/versions/node/*/bin "$HOME/.local/share/mise/shims" "$HOME/.asdf/shims"; do [ -x "$d/$1" ] && { echo "$d/$1"; return 0; }; done; return 1; }; `
+	s := `nv="${NVM_DIR:-$HOME/.nvm}"; nd=; [ -s "$nv/nvm.sh" ] && command -v bash >/dev/null 2>&1 && nd=$(NVM_DIR="$nv" timeout 10 bash -c '. "$NVM_DIR/nvm.sh" --no-use >/dev/null 2>&1; nvm_version default 2>/dev/null' </dev/null 2>/dev/null); ` +
+		`wslbin() { for d in "$HOME/.bun/bin" "$HOME/.local/bin" "$HOME/.npm-global/bin" "$HOME/.volta/bin" "$HOME/.local/share/pnpm"; do [ -x "$d/$1" ] && { echo "$d/$1"; return 0; }; done; ` +
+		`for v in $nd $(ls "$nv/versions/node" 2>/dev/null | sort -t. -k1.2,1nr -k2,2nr -k3,3nr); do d="$nv/versions/node/$v/bin"; [ -x "$d/$1" ] && { echo "$d/$1"; return 0; }; done; ` +
+		`for d in "$HOME/.local/share/mise/shims" "$HOME/.asdf/shims"; do [ -x "$d/$1" ] && { echo "$d/$1"; return 0; }; done; return 1; }; `
 	s += `echo "home:$HOME"; `
 	for _, k := range wslKinds {
 		if k.dir != "" {

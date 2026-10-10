@@ -21,7 +21,9 @@ import (
 // or codex installed with a custom npm prefix (~/.npm-global/bin), nvm, bun,
 // volta or asdf wasn't found: the agent wasn't seen and its subscription
 // couldn't be used. The folders those tools use are added at once, when they
-// exist; the login shell's own PATH is asked for after.
+// exist; the login shell's own PATH is asked for after. Of nvm's Nodes only
+// the one a terminal gets is added: its default alias's, not the folder
+// whose name sorts last (nvmBins).
 //
 // The same call brings the agents' own variables (agentenv.Vars:
 // PI_CODING_AGENT_DIR, CODEX_HOME, CLAUDE_CONFIG_DIR, ...) the profile sets
@@ -96,7 +98,9 @@ func LoginPath() []string {
 // UserBinDirs are the folders a user's command-line tools are installed in
 // that exist here — npm's prefixes, each Node version of nvm, fnm and mise,
 // bun, volta, pnpm, asdf, the standalone installers' ~/.local/bin,
-// Homebrew — for finding one PATH doesn't reach.
+// Homebrew — for finding one PATH doesn't reach. A manager's Node versions
+// come in the order a terminal would reach them: its default first, then
+// the highest version (v22 before v9).
 func UserBinDirs() []string { return userDirs(true) }
 
 func userDirs(everyNode bool) []string {
@@ -105,24 +109,29 @@ func userDirs(everyNode bool) []string {
 	for _, d := range []string{".local/bin", ".npm-global/bin", ".npm/bin", ".bun/bin", ".volta/bin", ".asdf/shims", ".local/share/mise/shims", ".cargo/bin", ".deno/bin", "Library/pnpm"} {
 		known = append(known, filepath.Join(home, d))
 	}
-	nodes := func(pattern string) {
-		vs, _ := filepath.Glob(filepath.Join(home, pattern))
-		if len(vs) == 0 {
-			return
+	// nvm's Node a terminal gets: its default, or with none usable the
+	// highest installed; none when the default is the system's Node
+	if nvm := nvmDir(home); nvm != "" {
+		bins, def, system := nvmBins(nvm)
+		switch {
+		case everyNode:
+			known = append(known, bins...)
+		case def != "":
+			known = append(known, def)
+		case !system && len(bins) > 0:
+			known = append(known, bins[0])
 		}
-		if !everyNode {
-			known = append(known, vs[len(vs)-1])
-			return
-		}
-		slices.Reverse(vs)
-		known = append(known, vs...)
 	}
-	nodes(".nvm/versions/node/*/bin")
 	if everyNode {
 		known = append(known, filepath.Join(home, ".local/share/pnpm"), npmPrefix(home))
-		nodes(".local/share/mise/installs/node/*/bin")
-		nodes(".local/share/fnm/node-versions/*/installation/bin")
-		nodes("Library/Application Support/fnm/node-versions/*/installation/bin")
+		known = append(known, nodeBins(filepath.Join(home, ".local/share/mise/installs/node"))...)
+		fnm := []string{filepath.Join(home, ".local/share/fnm"), filepath.Join(home, "Library/Application Support/fnm")}
+		if d := os.Getenv("FNM_DIR"); filepath.IsAbs(d) {
+			fnm = append([]string{d}, fnm...)
+		}
+		for _, d := range slices.Compact(fnm) {
+			known = append(known, fnmBins(d)...)
+		}
 	}
 	known = append(known, SystemDirs("/opt/homebrew/bin", "/usr/local/bin")...)
 	var have []string

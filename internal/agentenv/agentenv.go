@@ -84,6 +84,9 @@ var Vars = []string{
 	// Droid's home, Windsurf's API server, ZCode's credential seed: what
 	// makes an account or an installation visible that the test didn't make
 	"FACTORY_HOME_OVERRIDE", "WINDSURF_API_SERVER_URL", "ZCODE_CREDENTIAL_SECRET",
+	// nvm's and fnm's folders, which hold the Node versions an agent's CLI
+	// is installed under, and which of them a terminal uses
+	"NVM_DIR", "FNM_DIR",
 	// Google Cloud's credentials file and gcloud's folder, which Vertex AI's
 	// tokens are minted from (and Gemini CLI's own, on Vertex AI)
 	"GOOGLE_APPLICATION_CREDENTIALS", "CLOUDSDK_CONFIG",

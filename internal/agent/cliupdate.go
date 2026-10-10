@@ -55,7 +55,7 @@ type CLI struct {
 	// reached it
 	Path string `json:"path,omitempty"`
 	// OffPath says the CLI was found in a folder magpie adds to its own
-	// PATH (proc.UserPath: ~/.local/bin, npm's prefixes, nvm's newest
+	// PATH (proc.UserPath: ~/.local/bin, npm's prefixes, nvm's default
 	// Node, bun, Homebrew, ...) that a terminal opened now doesn't have,
 	// so that `which` there doesn't find it. A row of an agent the user
 	// believed uninstalled, with a version and nothing to say where it
