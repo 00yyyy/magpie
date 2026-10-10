@@ -2,10 +2,7 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -130,7 +127,7 @@ const wiredAt = ".wired_at"
 
 // stashPut writes the stash as m has it.
 func stashPut(m map[string]string) {
-	b, _ := json.MarshalIndent(m, "", "  ")
-	os.MkdirAll(filepath.Dir(stashPath()), 0o755)
-	os.WriteFile(stashPath(), b, 0o600)
+	stashMu.Lock()
+	defer stashMu.Unlock()
+	stashWrite(m)
 }

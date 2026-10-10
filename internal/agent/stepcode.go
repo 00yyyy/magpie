@@ -207,6 +207,8 @@ func loadStepcodeState(at place) (*stepcodeState, error) {
 }
 
 func stepcodeStoreState(at place, state *stepcodeState) error {
+	stashMu.Lock()
+	defer stashMu.Unlock()
 	m, err := stepcodeReadStash()
 	if err != nil {
 		return err
@@ -221,22 +223,7 @@ func stepcodeStoreState(at place, state *stepcodeState) error {
 		}
 		m[key] = string(b)
 	}
-	data, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(stashPath()), 0o700); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(stashPath(), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err == nil {
-		if err := f.Close(); err != nil {
-			return err
-		}
-	} else if !errors.Is(err, fs.ErrExist) {
-		return err
-	}
-	return edit.WriteAtomic(stashPath(), data)
+	return stashWrite(m)
 }
 
 func stepcodeStartup(cfg stepcodeTOML) string {
