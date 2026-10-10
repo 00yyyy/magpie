@@ -26,6 +26,9 @@ type streamVendor struct {
 	at    []time.Time // when each request arrived
 	fail  int
 	block chan struct{} // the first request waits on it, if set
+	later time.Duration // the requests after the first wait this, quiet
+	// when it began to answer each request, after block and later
+	answered []time.Time
 }
 
 // arrived is when the vendor's n-th request (from 0) arrived.
@@ -56,6 +59,16 @@ func (v *streamVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if n > 1 && v.later > 0 {
+		select {
+		case <-time.After(v.later):
+		case <-r.Context().Done():
+			return
+		}
+	}
+	v.mu.Lock()
+	v.answered = append(v.answered, time.Now())
+	v.mu.Unlock()
 	if failing {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(500)
@@ -115,20 +128,48 @@ func (l wroteListener) Accept() (net.Conn, error) {
 	if err != nil {
 		return c, err
 	}
-	at := new(atomic.Int64)
+	at, all := new(atomic.Int64), new(writeLog)
 	wrote.Store(c.RemoteAddr().String(), at)
-	return wroteConn{c, at}, nil
+	writes.Store(c.RemoteAddr().String(), all)
+	return wroteConn{c, at, all}, nil
+}
+
+// writes is every time the gateway wrote to each agent's connection, by
+// the agent's address.
+var writes sync.Map // string -> *writeLog
+
+type writeLog struct {
+	mu sync.Mutex
+	at []time.Time
+}
+
+// within says how many writes were after from and before to.
+func (l *writeLog) within(from, to time.Time) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, t := range l.at {
+		if t.After(from) && t.Before(to) {
+			n++
+		}
+	}
+	return n
 }
 
 type wroteConn struct {
 	net.Conn
-	at *atomic.Int64
+	at  *atomic.Int64
+	all *writeLog
 }
 
 func (c wroteConn) Write(b []byte) (int, error) {
 	n, err := c.Conn.Write(b)
 	if n > 0 {
-		c.at.CompareAndSwap(0, time.Now().UnixNano())
+		now := time.Now()
+		c.at.CompareAndSwap(0, now.UnixNano())
+		c.all.mu.Lock()
+		c.all.at = append(c.all.at, now)
+		c.all.mu.Unlock()
 	}
 	return n, err
 }
@@ -221,6 +262,65 @@ func TestQueuedStreamKeptAliveForTheMinute(t *testing.T) {
 			// under load (rpmSlack, zero here), so half of it
 			if d := asked.Sub(first); d < queueMinute/2 {
 				t.Fatalf("the vendor was asked %s after the first, inside the minute", d)
+			}
+		})
+	}
+}
+
+// Once a queued request's agent has been kept alive, it hears a keepalive
+// every keepaliveEvery after the request goes to its vendor too, not
+// keepHeldAfter after that: the vendor's watch waited keepHeldAfter
+// before its first keepalive, as if the agent had heard nothing, so an
+// agent sent one just before the handoff went up to keepHeldAfter plus
+// keepaliveEvery (30s with the real 15s each) with none. Here
+// keepHeldAfter is 1.5s, keepaliveEvery 100ms, and the vendor stays
+// quiet 1s on the queued request: the gateway must write to the agent
+// between the vendor being asked and its answer, where the old watch,
+// begun before the vendor was asked, wrote nothing until keepHeldAfter
+// after it began. The check is on the gateway's own writes, in order,
+// not on gaps a client measures, which stretch under load (3f4287e6).
+func TestQueuedStreamKeptAliveOnceSentToItsVendor(t *testing.T) {
+	for _, a := range queueAsks {
+		t.Run(a.name, func(t *testing.T) {
+			// what is left of the minute when the queued request arrives,
+			// late under load, stays over keepHeldAfter, so it is kept
+			// alive before the handoff
+			shortMinute(t, 4*time.Second, time.Minute)
+			v := &streamVendor{later: time.Second}
+			gw := queueGateway(t, v, func(p *provider.Provider) { p.MaxRPM = 1 })
+			keepFast(t, keepaliveGap, 100*time.Millisecond, keepaliveLongest)
+			keepHeldAfter = 1500 * time.Millisecond // put back by queueGateway's cleanup
+			if code, body, _, err := askHeard(gw, a.path, a.body, nil); err != nil || code != 200 {
+				t.Fatalf("first: %d %v %s", code, err, body)
+			}
+			req, _ := http.NewRequest("POST", gw+a.path, strings.NewReader(a.body))
+			req.Header.Set("Content-Type", "application/json")
+			var from string
+			req = req.WithContext(httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+				GotConn: func(i httptrace.GotConnInfo) { from = i.Conn.LocalAddr().String() },
+			}))
+			res, err := (&http.Client{Transport: &http.Transport{DisableKeepAlives: true}, Timeout: 30 * time.Second}).Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, err := io.ReadAll(res.Body)
+			res.Body.Close()
+			if err != nil || res.StatusCode != 200 || !strings.Contains(string(b), ": keepalive") || !strings.Contains(string(b), "queued ok") {
+				t.Fatalf("queued = %d %v %q, want 200, keepalives, then the reply", res.StatusCode, err, b)
+			}
+			l, ok := writes.Load(from)
+			if !ok {
+				t.Fatal("no writes recorded for the agent's connection")
+			}
+			log := l.(*writeLog)
+			v.mu.Lock()
+			asked, answered := v.at[1], v.answered[1]
+			v.mu.Unlock()
+			if log.within(time.Time{}, asked) == 0 {
+				t.Fatalf("the agent wasn't kept alive before the vendor was asked")
+			}
+			if n := log.within(asked, answered); n == 0 {
+				t.Fatalf("the gateway wrote nothing to the kept-alive agent in the %s between the vendor being asked and its answer, want a keepalive every %s", answered.Sub(asked).Round(time.Millisecond), keepaliveEvery)
 			}
 		})
 	}

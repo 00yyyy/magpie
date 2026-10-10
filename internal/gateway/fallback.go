@@ -1452,7 +1452,7 @@ func (h *holdWriter) scan() {
 		h.flow()
 		return
 	}
-	if (h.thinking || h.buffered || waiting || h.keptQuiet()) && time.Since(h.since) >= keepHeldAfter {
+	if (h.thinking || h.buffered || waiting || h.keptQuiet()) && (time.Since(h.since) >= keepHeldAfter || h.alive != nil && h.alive.sent) {
 		h.keepAlive()
 	}
 }
@@ -1798,7 +1798,10 @@ func (h *holdWriter) watch() func() {
 					h.mu.Unlock()
 					return
 				}
-				if time.Since(began) >= keepHeldAfter {
+				// an agent already kept alive (keepQueued, an earlier try)
+				// goes on hearing one every keepaliveEvery: waiting
+				// keepHeldAfter again left it up to twice that with none
+				if time.Since(began) >= keepHeldAfter || h.alive != nil && h.alive.sent {
 					h.keepQuiet()
 				}
 				h.mu.Unlock()
