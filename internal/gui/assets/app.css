@@ -2650,6 +2650,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
    under the strip; the app's thin thumb instead, slimmer still */
 :where(body:not(.mac)) :is(.segs.regions, .connect .segs, #sessAgent)::-webkit-scrollbar { height: 6px; }
 :where(body:not(.mac)) :is(.segs.regions, .connect .segs, #sessAgent)::-webkit-scrollbar-thumb { border-width: 1px; }
+/* on a Mac they scroll with no bar, as a Mac's own tab strips do: the
+   system's overlay bar showed over the options' lower half for a moment
+   after each scroll, and a click there went to the bar, which paged the
+   strip sideways and picked nothing (#1620) */
+:where(body.mac) :is(.segs.regions, .connect .segs, #sessAgent) { scrollbar-width: none; }
+:where(body.mac) :is(.segs.regions, .connect .segs, #sessAgent)::-webkit-scrollbar { display: none; }
 .segs.regions .opt, .connect .segs .opt, #sessAgent .opt { flex: none; }
 /* a custom provider's five Base URL APIs wrap to a second row where the
    editor is too narrow for them (#1346); the thumb follows the row */
