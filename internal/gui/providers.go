@@ -782,7 +782,9 @@ func providersState() providersJSON {
 		if e.Group == "" {
 			continue
 		}
-		g := gwGroupJSON{ID: e.ID, Name: e.Name, Icons: e.Icons, Efforts: e.Efforts, Images: e.Images, Context: e.Context, Output: e.PublishedOutput()}
+		// its lists are [] when empty, never null, which the page can't
+		// read as a list (#1585)
+		g := gwGroupJSON{ID: e.ID, Name: e.Name, Icons: append([]string{}, e.Icons...), Providers: []string{}, Efforts: e.Efforts, Images: e.Images, Context: e.Context, Output: e.PublishedOutput()}
 		if _, ms, ok := findGroup(e.ID); ok {
 			for _, m := range ms {
 				if id := m.Provider.ID + "/" + m.Model; !slices.Contains(g.Members, id) {

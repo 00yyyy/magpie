@@ -186,6 +186,11 @@ func keyPools(p provider.Provider) []poolJSON {
 
 func groupsState() groupsJSON {
 	out := groupsJSON{Groups: []groupJSON{}, Models: []modelRef{}, Pools: []poolJSON{}, Deciders: []modelRef{}, Found: provider.AutoGroupsOn(), Templates: provider.Templates()}
+	for i := range out.Templates {
+		if out.Templates[i].Group.Members == nil {
+			out.Templates[i].Group.Members = []string{} // one that can't be made has none
+		}
+	}
 	for _, e := range provider.Deciders() {
 		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon})
 	}
@@ -197,6 +202,12 @@ func groupsState() groupsJSON {
 	}
 	for _, g := range provider.Groups() {
 		gj := groupJSON{Group: g, Info: []memberJSON{}, Holds: []string{}, Offers: []string{}, Shared: []string{}, Patterns: []provider.PatternHit{}}
+		if gj.Members == nil {
+			// a group of patterns that match nothing now — a plugin's
+			// models not listed — has none, said as [] rather than null,
+			// which the Routing page couldn't draw (#1585)
+			gj.Members = []string{}
+		}
 		gj.Patterns = append(gj.Patterns, provider.PatternHits(g)...)
 		gj.Decides = g.Decides()
 		for _, e := range served {

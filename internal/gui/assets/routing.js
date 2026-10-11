@@ -3054,10 +3054,30 @@
   function poolOf(id) {
     try { return groups?.pools?.find((p) => p.provider === id) || null; } catch { return null; }
   }
+  // groupsFrom: /api/groups as the page draws it (#1585, dbydd). A group of
+  // patterns that match nothing now — a plugin behind on updates lists none
+  // of its models — came with its members as null, and that one group threw
+  // out every group's card while each still routed. Every list is a list
+  // here, and an entry that isn't a group at all is left out.
+  function groupsFrom(x) {
+    x = x && typeof x === "object" ? x : {};
+    const objs = (v) => Array.isArray(v) ? v.filter((o) => o && typeof o === "object") : [];
+    const ids = (v) => Array.isArray(v) ? v.filter((s) => typeof s === "string") : [];
+    // the lists Go leaves out when empty stay out; null or a non-list is none
+    const opt = (v, f) => v === undefined ? v : f(v);
+    const group = (g) => ({ ...g, id: String(g.id ?? ""), name: typeof g.name === "string" && g.name ? g.name : String(g.id ?? ""),
+      members: ids(g.members), memberInfo: objs(g.memberInfo), holds: ids(g.holds), offers: ids(g.offers), shared: ids(g.shared), patterns: objs(g.patterns),
+      match: opt(g.match, ids), matched: opt(g.matched, ids), off: opt(g.off, ids), fast: opt(g.fast, ids), levels: opt(g.levels, ids),
+      rules: opt(g.rules, (rs) => objs(rs).map((r) => ({ ...r, agents: opt(r.agents, ids), folders: opt(r.folders, ids) }))) });
+    const refs = (v) => objs(v).filter((m) => typeof m.id === "string");
+    return { ...x, groups: objs(x.groups).filter((g) => typeof g.id === "string" && g.id).map(group),
+      models: refs(x.models), deciders: refs(x.deciders), pools: objs(x.pools),
+      templates: objs(x.templates).filter((tp) => tp.group && typeof tp.group === "object").map((tp) => ({ ...tp, group: group(tp.group) })) };
+  }
   // quiet: the window focused again; the same groups aren't drawn again
   async function loadGroups(quiet) {
     let next;
-    try { next = await api("groups"); } catch { return; }
+    try { next = groupsFrom(await api("groups")); } catch { return; }
     if (quiet === true && groups && JSON.stringify(next) === JSON.stringify(groups)) return;
     groups = next;
     if (headOf) header(...headOf);
@@ -3077,7 +3097,7 @@
     if (action === "delete" && !await confirmRemoval(groups?.groups.find((g) => g.id === body.id)?.name || body.id,
       "This routing group will no longer be available to agents.")) return;
     try {
-      groups = await api("groups/" + action, body);
+      groups = groupsFrom(await api("groups/" + action, body));
       gEdit = null;
       renderGroups();
       if (ok) status(ok, "ok");
@@ -3185,8 +3205,25 @@
   // groupMatches: every word of the filter in the group's name, id, or a
   // member's id or label (its provider and model names)
   function groupMatches(g, words) {
+    try { return hayMatches(g, words); } catch { return true; } // a group that can't be read is shown, flagged
+  }
+  function hayMatches(g, words) {
     const hay = [g.name, g.id, "group/" + g.id, ...g.members.flatMap((id) => [id, memberLabel(g, id)]), ...(g.patterns || []).map((p) => p.pattern)].join("\n").toLowerCase();
     return words.every((w) => hay.includes(w));
+  }
+  // rowOrFlag: a group's row, or when drawing it fails, a row that says so
+  // with its name, while every other group is drawn as ever (#1585)
+  function rowOrFlag(g, draw) {
+    try { return draw(); } catch (e) {
+      console.error("routing group", g.id, e);
+      const row = el("div", "rt-group off rt-gbad");
+      row.dataset.id = g.id;
+      const main = el("div", "main"), nm = el("div", "nm");
+      nm.append(el("b", "", String(g.name || g.id)), el("code", "mdl", "group/" + g.id));
+      main.append(nm, el("div", "mem", t("This group can't be shown: {error}", { error: e?.message || String(e) })));
+      row.append(el("span", "ics"), main);
+      return row;
+    }
   }
   function drawGroups() {
     const all = groups.groups.filter((g) => !g.hidden), hidden = groups.groups.filter((g) => g.hidden);
@@ -3239,7 +3276,7 @@
     if (gSel) rows.push(selectBar(shown));
     if (gImport && !gSel) rows.push(importBox());
     if (gEdit && !gEdit.id) rows.push(groupEditor(null));
-    for (const g of shown) rows.push(gSel ? pickedRow(g) : gEdit?.id === g.id ? groupEditor(g) : groupRow(g));
+    for (const g of shown) rows.push(rowOrFlag(g, () => gSel ? pickedRow(g) : gEdit?.id === g.id ? groupEditor(g) : groupRow(g)));
     if (!rows.length && all.length) rows.push(el("div", "none rt-gnone", t("No group or model matches “{q}”", { q: gQ.value.trim() })));
     if (!rows.length) rows.push(el("div", "none rt-gnone", groups.found === false
       ? t("No group yet. New group makes one of any models you like.")
@@ -3308,7 +3345,7 @@
         if (!text.trim()) { gImportText.focus({ preventScroll: true }); return; }
         go.disabled = true;
         try {
-          groups = await api("groups/import", { text });
+          groups = groupsFrom(await api("groups/import", { text }));
           gImport = { res: groups.imported };
           gImportText.value = "";
           status(t("Added {name}", { name: groups.imported.name }), "ok");
@@ -3448,7 +3485,7 @@
       if (!await confirmRemoval(shown.filter((g) => ids.includes(g.id)).map((g) => g.name).join(t(", ")), "These routing groups will no longer be available to agents.")) return;
       rm.disabled = true;
       try {
-        groups = await api("groups/delete", { ids });
+        groups = groupsFrom(await api("groups/delete", { ids }));
         gSel = null;
         renderGroups();
         status(ids.length === 1 ? t("{name} removed", { name: ids[0] }) : t("{n} groups removed", { n: ids.length }), "ok");
@@ -3515,7 +3552,7 @@
     s.classList.toggle("on", on);
     s.setAttribute("aria-checked", String(on));
     try {
-      groups = await api("groups/found", { on });
+      groups = groupsFrom(await api("groups/found", { on }));
       gEdit = null;
       renderGroups();
       saidMoved(on ? t("Found groups are on") : t("Found groups are off: only yours are listed and served"), groups.moved);
@@ -3669,7 +3706,7 @@
     const seq = ++groupArrangeSeq;
     let next;
     try {
-      next = await api("groups/arrange", { order });
+      next = groupsFrom(await api("groups/arrange", { order }));
       status(t("Group order saved"), "ok");
     } catch (e) {
       next = prev;
@@ -4472,7 +4509,7 @@
         : t(p.kind === "account" ? "{n} accounts" : "{n} keys", { n: p.who.length })));
       const ctl = el("div", "ctl");
       const set = async (what, body, ok) => {
-        try { await api("provider/" + what, body); status(ok, "ok"); groups = await api("groups"); load(); } catch (e) { status(e.message, "err"); }
+        try { await api("provider/" + what, body); status(ok, "ok"); groups = groupsFrom(await api("groups")); load(); } catch (e) { status(e.message, "err"); }
       };
       const lab = (s, c) => { const w = el("span", "lab"); w.append(el("small", "", s), c); return w; };
       // by weight is a key's share (#841), set beside each key in the provider's editor
