@@ -2010,7 +2010,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// a member sent fast is, in its vendor's words, where its model
 		// has a fast mode; else it goes as the agent asked
 		fast := c.fast && provider.CanFast(c.p, c.model)
-		if fast {
+		ownFast := fast && provider.OwnFast(c.p, c.model)
+		if fast && (!ownFast || from == provider.Chat || from == provider.Responses) {
+			// the user's own provider is never sent Claude's speed "fast"
+			// in the agent's words, which a relay of theirs may turn
+			// away: it is asked for priority on its OpenAI API (#1615,
+			// forwardTranslated)
 			attemptBody = withFast(from, attemptBody)
 		}
 		// a member known not to think is sent no reasoning ask (#950): the
@@ -2080,6 +2085,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			ctx, stop := context.WithCancel(r.Context())
 			if isGroup {
 				ctx = groupTry(ctx)
+			}
+			if ownFast {
+				ctx = withOwnFast(ctx)
 			}
 			hw.stop = stop
 			if autoPicks(c) {
@@ -3965,6 +3973,14 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		if own := (p.Preset == "" && p.Account == nil || p.IsRemoteMagpie()) && s.fits(p.ID, tierField, to); own != req.OwnTier {
 			r := *req
 			r.OwnTier, req = own, &r
+		}
+		// a member or pick the user sent fast on a provider they added is
+		// asked for priority on its OpenAI API whatever API the agent
+		// spoke (#1615); one that turned the field away isn't (own is
+		// false then)
+		if req.OwnTier && req.Tier == "" && isOwnFast(ctx) && (to == provider.Chat || to == provider.Responses) {
+			r := *req
+			r.Tier, req = "priority", &r
 		}
 		wire := provider.UpstreamNameIn(wires, p.ID, model)
 		sent := req

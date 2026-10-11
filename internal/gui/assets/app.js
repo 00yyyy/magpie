@@ -4422,7 +4422,12 @@ function fastToggle(o) {
   const b = el("button", "fast" + (o.fast ? " on" : ""));
   const name = o.label || o.value;
   const agent = pick.agent.name || o.fastFor;
-  b.title = o.fast ? t("{model} is sent fast for {agent}: quicker, at a higher price. Click to send it at the usual speed", { model: name, agent })
+  // on a provider the user added (ownFast, #1615) fast is only asked for:
+  // magpie can't know the provider serves it
+  b.title = o.ownFast
+    ? (o.fast ? t("{model} is asked for OpenAI's fast mode for {agent}, where your provider serves it. Click to send it as {agent} asks", { model: name, agent })
+      : t("Ask your provider for OpenAI's fast mode (service_tier \"priority\") on {model} for {agent}: quicker, at a higher price, where it serves it", { model: name, agent }))
+    : o.fast ? t("{model} is sent fast for {agent}: quicker, at a higher price. Click to send it at the usual speed", { model: name, agent })
     : t("Send {model} fast for {agent}: quicker, at a higher price", { model: name, agent });
   b.setAttribute("aria-pressed", String(!!o.fast));
   b.setAttribute("aria-label", t("Fast"));

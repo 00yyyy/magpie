@@ -78,6 +78,9 @@ type memberJSON struct {
 	// model has one (provider.CanFast)
 	Fast    bool `json:"fast,omitempty"`
 	CanFast bool `json:"canFast,omitempty"`
+	// OwnFast: that fast mode is asked of a provider the user added by its
+	// address, which may or may not serve it (provider.OwnFast, #1615)
+	OwnFast bool `json:"ownFast,omitempty"`
 	// Efforts: the reasoning levels this member is offered. A model's own,
 	// or — a member that is itself a group — the levels it passes on to
 	// agents, which are the ones every model in it has (provider.groupEntries).
@@ -108,6 +111,9 @@ type modelRef struct {
 	// CanFast: a group's member of it may be sent in its vendor's fast
 	// mode (provider.CanFast)
 	CanFast bool `json:"canFast,omitempty"`
+	// OwnFast: asked of a provider the user added by its address, which may
+	// or may not serve it (provider.OwnFast, #1615)
+	OwnFast bool `json:"ownFast,omitempty"`
 	// Images: agents are told it takes images (provider.Entry.Images); a
 	// group's editor says of each member what it says of it (#756).
 	// ImagesUnknown: nothing was read of it either way (imagesUnknown),
@@ -197,7 +203,7 @@ func groupsState() groupsJSON {
 	served := provider.Served()
 	for _, e := range served {
 		if e.Group == "" {
-			out.Models = append(out.Models, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts, CanFast: provider.CanFast(e.Provider, e.Model), Images: seesImages(e), ImagesUnknown: imagesUnknown(e)})
+			out.Models = append(out.Models, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts, CanFast: provider.CanFast(e.Provider, e.Model), OwnFast: provider.OwnFast(e.Provider, e.Model), Images: seesImages(e), ImagesUnknown: imagesUnknown(e)})
 		}
 	}
 	for _, g := range provider.Groups() {
@@ -254,6 +260,7 @@ func groupsState() groupsJSON {
 				_, who := onOf(p)
 				m.Ready, m.Provider, m.Name, m.Icon, m.Model, m.On = true, p.ID, p.Name, p.Icon, model, max(len(who), 1)
 				m.CanFast = provider.CanFast(p, model)
+				m.OwnFast = m.CanFast && provider.OwnFast(p, model)
 				m.Fast = m.CanFast && g.IsFast(id)
 				for _, e := range served {
 					if e.Group == "" && e.Provider.ID == p.ID && e.Model == model {

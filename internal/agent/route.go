@@ -64,6 +64,7 @@ func viaMagpie(agent, prefix string) []Option {
 		// a model with a fast mode is switched fast in the picker (#954)
 		if provider.CanFast(e.Provider, e.Model) {
 			o.FastFor, o.Fast = agent, slices.Contains(fast, e.ID)
+			o.OwnFast = provider.OwnFast(e.Provider, e.Model)
 		}
 		out = append(out, o)
 	}

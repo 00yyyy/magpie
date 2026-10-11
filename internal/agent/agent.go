@@ -66,6 +66,10 @@ type Option struct {
 	// whether it is now (provider.IsFastPick)
 	FastFor string `json:"fastFor,omitempty"`
 	Fast    bool   `json:"fast,omitempty"`
+	// OwnFast: its fast mode is a GPT model's on a provider the user added
+	// by its address (provider.OwnFast, #1615), asked for there as OpenAI's
+	// priority, which the provider may or may not serve
+	OwnFast bool `json:"ownFast,omitempty"`
 
 	// own: served on the agent's own sign-in (viaMagpie), for Same
 	own bool
