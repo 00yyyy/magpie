@@ -21071,7 +21071,9 @@ function renderSearch(s, keep) {
     url.placeholder = v.needURL ? "https://searx.example.com" : t("Base URL, empty for {url}", { url: v.base || "" });
     url.setAttribute("aria-label", v.needURL ? t("Address") : t("Base URL"));
     key.placeholder = v.needURL ? t("API key, if it needs one")
-      : saved()?.key ? t("A new key, or empty to keep {key}", { key: saved().key }) : t("API key, or several split by commas");
+      : saved()?.key ? t("A new key, or empty to keep {key}", { key: saved().key })
+      : v.keyOptional ? t("API key, or empty for its free search")
+      : t("API key, or several split by commas");
     get.hidden = !v.keysURL;
   };
   pick.onclick = (e) => {
@@ -21084,7 +21086,8 @@ function renderSearch(s, keep) {
   add.onclick = () => {
     d.key = key.value.trim(); d.url = url.value.trim();
     // one added before keeps its key when none is typed
-    if (vendor().needURL ? !d.url : !d.key && !saved()?.key) return (vendor().needURL ? url : key).focus();
+    // You.com is asked at its free search with none (#1626)
+    if (vendor().needURL ? !d.url : !d.key && !saved()?.key && !vendor().keyOptional) return (vendor().needURL ? url : key).focus();
     set({ vendor: d.vendor, key: d.key, url: d.url },
       () => { searchDraft = { vendor: d.vendor, key: "", url: "", err: "" }; });
   };

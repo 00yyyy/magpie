@@ -67,3 +67,16 @@ func TestSearchCLI(t *testing.T) {
 		t.Fatalf("after rm %+v", as)
 	}
 }
+
+// magpie search add you, with no key, adds You.com's free search (#1626).
+func TestSearchCLIYouWithoutKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := searchCmd([]string{"add", "you"}); err != nil {
+		t.Fatal(err)
+	}
+	if as := provider.SearchAPIs(); len(as) != 1 || as[0] != (provider.SearchAPI{Vendor: "you"}) {
+		t.Fatalf("%+v", as)
+	}
+}

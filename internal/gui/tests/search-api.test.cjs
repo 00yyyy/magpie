@@ -7,7 +7,8 @@
 // copied, as a provider's is (OnurBen on Discord). Every API takes a base URL
 // of the user's own (#1580), on a line under the key: empty is the vendor's,
 // and one set shows in the field when its API is picked again, so a new key
-// alone keeps it. In English and Chinese, Chromium and WebKit, 980px and
+// alone keeps it. You.com is added with no key, for its free search
+// (#1626). In English and Chinese, Chromium and WebKit, 980px and
 // 420px wide, with the API faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -21,13 +22,14 @@ const vendors = [
   { id: "brave", name: "Brave Search", keysURL: "https://api-dashboard.search.brave.com/app/keys", base: "https://api.search.brave.com" },
   { id: "exa", name: "Exa", keysURL: "https://dashboard.exa.ai/api-keys", base: "https://api.exa.ai" },
   { id: "firecrawl", name: "Firecrawl", keysURL: "https://www.firecrawl.dev/app/api-keys", base: "https://api.firecrawl.dev" },
+  { id: "you", name: "You.com", keysURL: "https://you.com/platform", base: "https://ydc-index.io", keyOptional: true },
   { id: "searxng", name: "SearXNG", needURL: true },
 ];
 const words = {
   en: { head: "Web search", name: "Search APIs", none: "No provider can search", add: "Add", remove: "Remove", refused: "Brave Search: 401 bad key", show: "Show", hide: "Hide", copy: "Copy",
-    base: "Base URL, empty for https://api.tavily.com", exaBase: "Base URL, empty for https://api.exa.ai", keep: "A new key, or empty to keep tvly…abcd" },
+    base: "Base URL, empty for https://api.tavily.com", exaBase: "Base URL, empty for https://api.exa.ai", keep: "A new key, or empty to keep tvly…abcd", youKey: "API key, or empty for its free search" },
   zh: { head: "联网搜索", name: "搜索 API", none: "没有能搜索的供应商", add: "添加", remove: "移除", refused: "Brave Search: 401 bad key", show: "显示", hide: "隐藏", copy: "复制",
-    base: "API 地址，留空则用 https://api.tavily.com", exaBase: "API 地址，留空则用 https://api.exa.ai", keep: "新的密钥，留空则保留 tvly…abcd" },
+    base: "API 地址，留空则用 https://api.tavily.com", exaBase: "API 地址，留空则用 https://api.exa.ai", keep: "新的密钥，留空则保留 tvly…abcd", youKey: "API 密钥，留空则用其免费搜索" },
 };
 
 function serve(lang, posted) {
@@ -193,6 +195,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => document.querySelectorAll("#searchList .row.search-api").length === 2);
       assert.deepEqual(posted.at(-1), { vendor: "tavily", remove: true });
       assert.deepEqual(await list.locator(".row.search-api .name").allInnerTexts(), ["1. SearXNG", "2. Exa"]);
+
+      // You.com (#1626): its key is optional, so Add sends it with none
+      await click(head.locator("button.search-vendor"));
+      await click(page.locator(".proto-menu .pm-item", { hasText: "You.com" }));
+      assert.equal(await head.locator("input.search-key").getAttribute("placeholder"), w.youKey);
+      await click(head.locator("button.text", { hasText: w.add }));
+      await page.waitForFunction(() => document.querySelectorAll("#searchList .row.search-api").length === 3);
+      assert.deepEqual(posted.at(-1), { vendor: "you", key: "", url: "" });
+      assert.deepEqual(await list.locator(".row.search-api .name").allInnerTexts(), ["1. SearXNG", "2. Exa", "3. You.com"]);
       assert.deepEqual(await where(), before, "the clicks moved nothing");
       assert.deepEqual(errors, []);
     });

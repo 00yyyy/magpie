@@ -15,9 +15,10 @@ const searchUsage = `usage:
   magpie search add <api> <key> [url=<address>]   add one, or give one a new key
                                              (several keys as k1,k2: the next is tried when one is refused)
   magpie search add searxng url=<address> [<key>]
+  magpie search add you [<key>]              You.com: free with no key (100 searches a day)
   magpie search rm <api>                     take one away
 
-  apis: tavily, brave, exa, firecrawl, searxng
+  apis: tavily, brave, exa, firecrawl, you, searxng
 
   url= is the API's base URL, for an endpoint of your own that answers as that API
   does (e.g. url=https://search.example.com/tavily). Without it the vendor's own is
@@ -31,13 +32,14 @@ const searchUsage = `usage:
   Without any of them, the client's search is left out.
 
   e.g. magpie search add tavily tvly-…
-       magpie search add searxng url=https://searx.example.com`
+       magpie search add searxng url=https://searx.example.com
+       magpie search add you`
 
 func searchCmd(args []string) error {
 	if len(args) == 0 {
 		as := provider.StoredSearchAPIs()
 		if len(as) == 0 {
-			fmt.Println(muted.Render("  no search API · magpie search add <tavily|brave|exa|firecrawl|searxng> <key>"))
+			fmt.Println(muted.Render("  no search API · magpie search add <tavily|brave|exa|firecrawl|you|searxng> <key>"))
 			return nil
 		}
 		for i, a := range as {
