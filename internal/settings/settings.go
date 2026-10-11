@@ -413,6 +413,11 @@ type Settings struct {
 	// or an old one, is not shown until it is ticked. HiddenModels is not
 	// read for such an agent. An agent named with no entries is shown none.
 	PickedModels map[string][]string `json:"pickedModels,omitempty"`
+	// OwnModelsHidden are the agents, by id, whose pickers leave out the
+	// models the agent reaches on its own, not through magpie (DeepSeek
+	// Harness's own DeepSeek models, #1642): only magpie's are offered, and
+	// one the agent is set to stays.
+	OwnModelsHidden []string `json:"ownModelsHidden,omitempty"`
 	// AgentEfforts are the reasoning efforts the gateway asks for on an
 	// agent's requests, by agent id, for an agent whose own config can't
 	// carry one (Cursor Private Inference, #1003): one of the levels in
