@@ -3017,6 +3017,7 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	body = kimiToolEnumTypes(p, to, body)
 	body = kimiLockedSampling(p, to, body)
 	body = clinePin(p, to, body)
+	body = codexImagesFit(p, to, body)
 	if to == provider.Gemini && !p.FactoryGemini() {
 		// the model is in a Gemini API's and Vertex AI's path
 		// (upstreamPath), as Google's own SDK asks it; Factory's generate
