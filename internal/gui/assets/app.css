@@ -2480,7 +2480,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .thumb {
   position: absolute; top: 2px; bottom: 2px; left: 0; width: 0; border-radius: 6px;
   background: var(--card); box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .06);
-  transition: transform .28s var(--ease), width .28s var(--ease), opacity .15s;
+  transition: opacity .15s; /* the glide is slide()'s, which only it starts */
   pointer-events: none;
 }
 .segs .thumb { border-radius: 5px; }

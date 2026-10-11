@@ -8155,7 +8155,23 @@ $("#modal").onclick = (e) => { if (modalBackdrop(e)) cancelEdit(); };
 // ---------- sliding thumb ----------
 // Pills (the nav, every segmented control) have one thumb that glides to the
 // selected option instead of each option lighting up on its own.
-const thumbs = new Map(); // control position → where a re-rendered thumb resumes its slide
+//
+// A thumb glides only when the option picked changes, and only from where
+// it is on the screen. Most controls are drawn again on every save (all of
+// Settings is), and a redrawn control takes the thumb of the one it
+// replaces, the glide under way with it: the same element, so nothing about
+// its motion is worked out again. It glides on to the option picked if that
+// is another (a save refused puts one back), and otherwise is left as it
+// is. A thumb is placed only where the control is laid out: one drawn
+// hidden (Settings at start, a tab not shown) is put under its option,
+// still, when it is shown or sized again (thumbFit). Before, a redrawn
+// control made a new thumb and replayed what was remembered of the old
+// one's glide from its start (a click's thumb jumped back and slid again),
+// and positions taken while Settings was hidden, 0 wide, made every thumb
+// on the page grow in from the left on the first save.
+const thumbs = new Map(); // control position → { th, pick, to }: its thumb, the option it is under or going to, and where that is
+const THUMB_MS = 280, THUMB_EASE = "cubic-bezier(.2, .8, .2, 1)"; // --ease
+const thumbKeys = new WeakMap(); // box → its key, for thumbFit
 function thumbKey(box, choices) {
   const path = [];
   for (let node = box; node?.parentElement; node = node.parentElement) {
@@ -8164,31 +8180,78 @@ function thumbKey(box, choices) {
   }
   return null;
 }
-function slide(box, key) {
-  let th = box.querySelector(":scope > .thumb");
-  const fresh = !th;
-  if (fresh) { th = el("span", "thumb"); box.prepend(th); }
-  const on = box.querySelector(":scope > .on");
-  if (!on) { th.style.opacity = "0"; return; }
-  th.style.opacity = "";
+// where the thumb goes under the option picked; null while it isn't laid out
+function thumbTo(box, on) {
+  if (!on.offsetParent || !on.offsetWidth) return null;
   const to = { x: on.offsetLeft, w: on.offsetWidth };
   // a strip that wraps (the editor's Base URL APIs, narrow): the row of
   // the one picked (top: 2px is the first's), and that row's height, not
   // the strip's
   if (box.clientHeight > on.offsetHeight + 8) Object.assign(to, { y: on.offsetTop - 2, h: on.offsetHeight });
+  return to;
+}
+const thumbAt = (p) => ({ transform: p.y ? `translate(${p.x}px, ${p.y}px)` : `translateX(${p.x}px)`, width: p.w + "px" });
+const thumbGlide = (th) => th.getAnimations().find((a) => a.id === "thumb" && a.playState === "running");
+// a thumb put at p at once, any glide of it stopped
+function thumbPut(th, p) {
+  for (const a of th.getAnimations()) if (a.id === "thumb") a.cancel();
+  th.classList.add("still");
+  Object.assign(th.style, thumbAt(p), { height: p.h ? p.h + "px" : "" });
+  void th.offsetWidth;
+  th.classList.remove("still");
+}
+// where a thumb in the page is drawn now, partway through a glide included
+function thumbNow(th) {
+  if (!th.style.width || !th.isConnected) return null;
+  const cs = getComputedStyle(th), m = new DOMMatrixReadOnly(cs.transform === "none" ? undefined : cs.transform);
+  return { x: m.m41, y: m.m42, w: parseFloat(cs.width), h: th.style.height ? parseFloat(cs.height) : 0 };
+}
+// which option is picked: its place among the options
+const thumbPick = (box, on) => [...box.children].filter((c) => !c.classList.contains("thumb")).indexOf(on);
+const thumbSame = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs((a.y || 0) - (b.y || 0)) < 0.5 && Math.abs(a.w - b.w) < 0.5;
+// a control shown, or sized again (the fonts come in, the language changes,
+// the window narrows): its thumb is put under its option, still
+const thumbFit = new ResizeObserver((es) => {
+  for (const { target: box } of es) {
+    if (!box.isConnected) { thumbFit.unobserve(box); continue; }
+    const th = box.querySelector(":scope > .thumb"), on = box.querySelector(":scope > .on");
+    const to = th && on && thumbTo(box, on);
+    if (!to) continue;
+    const control = thumbKey(box, thumbKeys.get(box));
+    const last = control && thumbs.get(control);
+    const pick = thumbPick(box, on);
+    if (last?.th === th && last.pick === pick && thumbSame(last.to, to) && th.style.width) continue;
+    thumbPut(th, to);
+    if (control) thumbs.set(control, { th, pick, to });
+  }
+});
+function slide(box, key) {
   const control = thumbKey(box, key);
   const last = control && thumbs.get(control);
-  let from = to;
-  const put = (p) => { th.style.transform = p.y ? `translate(${p.x}px, ${p.y}px)` : `translateX(${p.x}px)`; th.style.width = p.w + "px"; th.style.height = p.h ? p.h + "px" : ""; };
-  if (fresh) {
-    from = last ? (performance.now() - last.at < 300 ? last.from : last) : to;
-    th.classList.add("still");
-    put(from);
-    void th.offsetWidth;
-    th.classList.remove("still");
-  } else if (last) from = { x: last.x, w: last.w, y: last.y, h: last.h };
-  put(to);
-  if (control) thumbs.set(control, { ...to, from, at: performance.now() });
+  let th = box.querySelector(":scope > .thumb");
+  if (!th) {
+    // drawn again: the thumb of the control it replaces, glide and all
+    th = last?.th && !last.th.isConnected ? last.th : el("span", "thumb");
+    box.prepend(th);
+  }
+  thumbKeys.set(box, key);
+  thumbFit.observe(box);
+  const on = box.querySelector(":scope > .on");
+  if (!on) { th.style.opacity = "0"; return; }
+  th.style.opacity = "";
+  const to = thumbTo(box, on);
+  if (!to) return; // hidden: thumbFit puts it once it is shown
+  const pick = thumbPick(box, on);
+  if (control) thumbs.set(control, { th, pick, to });
+  // already there, or on its way there
+  if (last?.th === th && thumbSame(last.to, to) && (thumbGlide(th) || (th.style.width && thumbSame(thumbNow(th), to)))) return;
+  const from = thumbNow(th);
+  thumbPut(th, to);
+  if (!from || thumbSame(from, to)) return;
+  // the height is the strip's unless it wraps: only a wrapped one's glides
+  const f = thumbAt(from), t = thumbAt(to);
+  if (from.h && to.h) { f.height = from.h + "px"; t.height = to.h + "px"; }
+  th.animate([f, t], { duration: THUMB_MS, easing: THUMB_EASE, id: "thumb" });
 }
 
 const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["responses", "Responses", "OpenAI Responses — what Codex speaks"], ["anthropic", "Anthropic", "Anthropic Messages — what Claude Code speaks"], ["gemini", "Gemini", "Gemini generateContent — what the Gemini CLI speaks"], ["decide", "System One", "A decision API on System One (TypeSafe's Jev, a gateway's, or Bailian's decision model) — what a routing group asks as a turn begins"]];
@@ -14957,20 +15020,9 @@ if (mode === "panel") {
     // Allowances picked is the reader opening them (#1588)
     b.onclick = () => { setPanelTab(b.dataset.ptab); if (panelTab === "usage") quotasOpened(); };
   }
+  // the bar drawn before the panel has its width: slide's thumbFit puts
+  // the card again, still, once it has one
   setPanelTab(panelTab);
-  // the bar drawn before the panel has its width puts the card again, still;
-  // the panel's height moving (a tab's own, a row opening) leaves it gliding
-  let width = 0;
-  new ResizeObserver(([e]) => {
-    const w = Math.round(e.contentRect.width);
-    if (w === width) return;
-    width = w;
-    const th = tabs.querySelector(":scope > .thumb");
-    th?.classList.add("still");
-    slide(tabs, "ptabs");
-    void th?.offsetWidth;
-    th?.classList.remove("still");
-  }).observe(tabs);
 }
 
 // The panel's Usage tab: what the requests of a period add up to — four
@@ -19465,20 +19517,6 @@ function setWarmTab(tab, remember) {
     b.setAttribute("aria-selected", String(on));
     b.tabIndex = on ? 0 : -1;
     $("#" + list).hidden = !on;
-    if (on) thumbsUnderPicks($("#" + list));
-  }
-}
-// a pill drawn while its card was hidden measured nothing: its thumb is
-// put under the option picked, still, once the card is shown
-function thumbsUnderPicks(box) {
-  for (const th of box.querySelectorAll(".segs > .thumb")) {
-    const opt = th.parentElement.querySelector(":scope > .on");
-    if (!opt || !opt.offsetParent || parseFloat(th.style.width) === opt.offsetWidth) continue;
-    th.classList.add("still");
-    th.style.transform = `translateX(${opt.offsetLeft}px)`;
-    th.style.width = opt.offsetWidth + "px";
-    void th.offsetWidth;
-    th.classList.remove("still");
   }
 }
 // A tab list's keys: the arrows, Home and End move along its shown tabs,
@@ -19541,7 +19579,6 @@ function setSetTab(tab, remember) {
     b.setAttribute("aria-selected", String(on));
     b.tabIndex = on ? 0 : -1;
     $("#setPage-" + id).hidden = !on;
-    if (on) thumbsUnderPicks($("#setPage-" + id));
   }
   setShown = tab;
   $("#setTabs").setAttribute("aria-label", t("Settings"));
@@ -19615,7 +19652,6 @@ function findSettings() {
     }
     page.dataset.part = tab.textContent;
     page.hidden = !hits;
-    if (hits) thumbsUnderPicks(page);
     any ||= hits > 0;
   }
   const none = $("#setNone");
@@ -22558,17 +22594,6 @@ function fitTop() {
 }
 const topFit = new ResizeObserver(fitTop);
 for (const e of [".top", ".brand", ".actions"]) topFit.observe($(e));
-// the nav's tabs change size after its thumb was put under one — the header
-// tightening, the fonts arriving, another language — so it's put there again
-if (mode === "window") new ResizeObserver(() => {
-  const th = $("#nav > .thumb"), on = $("#nav > .on");
-  if (!th || !on) return;
-  th.classList.add("still");
-  th.style.transform = `translateX(${on.offsetLeft}px)`;
-  th.style.width = on.offsetWidth + "px";
-  thumbs.set(thumbKey($("#nav"), "nav"), { x: on.offsetLeft, w: on.offsetWidth });
-  requestAnimationFrame(() => th.classList.remove("still"));
-}).observe($("#nav"));
 document.fonts?.ready.then(fitTop);
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { load(true); wag(); } });
