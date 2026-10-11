@@ -2892,7 +2892,7 @@ async function openAgentModels(a, anchor, ev) {
     closeAgentModels();
     me.anchor.focus({ preventScroll: true });
   };
-  me.scrolled = (e) => { if (!box.contains(e.target)) closeAgentModels(); };
+  me.scrolled = (e) => { if (scrollCloses(box, e)) closeAgentModels(); };
   document.addEventListener("mousedown", me.outside, true);
   document.addEventListener("keydown", me.keys, true);
   document.addEventListener("scroll", me.scrolled, true);
@@ -2962,7 +2962,7 @@ function openRowMenu(anchor, acts) {
   anchor.classList.add("open");
   const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeAgentMenu(); };
   // a long menu scrolls inside itself; only a scroll outside it closes it
-  const scroll = (e) => { if (!box.contains(e.target)) closeAgentMenu(); };
+  const scroll = (e) => { if (scrollCloses(box, e)) closeAgentMenu(); };
   const keys = (e) => {
     const k = items.indexOf(document.activeElement);
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAgentMenu(); anchor.focus({ preventScroll: true }); }
@@ -12965,6 +12965,19 @@ function closeProtoMenu() {
   protoMenu = null;
   done?.();
 }
+// scrollCloses says whether a scroll closes the app menu in box: one of the
+// reader's outside it does. A view scrolled by anything else (code, the
+// browser bringing what was clicked into sight, a scroll whose event comes
+// in the frame after the click) is put back by the click guard, which holds
+// the menu's anchor where it was, so the menu stays beside it. So is the
+// guard's own scroll that brings the clicked anchor back into sight before
+// the menu opens (guardUntil). At phone width a menu low on a page opened
+// shut again at once: the Gateway page's Connect address in magpie web,
+// whose header takes two rows.
+function scrollCloses(box, e) {
+  if (box.contains(e.target)) return false;
+  return !e.target.classList?.contains("view") || performance.now() < purposeUntil && purposeUntil !== guardUntil;
+}
 // openProtoMenu picks one of opts, or several when value is a list: each
 // ticked or unticked in turn with the menu kept open, choose given the
 // ticked ones, in the menu's order, once it closes (and only if they
@@ -13050,7 +13063,7 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   // Only the reader's scroll dismisses it; the click guard holds its anchor.
   const scroll = (e) => {
     if (box.contains(e.target) || live && performance.now() >= purposeUntil) return;
-    closeProtoMenu();
+    if (scrollCloses(box, e)) closeProtoMenu();
   };
   const keys = (e) => {
     const shown = filter ? items.filter((b) => !b.hidden) : items;
@@ -13653,7 +13666,7 @@ function openRangeMenu(anchor, current, choose) {
   anchor.classList.add("open");
   anchor.setAttribute("aria-expanded", "true");
   const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeProtoMenu(); };
-  const scroll = (e) => { if (!box.contains(e.target)) closeProtoMenu(); };
+  const scroll = (e) => { if (scrollCloses(box, e)) closeProtoMenu(); };
   // Escape closes; arrows walk the days, a week up or down
   const keys = (e) => {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeProtoMenu(); anchor.focus({ preventScroll: true }); return; }
@@ -18027,7 +18040,7 @@ function openSessCombo(anchor, all, opts, value, choose, head) {
   placeMenu(box, anchor);
   anchor.classList.add("open");
   const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeProtoMenu(); };
-  const scroll = (e) => { if (!box.contains(e.target)) closeProtoMenu(); };
+  const scroll = (e) => { if (scrollCloses(box, e)) closeProtoMenu(); };
   const keys = (e) => {
     const i = items.indexOf(document.activeElement);
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeProtoMenu(); anchor.focus(); }
@@ -21685,8 +21698,12 @@ function savePrefs(body) {
 // (from a load, a timer, a helper that other clicks share) it is refused,
 // and whatever scroll follows is put back.
 let purposeUntil = 0, held = null;
+// guardUntil is purposeUntil when the window is the click guard's own (a
+// field brought back into sight, backToReader): it lets that scroll stand,
+// but it isn't the reader's, so an app menu the click opens stays open.
+let guardUntil = 0;
 // A new purposeful scroll supersedes any still-pending quota navigation.
-const readerScrolls = (ms) => { quotaFocus = ""; purposeUntil = Math.max(purposeUntil, performance.now() + ms); held = null; };
+const readerScrolls = (ms) => { quotaFocus = ""; purposeUntil = Math.max(purposeUntil, performance.now() + ms); held = null; guardUntil = 0; };
 function scrollOnPurpose(e, ms = 1000) {
   if (!e?.isTrusted || performance.now() - e.timeStamp > 1000) {
     console.warn("magpie: a scroll not asked for by the reader was refused");
@@ -21834,7 +21851,7 @@ function backToReader(v) {
   const f = document.activeElement;
   if (f && f !== document.body && v.contains(f)) {
     const r = f.getBoundingClientRect(), b = v.getBoundingClientRect();
-    if (r.bottom > b.bottom || r.top < b.top) { readerScrolls(1000); f.scrollIntoView({ block: "nearest" }); }
+    if (r.bottom > b.bottom || r.top < b.top) { readerScrolls(1000); guardUntil = purposeUntil; f.scrollIntoView({ block: "nearest" }); }
   }
 }
 // Where an element is on the screen in its view. What's held is the element
