@@ -132,7 +132,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
     for (const lang of Object.keys(L)) {
-      for (const width of [1400, 560]) {
+      // 983: five cards in a row, the Output speed one ~158px (#1623,
+      // fanbuz); 789: guzi171's window (#1634)
+      for (const width of [1400, 983, 789, 700, 560]) {
         const w = L[lang];
         // sol: one measured at 125 and 259 floors at 50; astra: two measured
         // at 62; Claude Code: 30 floors at 100; the period: three measured
@@ -187,7 +189,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert((await kpi.locator(".sub").textContent()).includes("≥" + w.tok(54, 289)), "the floor under it: " + (await kpi.locator(".sub").textContent()));
           assert((await kpi.getAttribute("title")).startsWith(w.measured(3, false) + "\n" + w.floorTip(289)), "the card says what it is of");
           if (w.kpi) assert.equal((await kpi.locator(".k").textContent()).trim(), w.kpi);
-          assert(await kpi.locator(".v").evaluate((v) => v.scrollWidth <= v.clientWidth + 1), "the card's figure is read whole");
+          // every card's figure, and each part of it, stays inside its card
+          // (#1623: "48 token/秒（781 次）" ran 32px past it at 983px), the
+          // reply count going under the speed when the two don't fit
+          const outside = await p.evaluate(() => [...document.querySelectorAll(".led-strip .v")].filter((v) => v.offsetParent).flatMap((v) => {
+            const box = v.closest(".blk").getBoundingClientRect();
+            // the text's own box, not its element's: a block's box keeps to
+            // the card while its unwrapped text runs past it
+            const ink = (e) => { const r = document.createRange(); r.selectNodeContents(e); return r.getBoundingClientRect(); };
+            return [v, ...v.querySelectorAll("*")].filter((e) => { const r = ink(e); return r.left < box.left - 0.5 || r.right > box.right + 0.5; }).map((e) => e.textContent);
+          }));
+          assert.deepEqual(outside, [], "the card's figure is read whole");
+          assert(await p.evaluate(() => { const v = document.querySelector("#view-usage"); return v.scrollWidth <= v.clientWidth + 1; }), "the page doesn't scroll sideways under the cards");
 
           // the ranking by speed: what each row says, ordered by it, the floor's bar its floor
           await reader.click(p, p.locator("#ledMetric .opt").nth(3));
@@ -208,8 +221,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal((await p.locator("#ledKpi .blk").nth(4).locator(".v").textContent()).trim(), cc);
           assert((await p.locator("#ledKpi .blk").nth(4).getAttribute("title")).startsWith(ccTip));
 
-          // no sideways scroll of the page
-          assert(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "no sideways scroll");
+          // no sideways scroll of the page: the view is what scrolls, not the document
+          const wide = await p.evaluate(() => { const v = document.querySelector("#view-usage"); return [v.scrollWidth, v.clientWidth, document.documentElement.scrollWidth, window.innerWidth]; });
+          assert(wide[0] <= wide[1] + 1 && wide[2] <= wide[3] + 1, "no sideways scroll: " + wide);
           assert.deepEqual(errors, []);
           await ctx.close();
         });

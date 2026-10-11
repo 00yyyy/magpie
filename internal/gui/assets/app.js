@@ -15169,7 +15169,11 @@ function renderPanelUse() {
     const tot = el("div", "pu-tot");
     const blk = (label, value, sub, cls, subCls) => {
       const b = el("div", "blk");
-      b.append(el("span", "k", t(label)), el("span", "v" + (cls ? " " + cls : ""), value));
+      // a value in parts (an array) keeps each whole, wrapping between them
+    const v = el("span", "v" + (cls ? " " + cls : "") + (Array.isArray(value) ? " parts" : ""), Array.isArray(value) ? undefined : value);
+    // (a space between two stays out of them: one leading a part is dropped)
+    if (Array.isArray(value)) value.forEach((x, i) => v.append(...(i && /^\s/.test(x) ? [" "] : []), el("span", "", x.trim())));
+    b.append(el("span", "k", t(label)), v);
       if (sub) b.append(el("span", "sub" + (subCls ? " " + subCls : ""), sub));
       tot.append(b);
     };
@@ -16794,7 +16798,13 @@ function ledGroupSpeed(x) {
   const vTitle = !v || !kv ? "" : f ? t(kv === 1 ? "Measured on {k} reply, from its first token to its end" : "Measured on {k} replies, from their first token to their end", { k: ledNum(kv) })
     : t(kv === 1 ? "Measured on {k} reply, from its first token to its end; the others tell no speed" : "Measured on {k} replies, from their first token to their end; the others tell no speed", { k: ledNum(kv) });
   const fTitle = !f || !kf ? "" : t(kf === 1 ? "At least: {k} reply read from a session file, which doesn't say when its answer began, so time before that is counted too" : "At least: {k} replies read from session files, which don't say when their answers began, so time before that is counted too", { k: ledNum(kf) });
-  return { v: v || f, text: [measured, floor].filter(Boolean).join(" · "), main: measured || floor, floor: measured ? floor : "", title: [vTitle, fTitle].filter(Boolean).join("\n") };
+  // main's parts: the speed and the replies it is of, so a narrow card can
+  // put the second under the first rather than run past its edge (#1623)
+  const parts = (s, k, pre) => {
+    const whole = pre + say(s, k), head = pre + t("{n} tok/s", { n: ledNum(Math.round(s)) });
+    return k && whole.startsWith(head) && whole.length > head.length ? [head, whole.slice(head.length)] : [whole];
+  };
+  return { v: v || f, text: [measured, floor].filter(Boolean).join(" · "), main: measured || floor, mainParts: v ? parts(v, kv, "") : parts(f, kf, "≥"), floor: measured ? floor : "", title: [vTitle, fTitle].filter(Boolean).join("\n") };
 }
 // their mean wait for the first token, 0 for none
 const ledTTFT = (x) => x?.timed > 0 ? x.ttft_ms / x.timed : 0;
@@ -17139,7 +17149,11 @@ function renderLedgerDash(l) {
   const block = (label, value, sub, cls, title) => {
     const b = el("div", "blk");
     if (title) b.title = title;
-    b.append(el("span", "k", t(label)), el("span", "v" + (cls ? " " + cls : ""), value));
+    // a value in parts (an array) keeps each whole, wrapping between them
+    const v = el("span", "v" + (cls ? " " + cls : "") + (Array.isArray(value) ? " parts" : ""), Array.isArray(value) ? undefined : value);
+    // (a space between two stays out of them: one leading a part is dropped)
+    if (Array.isArray(value)) value.forEach((x, i) => v.append(...(i && /^\s/.test(x) ? [" "] : []), el("span", "", x.trim())));
+    b.append(el("span", "k", t(label)), v);
     if (sub) b.append(sub);
     strip.append(b);
     return b;
@@ -17174,7 +17188,7 @@ function renderLedgerDash(l) {
   // how fast the streamed replies wrote, and how long they took to begin (#860)
   // a floor beside a measured speed goes under it, the card's figure kept whole
   const gs = ledGroupSpeed(l);
-  block("Output speed", gs ? gs.main : "—",
+  block("Output speed", gs ? gs.mainParts : "—",
     line(...[ledTTFT(l) ? t("first token in {ms} on average", { ms: ledTook(ledTTFT(l)) }) : t("no streamed replies timed")].concat(gs?.floor ? [" · ", gs.floor] : [])),
     "", [gs?.title, t("Output tokens a second after the first, over the streamed replies") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it")].filter(Boolean).join("\n"));
   drawLedTrend();
