@@ -20,6 +20,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/proc"
 	"gopkg.in/yaml.v3"
 )
@@ -720,11 +721,17 @@ func parseGain(out string) (*RTKGain, []RTKDay, string) {
 // of them keeps its history in that account's AppData, not the user's;
 // "unelevated" runs them with a token that can't write the user's. Either
 // way rtk gain here doesn't count them. "" when Codex doesn't sandbox them.
+// It is parsed again only when config.toml changes: one with a table for
+// each of thousands of projects is ~0.2s of CPU to parse (#1665).
 func codexSandbox() string {
-	raw, err := os.ReadFile(filepath.Join(codexDir(), "config.toml"))
-	if err != nil {
-		return ""
-	}
+	s, _ := filememo.Read("rtk codex sandbox", filepath.Join(codexDir(), "config.toml"), func(raw []byte) (string, error) {
+		return codexSandboxIn(raw), nil
+	})
+	return s
+}
+
+// codexSandboxIn is codexSandbox of config.toml's bytes.
+func codexSandboxIn(raw []byte) string {
 	var c struct {
 		SandboxMode string `toml:"sandbox_mode"`
 		Windows     struct {
