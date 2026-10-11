@@ -818,13 +818,15 @@ function profileDetail(p, footed) {
 // An agent whose config is right but whose address doesn't answer (#1013)
 // has nothing to set again: its pill says what has to listen there, unless
 // WSL now reaches Windows at another address, which it moves the config to.
+// Likewise one whose requests for magpie go through a proxy that doesn't
+// pass them on (proxied: Codex, Muma102kMichael on X).
 function driftFix(a, label = "Apply again") {
   const d = a.drift, f = a.fields.find((x) => x.key === d.field);
   const want = (f && optionFor(f, d.want)?.label) || d.want;
   const fix = el("button", "ag-fix");
   fix.type = "button";
   fix.title = `${t(DRIFT_WHY[d.kind] || DRIFT_WHY.unwired, { agent: a.name, model: want })}\n${d.detail}`;
-  const deaf = d.kind === "unreachable";
+  const deaf = d.kind === "unreachable" || d.kind === "proxied";
   if (deaf && d.move) label = t("Use {url}", { url: d.move.replace(/^https?:\/\//, "") });
   else if (deaf) label = "How to fix";
   fix.setAttribute("aria-label", t(label));
@@ -838,17 +840,26 @@ function driftFix(a, label = "Apply again") {
 }
 
 // explainDrift: what has to listen at an address an agent can't reach
-// magpie by — too long for the status line, so a dialog of its own.
+// magpie by, or let it through a proxy — too long for the status line, so a
+// dialog of its own. Until it is fixed, Disconnect puts the agent's config
+// back as it was, one click away.
 function explainDrift(a) {
   const ed = el("div", "editor");
   const head = el("div", "ehead");
-  head.append(el("b", "", t(DRIFT_WHY.unreachable, { agent: a.name })));
+  head.append(el("b", "", t(DRIFT_WHY[a.drift.kind] || DRIFT_WHY.unreachable, { agent: a.name })));
   ed.append(head);
   ed.append(el("p", "lib-confirm drift-why", a.drift.detail));
   const bar = el("div", "bar");
   const ok = el("button", "text primary", t("OK"));
   ok.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
-  bar.append(el("span", "grow"), ok);
+  bar.append(el("span", "grow"));
+  if (a.wired) {
+    const off = el("button", "text drift-off", t("Disconnect from magpie"));
+    off.title = t(DISCONNECT_TIP, { agent: a.name });
+    off.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); askDisconnect(a); };
+    bar.append(off);
+  }
+  bar.append(ok);
   ed.append(bar);
   confirmAsk = ed;
   openModal(ed);
@@ -861,6 +872,7 @@ const DRIFT_WHY = {
   replaced: "{agent} was switched off {model} outside magpie",
   bypassed: "{agent} was used without going through magpie — restart it after applying",
   unreachable: "{agent} is set up, but nothing answers at the address it reaches magpie by",
+  proxied: "{agent} reaches magpie through a proxy that doesn't pass its requests on",
 };
 
 // an i in a circle: the pill that explains rather than acts

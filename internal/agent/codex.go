@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -512,6 +513,13 @@ func codexIn(at place) *Agent {
 			return nil
 		}
 		on := !disconnected() && codexFailover()
+		// failover is magpie's own idea, not the user's: never handed
+		// Codex's requests while a proxy they'd go through doesn't pass
+		// them on to magpie, which would have every turn fail with 502
+		// (codex_proxy.go); one written before goes again
+		if on && at.spell == nil && !codexProxyOK(path, at.gw()) {
+			on = false
+		}
 		if mirror {
 			t, _ := edit.GetTOMLTable(path, "model_providers."+p)
 			hasGateway := t["base_url"] == at.codexURL()
@@ -868,7 +876,13 @@ func codexIn(at place) *Agent {
 		Beside:      beside,
 		Routed:      routed,
 		FailingOver: failingOver,
-		OwnVia:      codexOwnViaMagpie,
+		EndFailover: func() error {
+			if !failingOver() {
+				return nil
+			}
+			return errors.Join(dropMirrorFailover(), dropBase())
+		},
+		OwnVia: codexOwnViaMagpie,
 		Sync: func() error {
 			// model_provider = "magpie" left with its table gone (taken by
 			// another tool, or a hand edit), which keeps Codex from loading
@@ -1184,6 +1198,7 @@ func codexIn(at place) *Agent {
 	// and moved to WSL's new one when that changed (#1013)
 	if at.spell == nil {
 		a.reach = at.base
+		a.viaProxy = func() (bool, bool, string, string) { return codexThroughProxy(path, at.gw()) }
 		a.move = func(from, to string) error { return codexMoveGateway(path, from, to) }
 	}
 	return a
@@ -1440,6 +1455,29 @@ func codexFailover() bool {
 		}
 	}
 	return false
+}
+
+// EndCodexFailover takes account failover out of this machine's Codex
+// as the magpie serving its gateway quits (EndFailover): Codex goes
+// straight to OpenAI again rather than retrying a gateway that's gone.
+// The app-server codex sessions share read the old base URL as it started
+// and keeps it, and KeepCodexDaemonCurrent ends with magpie, so it is
+// restarted here, when no session is on it (thisisvainxx on X: back on
+// its own config, Codex took "several restarts").
+func EndCodexFailover() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	a := codex(home)
+	if !a.FailingOver() {
+		return nil
+	}
+	if err := a.EndFailover(); err != nil {
+		return err
+	}
+	codexDaemonCheck(a.Path)
+	return nil
 }
 
 // CodexOwnOnly reports whether the Codex that asks the gateway for its

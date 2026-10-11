@@ -120,7 +120,10 @@ type Drift struct {
 	//              nothing of it reached the gateway — it runs on an old
 	//              config, or something outside the file overrides it;
 	//   "unreachable" the config is right, but the address off loopback
-	//              it names the gateway at doesn't answer (#1013).
+	//              it names the gateway at doesn't answer (#1013);
+	//   "proxied"  the config is right, but the agent sends its requests
+	//              for the gateway through a proxy (Addr) that doesn't
+	//              pass them on to it (codex_proxy.go).
 	Kind   string `json:"kind"`
 	Field  string `json:"field"`         // the field it shows on
 	Now    string `json:"now,omitempty"` // what that field says now
@@ -190,6 +193,9 @@ func (a *Agent) Drift() *Drift {
 	}
 	if onMagpie || joined {
 		if d := a.unreachable(on, vals[on.Key]); d != nil {
+			return d
+		}
+		if d := a.proxied(on, vals[on.Key]); d != nil {
 			return d
 		}
 	}

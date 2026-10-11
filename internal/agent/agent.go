@@ -167,6 +167,11 @@ type Agent struct {
 	// the Agents page says so and what turns it off, and the gateway lists
 	// it only its own models.
 	FailingOver func() bool
+	// EndFailover takes out what account failover wrote, for magpie
+	// quitting: left there, the agent would be pointed at a gateway that
+	// no longer answers, and retry till magpie is open again (Leon920717
+	// on X). The next start's Sync writes it again.
+	EndFailover func() error
 	// Follow, for an agent whose own picker moves its main model where
 	// magpie keeps other settings following it (Claude Code's /model and
 	// its tiers), brings those along to the model picked there. Run as the
@@ -239,6 +244,11 @@ type Agent struct {
 	// move, when set, points the agent's config at to where it names the
 	// gateway at from: an address of WSL's that changed (#1013).
 	move func(from, to string) error
+	// viaProxy, when set, says whether the agent's requests for the
+	// gateway get there through the proxy it sends them by (ok), whether
+	// that is known yet, and the proxy and where it is set; ok with no
+	// proxy when it sends them straight there (see codex_proxy.go).
+	viaProxy func() (ok, known bool, proxy, from string)
 	// dirShared says Dir is a folder another agent keeps its files in too
 	// (omp's, when PI_CODING_AGENT_DIR points it at Pi's): that it is there
 	// says nothing of this agent.
