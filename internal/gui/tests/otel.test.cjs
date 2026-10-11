@@ -154,6 +154,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // keep the controls inside their rows, and give URLs a full-width field.
         for (const width of [1100, 520, 360]) {
           await page.setViewportSize({ width, height: 1000 });
+          // Right after setViewportSize returns, WebKit can still lay the
+          // page out as it was at the old width: from 1100px to 520px the
+          // view still starts at the side nav's 212px with innerWidth already
+          // 520, and the rows measure 268px instead of 488px. Two frames
+          // later they are laid out at the new width, so measure then.
+          await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
           const layout = await page.locator("#otelList").evaluate((list) => {
             const sub = list.querySelector("#otelSessionsRow .sub");
             const row = list.querySelector("#otelEndpointRow");
