@@ -326,9 +326,9 @@ type Totals struct {
 	// 260 calls whose speed is one reply's says so (Fallmonkey on Discord)
 	DecodeN int `json:"decode_n,omitempty"`
 	// FloorOut tokens over FloorMs are the least FloorN replies read from a
-	// session file wrote at, those with no first token (Row.Floor): what a
-	// group none of whose replies was measured shows, as "≥", beside how
-	// many it is of. They are never in Speed.
+	// session file wrote at, those whose speed wasn't measured (Row.Floor):
+	// what a group shows, as "≥", beside how many it is of, after its
+	// measured speed when it has one. They are never in Speed.
 	FloorOut int   `json:"floor_out,omitempty"`
 	FloorMs  int64 `json:"floor_ms,omitempty"`
 	FloorN   int   `json:"floor_n,omitempty"`
@@ -354,8 +354,8 @@ func (t Totals) Speed() float64 {
 	return float64(t.DecodeOut) / (float64(t.DecodeMs) / 1000)
 }
 
-// Floor is the least the replies with no first token wrote at, in tokens a
-// second over their whole time (Row.Floor): 0 for none.
+// Floor is the least the replies whose speed wasn't measured wrote at, in
+// tokens a second (Row.Floor): 0 for none.
 func (t Totals) Floor() float64 {
 	if t.FloorMs <= 0 {
 		return 0

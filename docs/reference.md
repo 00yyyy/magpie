@@ -301,15 +301,22 @@ shows the least its reply wrote at instead (`≥98 tok/s`): its output tokens
 over that whole time, the wait for the first token in it, so the speed after
 the first token is never under it. Only a reply of 1,000 tokens or more
 written over a second or more shows one; a shorter reply's wait is too much
-of its time to tell anything. Only Claude Code's and Claude Desktop's rows
-show one: their line that asked for a reply is written before it is sent. A
-Codex call in a turn of several is timed from the last tool output before
-its token count, and Codex can write the output of a tool that call itself
-asked for before the count, so its time can begin inside the call and a
-floor from it could read high; it shows none.
-A call whose session file timed it (a Codex
-turn of one call) shows its own speed as before. A floor never mixes into a
-measured speed: the Speed trend and `magpie usage` count timed calls only.
+of its time to tell anything; a count of tokens bounds that share, a
+duration doesn't (a 5 s reply can be 4 s of wait). Claude Code's, Claude
+Desktop's and Codex's rows show one: Claude's line that asked for a reply is
+written before it is sent, and a Codex call in a turn of several is timed
+from what the model had last been given before the call's first output
+item to its last, never from the output of a tool the call itself ran,
+which an older rollout writes before the call's token count. OpenCode's rows
+show none.
+A call whose session file timed it (a Codex turn of one call) shows its own
+speed as before. When that call reasoned, the file has its first token but
+not its first text, so no speed is measured; it shows the least its answer
+wrote at instead: its output less the reasoning, all written after the first
+token, over the time from the first token to its end. Its whole output over
+that time would count reasoning written before the first token and read
+high. A floor never mixes into a measured speed: the Speed trend and
+`magpie usage` count timed calls only.
 
 A group's speed (a row of the Usage page's ranking, by model, provider or
 agent, its Output speed card, and the overview's lists) says how many

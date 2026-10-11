@@ -16453,7 +16453,7 @@ function ledGroupSpeed(x) {
   const n = ledNum(Math.round(v || f));
   const text = (f ? "≥" : "") + (k ? t("{n} tok/s ({k})", { n, k: ledNum(k) }) : t("{n} tok/s", { n }));
   const title = !k ? "" : v ? t(k === 1 ? "Measured on {k} reply, from its first token to its end; the others tell no speed" : "Measured on {k} replies, from their first token to their end; the others tell no speed", { k: ledNum(k) })
-    : t(k === 1 ? "At least: {k} reply read from a session file, which has no first token, so the wait for it is counted too" : "At least: {k} replies read from session files, which have no first token, so the wait for it is counted too", { k: ledNum(k) });
+    : t(k === 1 ? "At least: {k} reply read from a session file, which doesn't say when its answer began, so time before that is counted too" : "At least: {k} replies read from session files, which don't say when their answers began, so time before that is counted too", { k: ledNum(k) });
   return { v: v || f, text, title };
 }
 // their mean wait for the first token, 0 for none
@@ -17103,19 +17103,24 @@ const ledRowSpeed = (r) => { const d = ledDecode(r); return d ? d.n / (d.w / 100
 // a shorter one or one asked with a tool's result, so only a reply of 1,000
 // or more is told. 0 when it tells none, and a call magpie timed tells its
 // own (ledDecode). Only the row's: the period's speed counts timed calls.
-// Claude Code's and Claude Desktop's files only: a call's time is from the
-// line that asked it, which is written before it is sent. Codex's call in a
-// turn of several is timed from the last tool output before its token count,
-// and Codex writes the output of a tool the call itself asked for before
-// that count (2,968 of 4,588 calls in a month of real rollouts), so its time
-// can begin inside the call and its tokens over it read high. OpenCode's
-// isn't checked against real sessions. They tell none.
-const LED_FLOOR_AGENTS = new Set(["claude", "claude-desktop"]);
-const ledFloorSpeed = (r) => {
-  if (r.source !== "log" || !LED_FLOOR_AGENTS.has(r.agent) || ledFailed_(r) || ledRowSpeed(r)) return 0;
-  if (!(r.out >= 1000 && r.ms >= 1000 && r.out * 1000 <= 10000 * r.ms)) return 0;
-  return r.out / (r.ms / 1000);
+// Claude Code's, Claude Desktop's and Codex's files only (usage.FloorAgents):
+// a call's time is from what asked for it, never from inside it. OpenCode's
+// isn't checked against real sessions, and tells none.
+// A Codex turn of one call that reasoned has its first token but not its
+// first text (Fallmonkey on Discord): its answer, its output less the
+// reasoning, all came after the first token, so the answer over the time
+// after it is a floor of the answer's speed; any size tells one, as the wait
+// isn't in it. ledFloor_ says the tokens, the ms, and whether it is that.
+const LED_FLOOR_AGENTS = new Set(["claude", "claude-desktop", "codex"]);
+const ledFloor_ = (r) => {
+  if (r.source !== "log" || !LED_FLOOR_AGENTS.has(r.agent) || ledFailed_(r) || ledRowSpeed(r)) return null;
+  if (r.agent === "codex" && r.ttft_ms > 0) {
+    const n = r.out - r.reasoning, w = r.ms - r.ttft_ms;
+    return r.reasoning > 0 && n > 0 && w >= 100 && n * 1000 <= 10000 * w ? { n, w, answer: true } : null;
+  }
+  return r.out >= 1000 && r.ms >= 1000 && r.out * 1000 <= 10000 * r.ms ? { n: r.out, w: r.ms } : null;
 };
+const ledFloorSpeed = (r) => { const f = ledFloor_(r); return f ? f.n / (f.w / 1000) : 0; };
 
 // the table as wide as the window, when leaving out what the row's details
 // say anyway makes it so: else it scrolls sideways (#799)
@@ -17385,6 +17390,7 @@ function renderLedger() {
     td(v ? t("{n} tok/s", { n: ledNum(Math.round(v)) }) : floor ? "≥" + t("{n} tok/s", { n: ledNum(Math.round(floor)) }) : "—", "n speed" + (v || floor ? "" : " faint"),
       v ? (r.reasoning > 0 ? t("{n} answer tokens in {ms} after the first text, the {r} reasoning tokens before it left out", { n: ledNum(ledDecode(r).n), ms: ledTook(ledDecode(r).w), r: ledNum(r.reasoning) })
         : t("{n} output tokens in {ms} after the first", { n: ledNum(r.out), ms: ledTook(r.ms - r.ttft_ms) })) + " · " + t("TTFT {ms}", { ms: ledTook(r.ttft_ms) })
+        : floor && ledFloor_(r).answer ? t("At least: {n} answer tokens in {ms} after the first token, the {r} reasoning tokens left out. The session file has no first text, so reasoning after the first token is counted too", { n: ledNum(ledFloor_(r).n), ms: ledTook(ledFloor_(r).w), r: ledNum(r.reasoning) }) + " · " + t("TTFT {ms}", { ms: ledTook(r.ttft_ms) })
         : floor ? t("At least: {n} output tokens in {ms}, from the line that asked for it to its last. The session file has no first token, so the wait for it is counted too", { n: ledNum(r.out), ms: ledTook(r.ms) })
         : r.ttft_ms || untimed || ledFailed_(r) ? "" : timed ? t("The session file has no first token to time a speed from") : t("Not streamed: no first token to time a speed from"));
     const st = el("span", "st");

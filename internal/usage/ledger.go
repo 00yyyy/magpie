@@ -632,25 +632,52 @@ func (t *Totals) addRow(r Row) {
 	}
 }
 
-// FloorAgents are the agents whose session files time a call from the line
-// that asked for it, written before it was sent, to its reply's last
-// (Claude Code's, Claude Desktop's): their calls' tokens over that time are
-// a floor of how fast the reply wrote. A Codex call in a turn of several can
-// be timed from inside the call, and OpenCode's isn't checked against real
-// sessions, so they tell none. app.js's LED_FLOOR_AGENTS has the same.
-var FloorAgents = map[string]bool{"claude": true, "claude-desktop": true}
+// FloorAgents are the agents whose session files time a call from what
+// asked for it to its reply's end, never from inside it: Claude Code's and
+// Claude Desktop's from the line that asked, written before it was sent;
+// Codex's call in a turn of several from what the model had last been given
+// before the call's first output item, to its last (sessions' codexTiming).
+// Their calls' tokens over that time are a floor of how fast the reply
+// wrote. OpenCode's isn't checked against real sessions, so it tells none.
+// app.js's LED_FLOOR_AGENTS has the same.
+var FloorAgents = map[string]bool{"claude": true, "claude-desktop": true, "codex": true}
 
 // Floor is the tokens and ms a row read from a session file tells the least
-// its reply wrote at by, when its speed wasn't measured: its output over its
-// whole time, the wait for the first token in it, for a reply of 1,000
-// tokens or more over a second or more (a shorter one's wait is too much of
-// it to tell anything) and no faster than MaxDecodeSpeed. 0, 0 when it
-// tells none. app.js's ledFloorSpeed is the same rule for one row.
+// its reply wrote at by, when its speed wasn't measured. 0, 0 when it tells
+// none. app.js's ledFloorSpeed is the same rule for one row.
+//
+// Mostly it is its output over its whole time, the wait for the first token
+// in it, for a reply of 1,000 tokens or more over a second or more (a
+// shorter one's wait is too much of it to tell anything; against Claude
+// Code's own stream a floor read 2-5% under for 1,400 tokens or more, 11-33%
+// for a shorter one) and no faster than MaxDecodeSpeed. A count of tokens
+// is what bounds the share the wait can be, not a duration: a 5 s reply can
+// be 4 s of wait (Fallmonkey on Discord asked for 5 s instead).
+//
+// A Codex turn of one call that reasoned has its first token from the turn's
+// end, but not its first text, so DecodeOf tells no speed. Its answer, its
+// output less the reasoning, was all written after the first token, so the
+// answer over the time from the first token to the end is a floor of the
+// answer's speed, the reasoning written after the first token counted in
+// its time. Its output over that time, as Fallmonkey asked, would count the
+// reasoning written before the first token too and read high: a gateway
+// reply of 496 tokens, 224 of them reasoning, 827 ms after a 10.2 s first
+// token, reads 600 tok/s so, its measured answer 415, and this 329.
 func (r Row) Floor() (tokens int, ms int64) {
 	if r.Source != "log" || !FloorAgents[r.Agent] || r.Failed() {
 		return 0, 0
 	}
 	if _, w := r.Decode(); w > 0 {
+		return 0, 0
+	}
+	if r.Agent == "codex" && r.TTFT > 0 {
+		if r.Reasoning <= 0 {
+			return 0, 0
+		}
+		n := r.Output - r.Reasoning
+		if w := DecodeWindow(n, r.Millis, r.TTFT); w > 0 {
+			return n, w
+		}
 		return 0, 0
 	}
 	if r.Output < 1000 || r.Millis < 1000 || int64(r.Output)*1000 > MaxDecodeSpeed*r.Millis {
