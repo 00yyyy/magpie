@@ -7568,6 +7568,9 @@ function asTyped() {
   // credentials typed, as a pasted key is
   if (draft.vertex) body.vertex = vertexOfDraft();
   if (draft.headers) body.headers = headersOf(draft.headers);
+  // the extra body typed, when it reads; one that doesn't is the saved one's
+  const xb = extraBodyOf(draft.extraBody);
+  if (xb.value) body.extraBody = xb.value;
   const proxy = draft.proxyMode === undefined ? null : proxyOfDraft();
   if (proxy !== null) body.proxy = proxy;
   return body;
@@ -7748,6 +7751,56 @@ function headerEditor(hints = []) {
   return box;
 }
 function parses(s) { try { JSON.parse(s); return true; } catch { return false; } }
+
+// A provider's extra body fields (#1604): a JSON object the gateway merges
+// into the top of every request's body to the vendor, filling in what the
+// body lacks, or replacing it for a name written "!name"; ${sessionId} is
+// the conversation's id. The fields magpie sets itself — the model, stream,
+// the conversation — are refused, as provider.ExtraBodyReserved refuses
+// them on a save. The draft keeps the text as typed; extraBodyOf reads it.
+const EXTRA_BODY_RESERVED = ["model", "stream", "messages", "input", "contents", "system", "systemInstruction", "system_instruction", "instructions", "tools"];
+function extraBodyText(obj) {
+  return obj && Object.keys(obj).length ? JSON.stringify(obj, null, 2) : "";
+}
+// extraBodyOf is the object a save sends ({} for none), or why it can't be
+function extraBodyOf(text) {
+  const s = (text || "").trim();
+  if (!s) return { value: {} };
+  let v;
+  try { v = JSON.parse(s); } catch { return { error: t("not valid JSON") }; }
+  if (!v || typeof v !== "object" || Array.isArray(v)) return { error: t("write a JSON object, like {\"prompt_cache_key\": \"${sessionId}\"}") };
+  const seen = new Set();
+  for (const k of Object.keys(v)) {
+    const name = k.trim().replace(/^!/, "").trim();
+    if (!name) return { error: t("a field needs a name") };
+    if (EXTRA_BODY_RESERVED.includes(name)) return { error: t("magpie sets {k} itself, so it can't be added", { k: name }) };
+    if (seen.has(name)) return { error: t("{k} is named twice", { k: name }) };
+    seen.add(name);
+  }
+  return { value: v };
+}
+function extraBodyEditor() {
+  const box = el("div", "extra-body");
+  const ta = el("textarea", "json");
+  ta.value = draft.extraBody || "";
+  ta.spellcheck = false;
+  ta.wrap = "off";
+  ta.rows = Math.min(12, Math.max(3, ta.value.split("\n").length));
+  ta.placeholder = "{\n  \"prompt_cache_key\": \"${sessionId}\"\n}";
+  const why = el("div", "why");
+  why.setAttribute("aria-live", "polite");
+  const check = () => {
+    const err = (draft.extraBody || "").trim() ? extraBodyOf(draft.extraBody).error || "" : "";
+    ta.classList.toggle("bad", !!err);
+    ta.setAttribute("aria-invalid", err ? "true" : "false");
+    why.textContent = err;
+  };
+  ta.oninput = () => { draft.extraBody = ta.value; check(); };
+  ta.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") cancelEdit(); };
+  check();
+  box.append(ta, why);
+  return box;
+}
 
 // iconPicker: a custom provider's icon — one of the built-in ones, or a
 // picture of the user's own, which magpie keeps in ~/.config/magpie/icons.
@@ -8186,7 +8239,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), extra: [], headers: headerRows(p.headers), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, pinUpstream: !!p.pinUpstream, balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, pinUpstream: !!p.pinUpstream, balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -8598,6 +8651,8 @@ function drawEditor(p, presetID) {
   } else {
     ed.append(...field(t("Headers"), headerEditor(pr?.headerHints || []), t("Optional headers sent with every request to {p}, applied after auth.", { p: pr?.name || p?.name })));
   }
+  // and JSON fields of the user's own for each request's body (#1604)
+  ed.append(...field(t("Extra body"), extraBodyEditor(), t("JSON fields added to the body of every request to the vendor. A field the request has already is kept; write \"!name\" to replace it. ${sessionId} is the conversation's id.")));
   const proxies = el("div", "stack");
   proxies.append(proxyPicker());
   const perKey = keyProxyPicker(p);
@@ -8930,6 +8985,9 @@ function drawEditor(p, presetID) {
     // new: an Add never replaces a provider that has the id already
     const body = { id: p ? slug(draft.id) || p.id : draft.id, from: p?.id, name: draft.name, preset: draft.preset, key: draft.key || "", chat: draft.chat, responses: draft.responses, anthropic: draft.anthropic, gemini: (draft.gemini || "").trim(), catalog: draft.catalog, models: p ? chosenIds() : draft.extra, headers: headersOf(draft.headers), new: isNew };
     if (isNew && draft.copyOf) body.copyOf = draft.copyOf;
+    const xb = extraBodyOf(draft.extraBody);
+    if (xb.error) { ed.querySelector(".extra-body textarea")?.focus({ preventScroll: true }); return editorError(t("Extra body: {why}", { why: xb.error }), "warn"); }
+    body.extraBody = xb.value;
     if (decides || custom) body.decide = (custom && draft.api !== "decide" && !p?.decide ? "" : draft.decide || "").trim();
     if ((body.decide || "").includes(WORKSPACE)) { ed.querySelector(".workspace-id")?.focus({ preventScroll: true }); return editorError(t("Give the workspace ID your API key belongs to, or pick the Token Plan"), "warn"); }
     if (custom) {

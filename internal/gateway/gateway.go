@@ -3096,6 +3096,12 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// auto mode's review goes to Claude alone (automode.go)
 		betas, body = s.serverReview(p, asked, body)
 	}
+	if !countsTokens(path) {
+		// the user's own fields for the provider (#1604), last, so the
+		// body is as it goes out when they fill in what it lacks, and
+		// before it is signed
+		body = p.WithExtraBody(body, cmp.Or(sessionOf(in), conversationID(in, body)))
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.Base(to)+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -3199,6 +3205,13 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	// what a Codex account's reply says it has used, for its cap (#1295)
 	heardCodexLimits(p, res)
 	return res, nil
+}
+
+// countsTokens is a path that only counts a request's tokens (Anthropic's
+// count_tokens): no reply is asked, so a provider's extra body fields, for
+// asking one, aren't sent there.
+func countsTokens(path string) bool {
+	return strings.Contains(path, "count_tokens")
 }
 
 // fromClaudeCode is a request Claude Code sent, by the User-Agent it gives

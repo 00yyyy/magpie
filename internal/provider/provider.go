@@ -179,6 +179,12 @@ type Provider struct {
 	// ignore them: their auth is the agent's own.
 	Headers map[string]string `json:"headers,omitempty"`
 
+	// ExtraBody are JSON fields added to the body of every request to the
+	// vendor (#1604), filling in what the body lacks, or replacing it for a
+	// name written "!name"; ${sessionId} in a value is the conversation's
+	// id (extrabody.go). Signed-in agent accounts ignore it, as Headers.
+	ExtraBody ExtraBody `json:"extraBody,omitempty"`
+
 	// Searches says the vendor answers a web search tool offered on its
 	// Anthropic or Responses API by itself (web_search_20250305,
 	// web_search): a relay in front of Anthropic's or OpenAI's API, which
@@ -451,6 +457,7 @@ func (p Provider) clone() Provider {
 	p.Models = slices.Clone(p.Models)
 	p.PickedFrom = slices.Clone(p.PickedFrom)
 	p.Headers = maps.Clone(p.Headers)
+	p.ExtraBody = maps.Clone(p.ExtraBody)
 	p.AccountProxies = maps.Clone(p.AccountProxies)
 	p.AccountCaps = maps.Clone(p.AccountCaps)
 	p.AccountNames = maps.Clone(p.AccountNames)
@@ -1063,6 +1070,7 @@ func normalize(p Provider) Provider {
 	// a preset's provider keeps its headers too: the preset gives the
 	// endpoints and catalog, the headers say which workspace or app it is
 	p.Headers = cleanHeaders(p.Headers)
+	p.ExtraBody = cleanExtraBody(p.ExtraBody)
 	if pr := Preset(p.Preset); pr != nil {
 		if p.Icon == "" {
 			p.Icon = pr.Icon

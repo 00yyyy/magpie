@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -73,6 +74,8 @@ type providerJSON struct {
 	Website   string            `json:"website"`
 	KeysURL   string            `json:"keysUrl"`
 	Headers   map[string]string `json:"headers,omitempty"`
+	// JSON fields added to each request's body (provider.ExtraBody, #1604)
+	ExtraBody provider.ExtraBody `json:"extraBody,omitempty"`
 	// the API the user gave a custom provider's Base URL as (BaseAPI)
 	BaseAPI string `json:"baseAPI,omitempty"`
 	// the vendor searches the web by itself (provider.Searches)
@@ -495,7 +498,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Picks(), Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Unlisted: p.Unlisted, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
@@ -1169,6 +1172,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			if pr, err := provider.FromPreset(in.Preset); err == nil && in.Chat == "" && in.Responses == "" && in.Anthropic == "" && in.Gemini == "" {
 				pr.Key, pr.Models, pr.Fallback, pr.Headers, pr.BalanceToken, pr.Contexts = in.Key, in.Models, in.Fallback, in.Headers, in.BalanceToken, in.Contexts
 				pr.ZhipuTeam = in.ZhipuTeam
+				pr.ExtraBody = in.ExtraBody
 				pr.SecretAccessKey = in.SecretAccessKey
 				pr.Vertex = in.Vertex
 				pr.Searches = in.Searches
@@ -1186,6 +1190,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					pr.Decide = d
 				}
 				in = pr
+			}
+			// fields the body can't be given are refused, not dropped
+			// unseen (#1604)
+			if why := provider.ExtraBodyOK(in.ExtraBody); why != "" {
+				fail(rw, errors.New(why))
+				return
 			}
 			cc, keepCC, err := concurrencyOf(req.MaxConcurrency)
 			if err != nil {
@@ -1309,6 +1319,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				// a Zhipu key's team likewise: {} clears it
 				if in.ZhipuTeam == nil && old != nil {
 					in.ZhipuTeam = old.ZhipuTeam
+				}
+				// and its extra body fields: {} clears them
+				if in.ExtraBody == nil && old != nil {
+					in.ExtraBody = old.ExtraBody
 				}
 				// a Volcengine access key likewise: its ID kept when left
 				// out, its Secret when sent blank, unless the form dropped it
@@ -1995,11 +2009,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 
 // typed is the saved provider p as the editor's form has it (in), for
 // Refresh and Test models before a Save: a key pasted to replace the saved
-// one is the one asked with, and the URLs, headers and proxy typed are
-// where and how. Nothing is saved. What the form left blank (the key above
-// all) is the saved one's; the provider's other keys are kept. A Vertex AI
-// provider's project, location, credentials file and service account are
-// the ones typed, spelled as a Save keeps them, unless no project is.
+// one is the one asked with, and the URLs, headers, extra body and proxy
+// typed are where and how. Nothing is saved. What the form left blank (the
+// key above all) is the saved one's; the provider's other keys are kept. A
+// Vertex AI provider's project, location, credentials file and service
+// account are the ones typed, spelled as a Save keeps them, unless no
+// project is.
 func typed(p, in provider.Provider, proxy *string) provider.Provider {
 	if k := strings.TrimSpace(in.Key); k != "" && k != p.Key {
 		p.Key, p.KeyName, p.KeyProtocol, p.KeyWeight = k, "", "", 0
@@ -2017,6 +2032,9 @@ func typed(p, in provider.Provider, proxy *string) provider.Provider {
 	}
 	if in.Headers != nil {
 		p.Headers = in.Headers
+	}
+	if in.ExtraBody != nil {
+		p.ExtraBody = in.ExtraBody
 	}
 	if proxy != nil {
 		p.Proxy = *proxy
