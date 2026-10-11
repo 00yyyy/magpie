@@ -83,6 +83,13 @@ type host struct {
 	barTray     atomic.Int64 // the newest setTrayInBar; older ones stop
 	query       string       // what the windows' URLs carry (a forced theme)
 
+	// niri places the panel as it opens (#1670): niriWatch starts its
+	// watch once, and iconX is where the tray icon was just clicked
+	// across its bar
+	niri      omarchy.NiriPanel
+	niriWatch sync.Once
+	iconX     atomic.Pointer[int]
+
 	// closing is set while a full-screen main window, closed, leaves full
 	// screen; it is hidden once it has
 	closing atomic.Bool
@@ -159,8 +166,8 @@ func (h *host) ChooseFolder(title string) (string, error) {
 	return d.PromptForSingleSelection()
 }
 
-// panelTitle names the panel for Hyprland's rule, which places it (the
-// main window is "magpie")
+// panelTitle names the panel for Hyprland's rule, which places it, and
+// for niri, which finds it by it (the main window is "magpie")
 const panelTitle = "magpie panel"
 
 // FitPanel grows or shrinks the panel to its content and keeps it anchored
@@ -483,6 +490,9 @@ func Run(version string, showMain bool, link string) error {
 			h.ShowMain("")
 			return
 		}
+		if x, ok := trayClick(h.tray); ok {
+			h.iconX.Store(&x)
+		}
 		h.togglePanel()
 	})
 
@@ -678,6 +688,12 @@ func (h *host) togglePanelNow() {
 			return
 		}
 		h.placePanel()
+	}
+	// niri places it as it opens (see omarchy.NiriPanel), by the click
+	// that opened it, if a click did
+	if x := h.iconX.Swap(nil); omarchy.Niri() && !h.panel.IsVisible() {
+		h.niriWatch.Do(func() { go h.niri.Watch(panelTitle) })
+		h.niri.Opening(x)
 	}
 	if runtime.GOOS == "darwin" {
 		// Wails' ToggleWindow goes by IsVisible, which on the Mac is the
