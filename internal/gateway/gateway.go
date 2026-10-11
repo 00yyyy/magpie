@@ -4083,7 +4083,11 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			continue
 		}
 		dropped = false
-		if !wrongEndpoint(res.StatusCode, b) {
+		// Responses is asked first there only for what it tells of the
+		// cache, not because the model needs it: a model the vendor doesn't
+		// serve on it (404) is asked on Chat, as before #1578
+		cacheOnly := to == provider.Responses && res.StatusCode == http.StatusNotFound && p.ResponsesTellsCache()
+		if !cacheOnly && !wrongEndpoint(res.StatusCode, b) {
 			return res, to, nil
 		}
 		s.markUnfit(p.ID, model, to)
