@@ -666,8 +666,24 @@ func claudeIn(at place) *Agent {
 			return nil
 		}
 		mark1M := claude1M()
+		// a model a tier is on is in /model as that tier: Claude Code
+		// leaves out a picker row naming a tier's model, but compares the
+		// ids whole, so a tier fixed at an effort (codex/gpt-6-luna:max)
+		// kept its model's row as a second entry (#1616, iTanX). That row
+		// is left out here; a tier at no effort Claude Code matches itself.
+		var onTier []string
+		for _, t := range claudeTiers {
+			if v := env(tierEnv(t)); v != "" {
+				if _, e := tierAt(v); e != "" {
+					onTier = append(onTier, v)
+				}
+			}
+		}
 		rows := []any{}
 		for _, o := range viaMagpie("claude", "") {
+			if slices.ContainsFunc(onTier, func(v string) bool { return claudeSameModel(v, o.Value) }) {
+				continue
+			}
 			rows = append(rows, map[string]any{"model": spell(mark1M(o.Value)), "label": cmp.Or(o.Label, o.Value), "description": o.Note})
 		}
 		if len(rows) == 0 {
