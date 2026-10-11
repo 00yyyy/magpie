@@ -920,6 +920,9 @@
   // tokens it spends past the advice: the area over the advice's level is
   // what the others waste, and the one set now says how much
   let chartN = 0;
+  // how far apart, as a share of the axis, two of its labels must sit: a
+  // label is about 30px wide, the narrowest card's axis about 280px
+  const TICK_GAP = 0.16;
   function chart(pts, current, best, show) {
     if (pts.length < 2) return null;
     const near = (v) => pts.reduce((a, p) => Math.abs(p.value - v) < Math.abs(a.value - v) ? p : a, pts[0]);
@@ -976,8 +979,18 @@
     at(top, "best", t("Leanest"));
     if (now && now !== top) at(now, "now", "+" + pct(extra(now) / low));
     const axis = el("div", "ctx-tc-x");
+    // the advice's value first, then the setting now, then the range's two
+    // ends: a value that sits too close to one before it is left off, so two
+    // labels are never drawn over each other (#1549, Ti800: 170K, the
+    // leanest, one step from the axis's 160K, read as "1170K")
+    const along = (p) => pts.indexOf(p) / (pts.length - 1);
+    const kept = [];
+    for (const p of new Set([top, now, pts[0], pts[pts.length - 1]].filter(Boolean))) {
+      if (kept.every((k) => Math.abs(along(k) - along(p)) >= TICK_GAP)) kept.push(p);
+    }
     for (const p of new Set([pts[0], top, now, pts[pts.length - 1]].filter(Boolean))) {
       const i = pts.indexOf(p);
+      if (!kept.includes(p)) continue;
       const tick = el("span", (p === top ? "best" : p === now ? "now" : "") + (i === 0 ? " start" : i === pts.length - 1 ? " end" : ""), show(p.value));
       tick.style.left = (i / (pts.length - 1)) * 100 + "%";
       axis.append(tick);

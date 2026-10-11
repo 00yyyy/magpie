@@ -277,3 +277,50 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual(errors, []);
   });
 }
+
+// a value the advice or the setting now sits on, close to an end of the
+// range, keeps its label and the end's is left off, so no two labels are
+// drawn over each other (#1549, Ti800: the leanest 170K one step from the
+// axis's 160K read as "1170K"), at a phone's width and a desk's
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: the curve's axis labels never overlap`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const close = {
+      days: 7,
+      agents: [{ agent: "claude", calls: 4300, advice: [
+        { knob: "compact", model: "claude-opus-5-5", setting: { value: "400000", source: "env", locked: "CLAUDE_CODE_AUTO_COMPACT_WINDOW" },
+          compact: { model: "claude-opus-5-5", current: 400000, best: 170000, cost: 1.9e9, low: 1.46e9, curve: curve(160000, 1000000, 170000), facts } },
+        { knob: "compact", model: "claude-sonnet-5", setting: {},
+          compact: { model: "claude-sonnet-5", current: 990000, best: 500000, cost: 1.9e9, low: 1.46e9, curve: curve(160000, 1000000, 500000), facts } },
+      ] }],
+    };
+    for (const [width, height] of [[360, 760], [1100, 760]]) {
+      const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
+      await ctx.addInitScript(() => { try { localStorage.setItem("magpie.usageTab", "context"); } catch {} });
+      const page = await ctx.newPage();
+      page.setDefaultTimeout(5000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      const base = serve("en", []);
+      await page.route("**/*", (r) => new URL(r.request().url()).pathname === "/api/tune" ? r.fulfill({ json: close }) : base(r));
+      await page.goto("http://magpie.test/?view=usage");
+      await page.locator(".ctx-tune-chart").nth(1).waitFor();
+      const axes = await page.locator(".ctx-tc-x").evaluateAll((all) => all.map((a) => [...a.children].map((s) => {
+        const r = s.getBoundingClientRect();
+        return { text: s.textContent, cls: s.className, left: r.left, right: r.right };
+      })));
+      for (const ticks of axes) {
+        for (let i = 0; i < ticks.length; i++) for (let j = i + 1; j < ticks.length; j++) {
+          const [a, b] = [ticks[i], ticks[j]];
+          assert.ok(a.right <= b.left || b.right <= a.left, `${width}px: "${a.text}" (${Math.round(a.left)}–${Math.round(a.right)}) overlaps "${b.text}" (${Math.round(b.left)}–${Math.round(b.right)})`);
+        }
+      }
+      // the advice's value and the one set now keep their labels
+      assert.deepEqual(axes[0].map((s) => s.text), ["170K", "400K", "1M"], width + "px");
+      assert.deepEqual(axes[1].map((s) => s.text), ["160K", "500K", "990K"], width + "px");
+      assert.deepEqual(errors, []);
+      await ctx.close();
+    }
+  });
+}
