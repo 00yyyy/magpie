@@ -612,6 +612,17 @@ func codexIn(at place) *Agent {
 		if !withMagpie {
 			return own
 		}
+		// the models magpie serves on the Codex accounts in it (codex/…)
+		// are left out while they would only add a hop: Codex on its own
+		// ChatGPT sign-in, that one account alone in magpie. On a relay or
+		// a key they are not Codex's sign-in, and over several accounts
+		// magpie routes; offered via magpie then, beside the direct ones
+		// (#1603: Codex on CC Switch's custom relay, two accounts, GPT
+		// models direct only). Routed, Codex's own say via magpie already.
+		onSignIn := (p == "" || p == "openai" || isCCSwitchMirror(p)) && chatGPT()
+		if !through && (!onSignIn || codexFailover()) {
+			return append(own, viaMagpie("codex", "")...)
+		}
 		return append(own, viaMagpieFor("codex", "")...)
 	}
 	// unroute takes magpie out as the way Codex reaches its models and puts

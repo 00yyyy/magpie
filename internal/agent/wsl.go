@@ -270,6 +270,11 @@ var wslKinds = []wslKind{
 			switch key {
 			case "model", "subagent":
 				return func(map[string]string) []Option {
+					// over several accounts magpie routes, so they are
+					// offered via magpie too, as on a live Codex (#1603)
+					if codexFailover() {
+						return append(group("OpenAI", options(ownCodex(), "")), viaMagpie("codex", "")...)
+					}
 					return append(group("OpenAI", options(ownCodex(), "")), viaMagpieFor("codex", "")...)
 				}
 			case "effort":
