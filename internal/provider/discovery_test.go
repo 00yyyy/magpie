@@ -22,6 +22,9 @@ import (
 // a loop of such opens sees each read the moment it starts: whoever opened
 // it is handed "{}" and an end of file, and the path is noted. A plain
 // file would be read with nothing to show for it.
+//
+// The func returned waits for a whole loop that began after the call, so
+// an open the loop found before then is in what it returns.
 func openWatch(t *testing.T, paths []string) func() []string {
 	t.Helper()
 	for _, p := range paths {
@@ -35,6 +38,7 @@ func openWatch(t *testing.T, paths []string) func() []string {
 	var (
 		mu     sync.Mutex
 		opened []string
+		loops  int
 	)
 	stop := make(chan struct{})
 	done := make(chan struct{})
@@ -57,6 +61,9 @@ func openWatch(t *testing.T, paths []string) func() []string {
 				_, _ = syscall.Write(fd, []byte("{}"))
 				_ = syscall.Close(fd)
 			}
+			mu.Lock()
+			loops++
+			mu.Unlock()
 			time.Sleep(200 * time.Microsecond)
 		}
 	}()
@@ -71,6 +78,13 @@ func openWatch(t *testing.T, paths []string) func() []string {
 	})
 	return func() []string {
 		mu.Lock()
+		// the loop under way may have opened a FIFO and not noted it yet;
+		// the one after it begins after this call
+		for until := loops + 2; loops < until; {
+			mu.Unlock()
+			time.Sleep(100 * time.Microsecond)
+			mu.Lock()
+		}
 		defer mu.Unlock()
 		return slices.Clone(opened)
 	}
@@ -140,11 +154,6 @@ func TestAccountDiscoveryOffReadsNoSignIn(t *testing.T) {
 	}
 	if got := opened(); len(got) == 0 || slices.ContainsFunc(got, func(p string) bool { return p != codexAuthPath() }) {
 		t.Fatalf("the watch saw %v, want the test's own read", got)
-	}
-	// a write the watch began while the read was still open is noted
-	// after it returns; wait for the notes to stop before counting
-	for n := -1; n != len(opened()); time.Sleep(20 * time.Millisecond) {
-		n = len(opened())
 	}
 	checked := len(opened())
 
