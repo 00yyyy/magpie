@@ -684,10 +684,17 @@ func modelObject(e provider.Entry) map[string]any {
 	if native := nativeEndpoints(e); len(native) > 0 {
 		m["native_endpoints"] = native
 	}
-	if e.Images {
-		m["modalities"] = map[string]any{"input": []string{"text", "image"}}
-	} else if e.ImageInput != nil {
-		m["modalities"] = map[string]any{"input": []string{"text"}}
+	// what it takes and gives: every kind its source listed, audio, video
+	// and pdf too, not image alone (#1595)
+	if in, out := e.Modalities(); in != nil || out != nil {
+		mod := map[string]any{}
+		if in != nil {
+			mod["input"] = in
+		}
+		if out != nil {
+			mod["output"] = out
+		}
+		m["modalities"] = mod
 	}
 	return m
 }

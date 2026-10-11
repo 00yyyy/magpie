@@ -314,7 +314,8 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 		if len(apis) == 0 {
 			apis = targetAPIs(r.TypeTarget)
 		}
-		m := Model{ID: id, Name: name, Plain: plain, ImageInput: input, APIs: apis, Draws: drawer, Films: films, Decides: decision}
+		m := Model{ID: id, Name: name, Plain: plain, ImageInput: input, APIs: apis, Draws: drawer, Films: films, Decides: decision,
+			InputModalities: r.Modalities.Input, OutputModalities: r.Modalities.Output}
 		if n, ok := r.ContextLength.(float64); ok && n > 0 {
 			m.Context = int(n)
 		}
@@ -370,7 +371,8 @@ type liveModel struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
 	Modalities  struct {
-		Input []string `json:"input"`
+		Input  []string `json:"input"`
+		Output []string `json:"output"`
 	} `json:"modalities"`
 	// the paths the model is served on, where the vendor says: Command
 	// Code's Claude models on /messages alone, its open ones on
@@ -503,6 +505,10 @@ func Decorate(live []Model, known []Model) []Model {
 			if m.ImageInput == nil {
 				m.ImageInput = k.ImageInput
 				m.Images = m.Images || k.Images
+				m.InputModalities = k.InputModalities
+			}
+			if m.OutputModalities == nil {
+				m.OutputModalities = k.OutputModalities
 			}
 			if m.Context == 0 {
 				m.Context = k.Context

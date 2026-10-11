@@ -213,7 +213,12 @@ func pluginCatalog(pp plugin.Provider) []catalog.Model {
 		}
 		if m.ImageSaid {
 			c.ImageInput = &m.Image
+			// what else it takes (audio, video, pdf), only where the
+			// plugin said what it takes: the host's default for a model
+			// it said nothing of is text alone (#1595)
+			c.InputModalities = m.Inputs
 		}
+		c.OutputModalities = m.Outputs
 		out = append(out, c)
 	}
 	return out

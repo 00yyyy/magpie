@@ -1298,6 +1298,10 @@ type Entry struct {
 	Icons      []string `json:"-"`                // a group's: its providers' icons, one per provider
 	Images     bool     `json:"images,omitempty"` // takes images as input (a group's: a member does)
 	ImageInput *bool    `json:"-"`                // explicit answer, nil when unknown
+	// Inputs and Outputs are what the model's source listed it takes and
+	// gives (catalog.Model's InputModalities, OutputModalities); see
+	// Modalities
+	Inputs, Outputs []string `json:"-"`
 	// Context is the tokens a prompt may hold, when known (a group's: the
 	// least of its members')
 	Context int `json:"context,omitempty"`
@@ -1406,7 +1410,8 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	// an agent's list showed the whole magpie/<provider>/<model> (#955)
 	name := cmp.Or(m.Name, m.ID)
 	e := Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Family: p.Family, Name: name, Efforts: effortsOf(m), Provider: p,
-		Images: images, ImageInput: imageInput, Context: ctx, Output: output, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Tiers: m.Tiers, Released: m.Released}
+		Images: images, ImageInput: imageInput, Context: ctx, Output: output, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Tiers: m.Tiers, Released: m.Released,
+		Inputs: m.InputModalities, Outputs: m.OutputModalities}
 	if n, ok := modelNameIn(s.ModelNames, p.ID, m.ID); ok {
 		e.Name, e.Default = n, name
 	} else {
@@ -1427,6 +1432,29 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 		e.AgentsV2 = slices.Contains(e.Efforts, "ultra")
 	}
 	return e
+}
+
+// Modalities are what the model takes and gives, as an agent's model list
+// says them: every kind its source listed (a plugin's audio, video and pdf
+// too, #1595), with image as Images has it, the user's say included. With
+// no list, the input is text and image or text alone when whether it
+// takes images is known, and nil when it isn't; output is nil unless said.
+func (e Entry) Modalities() (in, out []string) {
+	if e.Inputs != nil {
+		in = slices.DeleteFunc(slices.Clone(e.Inputs), func(k string) bool { return k == "image" })
+		if e.Images {
+			at := 0
+			if len(in) > 0 && in[0] == "text" {
+				at = 1
+			}
+			in = slices.Insert(in, at, "image")
+		}
+	} else if e.Images {
+		in = []string{"text", "image"}
+	} else if e.ImageInput != nil {
+		in = []string{"text"}
+	}
+	return in, slices.Clone(e.Outputs)
 }
 
 // EntryOf is the model as the agents see it, by the id they ask for. It is

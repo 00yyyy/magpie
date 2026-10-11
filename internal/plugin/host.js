@@ -1208,6 +1208,22 @@ function cost(c) {
   }
 }
 
+// MODALITIES are the kinds of input and output OpenCode's capabilities
+// name, in its order.
+const MODALITIES = ["text", "image", "audio", "video", "pdf"]
+
+// modalities is a models.dev or config modalities list as capabilities
+// has it: each kind true or false, text when it lists none.
+const modalities = (list) => Object.fromEntries(MODALITIES.map((k) => [k, (list ?? ["text"]).includes(k)]))
+
+// kinds are the kinds a capabilities.input or .output says yes to, for
+// magpie: undefined when the plugin gave none.
+function kinds(c) {
+  if (!c || typeof c !== "object") return undefined
+  const out = Object.keys(c).filter((k) => c[k] === true)
+  return out.length ? out : undefined
+}
+
 // fromModelsDev is a models.dev model as OpenCode's provider list has it.
 function fromModelsDev(p, m) {
   return {
@@ -1226,14 +1242,8 @@ function fromModelsDev(p, m) {
       reasoning: m.reasoning ?? false,
       attachment: m.attachment ?? false,
       toolcall: m.tool_call ?? true,
-      input: {
-        text: true,
-        image: (m.modalities?.input ?? []).includes("image"),
-        audio: (m.modalities?.input ?? []).includes("audio"),
-        video: (m.modalities?.input ?? []).includes("video"),
-        pdf: (m.modalities?.input ?? []).includes("pdf"),
-      },
-      output: { text: true, image: false, audio: false, video: false, pdf: false },
+      input: { ...modalities(m.modalities?.input), text: true },
+      output: modalities(m.modalities?.output),
       interleaved: m.interleaved ?? false,
     },
     release_date: m.release_date ?? "",
@@ -1282,7 +1292,8 @@ async function info(id, key, strict) {
         ...(m.reasoning !== undefined ? { reasoning: m.reasoning } : {}),
         ...(m.attachment !== undefined ? { attachment: m.attachment } : {}),
         ...(m.tool_call !== undefined ? { toolcall: m.tool_call } : {}),
-        ...(m.modalities?.input ? { input: Object.fromEntries(["text", "image", "audio", "video", "pdf"].map((k) => [k, m.modalities.input.includes(k)])) } : {}),
+        ...(m.modalities?.input ? { input: modalities(m.modalities.input) } : {}),
+        ...(m.modalities?.output ? { output: modalities(m.modalities.output) } : {}),
       },
       variants: m.variants ?? was?.variants ?? {},
       // magpie's own mark: a decision model, answering System One
@@ -1445,6 +1456,9 @@ async function providers({ proxies } = {}) {
           reasoning: !!m.capabilities?.reasoning,
           image: !!m.capabilities?.input?.image,
           imageSaid: typeof m.capabilities?.input?.image === "boolean",
+          // every kind it takes and gives, not image alone (#1595)
+          inputs: kinds(m.capabilities?.input),
+          outputs: kinds(m.capabilities?.output),
           released: m.release_date ?? "",
           cost: m.cost,
           variants: Object.keys(m.variants ?? {}),
