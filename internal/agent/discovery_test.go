@@ -95,6 +95,11 @@ func TestAccountDiscoveryOffAgentsReadNoSignIn(t *testing.T) {
 	if b, err := os.ReadFile(files[0]); err != nil || len(b) == 0 || strings.ReplaceAll(string(b), "{}", "") != "" {
 		t.Fatalf("the watch didn't answer a read: %q %v", b, err)
 	}
+	// a write the watch began while the read was still open is noted
+	// after it returns; wait for the notes to stop before counting
+	for n := -1; n != len(opened()); time.Sleep(20 * time.Millisecond) {
+		n = len(opened())
+	}
 	checked := len(opened())
 
 	cfgDir := filepath.Join(home, ".config", "opencode")

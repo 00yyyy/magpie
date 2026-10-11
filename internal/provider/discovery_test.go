@@ -132,13 +132,21 @@ func TestAccountDiscoveryOffReadsNoSignIn(t *testing.T) {
 	files = slices.Compact(files)
 	opened := openWatch(t, files)
 
-	// the watch sees a read: this test's own
-	if b, err := os.ReadFile(codexAuthPath()); err != nil || string(b) != "{}" {
+	// the watch sees a read: this test's own. A reader slow to reach the
+	// end is handed "{}" again by the next loop's write, and noted again,
+	// so under load it reads "{}{}"
+	if b, err := os.ReadFile(codexAuthPath()); err != nil || len(b) == 0 || strings.ReplaceAll(string(b), "{}", "") != "" {
 		t.Fatalf("the watch didn't answer a read: %q %v", b, err)
 	}
-	if got := opened(); len(got) != 1 {
+	if got := opened(); len(got) == 0 || slices.ContainsFunc(got, func(p string) bool { return p != codexAuthPath() }) {
 		t.Fatalf("the watch saw %v, want the test's own read", got)
 	}
+	// a write the watch began while the read was still open is noted
+	// after it returns; wait for the notes to stop before counting
+	for n := -1; n != len(opened()); time.Sleep(20 * time.Millisecond) {
+		n = len(opened())
+	}
+	checked := len(opened())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -203,9 +211,9 @@ func TestAccountDiscoveryOffReadsNoSignIn(t *testing.T) {
 
 	// anything started in the background has its moment
 	time.Sleep(300 * time.Millisecond)
-	if got := opened(); len(got) != 1 {
-		read := slices.Compact(slices.Sorted(slices.Values(got[1:])))
-		t.Errorf("with discovery off, %d reads of sign-ins: %s", len(got)-1, strings.Join(read, " "))
+	if got := opened()[checked:]; len(got) != 0 {
+		read := slices.Compact(slices.Sorted(slices.Values(got)))
+		t.Errorf("with discovery off, %d reads of sign-ins: %s", len(got), strings.Join(read, " "))
 	}
 	if s := ran(); s != "" {
 		t.Errorf("with discovery off, these ran:\n%s", s)
