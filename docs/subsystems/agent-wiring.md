@@ -84,7 +84,7 @@ go test -tags nogui ./internal/agent -run '^TestAnte'
 go test -tags nogui ./internal/agent -run '^TestAstrBot'
 go test -tags nogui ./internal/agent -run '^TestJcode'
 go test -tags nogui ./internal/agent -run '^TestPlugged'
-go test -tags nogui ./internal/agent -run 'TestCodexFailoverOnlyKeepsOwnModels|TestCodexOwnModelThroughMagpieWhileAccountsOn|TestCodexHandWrittenBaseURLStays|TestCodexProxyFor|TestRealProxyProbe|TestCodexFailoverHeldWhileProxyDoesNotPassOn|TestCodexProxiedDrift|TestCodexFailoverEndsWithMagpie'
+go test -tags nogui ./internal/agent -run 'TestCodexFailoverOnlyKeepsOwnModels|TestCodexOwnModelThroughMagpieWhileAccountsOn|TestCodexHandWrittenBaseURLStays|TestCodexProxyFor|TestRealProxyProbe|TestCodexFailoverHeldWhileProxyDoesNotPassOn|TestCodexProxiedDrift|TestCodexFailoverEndsWithMagpie|TestCodexMirrorFailoverHeldAndEndsWithMagpie'
 go test -tags nogui ./internal/agent -run 'TestDisconnectStaysThroughSync|TestCodexDisconnectStaysWithAccountsOn|TestCodexAPIDisconnectStays'
 go test -tags nogui ./internal/tune ./internal/agent -run 'TestCompact|TestCacheTTL|TestTune'
 node --test internal/gui/tests/context-tune.test.cjs

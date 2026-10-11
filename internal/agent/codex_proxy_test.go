@@ -270,3 +270,59 @@ func TestCodexFailoverEndsWithMagpie(t *testing.T) {
 		t.Fatalf("app-server restarted with nothing changed: %q", asked)
 	}
 }
+
+// CC Switch with "unify Codex session history" on (xuxing0727 on X) runs
+// the official sign-in as its "custom" mirror, so failover goes on that
+// table's base_url rather than openai_base_url: it too waits for the proxy
+// to pass Codex on, and goes as the magpie serving the gateway quits.
+func TestCodexMirrorFailoverHeldAndEndsWithMagpie(t *testing.T) {
+	// CC Switch's own bytes (src-tauri services/provider/mod.rs)
+	const unified = "model_provider = \"custom\"\nmodel = \"gpt-5.5\"\n\n" +
+		"[model_providers.custom]\nname = \"OpenAI\"\nrequires_openai_auth = true\nsupports_websockets = true\nwire_api = \"responses\"\n"
+	claims := func(m map[string]any) string {
+		b, _ := json.Marshal(m)
+		return "h." + base64.RawURLEncoding.EncodeToString(b) + ".s"
+	}
+	auth := func(email, acct string) map[string]any {
+		return map[string]any{"auth_mode": "chatgpt", "tokens": map[string]any{
+			"id_token":      claims(map[string]any{"email": email}),
+			"access_token":  claims(map[string]any{"exp": time.Now().Add(time.Hour).Unix()}),
+			"refresh_token": "r-" + acct, "account_id": acct}}
+	}
+	me, _ := json.Marshal(auth("me@example.com", "acct-1"))
+	home, read := codexHome(t, string(me), unified)
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	b, _ := json.Marshal([]map[string]any{{"agent": "codex", "user": "spare@example.com", "on": true,
+		"seen": time.Now(), "auth": auth("spare@example.com", "acct-2")}})
+	os.MkdirAll(filepath.Dir(provider.Path()), 0o755)
+	os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), b, 0o600)
+	wasKeep := keepCodexDaemon
+	t.Cleanup(func() { keepCodexDaemon = wasKeep })
+	keepCodexDaemon = func(context.Context, string, time.Time) provider.CodexDaemonCheck { return provider.CodexDaemonCheck{} }
+
+	works := false
+	proxyAs(t, map[string]string{"HTTP_PROXY": "http://127.0.0.1:7890"}, netproxy.Proxy{}, "darwin", &works)
+	cx := codex(home)
+	sync := func() string {
+		t.Helper()
+		reachForget()
+		if err := cx.Sync(); err != nil {
+			t.Fatal(err)
+		}
+		return read()
+	}
+	if cfg := sync(); strings.Contains(cfg, "base_url") {
+		t.Fatalf("written while the proxy doesn't pass it on:\n%s", cfg)
+	}
+	works = true
+	if cfg := sync(); !strings.Contains(cfg, `base_url = "`+gateway.URL()) {
+		t.Fatalf("not written once the proxy passes it on:\n%s", cfg)
+	}
+	if err := EndCodexFailover(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); strings.Contains(cfg, "base_url") || !strings.Contains(cfg, `model_provider = "custom"`) || !strings.Contains(cfg, "supports_websockets = true") {
+		t.Fatalf("magpie quit, CC Switch's mirror still pointed at it:\n%s", cfg)
+	}
+}
