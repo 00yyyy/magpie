@@ -974,7 +974,7 @@ func newLooseTurn(owner string, req *Request, msgs []Message, sealed bool) *loos
 		}
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%t\x00%s\x00%d", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, req.System, req.WebSearch, req.Format.schema(), start)
+	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%t\x00%s\x00%d", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, withoutBillingHeader(req.System), req.WebSearch, req.Format.schema(), start)
 	hashMessages(h, msgs[:start], nil)
 	l := &looseTurn{key: hex.EncodeToString(h.Sum(nil)), runs: heardRuns(msgs[start:], sealed)}
 	words := messageWords(msgs)
@@ -1664,10 +1664,14 @@ func (r *subscriptionRun) park() {
 // turned thinking off, which its Claude Code was started with): a
 // run is told another level as its turn starts (setEffort), where one
 // started anew would write the whole conversation to the cache again (#502).
+// Nor is the client's billing line, which renderClaudePrompt leaves out of
+// what a run is told: its Claude Code changes fields in it every turn (cch,
+// cc_prompt_id, cc_prev_req…), and with them in the key no turn found the
+// run it went on from, so each started one anew (#1638).
 func turnKey(owner string, req *Request, msgs []Message) string {
 	h := sha256.New()
 	tools, _ := json.Marshal(req.Tools)
-	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%s\x00%t\x00%s", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, req.System, tools, req.WebSearch, req.Format.schema())
+	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%s\x00%t\x00%s", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, withoutBillingHeader(req.System), tools, req.WebSearch, req.Format.schema())
 	hashMessages(h, msgs, nil)
 	return hex.EncodeToString(h.Sum(nil))
 }

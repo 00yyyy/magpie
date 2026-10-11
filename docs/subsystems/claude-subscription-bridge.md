@@ -141,10 +141,15 @@ allocates, not on a deadline).
 - `ended` keeps a run whose reply was whole under
   `turnKey(owner, req, messages + reply)`: the account, model, whether an
   effort was asked, thinking off, tool choice, system prompt, the tools, web
-  search, schema, and the messages as `hashMessages` reads them. The exact
-  match is that key, from `nextTurn`'s split of the next request.
+  search, schema, and the messages as `hashMessages` reads them. The
+  system prompt is taken without the client Claude Code's
+  `x-anthropic-billing-header` line (`withoutBillingHeader`), which the run
+  is never told and whose fields (`cch`, `cc_prompt_id`, `cc_prev_req`…)
+  change every turn; with it in, no next turn found its run (#1638). The
+  exact match is that key, from `nextTurn`'s split of the next request.
 - It also keeps a `looseTurn`: the same settings without the tools, the
-  message count, the conversation before the last turn (hashed), and the
+  message count, the conversation before the last turn (hashed; its system
+  prompt also without the billing line), and the
   last turn's messages one by one (`messageWords`), the reply last. Shelving
   copies it, with the tool names the run's agent had, to the
   `savedSession`.
