@@ -14143,7 +14143,7 @@ function renderQuotas() {
   subscriptions.hidden = !quotas.length;
   // an agent with several accounts is one card, a section per account
   const groups = [];
-  for (const sub of byUsageOrder(quotas)) {
+  for (const sub of byUsageOrder(keyCards(quotas))) {
     const g = sub.user && groups.find((x) => x[0].user && x[0].provider === sub.provider);
     if (g) g.push(sub); else groups.push([sub]);
   }
@@ -14156,6 +14156,7 @@ function renderQuotas() {
     card.dataset.key = first.provider;
     card.dataset.provider = first.provider;
     if (!first.user) card.dataset.card = first.provider;
+    if (!first.user && first.balanceCard) card.dataset.balCard = first.balanceCard;
     const head = el("div", "subscription-head");
     head.append(groups.length > 1 ? usageHandle(first, card) : icon(first.icon), el("b", "", quotaName(first)));
     // a card with no account's name to it (a plugin's ZCode) is named in
@@ -14186,6 +14187,7 @@ function renderQuotas() {
       if (sub.user) {
         const who = el("div", "subscription-account" + (brief ? " brief" : ""));
         who.dataset.card = trayCardID(sub);
+        if (sub.balanceCard) who.dataset.balCard = sub.balanceCard;
         who.append(...quotaWho(sub));
         // in brief, its resets and whether it uses them by itself (#719)
         const auto = brief && autoResetBrief(sub);
@@ -14400,6 +14402,32 @@ function byUsageOrder(list) {
   const order = state.settings?.usageOrder || [];
   const rank = (q) => { const i = order.indexOf(q.provider); return i < 0 ? order.length : i; };
   return list.map((q, i) => [q, i]).sort(([a, i], [b, j]) => rank(a) - rank(b) || i - j).map(([q]) => q);
+}
+
+// keyCards puts a key's balance on its plan's card (#1658, MizuIro-H): a
+// Command Code key is told both its plan's 5-hour and weekly windows and
+// its credits, and read apart they were two cards of one name, "Command
+// Code" twice. As a subscription's credits beside its windows (Command
+// Code's own), the balance is the plan card's row under the windows. The
+// same key: one of the plan's name, or with the plan of a provider's one
+// key unnamed, that provider's one balance. A balance that failed or
+// stands in for one that did is left its own card, which says so. The
+// balance's card id goes with it (balanceCard), for a menu bar cell
+// that opens it.
+function keyCards(list) {
+  const plan = (q) => q.windows?.length && !q.balance && !q.error;
+  const bal = (q) => q.balance && !q.windows?.length && !q.plan;
+  const merged = new Map(), gone = new Set();
+  for (const p of list) {
+    if (!plan(p)) continue;
+    const of = list.filter((b) => b.provider === p.provider && (b.from || "") === (p.from || "") && bal(b));
+    const b = of.find((x) => p.user && x.user === p.user)
+      || (!p.user && of.length === 1 && list.filter((x) => x.provider === p.provider && plan(x)).length === 1 ? of[0] : null);
+    if (!b || b.error || b.asOf || gone.has(b)) continue;
+    gone.add(b);
+    merged.set(p, { ...p, balance: b.balance, balanceParts: b.balanceParts, balanceTrend: b.balanceTrend, balanceCard: trayCardID(b) });
+  }
+  return gone.size ? list.filter((q) => !gone.has(q)).map((q) => merged.get(q) || q) : list;
 }
 
 // packUsage lays the Usage page's cards out in columns, each card as tall
@@ -15027,7 +15055,8 @@ function focusQuotaCard() {
   if (mode === "panel") setPanelTab("usage");
   else if (view !== "usage" || usageTab !== "usage") return;
   const id = CSS.escape(quotaFocus);
-  const target = box.querySelector(`[data-card="${id}"]`) || box.querySelector(`[data-provider="${id}"]`);
+  // a key's balance shown on its plan's card (keyCards): that card
+  const target = box.querySelector(`[data-card="${id}"]`) || box.querySelector(`[data-bal-card="${id}"]`) || box.querySelector(`[data-provider="${id}"]`);
   // The panel omits accounts in brief; the main window draws them short.
   // The one asked for is opened in full.
   const quota = quotas?.find((q) => trayCardID(q) === quotaFocus);
@@ -15280,7 +15309,7 @@ function renderPanelUse() {
 function renderPanelQuota() {
   const box = $("#panelQuota");
   if (mode !== "panel" || !box) return;
-  const subs = byUsageOrder((quotas || []).filter((q) => q.balance || q.error || q.windows?.length));
+  const subs = byUsageOrder(keyCards(quotas || []).filter((q) => q.balance || q.error || q.windows?.length));
   const none = !!quotas && !subs.length;
   const usageTab = $('#ptabs [data-ptab="usage"]');
   if (usageTab.hidden !== none) {
@@ -15314,7 +15343,7 @@ function renderPanelQuota() {
   // what the arranging hid is left out, but for the one a menu bar cell
   // was clicked for
   const hidden = new Set(state.settings?.panelUsageHidden || []);
-  const peek = (q) => !!panelPeek && (trayCardID(q) === panelPeek || q.provider === panelPeek);
+  const peek = (q) => !!panelPeek && (trayCardID(q) === panelPeek || q.balanceCard === panelPeek || q.provider === panelPeek);
   const away = new Set(subs.filter((q) => hidden.has(q.provider) && !peek(q)).map((q) => q.provider));
   // the sections in order: a vendor's accounts, or a run of balances
   const parts = [], groups = new Map();
@@ -15515,6 +15544,7 @@ function shortWindow(name) {
 function panelQuotaCard(q) {
   const card = el("div", "pq-card");
   card.dataset.card = trayCardID(q);
+  if (q.balanceCard) card.dataset.balCard = q.balanceCard;
   // by the name the user gave the account, or the key plan it stands
   // in for (#1515), before the account itself
   card.append(el("span", "pq-user", q.alias || q.user || q.name));
