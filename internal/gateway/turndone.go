@@ -129,7 +129,8 @@ func (ts *turns) end(r *Route, final bool, now time.Time) {
 	if st.going > 0 || !final {
 		return
 	}
-	k, agent, session := sessionTurnKey(r), r.Agent, r.Session
+	// read here, not in the timer: what is in force as the reply ends
+	k, agent, session, after, done := sessionTurnKey(r), r.Agent, r.Session, turnAfter(), TurnDone
 	var t *time.Timer
 	t = time.AfterFunc(turnQuiet, func() {
 		ts.mu.Lock()
@@ -140,11 +141,8 @@ func (ts *turns) end(r *Route, final bool, now time.Time) {
 		}
 		delete(ts.m, k)
 		ts.mu.Unlock()
-		took, after := cur.last.Sub(cur.start), turnAfter()
-		if after > 0 && took >= after {
-			if f := TurnDone; f != nil {
-				f(TurnEnd{Agent: agent, Session: session, Folder: cur.folder, Took: took})
-			}
+		if took := cur.last.Sub(cur.start); after > 0 && took >= after && done != nil {
+			done(TurnEnd{Agent: agent, Session: session, Folder: cur.folder, Took: took})
 		}
 	})
 	st.timer = t

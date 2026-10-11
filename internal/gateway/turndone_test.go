@@ -12,17 +12,24 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// turnsFollowed has turns followed for a test: every turn long enough,
-// a short quiet, and each turn's end sent on the channel returned.
-func turnsFollowed(t *testing.T, after time.Duration) chan TurnEnd {
+// turnsFollowed has turns followed for a test: a turn as long as the
+// length returned (set it to change), a short quiet, and each turn's end
+// sent on the channel returned. The test waits out a timer still going
+// before the hooks are put back.
+func turnsFollowed(t *testing.T, after time.Duration) (chan TurnEnd, *atomic.Int64) {
 	t.Helper()
 	ends := make(chan TurnEnd, 8)
+	length := new(atomic.Int64)
+	length.Store(int64(after))
 	oldDone, oldAfter, oldQuiet := TurnDone, turnAfter, turnQuiet
 	TurnDone = func(e TurnEnd) { ends <- e }
-	turnAfter = func() time.Duration { return after }
+	turnAfter = func() time.Duration { return time.Duration(length.Load()) }
 	turnQuiet = 50 * time.Millisecond
-	t.Cleanup(func() { TurnDone, turnAfter, turnQuiet = oldDone, oldAfter, oldQuiet })
-	return ends
+	t.Cleanup(func() {
+		time.Sleep(4 * turnQuiet)
+		TurnDone, turnAfter, turnQuiet = oldDone, oldAfter, oldQuiet
+	})
+	return ends, length
 }
 
 // noEnd fails when a turn's end is said within a while: four times the
@@ -95,7 +102,7 @@ func TestTurnDoneSaidAtTheTurnsEnd(t *testing.T) {
 		{"anthropic", "/v1/messages", messages, "/Users/u/work/magpie"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			ends := turnsFollowed(t, time.Nanosecond)
+			ends, length := turnsFollowed(t, time.Nanosecond)
 			session := "s-" + c.name
 			send(c.path, c.body, session, "", true)
 			noEnd(t, ends, "after a reply that called a tool")
@@ -114,7 +121,7 @@ func TestTurnDoneSaidAtTheTurnsEnd(t *testing.T) {
 			noEnd(t, ends, "said once")
 
 			// a turn shorter than the length set isn't said
-			turnAfter = func() time.Duration { return time.Hour }
+			length.Store(int64(time.Hour))
 			send(c.path, c.body, session, "", false)
 			noEnd(t, ends, "a short turn")
 		})
@@ -123,7 +130,7 @@ func TestTurnDoneSaidAtTheTurnsEnd(t *testing.T) {
 
 // Off (TurnDone unset, or no length) follows nothing: nothing is kept.
 func TestTurnDoneOff(t *testing.T) {
-	ends := turnsFollowed(t, 0)
+	ends, _ := turnsFollowed(t, 0)
 	var ts turns
 	r := &Route{turn: true, Agent: "claude", Session: "s"}
 	ts.begin(r, time.Now())
@@ -137,7 +144,7 @@ func TestTurnDoneOff(t *testing.T) {
 // A request still going holds the turn open, whatever another's reply
 // was; a session idle past turnStale starts its next turn over.
 func TestTurnDoneWaitsForEveryRequest(t *testing.T) {
-	ends := turnsFollowed(t, time.Minute)
+	ends, _ := turnsFollowed(t, time.Minute)
 	var ts turns
 	t0 := time.Now().Add(-10 * time.Minute)
 	a, b := &Route{turn: true, Agent: "codex", Session: "s"}, &Route{turn: true, Agent: "codex", Session: "s"}
@@ -216,7 +223,7 @@ func TestTurnDoneCodexBackend(t *testing.T) {
 			`data: {"type":"response.output_item.done","item":`+item+`}`,
 			`data: {"type":"response.completed","response":{"id":"r1","status":"completed","usage":{"input_tokens":9,"output_tokens":2}}}`))
 	})
-	ends := turnsFollowed(t, time.Nanosecond)
+	ends, _ := turnsFollowed(t, time.Nanosecond)
 	s := New()
 	post := func(calls bool) {
 		tool.Store(calls)
