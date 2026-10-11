@@ -132,6 +132,12 @@ var (
 	plannedWords = regexp.MustCompile(`(?i)quota|usage.?limit|hit your .*limit|limit.{0,24}resets|per.?(day|week|month)|daily|weekly|monthly|额度|用量|套餐|限额已用完`)
 	// resetsWords: Claude Code's "usage limit reached|<when it resets>".
 	resetsWords = regexp.MustCompile(`(?i)limit reached\|(\d{10})\b`)
+	// quotaCodes: a vendor's own code for a used-up allowance, which alone
+	// makes a server error (5xx) one over the quota: Claude Code's resets
+	// line, the ChatGPT backend's usage_limit_reached, Google's
+	// RESOURCE_EXHAUSTED. A 5xx's words don't: a relay's 500 "当前模型 …
+	// 负载已经达到上限，请稍后重试" is its load's limit, not the plan's (#1418).
+	quotaCodes = regexp.MustCompile(`(?i)limit reached\|\d{10}\b|usage_limit_reached|RESOURCE_EXHAUSTED`)
 )
 
 // Why a candidate failed, as rest tells it.
@@ -210,7 +216,7 @@ func failure(status int, body []byte) string {
 		return failCredit
 	case status == 429 && rateWords.Match(body) && !plannedWords.Match(body):
 		return failRate
-	case usedUpWords.Match(body), status == 429 && plannedWords.Match(body):
+	case status >= 500 && quotaCodes.Match(body), status < 500 && usedUpWords.Match(body), status == 429 && plannedWords.Match(body):
 		return failQuota
 	case status == 429:
 		return failRate

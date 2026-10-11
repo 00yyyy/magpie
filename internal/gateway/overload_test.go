@@ -124,6 +124,39 @@ func TestGroupWaitsOutEveryMemberOverloaded(t *testing.T) {
 	}
 }
 
+// A relay's 500 that says its model's load has reached its limit
+// (real-jacket on #1418: two keys of one relay in an order group, Codex,
+// Patience at 4 minutes) passes like any overload. Its "上限" made it a
+// used-up quota: no member was asked again, and each rested a quarter of
+// an hour by "quota", renewed on every try.
+func TestGroupWaitsOutRelayLoadLimit(t *testing.T) {
+	fresh(t)
+	loaded := reply{500, "", `当前模型 gpt-5.5 负载已经达到上限，请稍后重试 (request id: 20261011161901234567890abcdefgh)`}
+	a := &scripted{replies: []reply{loaded, {200, "", chatOK}}}
+	b := &scripted{replies: []reply{loaded}}
+	scriptedOn(t, "a", provider.Chat, a)
+	scriptedOn(t, "b", provider.Chat, b)
+	if err := provider.SaveGroup(provider.Group{Name: "G", Members: []string{"a/m", "b/m"}, Routing: provider.Ordered, Patience: 240}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	code, body := postAs(t, s, "", `{"model":"group/g","messages":[{"role":"user","content":"hi"}]}`)
+	if code != 200 || !strings.Contains(body, "hello") || a.n != 2 {
+		t.Fatalf("%d %s (a %d, b %d)", code, body, a.n, b.n)
+	}
+	r := s.trace.routes[len(s.trace.routes)-1]
+	replanned := false
+	for _, try := range r.Tries {
+		if try.Fail == failQuota || try.Rest != nil && try.Rest.By == "quota" {
+			t.Errorf("a load limit read as a used-up quota: %+v", try)
+		}
+		replanned = replanned || try.Replan > 0
+	}
+	if !replanned {
+		t.Fatalf("the members weren't asked again: %+v", r.Tries)
+	}
+}
+
 // What Codex was sent (#1418): plus-B's 200 and frames, then
 // server_is_overloaded, and sub2api the same. With patience, the agent's
 // stream is the reply of the one asked again, and nothing of the failures.
