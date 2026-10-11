@@ -3134,6 +3134,11 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	// Cline's whole replies come in {success, data}; a web page or
 	// nothing at all, served 200, is the 502 it stands for (#1012)
 	res = notAnAPIReply(clineUnwrapped(p, res), "")
+	if p.Account != nil && p.Account.Agent == "codex" {
+		// a request ChatGPT drops for its size is the request's, not a
+		// 503 to ask every account again for (ylorn on Discord)
+		res = codexDropped(res, len(body))
+	}
 	// what a Codex account's reply says it has used, for its cap (#1295)
 	heardCodexLimits(p, res)
 	return res, nil
