@@ -1173,6 +1173,17 @@ zoom level), where the buttons' edge measures a hair past the header's
 padding; WebKit, which has no page zoom to set, uses the device scale factor.
 English and Chinese, with `/api/plugins` faked.
 
+`header-relang.test.cjs` opens a macOS window in Chinese at 830px, with the
+header's tabs picked over the sidebar, and switches it from Settings to
+English, Traditional Chinese, Japanese, German and back (kiwiflysky on X).
+In English it is handed a wide font (Menlo, as the host hands a saved font)
+on the Agents page, swept from 1000 to 640px: each width is fitted to the
+system font first and, given Menlo, must match a fresh fit. Each language is
+then swept from 1100 to 600px, and the tabs keep 7.5px from the magpie (or
+the header's padding past the traffic lights) and from the buttons, which
+stay in the header; drawn in all the way, they scroll in the room between.
+Chromium and WebKit, with `/api/settings` faked.
+
 `strip-scrollbar.test.cjs` lays out an overflowing tab strip (`segs regions`,
 the Sessions page's agents and a provider's regions) in Chromium with its
 scrollbars shown (ARNO on Discord): off a Mac it scrolls under the app's

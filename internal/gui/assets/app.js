@@ -22855,6 +22855,8 @@ function fitTop() {
 const topFit = new ResizeObserver(fitTop);
 for (const e of [".top", ".brand", ".actions"]) topFit.observe($(e));
 document.fonts?.ready.then(fitTop);
+// a font picked later (Settings' Font) can still be loading when it's applied
+document.fonts?.addEventListener("loadingdone", fitTop);
 
 // ---- the sidebar ----------------------------------------------------------
 // A window wide enough has its pages down a sidebar, as a Mac app's: in

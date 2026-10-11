@@ -17542,4 +17542,7 @@ function translateStatic() {
     if (e.dataset.enPlaceholder === undefined) e.dataset.enPlaceholder = e.placeholder;
     e.placeholder = t(e.dataset.enPlaceholder);
   }
+  // another language makes the tabs wider in the header as it was fitted, and
+  // they ran under the magpie and the window's buttons (kiwiflysky on X)
+  window.fitTop?.();
 }
