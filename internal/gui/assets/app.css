@@ -373,7 +373,7 @@ body.window .ag-handle { width: 28px; height: 28px; }
    logo. Hide is in the handle's menu and the row's right-click menu. */
 #agents > .row .ag-handle { position: relative; }
 #agents > .row .ag-handle::before { content: ""; position: absolute; left: -7px; top: 50%; width: 6px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; }
-body.panel #agents > .row .ag-handle::before { left: -10px; }
+body.panel #agents > .row .ag-handle::before { left: -8px; }
 #agents > .row:is(:hover, .dragging) .ag-handle::before, #agents > .row .ag-handle.open::before { opacity: 1; }
 #agents > .row .ag-handle:focus-visible::before { opacity: 1; }
 /* one hidden by hand reads as put away, with its way back beside its name */
@@ -1411,7 +1411,7 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-arow { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 10px 7px 14px; border-radius: 10px; background: var(--card); box-shadow: var(--card-edge); }
 .pq-arow .pq-ahandle { position: relative; width: 22px; height: 22px; margin: -2px; }
 .pq-arow .pq-ahandle .ic { width: 16px; height: 16px; }
-.pq-arow .pq-ahandle::before { content: ""; position: absolute; left: -9px; top: 50%; width: 6px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; }
+.pq-arow .pq-ahandle::before { content: ""; position: absolute; left: -8px; top: 50%; width: 6px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; }
 .pq-arow:is(:hover, .dragging) .pq-ahandle::before { opacity: 1; }
 .pq-arow .pq-ahandle:focus-visible::before { opacity: 1; }
 .pq-aname { flex: 1 1 auto; min-width: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3075,9 +3075,12 @@ body.panel .modal { padding: 16px 12px; }
 .accts[aria-busy=true] > [data-account-id] { cursor: progress; }
 /* the Usage page's cards, dragged by their logos: a grip by the logo on hover.
    A grip's box holds both its columns of dots whole, 3px apart: at 5px wide
-   with 3.5px between them the right column was cut in half (Hu9956, #842) */
+   with 3.5px between them the right column was cut in half (Hu9956, #842).
+   It stands 4px inside the card's border, as the Agents row's does inside
+   its list's: at -8px, with the card's 12px padding, it stood on the border
+   (real-jacket, #1581) */
 .subscription-head .us-handle { position: relative; width: 24px; height: 24px; margin: -4px -3px; }
-.subscription-head .us-handle::before { content: ""; position: absolute; left: -8px; top: 50%; width: 6px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; }
+.subscription-head .us-handle::before { content: ""; position: absolute; left: -5px; top: 50%; width: 6px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; }
 .subscription-card:is(:hover, .dragging) .us-handle::before { opacity: 1; }
 /* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
 .us-handle:focus-visible::before { opacity: 1; }
