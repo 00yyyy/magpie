@@ -238,6 +238,91 @@ func thinkingOffUnlessAsked(body []byte) []byte {
 	return append(out, `"thinking":{"type":"disabled"}}`...)
 }
 
+// anthropicReplaysThinking is whether model, served by host's Messages
+// API, wants a thinking block on every assistant turn that calls a tool:
+// DeepSeek's Anthropic endpoint, thinking (its default, and when asked),
+// refuses a tool_use turn with none, "The `content[].thinking` in the
+// thinking mode must be passed back to the API", and turns
+// redacted_thinking away as a block it doesn't know (422), checked against
+// api.deepseek.com/anthropic on 2026-10-11 (#1611). It takes Claude's
+// signed thinking, its own, one with no signature and a space.
+func anthropicReplaysThinking(host, model string) bool {
+	if host == "api.anthropic.com" || anthropicModel.MatchString(model) {
+		return false
+	}
+	return strings.Contains(host, "deepseek") || strings.Contains(strings.ToLower(model), "deepseek")
+}
+
+// withThinkingOnToolTurns gives each assistant message of a Messages
+// request that has a tool_use and no thinking block one holding
+// noReasoning, and turns a redacted_thinking block (Claude's, sealed, which
+// DeepSeek can't read) into that too, or leaves it out when the message
+// has thinking already, for anthropicReplaysThinking. A Claude Code routing
+// group that falls from Claude to DeepSeek sends both (#1611). Every other
+// message, and a body with nothing to change, goes byte for byte.
+func withThinkingOnToolTurns(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"tool_use"`)) && !bytes.Contains(body, []byte(`"redacted_thinking"`)) {
+		return body
+	}
+	var q map[string]json.RawMessage
+	var msgs []json.RawMessage
+	if json.Unmarshal(body, &q) != nil || json.Unmarshal(q["messages"], &msgs) != nil {
+		return body
+	}
+	space, _ := json.Marshal(aBlock{Type: "thinking", Thinking: noReasoning})
+	changed := false
+	for i, raw := range msgs {
+		var m map[string]json.RawMessage
+		var role string
+		var blocks []json.RawMessage
+		if json.Unmarshal(raw, &m) != nil || json.Unmarshal(m["role"], &role) != nil || role != "assistant" ||
+			json.Unmarshal(m["content"], &blocks) != nil {
+			continue
+		}
+		var out []json.RawMessage
+		thought, called, edited := false, false, false
+		for _, b := range blocks {
+			var t struct {
+				Type string `json:"type"`
+			}
+			json.Unmarshal(b, &t)
+			switch t.Type {
+			case "thinking":
+				thought = true
+			case "tool_use":
+				called = true
+			case "redacted_thinking":
+				edited = true
+				if thought {
+					continue
+				}
+				b, thought = space, true
+			}
+			out = append(out, b)
+		}
+		if called && !thought {
+			out = append([]json.RawMessage{space}, out...)
+			edited = true
+		}
+		if !edited {
+			continue
+		}
+		m["content"], _ = json.Marshal(out)
+		if nb, err := json.Marshal(m); err == nil {
+			msgs[i], changed = nb, true
+		}
+	}
+	if !changed {
+		return body
+	}
+	q["messages"], _ = json.Marshal(msgs)
+	nb, err := json.Marshal(q)
+	if err != nil {
+		return body
+	}
+	return nb
+}
+
 // anthropicModel is one of Anthropic's own models, which think only when asked,
 // so a request for one is left as the agent sent it.
 var anthropicModel = regexp.MustCompile(`(?i)(?:^|[/.:-])claude-`)
@@ -641,6 +726,13 @@ func imageBlock(p Part) aBlock {
 
 // buildAnthropic renders a request for an Anthropic-style upstream.
 func buildAnthropic(r *Request, model string) []byte {
+	return anthropicBody(r, model, false)
+}
+
+// anthropicBody is buildAnthropic; with replay, for an upstream that wants
+// a turn's thinking back (anthropicReplaysThinking), thinking with no
+// signature goes as its text instead of being left out.
+func anthropicBody(r *Request, model string, replay bool) []byte {
 	if r.Format != nil && r.Format.schema() == nil {
 		// output_config.format takes a schema only: any JSON object is
 		// asked for in words
@@ -697,6 +789,8 @@ func buildAnthropic(r *Request, model string) []byte {
 					rest = append(rest, aBlock{Type: "redacted_thinking", sealed: p.Sealed})
 				} else if p.Signature != "" {
 					rest = append(rest, aBlock{Type: "thinking", Thinking: p.Text, Signature: p.Signature})
+				} else if replay && p.Text != "" {
+					rest = append(rest, aBlock{Type: "thinking", Thinking: p.Text})
 				}
 			}
 		}

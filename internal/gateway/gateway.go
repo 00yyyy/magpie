@@ -3412,6 +3412,12 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// byte (#1600, billing_line.go)
 			body = withoutBillingLine(body)
 		}
+		if anthropicReplaysThinking(p.Host(), model) || anthropicReplaysThinking(p.Host(), upstream) {
+			// a tool_use turn with no thinking, or Claude's redacted
+			// thinking (a routing group's Claude turn), which DeepSeek
+			// turns the whole request away for (#1611)
+			body = withThinkingOnToolTurns(body)
+		}
 		if !anthropicModel.MatchString(model) {
 			body = thinkingOffUnlessAsked(body)
 			// Claude Code's auto mode classifier, on a vendor's model that
@@ -4876,7 +4882,13 @@ func build(proto provider.Protocol, r *Request, model, host string, rejectTemp b
 	case provider.Gemini:
 		return buildGemini(r, model)
 	}
-	out := buildAnthropic(r, model)
+	replay := anthropicReplaysThinking(host, model)
+	out := anthropicBody(r, model, replay)
+	if replay {
+		// a tool call with no thinking before it, which DeepSeek turns
+		// the whole request away for (#1611)
+		out = withThinkingOnToolTurns(out)
+	}
 	if r.Fast && host == "api.anthropic.com" && provider.ClaudeFast(model) {
 		// Claude's fast mode, on the models that have it (its beta header
 		// goes with it: forwardOnce)
