@@ -1384,7 +1384,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// ChatGPT backend's route is recorded as asked for the model it was
 	subagent := subagentPickOf(r)
 	if subagent == nil {
-		subagent = codexSubagentPick(r, agent, call.Kind, call.Model)
+		subagent = codexSubagentPick(r, agent, call.Kind, call.Model, body)
 	}
 	if subagent.Moved() {
 		call.Model, asked = subagent.Asked, subagent.To

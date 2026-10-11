@@ -97,7 +97,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			// the request on the model asked for when it can't be, the
 			// trace saying why (codexUpstreamOn, serve)
 			if !strings.Contains(model, "/") {
-				pick := codexSubagentPick(r, agentOf(r), requestCallKind(r.Header, requestSessionMetadata(r.Header, body)), model)
+				pick := codexSubagentPick(r, agentOf(r), requestCallKind(r.Header, requestSessionMetadata(r.Header, body)), model, body)
 				r = withSubagentPick(r, pick)
 				if pick.Moved() {
 					body, model = withModel(body, pick.To), pick.To

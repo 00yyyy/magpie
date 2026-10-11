@@ -209,6 +209,37 @@ func TestCodexSubagentModel(t *testing.T) {
 	}
 }
 
+// #1633 (laacmilan): the model magpie puts every Codex subagent on offers
+// another provider's models, not only a ChatGPT account's, and takes one;
+// one of Codex's own bare names, which magpie can't put a request on, is
+// refused.
+func TestCodexSubagentModelTakesAnyProvider(t *testing.T) {
+	home, _ := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "model = \"gpt-5.5\"\n")
+	sub := codex(home).Field("subagent_model")
+	if sub == nil {
+		t.Fatal("no subagent model field")
+	}
+	offered := false
+	for _, o := range sub.Options(nil) {
+		offered = offered || o.Value == "fake/m1"
+	}
+	if !offered {
+		t.Fatalf("fake/m1 not offered: %+v", sub.Options(nil))
+	}
+	if err := sub.Set("fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := sub.Get(); got != "fake/m1" {
+		t.Fatalf("subagent model = %q", got)
+	}
+	if err := sub.Set("gpt-5.5"); err == nil {
+		t.Error("a bare name of Codex's own was taken")
+	}
+	if err := sub.Set(""); err != nil || sub.Get() != "" {
+		t.Fatalf("Default: %v %q", err, sub.Get())
+	}
+}
+
 // Subagents can start at an effort of their own (#469): Codex's [agents]
 // default_subagent_reasoning_effort, used when a spawn names none. Codex
 // refuses a spawn at a level the subagents' model lacks, so magpie takes

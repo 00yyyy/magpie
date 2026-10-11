@@ -3040,8 +3040,9 @@ const PICKS_ITSELF = ["pi", "omo", "prime-agent"];
 const SUB_EFFORT = "subagent effort";
 const MEMORIES = "memories";
 // the model magpie puts every Codex subagent on, whatever its lead asked
-// for (willz on Discord): one of a ChatGPT account's, as a subagent's task
-// is sealed for them
+// for (willz on Discord): any model magpie serves (#1633); a subagent
+// whose task a ChatGPT-backed lead sealed stays on its own unless the one
+// set is a ChatGPT account's, the Routing page saying why
 const SUB_MODEL = "subagent model";
 // Codex's subagents square is [agents] default_subagent_model, the model a
 // subagent starts on only when its lead names none in spawn_agent

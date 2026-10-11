@@ -1094,14 +1094,22 @@ func codexIn(at place) *Agent {
 				// the model magpie puts every subagent on, whatever the
 				// lead asked for in spawn_agent (willz on Discord): kept in
 				// magpie's settings, not Codex's config, since the gateway
-				// rewrites the subagent's request. Only a ChatGPT account's
-				// models are offered: a subagent's task is sealed for them
+				// rewrites the subagent's request. Every model magpie serves
+				// is offered (#1633: a lead on a chat provider, its
+				// subagents wanted there too); a subagent whose task a
+				// ChatGPT-backed lead sealed stays on the model asked for
+				// unless the one set is a ChatGPT account's (the gateway)
 				Key: "subagent_model", Label: "subagent model", Quiet: true,
 				Get: provider.CodexSubagentModel,
 				Set: provider.SetCodexSubagentModel,
 				Options: func(map[string]string) []Option {
-					var out []Option
+					var out, groups []Option
 					for _, e := range provider.CodexSubagentModels() {
+						if e.Group != "" {
+							groups = append(groups, Option{Value: e.ID, Label: e.Name, Note: "routing group · via magpie",
+								Icon: e.Provider.Icon, Icons: e.Icons, Group: RoutingGroups, Ref: e.ID})
+							continue
+						}
 						note := e.Provider.Name + " · via magpie"
 						if a := e.Provider.Account; a != nil && a.User != "" {
 							note = a.User + " · via magpie"
@@ -1109,7 +1117,7 @@ func codexIn(at place) *Agent {
 						out = append(out, Option{Value: e.ID, Label: e.Name, Note: note, Icon: e.Provider.Icon,
 							Group: e.Provider.Name, Ref: e.ID, Context: e.Context})
 					}
-					return out
+					return append(out, groups...)
 				},
 			},
 			{
