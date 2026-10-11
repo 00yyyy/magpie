@@ -95,7 +95,9 @@ async function press(page, x) {
   const d = await x.evaluate((e) => { const v = document.querySelector("#view-routing");
     return Math.round(e.getBoundingClientRect().top - v.getBoundingClientRect().top - v.clientHeight / 2); });
   if (Math.abs(d) > 100) {
-    await page.mouse.move(10, 300);
+    // over the view, not the sidebar beside it
+    const v = await page.locator("#view-routing").boundingBox();
+    await page.mouse.move(v.x + 10, 300);
     await page.mouse.wheel(0, d);
     await page.waitForTimeout(400);
   }

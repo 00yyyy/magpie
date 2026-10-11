@@ -133,7 +133,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
 
       // cards of a height: one row, in their order; a narrow window one column
-      const row = await open("even", { quotas: even(now) }, 1300);
+      // as wide as 1300 beside the sidebar
+      const row = await open("even", { quotas: even(now) }, 1512);
       let cards = await boxes(row);
       assert.deepEqual(cards.map((c) => c.key), ["kimi", "zai", "minimax", "moonshot"]);
       assert.ok(cards.every((c) => c.y === cards[0].y), `one row: ${JSON.stringify(cards)}`);

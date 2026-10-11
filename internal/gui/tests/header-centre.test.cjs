@@ -41,9 +41,11 @@ const settled = (page) => page.evaluate(() => new Promise((r) => requestAnimatio
 const header = (page) => page.evaluate(() => {
   const top = document.querySelector(".top"), r = top.getBoundingClientRect();
   const n = document.querySelector("#nav").getBoundingClientRect(), a = document.querySelector(".actions").getBoundingClientRect();
+  // the layout's button, shown, is what the tabs sit after
+  const lead = document.querySelector("#sideToggle"), from = lead.offsetParent ? lead.getBoundingClientRect().right : r.left;
   return {
     cls: top.className, update: !document.querySelector("#update").hidden,
-    off: n.left + n.width / 2 - innerWidth / 2, left: n.left - r.left, right: a.left - n.right,
+    off: n.left + n.width / 2 - innerWidth / 2, left: n.left - from, right: a.left - n.right,
   };
 });
 
