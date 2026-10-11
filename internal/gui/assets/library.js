@@ -1666,8 +1666,30 @@
     if (f.others?.length) row.append(tag(t("differs in {agents}", { agents: f.others.map(nameOf).join(", ") }), "warn", t("{agents} has another server by this name; bringing this one in leaves that one as it is", { agents: f.others.map(nameOf).join(", ") })));
     const b = button(t("Bring in"), "action", () => change("servers/import", { name: s.name }, t("{name} is in the library now", { name: s.name })));
     b.title = t("Keeps it in the library: {agents} go on having it, and you can give it to the others", { agents: s.agents.map(nameOf).join(", ") });
-    row.append(b);
+    // gone from the agents' own MCP settings without bringing it in first
+    // (#1618), as a skill of their own is (#1303)
+    const rm = button("", "lib-icon danger", () => confirmRemoveFoundServer(f));
+    rm.append(svg(GLYPH.trash, 13, 1.4));
+    rm.title = t("Remove");
+    row.append(b, rm);
     return row;
+  }
+
+  function confirmRemoveFoundServer(f) {
+    const s = f.server;
+    const ed = el("div", "editor lib-editor");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.trash), el("b", "", t("Remove {name}?", { name: s.name })));
+    ed.append(head);
+    const agents = s.agents.map(nameOf).filter(Boolean);
+    ed.append(el("p", "lib-confirm", t("It is taken out of the MCP settings of {agents}. Each file is copied to magpie's backups before it changes.", { agents: agents.join(", ") })));
+    if (f.others?.length) ed.append(el("p", "lib-confirm", t("{agents} has another server by this name; that one stays.", { agents: f.others.map(nameOf).join(", ") })));
+    const bar = el("div", "bar");
+    const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("servers/remove-found", { name: s.name }, t("{name} removed", { name: s.name }))) closeLibModal(true); });
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
+    ed.append(bar);
+    modal = { save: () => go.click() };
+    openLib(ed);
   }
 
   // A command line split the way a shell would, quotes and all.

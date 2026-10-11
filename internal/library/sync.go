@@ -638,3 +638,94 @@ func ImportServer(name string) (*Result, error) {
 		return fmt.Errorf("no agent has a server called %s that the library hasn't", name)
 	})
 }
+
+// RemoveFoundServer takes a server the agents have of their own out of
+// every agent that has it as it is (#1618), without bringing it into the
+// library first: its entry goes from each file the agent reads servers
+// from (dsh's other profiles, Claude Desktop's Claude-3p file, Pi's other
+// mcp.json too), each file copied to the backups before it is written, and
+// the rest of each file — the user's other servers, their keys, comments —
+// left as it is. Another server by that name (Others) is another server
+// and stays. One the agent's app puts back each time it starts (Own) is
+// left: taking it out wouldn't last. A file that can't be read now is
+// never written: what it holds is unknown, not nothing.
+func RemoveFoundServer(name string) (*Result, error) {
+	return change(func(l *Library) error {
+		found := foundServers(l)
+		i := slices.IndexFunc(found, func(f Found) bool { return f.Server.Name == name })
+		if i < 0 {
+			return fmt.Errorf("no agent has a server called %s that the library hasn't", name)
+		}
+		f := found[i]
+		if f.Own {
+			return fmt.Errorf("%s is put there by the agent's app itself, each time it starts: taking it out wouldn't last", name)
+		}
+		b := l.kept
+		if b == nil {
+			b = newBackups()
+			l.kept = b
+		}
+		for _, id := range f.Server.Agents {
+			t := targetByID(id)
+			if t == nil || t.MCP == nil {
+				continue
+			}
+			if err := removeFoundEntry(t.MCP, id, name, b); err != nil {
+				return fmt.Errorf("%s: %w", t.Agent.Name, err)
+			}
+		}
+		return nil
+	})
+}
+
+// removeFoundEntry takes the server by that name out of the agent's MCP
+// file and the files read with it, each backed up first.
+func removeFoundEntry(mf *mcpFile, id, name string, b *backups) error {
+	extra := make([]*mcpFile, 0, len(mf.Extra))
+	for _, p := range mf.Extra {
+		extra = append(extra, &mcpFile{Path: p, Format: mf.Format})
+	}
+	// every file read before any is written: one that doesn't parse stops
+	// it all, with nothing changed
+	es, err := mf.entries()
+	if err != nil {
+		return err
+	}
+	in := es[name] != nil || mf.holds(name)
+	var inExtra []*mcpFile
+	for _, x := range extra {
+		xes, err := x.entries()
+		if err != nil {
+			return err
+		}
+		if xes[name] != nil {
+			inExtra = append(inExtra, x)
+		}
+	}
+	if in {
+		for _, p := range mf.files() {
+			if err := b.keep(id, p); err != nil {
+				return err
+			}
+		}
+		if err := mf.del(name); err != nil {
+			return err
+		}
+	}
+	for _, x := range inExtra {
+		if err := b.keep(id, x.Path); err != nil {
+			return err
+		}
+		if err := x.del(name); err != nil {
+			return err
+		}
+	}
+	// read back: a server left in a file the agent reads is said, not
+	// reported gone
+	if have, err := mf.read(); err != nil {
+		return err
+	} else if have[name] != nil {
+		return fmt.Errorf("%s is still in %s", name, mf.Path)
+	}
+	return nil
+}
