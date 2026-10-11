@@ -128,6 +128,7 @@ func builtins(home, cfg string) []*Agent {
 		qoder(home),
 		qoderCN(home),
 		grok(home),
+		grokApp(home),
 		zcode(home),
 		workbuddy(home),
 		workbuddyAI(home),

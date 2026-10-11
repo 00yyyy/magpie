@@ -52,6 +52,8 @@ var Vars = []string{
 	"QODER_CONFIG_DIR", "QODERCN_CONFIG_DIR",
 	// Grok: its home, and where its CLI is installed
 	"GROK_HOME", "GROK_BIN_DIR",
+	// Grok App's data folder (its agent-home/config.toml), else the OS's app-data one
+	"GROK_APP_HOME",
 	// Kimi Code and its shared folder
 	"KIMI_CODE_HOME", "KIMI_SHARE_DIR",
 	// Qwen Code's home, ~/.qwen without it
