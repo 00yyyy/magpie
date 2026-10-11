@@ -18561,7 +18561,13 @@ function renderSessions() {
     const tile = (n, label, sub, title, cls) => {
       const e = el("div", "kpi" + (cls ? " " + cls : ""));
       if (title) e.title = title;
-      e.append(el("b", "", n), el("span", "", label));
+      // a figure never wraps: a tile a line taller moves the page when a
+      // filter shortens it; a time's units step down, as the Health app's do
+      const b = el("b", "");
+      if (cls?.includes("dur")) for (const part of n.split(/(\d+)/)) part && b.append(/^\d+$/.test(part) ? part : el("i", "u", part.trim()));
+      else b.textContent = n;
+      b.title = n;
+      e.append(b, el("span", "", label));
       if (sub) e.append(el("small", "", sub));
       stats.append(e);
     };
@@ -18575,7 +18581,7 @@ function renderSessions() {
     const prompt = tot.input + tot.cache_read + tot.cache_write;
     tile(fmtN(tot.cache_read), t("cache read"), tot.cache_read && prompt ? t("hit rate {p}", { p: Math.round(100 * tot.cache_read / prompt) + "%" }) : "", tot.cache_write ? t("{n} written", { n: fmtN(tot.cache_write) }) : "");
     tile(active == null ? "—" : fmtDur(active), t("active"), active == null ? t("not kept by model") : t(days === 1 ? "on {n} day" : "on {n} days", { n: days }),
-      t("The time the sessions were at work: the pauses between one message and the next, each under five minutes"));
+      t("The time the sessions were at work: the pauses between one message and the next, each under five minutes"), "dur");
     // how many folders, and how much of it the first took
     const byCwd = sessSums(used, "cwd");
     const lead = byCwd[0], spentAll = byCwd.reduce((n, f) => n + f.n, 0);

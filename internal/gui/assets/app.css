@@ -932,7 +932,9 @@ body.window .field.solo { grid-column: auto; }
 .stats.empty { display: block; background: var(--card); }
 .stats .none { padding: 18px 16px; color: var(--muted); text-align: center; line-height: 1.5; }
 .kpi { background: var(--card); padding: 12px 14px 11px; display: flex; flex-direction: column; min-width: 0; }
-.kpi b { font-size: 20px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.kpi b { font-size: 20px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi b .u { font-style: normal; font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin: 0 3px 0 2px; }
+.kpi b .u:last-child { margin-right: 0; }
 .kpi span { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
 .kpi small { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chart { position: relative; margin-top: 8px; padding: 12px 14px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; flex: none; }
@@ -1270,7 +1272,7 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 /* the overview: six figures, the calendar, and four cards two by two */
 .sess-pane { container-type: inline-size; }
 .stats.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-@container (max-width: 820px) { .stats.six { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (max-width: 960px) { .stats.six { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @container (max-width: 420px) { .stats.six { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .kpi.stale, .sess-card.stale .sess-tops { opacity: .55; transition: opacity .2s; }
 .l0 { background: var(--pill); }
