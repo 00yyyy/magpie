@@ -156,6 +156,38 @@ named provider still falls back to that selection.
 Covered by `TestSearchProviderOff`, `TestSearchProviderOffForwarding`, `TestSearchProviderOffTellsRemoteMagpie`,
 `TestSearcherChosen`, `TestSettingsSearchProviderOff`, and `searcher-pick.test.cjs`.
 
+## A search API's base URL
+
+Each search API ([`provider.SearchAPI`](../../internal/provider/search_api.go))
+has an optional `url`, its base URL: an endpoint of the user's own that
+answers as that API does (#1580). Empty is the vendor's own
+(`SearchVendor.Base`); SearXNG has none, so its URL is required. `check`
+takes only an `http://` or `https://` URL with a host and no `?query` or
+`#fragment`, since `askSearchAPI` puts the vendor's path after it
+(`/search`, `/res/v1/web/search`, `/v2/search`) with the slash at its end
+trimmed. The request goes through the gateway's client, so it follows
+magpie's proxy settings as the vendor's own address does
+(`TestSearchFollowsTheSearchersProxy`).
+
+The key is sent only to that URL. Go keeps Brave's `X-Subscription-Token`
+and Exa's `x-api-key` across a redirect to another host, so `askSearchAPI`
+doesn't follow one. The 3xx is the error, and it names where the search
+was sent. magpie ships and lists no third-party search endpoint; the URL
+is only ever the user's.
+
+A value the user set is never replaced by the vendor's default. In
+Settings › Models › Web search the field sits under the key for every API,
+with the vendor's own address as its placeholder. Picking an API that is
+already added fills in its saved URL, so Add with a new key alone keeps
+the URL, and Add with no key changes only the URL. On the CLI,
+`magpie search add <api> <key>` keeps the URL set before, and `url=` with
+nothing after it puts the vendor's own back. Backup and sync carry `url`
+with the rest of the entry.
+
+Covered by `TestSearchAPIAtItsOwnBaseURL`, `TestSearchKeyStaysAtItsBaseURL`,
+`TestSearchAPIBaseURLFromSettings`, `TestSearchCLI` and
+`search-api.test.cjs`.
+
 ## Web search as an MCP server
 
 `SearchMCPPath`, `/mcp/magpie/web-search`, serves the same `webSearch` a
@@ -198,6 +230,7 @@ go test -tags nogui ./internal/gateway -run 'TestVertex'
 go test -tags nogui ./internal/gateway ./internal/usage -run 'TestRetriedRequestCountsOnce|TestRequestsCountedOnceWithTheirRetries'
 go test -tags nogui ./internal/gateway -run 'TestRemoteMagpie|TestRedactedKinds|TestKeyLimitTellsOnlyTheCaller'
 go test -tags nogui ./internal/gateway -run 'TestSearchMCP'
+go test -tags nogui ./internal/gateway ./internal/gui . -run 'TestSearchAPIAtItsOwnBaseURL|TestSearchKeyStaysAtItsBaseURL|TestSearchAPIBaseURLFromSettings|TestSearchCLI'
 go test -tags nogui ./internal/redact ./internal/gui -run 'TestMoreKinds|TestCategoryDefaults|TestRedactKindsAreRedacts|TestRedactRuleEdit'
 go test -tags nogui ./internal/gateway -run 'TestCodexModelList|TestCodexModelsEtag'
 go test -tags nogui ./internal/provider ./internal/gateway -run 'TestFolderUnder|TestRuleFoldersCleaned|TestRuleMatchesByFolder|TestParseRuleFolders|TestWorkDir|TestRuleByFolder'

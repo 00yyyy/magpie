@@ -20704,22 +20704,32 @@ function renderSearch(s, keep) {
   const d = searchDraft;
   if (!vendors.some((v) => v.id === d.vendor)) d.vendor = vendors[0]?.id || "";
   const vendor = () => vendors.find((v) => v.id === d.vendor) || {};
+  // the one of the picked vendor already added: Add then changes it, its
+  // key kept when none is typed
+  const saved = () => (s.searchAPIs || []).find((a) => a.vendor === d.vendor);
   const pick = el("button", "proto pick search-vendor");
   pick.type = "button";
   pick.setAttribute("aria-label", t("Search API"));
   const key = input(d.key, t("API key"), "password");
+  // any API's base URL (#1580): an endpoint of the user's own that answers
+  // as that API does; empty is the vendor's own, a SearXNG's is required
   const url = input(d.url, "https://searx.example.com");
   key.className = "words search-key";
   url.className = "words search-url";
   key.setAttribute("aria-label", t("API key"));
-  url.setAttribute("aria-label", t("Address"));
   const get = el("button", "link", t("Get a key ↗"));
   get.onclick = () => vendor().keysURL && api("open", { url: vendor().keysURL });
   const draw = () => {
     const v = vendor();
     pick.replaceChildren(el("span", "", v.name || ""), svg(CHEV, 11, 1.6));
-    url.hidden = !v.needURL;
-    key.placeholder = v.needURL ? t("API key, if it needs one") : t("API key, or several split by commas");
+    // the address it is set at shows in the field, so changing its key
+    // never puts the vendor's own back in its place
+    if (d.urlOf !== d.vendor) { d.url = saved()?.url || ""; d.urlOf = d.vendor; }
+    url.value = d.url;
+    url.placeholder = v.needURL ? "https://searx.example.com" : t("Base URL, empty for {url}", { url: v.base || "" });
+    url.setAttribute("aria-label", v.needURL ? t("Address") : t("Base URL"));
+    key.placeholder = v.needURL ? t("API key, if it needs one")
+      : saved()?.key ? t("A new key, or empty to keep {key}", { key: saved().key }) : t("API key, or several split by commas");
     get.hidden = !v.keysURL;
   };
   pick.onclick = (e) => {
@@ -20731,8 +20741,9 @@ function renderSearch(s, keep) {
   const add = el("button", "text", t("Add"));
   add.onclick = () => {
     d.key = key.value.trim(); d.url = url.value.trim();
-    if (vendor().needURL ? !d.url : !d.key) return (vendor().needURL ? url : key).focus();
-    set({ vendor: d.vendor, key: d.key, url: vendor().needURL ? d.url : "" },
+    // one added before keeps its key when none is typed
+    if (vendor().needURL ? !d.url : !d.key && !saved()?.key) return (vendor().needURL ? url : key).focus();
+    set({ vendor: d.vendor, key: d.key, url: d.url },
       () => { searchDraft = { vendor: d.vendor, key: "", url: "", err: "" }; });
   };
   for (const i of [key, url]) {
@@ -20746,7 +20757,7 @@ function renderSearch(s, keep) {
     : apiFirst ? t("Asked before {who}, which searches when these fail", { who: s.searchProvider })
     : t("Now done by {who}; these come after it", { who: s.searchProvider });
   const head = row(t("Search APIs"), d.err || t("When a model can't search the web, magpie searches for it with these, in this order, and gives it what they found") + " · " + by,
-    pick, key, url, get, add);
+    pick, key, get, add, url);
   head.classList.add("rule-row", "search-add");
   head.querySelector(".val").classList.add("rule-add");
   if (d.err) head.querySelector(".sub").classList.add("err");

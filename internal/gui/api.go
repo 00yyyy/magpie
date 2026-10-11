@@ -463,6 +463,8 @@ type searchVendorJSON struct {
 	Name    string `json:"name"`
 	KeysURL string `json:"keysURL,omitempty"`
 	NeedURL bool   `json:"needURL,omitempty"` // one the user runs
+	// its own address, the one used while no base URL is set (#1580)
+	Base string `json:"base,omitempty"`
 }
 
 func searchState(s *settingsJSON) {
@@ -479,7 +481,7 @@ func searchState(s *settingsJSON) {
 		s.SearchAPIs = append(s.SearchAPIs, j)
 	}
 	for _, v := range provider.SearchVendors {
-		s.SearchVendors = append(s.SearchVendors, searchVendorJSON{ID: v.ID, Name: v.Name, KeysURL: v.KeysURL, NeedURL: v.Base == ""})
+		s.SearchVendors = append(s.SearchVendors, searchVendorJSON{ID: v.ID, Name: v.Name, KeysURL: v.KeysURL, NeedURL: v.Base == "", Base: v.Base})
 	}
 	s.SearchProvider = gateway.Searcher()
 	s.SearchAuto, s.SearchUnused = gateway.AutoSearcher(), gateway.SearcherUnused()
