@@ -2763,41 +2763,49 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		call.To = provider.Anthropic
 		return s.serveClaudeSubscription(w, r, from, p, model, body, &call.Usage)
 	}
+	// the subscriptions below are asked through their own clients' APIs,
+	// never Anthropic's: Claude Code's billing line, which changes every
+	// turn, would be the first words of their prompt and its cache missed
+	// from there on (#1600, billing_line.go)
+	own := body
+	if from == provider.Anthropic {
+		own = withoutBillingLine(body)
+	}
 	// Cursor's through the API its CLI talks to, with the CLI's sign-in
 	if p.Account != nil && p.Account.Agent == "cursor" {
 		call.To = from
-		return s.serveCursor(w, r, from, model, body, &call.Usage)
+		return s.serveCursor(w, r, from, model, own, &call.Usage)
 	}
 	// Devin's through the API its CLI talks to, with the CLI's sign-in or
 	// one magpie keeps beside it
 	if p.Account != nil && p.Account.Agent == "devin" {
 		call.To = from
-		return s.serveDevin(w, r, from, p.Account.Home, model, body, &call.Usage)
+		return s.serveDevin(w, r, from, p.Account.Home, model, own, &call.Usage)
 	}
 	// Kiro's is served through its own API, with kiro-cli's or the Kiro
 	// IDE's sign-in, or a Kiro API key saved on the provider
 	if p.Account != nil && p.Account.Agent == "kiro" {
 		call.To = from
-		return s.serveKiro(w, r, from, p, model, body, &call.Usage)
+		return s.serveKiro(w, r, from, p, model, own, &call.Usage)
 	}
 	// Qoder is served through the API the client talks to, signed with the
 	// COSY envelope, with the account magpie signed in to.
 	if p.Account != nil && (p.Account.Agent == "qoder" || p.Account.Agent == provider.QoderCNID) {
 		call.To = from
-		return s.serveQoder(w, r, from, p, model, body, &call.Usage)
+		return s.serveQoder(w, r, from, p, model, own, &call.Usage)
 	}
 	// Zed's through cloud.zed.dev, written in the API of the model's own
 	// provider, with the account magpie signed in to
 	if p.Account != nil && p.Account.Agent == "zed" {
 		call.To = from
-		return s.serveZed(w, r, from, p, model, body, &call.Usage)
+		return s.serveZed(w, r, from, p, model, own, &call.Usage)
 	}
 	// Command Code's Go plan has no Provider API: it is asked where the
 	// CLI asks, in the CLI's own format; its other plans go on as keys do
 	if p.Account != nil && p.Account.Agent == provider.CommandCodePlanID {
 		if api, key, ok := cmdGenerate(r.Context(), p); ok {
 			call.To = from
-			return s.serveCommandCode(w, r, from, p, api, key, model, body, &call.Usage)
+			return s.serveCommandCode(w, r, from, p, api, key, model, own, &call.Usage)
 		}
 	}
 	// Copilot's Auto (all a Student plan may pick) is asked which model it
@@ -3291,6 +3299,12 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// Claude Code's metadata.user_id, a JSON string these days, is
 			// not the plain id Bedrock checks it against (#176)
 			body = withoutFields(body, "metadata")
+		}
+		if dropsBillingLine(p, proto, model, upstream) {
+			// Claude Code's billing line, which changes every turn, to a
+			// vendor's model: its prompt cache missed from the first
+			// byte (#1600, billing_line.go)
+			body = withoutBillingLine(body)
 		}
 		if !anthropicModel.MatchString(model) {
 			body = thinkingOffUnlessAsked(body)
@@ -3912,7 +3926,17 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r := *req
 			r.OwnTier, req = own, &r
 		}
-		body, err := buildFor(p, to, req, model)
+		wire := provider.UpstreamNameIn(wires, p.ID, model)
+		sent := req
+		if dropsBillingLine(p, to, model, wire) && billingHeader.MatchString(req.System) {
+			// Claude Code's billing line, which changes every turn, as the
+			// first words of another API's prompt or a vendor's model's:
+			// its prompt cache missed from the first byte (#1600,
+			// billing_line.go)
+			r := *req
+			r.System, sent = withoutBillingHeader(r.System), &r
+		}
+		body, err := buildFor(p, to, sent, model)
 		if err != nil {
 			return nil, to, err
 		}
@@ -3923,7 +3947,6 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			// the other magpie searches for it (search_remote.go)
 			body = withFields(body, map[string]any{"web_search_options": map[string]any{}})
 		}
-		wire := provider.UpstreamNameIn(wires, p.ID, model)
 		if to == provider.CodeAssist && p.Account != nil {
 			// the envelope is named in there, where the id it carries is
 			// known: on Antigravity that is the variant the effort picked,
