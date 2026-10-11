@@ -16443,18 +16443,22 @@ const ledFloor = (x) => x?.floor_ms > 0 ? (1000 * x.floor_out) / x.floor_ms : 0;
 // a group's speed as every ranking and the Output speed card say it, by one
 // rule (Fallmonkey on Discord): with replies whose speed was measured, their
 // speed and how many they are, "125 tok/s (1)", not beside "260 requests"
-// alone; with none, but replies read from a session file that tell the
-// least they wrote at, that floor and how many, "≥100 tok/s (30)"; else
-// nothing. The Requests tab says the same of each row: "125 tok/s" or
-// "≥100 tok/s". v is the figure a speed ranking orders by and bars.
+// alone; with replies read from a session file that tell the least they
+// wrote at, that floor and how many, "≥100 tok/s (30)"; with both, both,
+// the measured first, "62 tok/s (2) · ≥71 tok/s (54)", as two replies are
+// too few to stand for 56 and a floor is no measure; else nothing. The
+// Requests tab says the same of each row: "125 tok/s" or "≥100 tok/s". v is
+// the figure a speed ranking orders by and bars: the measured speed when
+// there is one, else the floor. main is the first part, floor the second.
 function ledGroupSpeed(x) {
-  const v = ledSpeed(x), f = v ? 0 : ledFloor(x), k = v ? x.decode_n || 0 : x?.floor_n || 0;
+  const v = ledSpeed(x), f = ledFloor(x), kv = x?.decode_n || 0, kf = x?.floor_n || 0;
   if (!v && !f) return null;
-  const n = ledNum(Math.round(v || f));
-  const text = (f ? "≥" : "") + (k ? t("{n} tok/s ({k})", { n, k: ledNum(k) }) : t("{n} tok/s", { n }));
-  const title = !k ? "" : v ? t(k === 1 ? "Measured on {k} reply, from its first token to its end; the others tell no speed" : "Measured on {k} replies, from their first token to their end; the others tell no speed", { k: ledNum(k) })
-    : t(k === 1 ? "At least: {k} reply read from a session file, which doesn't say when its answer began, so time before that is counted too" : "At least: {k} replies read from session files, which don't say when their answers began, so time before that is counted too", { k: ledNum(k) });
-  return { v: v || f, text, title };
+  const say = (s, k) => k ? t("{n} tok/s ({k})", { n: ledNum(Math.round(s)), k: ledNum(k) }) : t("{n} tok/s", { n: ledNum(Math.round(s)) });
+  const measured = v ? say(v, kv) : "", floor = f ? "≥" + say(f, kf) : "";
+  const vTitle = !v || !kv ? "" : f ? t(kv === 1 ? "Measured on {k} reply, from its first token to its end" : "Measured on {k} replies, from their first token to their end", { k: ledNum(kv) })
+    : t(kv === 1 ? "Measured on {k} reply, from its first token to its end; the others tell no speed" : "Measured on {k} replies, from their first token to their end; the others tell no speed", { k: ledNum(kv) });
+  const fTitle = !f || !kf ? "" : t(kf === 1 ? "At least: {k} reply read from a session file, which doesn't say when its answer began, so time before that is counted too" : "At least: {k} replies read from session files, which don't say when their answers began, so time before that is counted too", { k: ledNum(kf) });
+  return { v: v || f, text: [measured, floor].filter(Boolean).join(" · "), main: measured || floor, floor: measured ? floor : "", title: [vTitle, fTitle].filter(Boolean).join("\n") };
 }
 // their mean wait for the first token, 0 for none
 const ledTTFT = (x) => x?.timed > 0 ? x.ttft_ms / x.timed : 0;
@@ -16805,9 +16809,10 @@ function renderLedgerDash(l) {
   meter.append(fill);
   hit.append(meter);
   // how fast the streamed replies wrote, and how long they took to begin (#860)
+  // a floor beside a measured speed goes under it, the card's figure kept whole
   const gs = ledGroupSpeed(l);
-  block("Output speed", gs ? gs.text : "—",
-    line(ledTTFT(l) ? t("first token in {ms} on average", { ms: ledTook(ledTTFT(l)) }) : t("no streamed replies timed")),
+  block("Output speed", gs ? gs.main : "—",
+    line(...[ledTTFT(l) ? t("first token in {ms} on average", { ms: ledTook(ledTTFT(l)) }) : t("no streamed replies timed")].concat(gs?.floor ? [" · ", gs.floor] : [])),
     "", [gs?.title, t("Output tokens a second after the first, over the streamed replies") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it")].filter(Boolean).join("\n"));
   drawLedTrend();
 }
