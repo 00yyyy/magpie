@@ -1206,9 +1206,15 @@ func byIDOrWas(id string) (Provider, bool) {
 // prices it.
 var grokEffort = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/]*?)-(?:minimal|low|medium|high|xhigh|extra-high)$`)
 
+// grokWindow is a Grok id offered at a context window of its own
+// ("grok-4.7@500k", grokContextModels and the grok plugin's windowsOf): the
+// same model, asked for at a longer window.
+var grokWindow = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/@]*)@[0-9]+k$`)
+
 // pricedNames are the ids a model is priced by, in order: its own, then,
 // for a Grok id named at an effort, the model it is that effort of — the
-// same model, at the same price (#224). Codex Auto Review uses GPT-5.6 Luna
+// same model, at the same price (#224) — or at a window (grok-4.7@500k),
+// the model it is that window of. Codex Auto Review uses GPT-5.6 Luna
 // according to OpenAI's rate card (2026-09-30):
 // https://help.openai.com/en/articles/11481834-chatgpt-rate-card-business-enterpriseedu-credit-based-pricing
 // This is a list-price estimate, not evidence of a response's served model.
@@ -1218,6 +1224,9 @@ func pricedNames(model string) []string {
 	out := []string{model}
 	if model == "codex-auto-review" {
 		out = append(out, "gpt-5.6-luna")
+	}
+	if m := grokWindow.FindStringSubmatch(strings.ToLower(strings.TrimSpace(model))); m != nil {
+		out = append(out, m[1])
 	}
 	if m := grokEffort.FindStringSubmatch(strings.ToLower(strings.TrimSpace(model))); m != nil {
 		out = append(out, m[1])

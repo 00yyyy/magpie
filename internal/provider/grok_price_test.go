@@ -28,7 +28,9 @@ func TestGrokEffortListPrice(t *testing.T) {
 
 	grok := Provider{ID: "grok", Name: "Grok (SuperGrok)"}
 	for _, id := range []string{"grok-4.7", "grok-4.7-low", "grok-4.7-medium", "grok-4.7-high", "grok-4.7-xhigh",
-		"GROK-4.7-High", "x-ai/grok-4.7-xhigh", "grok-4.6-minimal"} {
+		"GROK-4.7-High", "x-ai/grok-4.7-xhigh", "grok-4.6-minimal",
+		// a model at a window of its own (#1608)
+		"grok-4.7@500k", "grok-4.6@500k"} {
 		for name, price := range map[string]func(string) (catalog.Price, bool){"MakerPrice": MakerPrice, "ListPrice": grok.ListPrice} {
 			pr, ok := price(id)
 			if !ok || pr.Input != 2 || pr.Output != 6 || pr.CacheRead != 0.5 {
@@ -39,7 +41,7 @@ func TestGrokEffortListPrice(t *testing.T) {
 	for _, id := range []string{"grok-4.7-fast", "grok-4.7-low-fast", "grok-4.7-xhigh-fast", "grok-4.7-build",
 		"grok-4.7-build-fast", "grok-4.7-mini", "grok-4.7-mini-high", "grok-4.7-max",
 		// only Grok's ids are read this way
-		"gpt-6-astra-high", "cursor-grok-4.7-high"} {
+		"gpt-6-astra-high", "cursor-grok-4.7-high", "gpt-6-astra@500k", "grok-4.7-build@500k"} {
 		if pr, ok := grok.ListPrice(id); ok {
 			t.Errorf("ListPrice(%q) = %+v; want unpriced", id, pr)
 		}
