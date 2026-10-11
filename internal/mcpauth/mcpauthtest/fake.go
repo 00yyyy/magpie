@@ -53,6 +53,10 @@ type Fake struct {
 	// another is refused (RFC 7591's invalid_client_metadata), and a client
 	// registered for a secret is given one and has to send it as it said
 	AuthMethods []string
+	// RefuseRegistration turns every registration away as Figma's
+	// authorization server does a client it doesn't list: 403, a JSON
+	// content type and the bare body "Forbidden" (#1619)
+	RefuseRegistration bool
 
 	codes   map[string]codeGrant
 	secrets map[string]string // client id → secret, of those that have one
@@ -107,6 +111,13 @@ func New(t *testing.T) *Fake {
 		json.NewDecoder(r.Body).Decode(&reg)
 		method, _ := reg["token_endpoint_auth_method"].(string)
 		f.mu.Lock()
+		if f.RefuseRegistration {
+			f.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusForbidden)
+			io.WriteString(w, "Forbidden")
+			return
+		}
 		f.Registered = append(f.Registered, reg)
 		id := fmt.Sprintf("client-%d", len(f.Registered))
 		// private_key_jwt and tls_client_auth need a key set or a

@@ -74,6 +74,14 @@ var ErrExpired = errors.New("magpie's sign-in to this server has run out: sign i
 // mcp.exa.ai/mcp?login) is signed in to there. The GUI has it in Chinese.
 var ErrNoSignIn = errors.New("this server already works without signing in, so there is nothing to sign in to: the agents given it can use it as it is. A key it takes goes in Headers; a server that signs in at another address (as Exa's ?login) needs that URL")
 
+// ErrClientRefused is a server whose authorization server turned magpie's
+// registration away with 401 or 403: it admits only the clients it lists,
+// as Figma's (mcp.figma.com, a 403 "Forbidden" to any client_name it doesn't
+// list, #1619). magpie doesn't pass itself off as a listed client; a server
+// magpie isn't signed in to is given to the agents at its own address, so
+// each agent signs in there itself. The GUI has it in every language.
+var ErrClientRefused = errors.New("this server's sign-in admits only the apps it lists and turned magpie away, so magpie can't sign in for the agents. The agents given it still have the server's own address: sign in from each agent itself (in Claude Code, run /mcp and pick the server)")
+
 // Record is magpie's sign-in to one server.
 type Record struct {
 	URL      string `json:"url"`                // the server's, as the library has it
@@ -664,6 +672,9 @@ func register(ctx context.Context, m meta, redirect string) (id, secret, method 
 	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return "", "", "", ErrClientRefused
+	}
 	if resp.StatusCode/100 != 2 {
 		return "", "", "", fmt.Errorf("registering magpie with the server's sign-in failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(rb)))
 	}
