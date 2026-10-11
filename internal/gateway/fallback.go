@@ -534,6 +534,12 @@ func capHeld(p, acct provider.Provider, model string, now time.Time) *capHold {
 	}
 	a := acct.Account
 	caps := provider.HoldCaps(p, a.Agent, a.User)
+	if a.Agent == "codex" && freeOnChatGPT(model) {
+		// a call ChatGPT counts in no window spends nothing a usage cap
+		// keeps (#1593); credits set not to be spent still hold it at
+		// 100%, as nothing says the backend answers it there
+		caps = provider.WindowCaps{Credits: caps.Credits}
+	}
 	if !caps.Holds() {
 		return nil
 	}
