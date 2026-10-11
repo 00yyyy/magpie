@@ -697,6 +697,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	var res *http.Response
 	autoReset := false // a Codex reset looked at, once
 	resetNote := ""    // what spending it did, for the request log
+	resets := 0        // times a large request ChatGPT closed on was asked again (#1628)
 	for tries := 0; ; tries++ {
 		ctx := provider.ViaSignedIn(r.Context(), "codex")
 		if on != nil {
@@ -751,6 +752,23 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				}
 			}
 		}
+		if rest == "/responses" && base != codexAPIBase && res.StatusCode == http.StatusServiceUnavailable && len(body) >= codexDropBody && resets < lastRetries {
+			// ChatGPT closed the connection before answering a large
+			// request, which often passes (#1628): asked again after a
+			// moment, as the accounts loop asks its last one again
+			head, _ := io.ReadAll(io.LimitReader(res.Body, 4<<10))
+			res.Body.Close()
+			res.Body = io.NopCloser(bytes.NewReader(head))
+			if edgeReset.Match(head) {
+				wait := retryPause << resets
+				resets++
+				select {
+				case <-time.After(wait):
+					continue
+				case <-r.Context().Done():
+				}
+			}
+		}
 		if rest != "/responses" || tries >= 3 || (res.StatusCode != 400 && res.StatusCode != 404) {
 			break
 		}
@@ -772,8 +790,8 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		// for (#1012)
 		res = notAnAPIReply(res, "OpenAI: ")
 		if base != codexAPIBase {
-			// dropped by ChatGPT for its size: Codex is told it's too
-			// large rather than sending it again (ylorn on Discord)
+			// still closed on after that: Codex is told what may help,
+			// at the 503 it asks again for (#1628)
 			res = codexDropped(res, len(body))
 		}
 	}

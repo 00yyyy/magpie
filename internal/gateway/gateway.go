@@ -2535,6 +2535,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 			break
 		}
+		if !last && hw.failed() && codexReset(hw.code(), hw.errBody()) {
+			// ChatGPT closed the connection before answering a large
+			// request (#1628): it may on any account, it often passes, and
+			// no account is at fault for it, so the next is asked and this
+			// one doesn't rest (ylorn on Discord: acct-1 had rested for it).
+			// The last one left is asked again after a moment, as for any
+			// 503, before the agent is told
+			if other == nil {
+				other = &Try{Status: call.Status, Error: call.Error}
+			}
+			try.Fail = failOther
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			skipped = append(skipped, c.label()+": "+call.Error)
+			continue
+		}
 		if !last && hw.failed() {
 			if f := failure(hw.code(), hw.errBody()); other == nil && f != failQuota && f != failCredit {
 				other = &Try{Status: call.Status, Error: call.Error}
@@ -3198,8 +3213,8 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	// nothing at all, served 200, is the 502 it stands for (#1012)
 	res = notAnAPIReply(clineUnwrapped(p, res), "")
 	if p.Account != nil && p.Account.Agent == "codex" {
-		// a request ChatGPT drops for its size is the request's, not a
-		// 503 to ask every account again for (ylorn on Discord)
+		// a large request ChatGPT closed the connection on: asked again,
+		// nobody resting for it, and said what may help (#1628)
 		res = codexDropped(res, len(body))
 	}
 	// what a Codex account's reply says it has used, for its cap (#1295)
