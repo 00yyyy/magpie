@@ -778,6 +778,17 @@ body.window .field.solo { grid-column: auto; }
   .usage-refresh .sess-pick { padding: 0 7px; }
   .usage-refresh .sess-pick svg { display: none; }
 }
+/* the same, wider, wherever the sum would be cut otherwise (#1599): a
+   class app.js sets when the sum runs past its box */
+.usage-head.tight { gap: 7px; flex-wrap: wrap; height: auto; min-height: 34px; row-gap: 2px; }
+.usage-head.tight .usage-cost span:not(.skeleton) { display: none; }
+.usage-head.tight .usage-cost b { font-size: 14px; }
+.usage-head.tight .usage-cost { margin-left: auto; }
+.usage-head.tight .usage-refresh { margin-right: 0; }
+.usage-head.tight .usage-refresh .icon { width: 22px; }
+.usage-head.tight .usage-refresh .sess-pick { padding: 0 7px; }
+.usage-head.tight .usage-refresh .sess-pick svg { display: none; }
+.usage-head.tight .range-opt:not(.on) > span { display: none; }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; flex: none; }
 .stats.empty { display: block; background: var(--card); }
 .stats .none { padding: 18px 16px; color: var(--muted); text-align: center; line-height: 1.5; }

@@ -22400,6 +22400,26 @@ setInterval(async () => {
   noSum();
   new MutationObserver(noSum).observe(cost, { childList: true });
 }
+// the Usage head is made tight, as at a narrow window, wherever its sum
+// would be cut (#1599, sean908): between 640px and the width its tabs, its
+// periods with Custom named and the refresh need, the sum was the one
+// thing left to give way, and read ≈$0. for ≈$0.001. Tight, Custom is its
+// icon and the sum may go to a line of its own, whole, in every language.
+// Decided on the next frame, as the class changes the head's height.
+{
+  const head = $("#usageCost").parentElement;
+  let frame = 0;
+  const fit = () => {
+    frame = 0;
+    if (!head.offsetWidth) return;
+    head.classList.remove("tight");
+    const cost = $("#usageCost"), sum = cost.querySelector("b");
+    head.classList.toggle("tight", !!sum && sum.getBoundingClientRect().right > cost.getBoundingClientRect().right + 0.5);
+  };
+  const later = () => { if (!frame) frame = requestAnimationFrame(fit); };
+  new ResizeObserver(later).observe(head);
+  new MutationObserver(later).observe(head, { childList: true, subtree: true, characterData: true });
+}
 // The Usage page reads its numbers again while it is looked at, as often as
 // the reader says — off, or every 5 s to a minute (a request through the gateway
 // shows within that; the subscriptions' windows each minute at most, the vendors'
