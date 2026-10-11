@@ -151,8 +151,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.ok(slowBox.height <= 18 && slowBox.width <= 220, "the step's name widens or wraps the status: " + JSON.stringify(slowBox));
 
         // back from another tab: not checked again
-        await page.locator(".lib-tabs button", { hasText: w.skills }).click();
-        await page.locator(".lib-tabs button", { hasText: /MCP/ }).click();
+        await page.locator(":is(.lib-tabs button, .nav-s):visible", { hasText: w.skills }).click();
+        await page.locator(":is(.lib-tabs button, .nav-s):visible", { hasText: /MCP/ }).click();
         await status("files").waitFor();
         await page.waitForTimeout(150);
         assert.equal(checks.length, 1, "the servers were checked again on coming back");

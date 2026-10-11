@@ -68,6 +68,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => !document.querySelector("#update").hidden);
         let middle = 0, inrow = 0;
         for (let w = 1100; w >= 560; w -= 10) {
+          // wide enough for the sidebar, the pages are down it: no tabs here
+          if (Math.round(w / zoom) >= 1024) continue;
           await page.setViewportSize({ width: Math.round(w / zoom), height: 600 });
           await settled(page);
           const h = await header(page), at = `${w}pt: ${JSON.stringify(h)}`;

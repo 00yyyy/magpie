@@ -158,7 +158,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert((await codex.textContent()).includes(sol), "overview: " + (await codex.textContent()));
           assert(!(await p.locator("#usageAgents .row.stat").nth(1).locator(".sub").textContent()).includes("/"), "a group with no speed says none");
 
-          await p.locator("#usageTab .opt").nth(1).click();
+          await p.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();
           await p.locator("#ledWrap .led tbody tr").first().waitFor();
           await p.waitForTimeout(200);
 

@@ -4857,6 +4857,7 @@ async function loadProviders() {
   else if (view === "gateway" && !$("#gateway").childElementCount) renderGatewayView();
   const was = providers;
   providers = await api("providers");
+  renderSideGw(providers.gateway);
   // a reload's provider may be gone since
   if (typeof editing === "string" && !providers.providers.some((p) => p.id === editing)) editing = null;
   // a providers.json that can't be read is not a first use: no Add sheet
@@ -17523,7 +17524,7 @@ function ledFit() {
     hint.id = "ledTight";
     $("#ledSum").after(hint);
   }
-  hint.textContent = t("Sent, Effort and the cache are in each row's details");
+  hint.textContent = hint.title = t("Sent, Effort and the cache are in each row's details");
   hint.hidden = !tight;
 }
 
@@ -17937,6 +17938,7 @@ function renderUsageTab() {
   // the Context tab has its own range, in its pane
   $("#period").hidden = on || usageTab === "context";
   $("#sessRange").hidden = !on;
+  $("#ctxRange").hidden = usageTab !== "context";
   $("#usagePane").hidden = usageTab !== "usage";
   $("#ledgerPane").hidden = usageTab !== "requests";
   $("#sessionsPane").hidden = !on;
@@ -19460,7 +19462,7 @@ function applyPrefs(s, rate) {
   if (!prefsBusy && (s.textSize || 100) !== textSize) { textSize = s.textSize || 100; newTextSize(); applyZoom(textSize); }
   const was = locale;
   setLocale(s.lang);
-  if (was !== locale && mode === "window") queueMicrotask(() => slide($("#nav"), "nav"));
+  if (was !== locale && mode === "window") queueMicrotask(() => { if (!sideNav()) slide($("#nav"), "nav"); navSubs(); renderSideGw(); renderSideToggle(); });
   return was !== locale;
 }
 
@@ -21308,7 +21310,7 @@ function renderReplies(s, keep) {
   l.id = "loopGuardRow";
   const lwho = el("div", "who");
   lwho.append(el("div", "name", t("Stop looping replies")),
-    el("div", "sub", t("A reply whose reasoning or text goes round the same few lines is ended with an error the agent can retry, not left to run to its output limit")));
+    el("div", "sub wraps", t("A reply whose reasoning or text goes round the same few lines is ended with an error the agent can retry, not left to run to its output limit")));
   const lval = el("div", "val");
   lval.append(segs([["off", t("Off")], ["on", t("On")]], s.noLoopGuard ? "off" : "on",
     (v) => savePrefs({ ...keep, noLoopGuard: v === "off" })));
@@ -22349,6 +22351,11 @@ function hold(h) {
   readerLeaves(v);
 }
 let holding = false; // one frame loop, whatever the clicks
+// A window made wider or narrower lays the whole page out again, the sidebar
+// coming or going with it: nothing the click did, and what it held is no
+// longer where it was read, so the page isn't scrolled after it
+let heldWidth = innerWidth;
+addEventListener("resize", () => { if (innerWidth !== heldWidth) { heldWidth = innerWidth; held = null; } });
 // A part that grows or shrinks as it plays (the agents' scroll unrolling
 // above the button that unrolls it) is held again as soon as it is laid out,
 // before it's painted: a frame's loop sees it only as the frame before left
@@ -22427,14 +22434,16 @@ async function show(v) {
   $("#pageTitle").dataset.en = title;
   $("#pageTitle").textContent = t(title);
   if (mode === "window") {
-    for (const b of $("#nav").querySelectorAll("button")) {
+    for (const b of $("#nav").querySelectorAll("button[data-view]")) {
       const on = b.dataset.view === v;
       b.classList.toggle("on", on);
       if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     }
-    slide($("#nav"), "nav"); navInSight();
+    if (!sideNav()) { slide($("#nav"), "nav"); navInSight(); }
   }
   $("#prefs").classList.toggle("on", v === "settings");
+  if (v === "settings") $("#prefs").setAttribute("aria-current", "page"); else $("#prefs").removeAttribute("aria-current");
+  navSubs();
   for (const id of ["agents", "providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"]) $("#view-" + id).hidden = v !== id;
   // back to where the reader was in it, and again once it has what it loads
   const back = () => backToReader($("#view-" + v));
@@ -22465,7 +22474,7 @@ function syncURL() {
   const s = q.size ? "?" + q : location.pathname;
   if (s !== location.search) history.replaceState(null, "", s);
 }
-if (mode === "window") for (const b of $("#nav").querySelectorAll("button")) b.onclick = () => { show(b.dataset.view); b.blur(); };
+if (mode === "window") for (const b of $("#nav").querySelectorAll("button[data-view]")) b.onclick = () => { show(b.dataset.view); b.blur(); };
 // setGatewayMode shows or leaves out gateway mode's pages' tabs; the page
 // open, one of them, gives way to Providers
 function setGatewayMode(on) {
@@ -22474,7 +22483,8 @@ function setGatewayMode(on) {
   if (mode !== "window") return;
   for (const v of GATEWAY_HIDES) $(`#nav button[data-view="${v}"]`).hidden = on;
   if (on && GATEWAY_HIDES.includes(view)) show("providers");
-  else slide($("#nav"), "nav");
+  else if (!sideNav()) slide($("#nav"), "nav");
+  navSubs();
 }
 // openSettings: the Settings page, in the window (the panel opens it there)
 function openSettings() {
@@ -22567,7 +22577,7 @@ $(".top").addEventListener("dblclick", (e) => {
   if (document.body.classList.contains("linux") && !e.target.closest("button, nav")) winRuntime.then((w) => w?.Window.ToggleMaximise());
 });
 if (mode === "window") { $("#open").remove(); $("#openMain").remove(); $("#quit").remove(); }
-else { $("#nav").remove(); }
+else { $("#nav").remove(); $("#side").remove(); }
 if (mode !== "window" || !document.body.classList.contains("linux")) $("#winclose").remove();
 
 // Config files may change underneath us (another magpie, an editor); reload when
@@ -22594,7 +22604,7 @@ function navInSight() {
   if (nav.scrollLeft > l) nav.scrollLeft = l;
   else if (nav.scrollLeft < r) nav.scrollLeft = r;
 }
-matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").addEventListener?.("change", () => { fitTop(); navInSight(); });
+matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").addEventListener?.("change", () => { layoutNav(); fitTop(); navInSight(); });
 
 // A narrow window has no room for the whole header: the name goes, leaving
 // the magpie, and Update becomes its arrow; narrower still, the tabs stop
@@ -22602,14 +22612,17 @@ matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").addE
 // further still when they don't fit (the 560px window at 150%).
 function fitTop() {
   const top = $(".top"), nav = $("#nav"), brand = $(".brand"), actions = $(".actions");
-  // a phone's browser: the tabs have a row of their own (app.css), at their size
-  if (phoneWeb()) { top.classList.remove("tight", "cramped", "inrow", "crowded", "packed"); return; }
+  // a phone's browser: the tabs have a row of their own (app.css), at their size;
+  // and beside the sidebar the header holds only where the reader is and the icons
+  if (phoneWeb() || sideNav()) { top.classList.remove("tight", "cramped", "inrow", "crowded", "packed"); return; }
   const fits = () => {
     const a = actions.getBoundingClientRect();
     // the buttons sit against the padding; under a page zoom (the text size)
     // their edge can measure a hair past it, which isn't running off (#457)
     if (a.right > top.getBoundingClientRect().right - parseFloat(getComputedStyle(top).paddingRight) + 0.5) return false;
-    const left = brand.offsetParent ? brand.getBoundingClientRect().right
+    // the sidebar's button, when shown, comes after the brand
+    const lead = $("#sideToggle")?.offsetParent ? $("#sideToggle") : brand;
+    const left = lead.offsetParent ? lead.getBoundingClientRect().right
       : top.getBoundingClientRect().left + parseFloat(getComputedStyle(top).paddingLeft);
     if (!nav?.offsetParent) return left + 8 <= a.left;
     const n = nav.getBoundingClientRect();
@@ -22630,6 +22643,303 @@ function fitTop() {
 const topFit = new ResizeObserver(fitTop);
 for (const e of [".top", ".brand", ".actions"]) topFit.observe($(e));
 document.fonts?.ready.then(fitTop);
+
+// ---- the sidebar ----------------------------------------------------------
+// A window wide enough has its pages down a sidebar, as a Mac app's: in
+// groups, the open page's own tabs under it, Settings at its foot and the
+// gateway's address under that, the header saying where the reader is
+// ("Work / Library / MCP servers"). Narrower, and magpie web on a phone,
+// the pages go back into the header as tabs and each page shows its own
+// tabs again, as iPadOS's sidebar turns into a tab bar when it has no room.
+// It is the same #nav, its buttons and handlers, moved between the two.
+// (app.css's side-nav rules hold at the same width): narrower, the page
+// beside it would be narrower than Usage's requests with their columns left
+// out (768 points), and the sidebar gives way to the header's tabs, as a Mac
+// app's sidebar does in a narrow window
+var SIDE_AT = 1024;
+var sideQuery = matchMedia(`(min-width: ${SIDE_AT}px)`);
+function sideNav() { return document.body.classList.contains("side-nav"); }
+// the reader's own layout, picked with the title bar's button
+// (toggleSideNav) and kept for the window as a Mac app keeps its sidebar
+// shown or hidden: "side" or "top" at every width, the sidebar narrower in a
+// narrow window (app.css); none picked, the sidebar from SIDE_AT
+var navPick = "";
+try { navPick = localStorage.getItem("magpie.navLayout") || ""; } catch { /* by the width, then */ }
+if (navPick !== "side" && navPick !== "top") navPick = "";
+function layoutNav() {
+  if (mode !== "window") return;
+  // magpie web on a phone has its own tab bar and no title bar
+  const on = !phoneWeb() && (navPick ? navPick === "side" : sideQuery.matches);
+  if (layoutNav.done && on === sideNav()) {
+    // the button goes with the phone's layout all the same
+    const was = $("#sideToggle").hidden;
+    renderSideToggle();
+    if ($("#sideToggle").hidden !== was) fitTop();
+    return;
+  }
+  layoutNav.done = true;
+  const side = $("#side"), nav = $("#nav"), brand = $(".brand"), prefs = $("#prefs");
+  document.body.classList.toggle("side-nav", on);
+  side.hidden = !on;
+  $("#crumb").hidden = !on;
+  if (on) {
+    side.querySelector(".side-top").append(brand);
+    side.querySelector(".side-scroll").append(nav);
+    side.querySelector(".side-foot").prepend(prefs);
+    nav.querySelector(":scope > .thumb")?.remove();
+  } else {
+    $(".top").prepend(brand);
+    $("#crumb").after(nav);
+    $(".actions").insertBefore(prefs, $("#winclose"));
+  }
+  navSubsAt = "";
+  // the sidebar coming or going isn't a list opening
+  navSubs.quiet = true;
+  navSubs();
+  navSubs.quiet = false;
+  if (!on) { slide(nav, "nav"); navInSight(); } else { sideGwRead(); renderSideGw(); }
+  renderSideToggle();
+  fitTop();
+}
+// the sidebar's button in the title bar, as a Mac app has it, at every
+// width; ⌃⌘S as the Mac's View menu has it
+function renderSideToggle() {
+  const b = $("#sideToggle");
+  if (!b) return;
+  b.hidden = mode !== "window" || phoneWeb();
+  const label = t(sideNav() ? "Hide sidebar" : "Show sidebar");
+  const keys = web ? "" : /^Mac/.test(navigator.platform) ? "⌃⌘S" : "Ctrl+Shift+S";
+  b.title = keys ? `${label} (${keys})` : label;
+  b.setAttribute("aria-label", label);
+  b.setAttribute("aria-pressed", String(sideNav()));
+}
+function toggleSideNav() {
+  if (mode !== "window" || phoneWeb()) return;
+  navPick = sideNav() ? "top" : "side";
+  try { localStorage.setItem("magpie.navLayout", navPick); } catch { /* this time only */ }
+  navMorph(layoutNav);
+}
+// the two layouts trade places as one motion (app.css .nav-morph): the old
+// drawn and the new laid out, the sidebar sliding and each tab flying to
+// its place in the other; a webview without view transitions, or a reader
+// who asked for less motion, has the new at once
+function navMorph(change) {
+  if (navCalm() || !document.startViewTransition) { change(); return; }
+  const root = document.documentElement;
+  root.classList.add("nav-morph");
+  const vt = document.startViewTransition(change);
+  vt.finished.finally(() => root.classList.remove("nav-morph"));
+}
+// where the page shown keeps its own tabs: the sidebar lists them under it
+// and picks them there, the page's own strip hidden (app.css)
+var NAV_SUBS = {
+  usage: () => $("#usageTab"),
+  library: () => $("#view-library .lib-tabs"),
+  plugins: () => $("#view-plugins .lib-tabs"),
+  settings: () => $("#setTabs"),
+};
+function navSubItems(v) { return [...(NAV_SUBS[v]?.()?.querySelectorAll(":scope > button") || [])].filter((b) => !b.hidden); }
+var navSubsAt = "";
+function navSubs() {
+  if (mode !== "window") return;
+  const nav = $("#nav");
+  // a group none of whose pages shows (gateway mode's) leaves out its name
+  for (const gl of nav.querySelectorAll(".nav-gl")) {
+    let any = false;
+    for (let n = gl.nextElementSibling; n && !n.matches(".nav-gl"); n = n.nextElementSibling) if (n.dataset.view && !n.hidden) any = true;
+    gl.hidden = !any;
+  }
+  const side = sideNav();
+  const items = side ? navSubItems(view) : [];
+  const at = view === "settings" ? $("#prefs") : nav.querySelector(`button[data-view="${view}"]`);
+  const sig = [side, view, locale, ...items.map((b) => b.textContent.trim() + (b.classList.contains("on") ? "*" : ""))].join("|");
+  if (sig === navSubsAt) return;
+  navSubsAt = sig;
+  let box = document.querySelector(".nav-sub:not(.leaving)");
+  const want = side && at && items.length > 1;
+  // another page's list folds away as this one's opens, both at once
+  if (box && (!want || box.dataset.view !== view || box.previousElementSibling !== at)) { navSubLeave(box); box = null; }
+  if (want) {
+    const fresh = !box;
+    if (fresh) {
+      box = el("div", "nav-sub");
+      box.setAttribute("role", "tablist");
+      box.dataset.view = view;
+      box.append(el("i", "nav-hl"));
+      box.onkeydown = (e) => {
+        const all = [...box.querySelectorAll(".nav-s")], i = all.indexOf(document.activeElement);
+        const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: all.length - 1 }[e.key];
+        if (i < 0 || to === undefined) return;
+        e.preventDefault();
+        all[(to + all.length) % all.length].focus();
+      };
+      at.after(box);
+    }
+    box.setAttribute("aria-label", at.querySelector("span[data-t]")?.textContent || "");
+    for (const s of box.querySelectorAll(".nav-s")) s.remove();
+    items.forEach((b, i) => {
+      const [name, n] = b.textContent.trim().split(" · ");
+      const s = el("button", "nav-s");
+      s.type = "button";
+      s.setAttribute("role", "tab");
+      if (b.id) s.dataset.of = b.id;
+      const cur = b.classList.contains("on");
+      s.classList.toggle("cur", cur);
+      s.setAttribute("aria-selected", String(cur));
+      s.tabIndex = cur ? 0 : -1;
+      s.append(el("span", "", name));
+      if (n) s.append(el("em", "", n));
+      // the selection goes as the finger comes down, as iOS's does, not once
+      // the page has drawn the tab; let go off the row, it goes back
+      s.onpointerdown = (e) => { if (e.button === 0) navSubGlide(box, s); };
+      s.onpointercancel = () => navSubGlide(box, box.querySelector(".nav-s.cur"));
+      s.onpointerleave = (e) => { if (e.buttons & 1) navSubGlide(box, box.querySelector(".nav-s.cur")); };
+      // the page draws its strip again as it likes: the one there now is
+      // clicked at once, so what is typed next goes to the tab picked (the
+      // press has set the selection off already)
+      s.onclick = () => {
+        navSubGlide(box, s);
+        for (const o of box.querySelectorAll(".nav-s")) o.classList.toggle("cur", o === s);
+        navSubItems(view)[i]?.click();
+      };
+      box.append(s);
+    });
+    navSubMark(box, !fresh);
+    if (fresh && !navSubs.quiet) navSubEnter(box);
+  }
+  renderCrumb(items);
+}
+// the sidebar's lists open and fold the way iOS's do: a spring that
+// starts quick and settles slowly, the rows coming in one after another
+var NAV_EASE = "cubic-bezier(.32, .72, 0, 1)";
+const navCalm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+// the selection is one shape that slides to the row picked
+function navSubMark(box, glide) {
+  const hl = box.querySelector(".nav-hl"), cur = box.querySelector(".nav-s.cur");
+  hl.classList.toggle("still", !glide);
+  hl.hidden = !cur;
+  if (!cur) return;
+  hl.style.transform = `translateY(${cur.offsetTop}px)`;
+  hl.style.height = cur.offsetHeight + "px";
+  if (!glide) requestAnimationFrame(() => hl.classList.remove("still"));
+}
+// the selection set off to a row now, ahead of the page (navSubMark puts
+// it on the tab the page then shows)
+function navSubGlide(box, row) {
+  const hl = box.querySelector(".nav-hl");
+  if (!hl || !row || hl.hidden) return;
+  hl.style.transform = `translateY(${row.offsetTop}px)`;
+  hl.style.height = row.offsetHeight + "px";
+}
+function navSubEnter(box) {
+  if (navCalm()) return;
+  const cs = getComputedStyle(box);
+  const to = { height: box.offsetHeight + "px", marginTop: cs.marginTop, marginBottom: cs.marginBottom, opacity: 1 };
+  box.classList.add("moving");
+  box.animate([{ height: "0px", marginTop: "0px", marginBottom: "0px", opacity: 0 }, to], { duration: 460, easing: NAV_EASE })
+    .finished.then(() => box.classList.remove("moving"), () => {});
+  [...box.querySelectorAll(".nav-s")].forEach((s, i) => s.animate(
+    [{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+    { duration: 380, delay: 60 + i * 28, easing: NAV_EASE, fill: "backwards" }));
+  box.querySelector(".nav-hl").animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 120, fill: "backwards" });
+}
+// a folding list is out of the way at once: not a tab, not reachable, not
+// found by what looks for the sidebar's rows
+function navSubLeave(box) {
+  box.classList.add("leaving");
+  box.removeAttribute("role");
+  box.inert = true;
+  for (const s of box.querySelectorAll(".nav-s")) s.classList.replace("nav-s", "nav-s-gone");
+  if (navCalm() || navSubs.quiet) { box.remove(); return; }
+  const cs = getComputedStyle(box);
+  box.classList.add("moving");
+  box.animate([{ height: box.offsetHeight + "px", marginTop: cs.marginTop, marginBottom: cs.marginBottom, opacity: 1 },
+    { height: "0px", marginTop: "0px", marginBottom: "0px", opacity: 0 }], { duration: 380, easing: NAV_EASE, fill: "forwards" })
+    .finished.then(() => box.remove(), () => box.remove());
+}
+// the header beside the sidebar: the group, the page, and its tab
+function renderCrumb(items) {
+  const c = $("#crumb");
+  if (!c || c.hidden) return;
+  const parts = [];
+  if (view === "settings") parts.push($("#prefs .side-l").textContent);
+  else {
+    const b = $(`#nav button[data-view="${view}"]`);
+    let gl = b?.previousElementSibling;
+    while (gl && !gl.matches(".nav-gl")) gl = gl.previousElementSibling;
+    if (gl) parts.push(gl.textContent);
+    if (b) parts.push(b.querySelector("span[data-t]").textContent);
+  }
+  const on = items.find((b) => b.classList.contains("on"));
+  if (on) parts.push(on.textContent.trim().split(" · ")[0]);
+  c.replaceChildren(...parts.flatMap((p, i) => i ? [el("i", "", "/"), el(i === parts.length - 1 ? "b" : "span", "", p)] : [el(parts.length === 1 ? "b" : "span", "", p)]));
+}
+// the gateway at the sidebar's foot: where it listens, or that it doesn't
+var sideGwAt = null;
+function sideGwRead() {
+  if (sideGwRead.due && sideNav() && !sideGwAt) api("providers").then((r) => renderSideGw(r?.gateway), () => {});
+}
+function renderSideGw(g) {
+  const b = $("#sideGw");
+  if (!b) return;
+  if (g) sideGwAt = g;
+  g = sideGwAt;
+  b.hidden = !g?.url;
+  if (b.hidden) return;
+  let host = g.url;
+  try { host = new URL(g.url).host; } catch {}
+  b.classList.toggle("off", !g.running);
+  const s = b.querySelector("span");
+  s.textContent = g.running ? t("Gateway") + " " + host : t("Gateway stopped");
+  // the address is what the line is for: a language whose word for the
+  // gateway leaves it no room ("Zugangspunkt") says the address alone, the
+  // word kept in its tooltip
+  if (g.running && s.scrollWidth > s.clientWidth) s.textContent = host;
+  b.title = g.running ? t("Gateway") + " " + g.url : g.url;
+}
+if (mode === "window") {
+  $("#sideGw").onclick = () => { show("gateway"); $("#sideGw").blur(); };
+  sideQuery.addEventListener?.("change", layoutNav);
+  layoutNav();
+  $("#sideToggle").onclick = toggleSideNav;
+  if (!web) addEventListener("keydown", (e) => {
+    const mac = /^Mac/.test(navigator.platform);
+    const mod = mac ? e.metaKey && e.ctrlKey && !e.shiftKey : e.ctrlKey && e.shiftKey && !e.metaKey;
+    if (!mod || e.altKey || e.repeat || e.code !== "KeyS") return;
+    e.preventDefault();
+    toggleSideNav();
+  }, true);
+  // the page's strip drawn again (a count, another language, a tab picked
+  // there or by a link) is drawn again in the sidebar, once a frame
+  let queued = false;
+  const again = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; navSubs(); }); };
+  const mo = new MutationObserver(again);
+  for (const v of Object.keys(NAV_SUBS)) mo.observe($("#view-" + v), { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
+  // a page whose head is only its tools (Library, Plugins, Settings) has them
+  // in the title bar beside the sidebar (app.css): between where the reader
+  // is and the window's own buttons, so no row of its own stands empty
+  // measured on the next frame, not inside the observer's callback, which
+  // would ask for a second layout of the same frame
+  let toolsAt = 0;
+  const tools = () => {
+    if (toolsAt) return;
+    toolsAt = requestAnimationFrame(() => {
+      toolsAt = 0;
+      const top = $(".top"), c = $("#crumb").getBoundingClientRect(), a = $(".actions").getBoundingClientRect();
+      const st = document.documentElement.style;
+      const set = (k, v) => { if (st.getPropertyValue(k) !== v) st.setProperty(k, v); };
+      set("--top-h", top.offsetHeight + "px");
+      set("--tools-l", Math.ceil(c.right + 16) + "px");
+      set("--tools-r", Math.ceil(innerWidth - a.left + 8) + "px");
+    });
+  };
+  const ro = new ResizeObserver(tools);
+  for (const e of [$(".top"), $("#crumb"), $(".actions")]) ro.observe(e);
+  addEventListener("resize", tools);
+  // the address shown from the start, not only once a page has read the
+  // providers: read for the sidebar only while there is one
+  setTimeout(() => { sideGwRead.due = true; sideGwRead(); }, 1500);
+}
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { load(true); wag(); } });
 // an agent's config can be rewritten, or the agent run round magpie, while the
@@ -23034,7 +23344,7 @@ if (mode === "window" && params.get("view") === "usage") {
   history.replaceState(null, "", u);
 }
 if (mode === "window" && ["providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"].includes(params.get("view"))) show(params.get("view"));
-else if (mode === "window" && !gatewayMode) slide($("#nav"), "nav");
+else if (mode === "window" && !gatewayMode && !sideNav()) slide($("#nav"), "nav");
 // in gateway mode the first page is Providers, Agents' tab gone
 if (gatewayMode) setGatewayMode(true);
 load();

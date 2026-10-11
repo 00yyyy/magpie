@@ -107,12 +107,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.clock.fastForward(31e3);
       await settle();
       const m = asked();
-      await page.locator("#usageTab .opt").nth(1).click();
+      await page.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();
       await page.evaluate(() => window.dispatchEvent(new Event("focus")));
       await settle();
       assert.equal(asked(), m, `the Requests tab brought back asks nothing: ${acct.reads}`);
       acct.vendor = 80;
-      await page.locator("#usageTab .opt").first().click();
+      await page.locator(":is(#usageTab .opt, .nav-s):visible").first().click();
       await shows(80);
       assert.equal(asked(), m + 1, `the Overview picked asks: ${acct.reads}`);
 

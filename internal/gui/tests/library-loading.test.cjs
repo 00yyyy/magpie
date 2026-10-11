@@ -44,7 +44,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
   test(engine + ": the Library while it loads", async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
-    const ctx = await browser.newContext({ viewport: { width: 980, height: 800 } });
+    // under the sidebar's width: the tabs here are the page's own strip
+    const ctx = await browser.newContext({ viewport: { width: 860, height: 800 } });
     await ctx.addInitScript(() => { try { if (!sessionStorage.getItem("seeded")) { localStorage.setItem("magpie.libTab", "skills"); sessionStorage.setItem("seeded", "1"); } } catch {} });
     const page = await ctx.newPage();
     page.setDefaultTimeout(5000);

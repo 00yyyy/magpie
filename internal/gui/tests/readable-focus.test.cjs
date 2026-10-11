@@ -130,7 +130,7 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       // buttons, and the page keeps the reader's place against a script's scroll
       const setup = async () => {
         await page.goto("http://magpie.test/?view=settings");
-        await page.locator("#setTab-general").waitFor();
+        await page.locator(":is(#setTab-general, .nav-s[data-of=setTab-general]):visible").waitFor();
         await page.locator("#view-settings").evaluate((v) => {
           const first = document.createElement("button"); first.id = "focus-start"; first.textContent = "Edit";
           const spacer = document.createElement("div"); spacer.style.cssText = "flex:none;height:1400px";

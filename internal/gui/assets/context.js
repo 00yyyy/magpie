@@ -1124,14 +1124,14 @@
   function renderContext() {
     const pane = $("#contextPane");
     if (!pane) return;
-    const tools = el("div", "sess-tools ctx-tools");
-    tools.append(segs(CTX_RANGES.map(([id, n]) => [id, t(n)]), ctxDays, (id) => {
+    // the range sits in the Usage page's own head, where the other tabs keep
+    // theirs, so no row of its own stands empty above the pane
+    $("#ctxRange")?.replaceChildren(segs(CTX_RANGES.map(([id, n]) => [id, t(n)]), ctxDays, (id) => {
       ctxDays = id;
       try { localStorage.setItem("magpie.ctxDays", id); } catch {}
       loadContext();
     }));
-    tools.append(el("span", "grow"));
-    pane.replaceChildren(tools);
+    pane.replaceChildren();
     pane.classList.toggle("still", ctxDrawn && !!ctxData);
     pane.classList.toggle("tune-still", tuneDrawn && !!tuneData);
     ctxDrawn = !!ctxData, tuneDrawn = !!tuneData;

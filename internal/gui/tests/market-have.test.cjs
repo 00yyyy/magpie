@@ -124,7 +124,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
 
       await t.test("a skill removed is no longer marked added", async () => {
-        await view.locator(".lib-tabs .opt").nth(2).click();
+        await view.page().locator(":is(.lib-tabs .opt, .nav-s):visible").nth(2).click();
         await card("skills", "acme/skills/pdf").locator(".mk-have").waitFor();
         await view.locator(".lib-row", { hasText: "pdf" }).locator(".lib-icon.danger").click();
         await page.locator(".lib-editor").getByRole("button", { name: words[lang].removeSkill, exact: true }).click();

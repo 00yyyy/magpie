@@ -71,10 +71,11 @@ const L = {
   zh: { mode: "网关模式", noAgents: "当前开启：本机没有 Agent", off: "当前关闭：本机找到了 Agent" },
 };
 const HIDDEN = ["agents", "library"];
-const KEPT = ["providers", "gateway", "routing", "usage", "sessions", "plugins"];
+// in the order the pages are grouped in (work, models, insights, extend)
+const KEPT = ["sessions", "providers", "routing", "gateway", "usage", "plugins"];
 
 // the tabs shown, the page shown
-const tabs = (page) => page.evaluate(() => [...document.querySelectorAll("#nav button")].filter((b) => !b.hidden && b.offsetParent).map((b) => b.dataset.view));
+const tabs = (page) => page.evaluate(() => [...document.querySelectorAll("#nav button[data-view]")].filter((b) => !b.hidden && b.offsetParent).map((b) => b.dataset.view));
 const viewShown = (page) => page.evaluate(() => [...document.querySelectorAll("main.view")].filter((v) => !v.hidden).map((v) => v.id));
 // the rows gateway mode leaves out of Settings, each shown or not
 const agentRows = (page) => page.evaluate(() => ["#plainNamesSegs", "#codexAgentsV1Segs", "#fullContextSegs", "#codexTitlesPick", "#codexAutoReviewPick", "#usageAlertSegs", "#balanceAlertSegs", "#resetReminderSegs", "#turnDoneSegs"]
@@ -141,7 +142,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await clickStill(page, "#gatewayModeSegs .opt:nth-child(4)", `${where}: Off`);
       await page.waitForFunction(() => !document.querySelector('#nav button[data-view="agents"]').hidden);
       assert.deepEqual(posts.filter((p) => p[0] === "gateway-mode"), [["gateway-mode", "off"]], where);
-      assert.deepEqual(await tabs(page), ["agents", "providers", "gateway", "routing", "usage", "sessions", "library", "plugins"], `${where}: off`);
+      assert.deepEqual(await tabs(page), ["agents", "sessions", "library", "providers", "routing", "gateway", "usage", "plugins"], `${where}: off`);
       assert.deepEqual(await viewShown(page), ["view-settings"], `${where}: Settings stays`);
       assert.deepEqual(await agentRows(page), [true, true, true, true, true, true, true, true, true], `${where}: rows back`);
       assert.doesNotMatch(await page.locator("#gatewayModeSub").textContent(), new RegExp(L[lang].noAgents), where);
@@ -174,7 +175,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", server(lang, [], { web, gateway: false, agents: true }));
         await page.goto("http://magpie.test/");
         await page.waitForSelector("#nav button.on");
-        assert.deepEqual(await tabs(page), ["agents", "providers", "gateway", "routing", "usage", "sessions", "library", "plugins"], where);
+        assert.deepEqual(await tabs(page), ["agents", "sessions", "library", "providers", "routing", "gateway", "usage", "plugins"], where);
         assert.deepEqual(await viewShown(page), ["view-agents"], where);
         await page.locator("#prefs").click();
         await page.waitForSelector("#langSegs .opt");

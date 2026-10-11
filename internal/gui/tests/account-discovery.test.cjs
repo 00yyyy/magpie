@@ -69,7 +69,7 @@ async function open(browser, lang, width, posts, over) {
   await page.route("**/*", server(lang, posts, over));
   await page.goto("http://magpie.test/?view=usage");
   await page.locator("#prefs").click();
-  await page.locator("#setTab-privacy").click();
+  await page.locator(":is(#setTab-privacy, .nav-s[data-of=setTab-privacy]):visible").click();
   await page.locator("#discoveryList .opt").first().waitFor();
   return { context, page, errors };
 }

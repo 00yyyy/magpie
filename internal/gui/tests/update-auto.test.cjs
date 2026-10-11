@@ -100,7 +100,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=settings");
         // the rows are in Settings' About part
         const aboutTab = async () => {
-          await page.locator("#setTab-about").click();
+          await page.locator(":is(#setTab-about, .nav-s[data-of=setTab-about]):visible").click();
           await page.locator("#setPage-about").waitFor({ state: "visible" });
         };
         await aboutTab();
