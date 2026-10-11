@@ -68,7 +68,7 @@ func (s *Server) retrieve(path, operation string) http.HandlerFunc {
 		if isGroup {
 			// a model a pause rule holds for now is left out, as for a chat
 			var paused []provider.Paused
-			if ms, paused = provider.PausedOut(g.Live(), ms, agentOf(r), ruleClock()); len(ms) == 0 && len(paused) > 0 {
+			if ms, paused = provider.PausedOut(g.Live(), ms, agentOf(r), "", ruleClock()); len(ms) == 0 && len(paused) > 0 {
 				msg := pausedError(asked, paused)
 				call.Status, call.Error = 503, msg
 				writeError(w, provider.Chat, 503, msg)

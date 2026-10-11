@@ -529,6 +529,8 @@ button.rt-session { cursor: pointer; }
 .rt-cond.in input, .editor .rt-cond.in input[type="text"] { width: 24ch; }
 .rt-cond.fd { cursor: text; }
 .rt-cond.fd input, .editor .rt-cond.fd input[type="text"] { width: 24ch; }
+.rt-cond.xf { cursor: text; }
+.rt-cond.xf input, .editor .rt-cond.xf input[type="text"] { width: 24ch; }
 /* a rule's hours: two times in the pill, typed; one that isn't a time is marked */
 .rt-cond.tm { cursor: text; }
 .rt-cond.tm input.clock, .editor .rt-cond.tm input.clock[type="text"] { width: 5.5ch; text-align: center; }

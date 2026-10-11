@@ -1453,7 +1453,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// model paused in its vendor's peak hours)
 	var paused []provider.Paused
 	if isGroup {
-		ms, paused = provider.PausedOut(g, ms, agent, ruleClock())
+		// a pause by folder (#1606) reads the folder the agent says it
+		// works in; one that says none is outside every folder
+		folder := ""
+		if provider.PausesByFolder(g, ms) {
+			if req, err := parse(from, body); err == nil {
+				folder = workDir(req)
+			}
+		}
+		ms, paused = provider.PausedOut(g, ms, agent, folder, ruleClock())
 		if len(ms) == 0 && len(paused) > 0 {
 			call.Status, call.Error = 503, "every model paused"
 			writeError(w, from, 503, pausedError(call.Model, paused))

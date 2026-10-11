@@ -167,7 +167,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 	if had && tr.input > q.Tokens {
 		q.Tokens = tr.input // what the vendor counted last, a floor: the conversation only grew since
 	}
-	if slices.ContainsFunc(g.Rules, func(r provider.Rule) bool { return len(r.Folders) > 0 }) {
+	if slices.ContainsFunc(g.Rules, provider.Rule.ByFolder) {
 		q.Folder = workDir(req)
 	}
 	hit := &RuleHit{Turn: turn, Tokens: q.Tokens, Images: q.Images, Effort: q.Effort, Folder: q.Folder, Bare: len(g.Rules) == 0}
