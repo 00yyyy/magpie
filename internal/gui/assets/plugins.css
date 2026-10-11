@@ -114,6 +114,9 @@ button.pm-chip:disabled { cursor: default; opacity: .6; }
 .pm-act:hover:not(:disabled) { background: var(--pill-hover); color: var(--fg); }
 .pm-act.get { background: var(--accent-soft); color: var(--accent); }
 .pm-act.get:hover:not(:disabled) { background: var(--accent); color: var(--accent-fg); }
+/* an update out: Install's size, green for its own (#1587) */
+.pm-act.pm-up { background: var(--green-soft); color: var(--green); }
+.pm-act.pm-up:hover:not(:disabled) { background: var(--green); color: var(--card); }
 .pm-act.go { background: var(--accent); color: var(--accent-fg); }
 .pm-act.go:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); color: var(--accent-fg); }
 .pm-act.done { background: none; color: var(--green); padding: 0 8px; min-width: 0; }
