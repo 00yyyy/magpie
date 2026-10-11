@@ -104,18 +104,21 @@ func TestTurnDoneSaidAtTheTurnsEnd(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			ends, length := turnsFollowed(t, time.Nanosecond)
 			session := "s-" + c.name
+			// the turn runs from its first request: the clock starts
+			// before it, so a slow first request on a busy machine is in
+			// both (#1629)
+			start := time.Now()
 			send(c.path, c.body, session, "", true)
 			noEnd(t, ends, "after a reply that called a tool")
 			// a subagent's last reply, its parent still waiting on it
 			send(c.path, c.body, session, "agent-1", false)
 			noEnd(t, ends, "after a subagent's last reply")
-			start := time.Now()
 			send(c.path, c.body, session, "", false)
 			e := gotEnd(t, ends)
 			if e.Session != session || e.Agent == "" || e.Folder != c.folder {
 				t.Fatalf("end %+v", e)
 			}
-			if e.Took < 8*turnQuiet || e.Took > time.Since(start)+20*turnQuiet {
+			if e.Took < 8*turnQuiet || e.Took > time.Since(start) {
 				t.Fatalf("took %v: the turn ran from its first request to its last reply", e.Took)
 			}
 			noEnd(t, ends, "said once")
