@@ -321,6 +321,17 @@ type Totals struct {
 	TTFT      int64 `json:"ttft_ms,omitempty"`
 	DecodeMs  int64 `json:"decode_ms,omitempty"`
 	DecodeOut int   `json:"decode_out,omitempty"`
+	// DecodeN is how many replies DecodeMs and DecodeOut are of: the ones
+	// whose speed was measured, which a speed is shown with, so a group of
+	// 260 calls whose speed is one reply's says so (Fallmonkey on Discord)
+	DecodeN int `json:"decode_n,omitempty"`
+	// FloorOut tokens over FloorMs are the least FloorN replies read from a
+	// session file wrote at, those with no first token (Row.Floor): what a
+	// group none of whose replies was measured shows, as "≥", beside how
+	// many it is of. They are never in Speed.
+	FloorOut int   `json:"floor_out,omitempty"`
+	FloorMs  int64 `json:"floor_ms,omitempty"`
+	FloorN   int   `json:"floor_n,omitempty"`
 }
 
 // Tokens is what went in and out, excluding cache traffic.
@@ -341,6 +352,15 @@ func (t Totals) Speed() float64 {
 		return 0
 	}
 	return float64(t.DecodeOut) / (float64(t.DecodeMs) / 1000)
+}
+
+// Floor is the least the replies with no first token wrote at, in tokens a
+// second over their whole time (Row.Floor): 0 for none.
+func (t Totals) Floor() float64 {
+	if t.FloorMs <= 0 {
+		return 0
+	}
+	return float64(t.FloorOut) / (float64(t.FloorMs) / 1000)
 }
 
 // A reply's speed is its output tokens over its decode window, the ms
@@ -478,6 +498,7 @@ func (t *Totals) add(r Record, price *catalog.Price) {
 		if n, w := r.Decode(); w > 0 {
 			t.DecodeMs += w
 			t.DecodeOut += n
+			t.DecodeN++
 		}
 	}
 	if r.Input+r.Output == 0 {

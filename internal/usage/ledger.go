@@ -606,7 +606,13 @@ func (t *Totals) addRow(r Row) {
 		if n, w := r.Decode(); w > 0 {
 			t.DecodeMs += w
 			t.DecodeOut += n
+			t.DecodeN++
 		}
+	}
+	if n, ms := r.Floor(); ms > 0 {
+		t.FloorOut += n
+		t.FloorMs += ms
+		t.FloorN++
 	}
 	t.Calls++
 	if r.Failed() {
@@ -624,6 +630,33 @@ func (t *Totals) addRow(r Row) {
 	case r.Input+r.Output > 0:
 		t.Unpriced++
 	}
+}
+
+// FloorAgents are the agents whose session files time a call from the line
+// that asked for it, written before it was sent, to its reply's last
+// (Claude Code's, Claude Desktop's): their calls' tokens over that time are
+// a floor of how fast the reply wrote. A Codex call in a turn of several can
+// be timed from inside the call, and OpenCode's isn't checked against real
+// sessions, so they tell none. app.js's LED_FLOOR_AGENTS has the same.
+var FloorAgents = map[string]bool{"claude": true, "claude-desktop": true}
+
+// Floor is the tokens and ms a row read from a session file tells the least
+// its reply wrote at by, when its speed wasn't measured: its output over its
+// whole time, the wait for the first token in it, for a reply of 1,000
+// tokens or more over a second or more (a shorter one's wait is too much of
+// it to tell anything) and no faster than MaxDecodeSpeed. 0, 0 when it
+// tells none. app.js's ledFloorSpeed is the same rule for one row.
+func (r Row) Floor() (tokens int, ms int64) {
+	if r.Source != "log" || !FloorAgents[r.Agent] || r.Failed() {
+		return 0, 0
+	}
+	if _, w := r.Decode(); w > 0 {
+		return 0, 0
+	}
+	if r.Output < 1000 || r.Millis < 1000 || int64(r.Output)*1000 > MaxDecodeSpeed*r.Millis {
+		return 0, 0
+	}
+	return r.Output, r.Millis
 }
 
 // Dimensions are what calls are told apart by: the provider they went to,

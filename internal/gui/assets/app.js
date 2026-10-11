@@ -15985,8 +15985,9 @@ function renderUsage() {
       // wrote after (#196)
       if (g.timed) {
         sub.push(t("TTFT {ms}", { ms: ledTook(Math.round(g.ttft_ms / g.timed)) }));
-        if (g.decode_ms > 0) sub.push(t("{n} tok/s", { n: Math.round(g.decode_out / (g.decode_ms / 1000)) }));
       }
+      const gs = ledGroupSpeed(g);
+      if (gs) sub.push(gs.text);
       who.append(el("div", "sub", sub.join(" · ")));
       r.append(who);
       const share = el("div", "share");
@@ -16402,10 +16403,32 @@ function cacheTTLs(x, fmt) {
 // how fast the timed replies of a point, a share or a part wrote, in tokens
 // a second after their first (usage.Totals.Speed): 0 for none timed
 const ledSpeed = (x) => x?.decode_ms > 0 ? (1000 * x.decode_out) / x.decode_ms : 0;
+// the least the replies of a group that has no first token wrote at
+// (usage.Totals.Floor, ledFloorSpeed's for each): 0 for none
+const ledFloor = (x) => x?.floor_ms > 0 ? (1000 * x.floor_out) / x.floor_ms : 0;
+// a group's speed as every ranking and the Output speed card say it, by one
+// rule (Fallmonkey on Discord): with replies whose speed was measured, their
+// speed and how many they are, "125 tok/s (1)", not beside "260 requests"
+// alone; with none, but replies read from a session file that tell the
+// least they wrote at, that floor and how many, "≥100 tok/s (30)"; else
+// nothing. The Requests tab says the same of each row: "125 tok/s" or
+// "≥100 tok/s". v is the figure a speed ranking orders by and bars.
+function ledGroupSpeed(x) {
+  const v = ledSpeed(x), f = v ? 0 : ledFloor(x), k = v ? x.decode_n || 0 : x?.floor_n || 0;
+  if (!v && !f) return null;
+  const n = ledNum(Math.round(v || f));
+  const text = (f ? "≥" : "") + (k ? t("{n} tok/s ({k})", { n, k: ledNum(k) }) : t("{n} tok/s", { n }));
+  const title = !k ? "" : v ? t(k === 1 ? "Measured on {k} reply, from its first token to its end; the others tell no speed" : "Measured on {k} replies, from their first token to their end; the others tell no speed", { k: ledNum(k) })
+    : t(k === 1 ? "At least: {k} reply read from a session file, which has no first token, so the wait for it is counted too" : "At least: {k} replies read from session files, which have no first token, so the wait for it is counted too", { k: ledNum(k) });
+  return { v: v || f, text, title };
+}
 // their mean wait for the first token, 0 for none
 const ledTTFT = (x) => x?.timed > 0 ? x.ttft_ms / x.timed : 0;
 // a metric's value of a point or a share, as the chart counts it
 const ledValue = (m, x) => m === "speed" ? ledSpeed(x) : m === "cost" ? +x.cost || 0 : m === "calls" ? +x.calls || 0 : allTokens(x);
+// of a share in the ranking: a speed is what its row says, the floor of a
+// group none of whose replies was measured (ledGroupSpeed)
+const ledRankValue = (m, x) => m === "speed" ? ledGroupSpeed(x)?.v || 0 : ledValue(m, x);
 // of a point's part, which has its calls, tokens, cost and speed
 const ledPart = (m, x) => m === "speed" ? ledSpeed(x) : m === "cost" ? +x.cost || 0 : m === "calls" ? +x.calls || 0 : +x.tokens || 0;
 // a metric as its axis and its values say it
@@ -16423,7 +16446,7 @@ function ledAxis(max) {
 // what a chart tells apart, most first, and the colour of each: those of the
 // ranking's top, and the rest together as "Other"
 function ledCategories(l, split, metric) {
-  const list = (l.by?.[split] || []).slice().sort((a, b) => ledValue(metric, b) - ledValue(metric, a) || allTokens(b) - allTokens(a));
+  const list = (l.by?.[split] || []).slice().sort((a, b) => ledRankValue(metric, b) - ledRankValue(metric, a) || allTokens(b) - allTokens(a));
   const top = list.slice(0, LED_SHOWN).map((x, i) => ({ ...x, color: `var(--c${i + 1})` }));
   return { top, rest: list.slice(LED_SHOWN), list };
 }
@@ -16627,11 +16650,11 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
   }
   if (!list.length) return;
   const sum = list.reduce((a, x) => a + ledValue(metric, x), 0) || 1;
-  const leader = Math.max(1, ledValue(metric, top[0]));
+  const leader = Math.max(1, ledRankValue(metric, top[0]));
   const one = (x, color, plain) => {
     const b = el("button", "rk" + (plain ? " plain" : "") + (picked && picked === x.id ? " on" : ""));
     b.type = "button";
-    const v = ledValue(metric, x);
+    const v = ledRankValue(metric, x), gs = ledGroupSpeed(x);
     const l1 = el("div", "rk-a");
     const sw = el("i", "rk-sw");
     sw.style.background = color;
@@ -16639,7 +16662,9 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
     if (x.icon && split !== "model") l1.append(icon(x.icon));
     const nm = el("span", "rk-nm", t(x.name || x.id || "—"));
     nm.title = t(x.name || x.id || "");
-    l1.append(nm, el("span", "rk-val", ledFormatLong(metric, v)));
+    const val = el("span", "rk-val", metric === "speed" ? gs?.text || "—" : ledFormatLong(metric, v));
+    if (metric === "speed" && gs?.title) val.title = gs.title;
+    l1.append(nm, val);
     const bar = el("div", "rk-bar"), fill = el("i");
     fill.style.width = Math.max(1.5, (100 * v) / leader).toFixed(1) + "%";
     fill.style.background = color;
@@ -16649,14 +16674,14 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
     if (metric !== "tokens") more.push(t("{n} tokens", { n: fmtN(allTokens(x)) }));
     if (metric !== "cost" && x.cost) more.push("≈" + fmtCost(x));
     // how fast its replies came, beside what they cost (#860)
-    if (metric !== "speed" && ledSpeed(x)) more.push(t("{n} tok/s", { n: ledNum(Math.round(ledSpeed(x))) }));
+    if (metric !== "speed" && gs) more.push(Object.assign(el("span", "rk-speed", gs.text), { title: gs.title }));
     if (ledTTFT(x)) more.push(t("TTFT {ms}", { ms: ledTook(ledTTFT(x)) }));
     const prompt = x.input + x.cache_write + x.cache_read;
     if (prompt && !compact) more.push(t("hit rate {p}", { p: Math.round((100 * x.cache_read) / prompt) + "%" }));
     // a speed is no one's share of all
     if (metric !== "speed") more.push(Math.round((100 * v) / sum) + "%");
     const l2 = el("div", "rk-b");
-    l2.append(more.join(" · "));
+    more.forEach((m, i) => l2.append(...(i ? [" · ", m] : [m])));
     if (x.errors) l2.append(" · ", Object.assign(el("span", "rk-bad"), { textContent: t("{n} failed", { n: x.errors }) }));
     b.append(l1, bar, l2);
     if (!plain) b.onclick = () => choose(x);
@@ -16667,7 +16692,7 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
   for (const x of top) box.append(one(x, x.color));
   if (rest.length) {
     const tot = rest.reduce((acc, x) => {
-      for (const k of ["calls", "errors", "input", "output", "cache_read", "cache_write", "cost", "timed", "ttft_ms", "decode_ms", "decode_out"]) acc[k] = (acc[k] || 0) + (x[k] || 0);
+      for (const k of ["calls", "errors", "input", "output", "cache_read", "cache_write", "cost", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n", "floor_out", "floor_ms", "floor_n"]) acc[k] = (acc[k] || 0) + (x[k] || 0);
       return acc;
     }, { id: "\0other", name: t("Other ({n})", { n: rest.length }) });
     box.append(one(tot, "var(--faint)", true));
@@ -16746,10 +16771,10 @@ function renderLedgerDash(l) {
   meter.append(fill);
   hit.append(meter);
   // how fast the streamed replies wrote, and how long they took to begin (#860)
-  const speed = ledSpeed(l);
-  block("Output speed", speed ? t("{n} tok/s", { n: ledNum(Math.round(speed)) }) : "—",
+  const gs = ledGroupSpeed(l);
+  block("Output speed", gs ? gs.text : "—",
     line(ledTTFT(l) ? t("first token in {ms} on average", { ms: ledTook(ledTTFT(l)) }) : t("no streamed replies timed")),
-    "", t("Output tokens a second after the first, over the streamed replies") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it"));
+    "", [gs?.title, t("Output tokens a second after the first, over the streamed replies") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it")].filter(Boolean).join("\n"));
   drawLedTrend();
 }
 

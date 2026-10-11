@@ -308,9 +308,19 @@ its token count, and Codex can write the output of a tool that call itself
 asked for before the count, so its time can begin inside the call and a
 floor from it could read high; it shows none.
 A call whose session file timed it (a Codex
-turn of one call) shows its own speed as before. The floor is the row's
-alone: the period's output speed, the Speed trend and `magpie usage` count
-timed calls only.
+turn of one call) shows its own speed as before. A floor never mixes into a
+measured speed: the Speed trend and `magpie usage` count timed calls only.
+
+A group's speed (a row of the Usage page's ranking, by model, provider or
+agent, its Output speed card, and the overview's lists) says how many
+replies it is of, by one rule: with replies whose speed was measured, their
+speed and how many they are (`125 tok/s (1)`, though the group has 260
+requests, most of them Codex calls in a turn of several); with none, but
+rows that tell a floor, the least those wrote at, their tokens over their
+whole times, and how many (`≥100 tok/s (30)`); with neither, nothing. Its
+tooltip says which. A ranking by speed orders a floor-only group by its
+floor (`usage.Totals` `decode_n`, `floor_out`, `floor_ms`, `floor_n`;
+`usage.Row.Floor`).
 
 It lists **accounts** too: each Codex, Claude or other subscription account's
 tokens and cost, by the account that actually answered — the one that took
