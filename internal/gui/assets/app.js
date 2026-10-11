@@ -22417,7 +22417,11 @@ setInterval(async () => {
     head.classList.toggle("tight", !!sum && sum.getBoundingClientRect().right > cost.getBoundingClientRect().right + 0.5);
   };
   const later = () => { if (!frame) frame = requestAnimationFrame(fit); };
-  new ResizeObserver(later).observe(head);
+  // the sum's own box too: it can shrink with the head's width the same,
+  // when what is beside it grows after the head was fitted
+  const ro = new ResizeObserver(later);
+  ro.observe(head);
+  ro.observe($("#usageCost"));
   new MutationObserver(later).observe(head, { childList: true, subtree: true, characterData: true });
 }
 // The Usage page reads its numbers again while it is looked at, as often as
