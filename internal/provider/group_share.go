@@ -29,7 +29,9 @@ type SharedGroup struct {
 // effort, context, levels, fast and off members. A group holds no key or
 // account of its own, only provider/model ids, so nothing secret goes with
 // it; what is derived (the models its patterns match now, found, hidden,
-// switched off) stays behind.
+// switched off) stays behind, and so do the rules that hold by a folder:
+// a folder is a path on the sharer's own machine, which names their
+// projects and means nothing on another.
 func ShareGroup(id string) (string, error) {
 	all := Groups()
 	i := slices.IndexFunc(all, func(g Group) bool { return g.ID == id && !g.Hidden })
@@ -49,6 +51,7 @@ func ShareGroup(id string) (string, error) {
 	g.Members, g.Match = ownMembers(g)
 	g.Matched = nil
 	g.Auto, g.Hidden, g.Disabled = false, false, false
+	g.Rules = slices.DeleteFunc(g.Rules, func(r Rule) bool { return len(r.Folders) > 0 })
 	out, err := json.Marshal(SharedGroup{Magpie: ShareMark, Version: ShareVersion, Group: g})
 	return string(out), err
 }
@@ -91,7 +94,8 @@ type Imported struct {
 	// same model (AutoGroupOf), "shared → here".
 	Instead []string `json:"instead,omitempty"`
 	// Rules is how many of the group's rules were left out with the
-	// member they send to, or the classifier their intent needs.
+	// member they send to, or the classifier their intent needs, or for
+	// holding by a folder of the sharer's.
 	Rules int `json:"rules,omitempty"`
 }
 
@@ -205,7 +209,8 @@ func ImportGroup(text string) (Imported, error) {
 			// magpie has, or none
 			use = memberHere(entries, all, r.Use)
 		}
-		if use == "" || !slices.Contains(in, use) || (r.Intent != "" && g.Classifier == "") {
+		// a folder is the sharer's path, never this machine's
+		if use == "" || !slices.Contains(in, use) || (r.Intent != "" && g.Classifier == "") || len(r.Folders) > 0 {
 			res.Rules++
 			continue
 		}
