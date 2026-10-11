@@ -827,6 +827,23 @@ func shapeRefused(status int, body []byte) bool {
 		!quotaWords.Match(body) && !unservedWords.Match(body) && !refusedWords.Match(body)
 }
 
+// regionWords are how a vendor says it doesn't serve where the request
+// comes from: Google's 400 FAILED_PRECONDITION "User location is not
+// supported for the API use." (Gemini, Antigravity, Code Assist; #1621),
+// and OpenAI's "unsupported_country_region_territory", which a relay may
+// pass on as a 400. It is about the address the request leaves from, not
+// the request or the model: another member, going another way, may
+// answer, and this one rests only as briefly as any other failure does.
+// A request's own field named location ("location field is not
+// supported") isn't one.
+var regionWords = regexp.MustCompile(`(?i)\buser location is not supported for the api use\b|unsupported_country_region_territory|country, region,? or territory not supported`)
+
+// regionRefused says the vendor refused the request for where it came
+// from, with regionWords.
+func regionRefused(status int, body []byte) bool {
+	return status >= 400 && regionWords.Match(body)
+}
+
 // protectionWords are how the ChatGPT backend answers a long Codex
 // conversation it won't take as it is: 502 "response protection is
 // unavailable" (vs on Discord, 0.1.1108). It comes back the same for the
@@ -874,7 +891,7 @@ func retryable(status int, body []byte) bool {
 		// in front of zcode.z.ai): another provider goes another way
 		return true
 	case status == 400, status == 422:
-		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body)
+		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body) || regionWords.Match(body)
 	}
 	return false
 }
@@ -902,7 +919,8 @@ const unsaidMargin = 1.2
 // another account of the model, it fails the same, and the agent, told it
 // as a vendor's error, never compacts. The message it is told instead
 // says the prompt is too long. Not for a rate limit, an account's
-// trouble, a model it doesn't serve, or one already saying it overflowed.
+// trouble, a model it doesn't serve, a region it doesn't serve, or one
+// already saying it overflowed.
 func tooLongUnsaid(p provider.Provider, model string, tokens, status int, body []byte) (string, bool) {
 	switch status {
 	case 400, 413, 422, 500, 502, 503, 504:
@@ -910,7 +928,7 @@ func tooLongUnsaid(p provider.Provider, model string, tokens, status int, body [
 		return "", false
 	}
 	if overflowed(status, body) || failure(status, body) != failOther || quotaWords.Match(body) ||
-		unservedWords.Match(body) || refusedWords.Match(body) || provider.EdgeBlocked(body) {
+		unservedWords.Match(body) || refusedWords.Match(body) || provider.EdgeBlocked(body) || regionRefused(status, body) {
 		return "", false
 	}
 	window := windowOf(p, model)
