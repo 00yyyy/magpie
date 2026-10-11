@@ -4674,7 +4674,8 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	err = readSSE(rd, func(_, data string) error {
 		u.add(Usage{Upstream: upstreamOf([]byte(data))})
 		ended = ended || upstreamStop([]byte(data)) != "" ||
-			(actual == provider.Anthropic || actual == provider.Responses) && upstreamEnds(data)
+			(actual == provider.Anthropic || actual == provider.Responses) && upstreamEnds(data) ||
+			geminiKin(actual) && geminiEnds([]byte(data))
 		return dec(data, see)
 	})
 	held()
@@ -4691,12 +4692,13 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		}
 		return writeError(w, from, 502, p.Name+": "+said), said
 	}
-	if col.err == "" && !ended && (actual == provider.Anthropic || actual == provider.Responses) && r.Context().Err() == nil {
+	if col.err == "" && !ended && (actual == provider.Anthropic || actual == provider.Responses || geminiKin(actual)) && r.Context().Err() == nil {
 		// an Anthropic stream that just stopped — no stop_reason, no
 		// message_stop — or a Responses one with no response.completed is
 		// a reply cut short, not a finished one, as a streaming client is
 		// told (streamTranslated): handed whole, a non-streaming client
-		// ends its turn a few words in, as if done
+		// ends its turn a few words in, as if done. A Gemini one is told
+		// by its finishReason (geminiEnds, #1643)
 		msg := p.Name + ": " + errEndedShort.Error()
 		return writeError(w, from, 502, msg), msg
 	}
