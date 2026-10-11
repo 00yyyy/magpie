@@ -200,6 +200,7 @@
     <ul>
       <li><b>No loops.</b> A group can’t be in itself, directly or through the groups in it. Saving Fast with Coder in it, while Coder has Fast, is refused, and the picker doesn’t offer such a group. Groups go at most 8 deep. A group can’t be removed while another has it: take it out there first.</li>
       <li><b>Each group routes by its own routing.</b> Whatever the outer group’s routing, it never reaches inside a group in it: Smart, In turn, Least used or Weekly pace weighs the inner group as one member, by the account or key the inner group would try first, and where it lands the inner group is tried whole, in its own order. Coder on Smart with Claude (In order) and GPT (In order) in it compares Claude’s first with GPT’s first, not all of their accounts together.</li>
+      <li><b>So does a provider routed its own way.</b> A model whose provider routes its accounts or keys In order, In turn, by Least used, Weekly pace or Weight keeps that inside any group, weighed as one by the account or key it would try first and tried whole in its own order. One left on Smart, the default, has its accounts weighed with the group’s others as one pool, so the one whose allowance renews soonest goes first whichever provider it is of.</li>
       <li><b>Failover goes through.</b> If every model in the inner group fails, the outer group’s next member answers, as with any member.</li>
       <li>A model that appears twice (on its own and in a group in it) is asked once, at its first place.</li>
     </ul>

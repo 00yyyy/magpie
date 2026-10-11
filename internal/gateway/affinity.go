@@ -330,10 +330,12 @@ func leastHeld(scope, key string, cs []candidate, pl planned) ([]candidate, plan
 		return cs, pl
 	}
 	if strings.HasPrefix(scope, provider.GroupPrefix) {
-		if _, ms, ok := provider.FindGroup(scope); ok {
+		if g, ms, ok := provider.FindGroup(scope); ok {
 			for _, m := range ms {
-				if len(m.Path) > 1 {
-					return cs, pl // a group in the group: its own routing orders its models (#576)
+				// a group in the group, or a provider routed its own way:
+				// its own routing orders its models or keys (#576)
+				if len(m.Path) > 1 || ownRouting(m.Provider, g) {
+					return cs, pl
 				}
 			}
 		}

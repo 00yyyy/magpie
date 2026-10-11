@@ -346,7 +346,8 @@ func (s *Server) plan(p provider.Provider, model string, from provider.Protocol)
 // weighed together as the group's routing says — in order, member by
 // member, each as its own provider's routing orders it; else all as one,
 // so a subscription whose allowance renews soonest goes first whichever
-// provider it is of. A group in the group is planned by its own routing
+// provider it is of, but for a provider set to route another way, which
+// is planned as a group in the group is (ownRouting). A group in the group is planned by its own routing
 // alone, whatever the group's (#576): in order, in its place; else as
 // one, weighed with the rest by the one it would try first, and tried
 // whole where that one goes — the group's routing picks between its
@@ -399,7 +400,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		// where the one it would try first is, the rest of it after
 		type unit struct {
 			m     provider.Member // the model, for one of its keys
-			cs    []candidate     // a group in g: its own order
+			cs    []candidate     // a group in g, or a provider routed its own way: its own order
 			order []Weighed
 		}
 		var units []unit
@@ -420,19 +421,28 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 				cs := planLevel(m.Via[depth], ms[i:j], depth+1, from, &sub, asides, wAsides)
 				pl.left = append(pl.left, sub.left...)
 				if len(cs) > 0 {
-					// weighed by the first it would try that isn't resting
-					head := cs[0]
-					for _, c := range cs {
-						if _, resting := restOf(c.restKey()); !resting {
-							if _, resting = restOf(c.restID()); !resting {
-								head = c
-								break
-							}
-						}
-					}
-					add(unit{cs: cs, order: sub.order}, head)
+					add(unit{cs: cs, order: sub.order}, firstAwake(cs))
 				}
 				i = j
+				continue
+			}
+			if ownRouting(m.Provider, g) {
+				// a provider routed its own way keeps it, as a group
+				// in the group does: weighed as one by the first it
+				// would try, and tried whole in its own order (kchen0x
+				// on X: Antigravity in order inside a Smart group)
+				cs, wg := weigh(m.Provider, keys(m), m.Model, from)
+				var order []Weighed
+				for k, c := range cs {
+					w := weighed(c, m.Provider, wg, false, from)
+					w.Turn = k == 0 && (m.Provider.Routing == provider.Rotate || m.Provider.Routing == provider.Weighted) && len(cs) > 1
+					w.Via = m.Groups()
+					order = append(order, w)
+				}
+				if len(cs) > 0 {
+					add(unit{cs: cs, order: order}, firstAwake(cs))
+				}
+				i++
 				continue
 			}
 			for _, c := range keys(m) {
@@ -488,6 +498,29 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		i++
 	}
 	return out
+}
+
+// firstAwake is the first of cs that isn't resting, else the first: what
+// a group in a group, or a provider routed its own way, is weighed by.
+func firstAwake(cs []candidate) candidate {
+	for _, c := range cs {
+		if _, resting := restOf(c.restKey()); !resting {
+			if _, resting = restOf(c.restID()); !resting {
+				return c
+			}
+		}
+	}
+	return cs[0]
+}
+
+// ownRouting: p, a model's provider in g, is routed by its own routing
+// rather than weighed key by key with the rest of g. One left on Smart,
+// the default, or routed as g is, is weighed with g's other keys and
+// accounts as one pool, so a subscription whose allowance renews soonest
+// goes first whichever provider it is of; one set another way keeps it,
+// as the user set it, whatever g's routing.
+func ownRouting(p provider.Provider, g provider.Group) bool {
+	return p.Routing != "" && p.Routing != g.Routing
 }
 
 // capHeld is how the account acct of p is held at its usage cap for
