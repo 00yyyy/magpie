@@ -5600,10 +5600,14 @@ function renderGateway() {
   const fix = gatewayFixButton(g, older);
   if (fix) who.append(fix);
   if (gatewayFix.err && gatewayFix.when === gatewayFixWhen(g)) who.append(el("div", "sub old err", gatewayFix.err));
+  // served to other machines' browsers (magpie web), the address shown is
+  // the one they reach, MAGPIE_PUBLIC_URL's, not this computer's loopback
+  // (#1551)
+  const shown = web && g.publicURL || g.url;
   const url = el("button", "url");
-  url.append(el("code", "", g.url));
+  url.append(el("code", "", shown));
   url.title = t("Copy the gateway URL");
-  url.onclick = () => copy(g.url, t("Gateway URL"));
+  url.onclick = () => copy(shown, t("Gateway URL"));
   box.append(dot, who, url);
 }
 
@@ -5905,8 +5909,10 @@ function renderConnect() {
   const urls = [g.url, ...(g.lanURLs || [])];
   // the address picked is kept (coeo91): an address not offered right now
   // (the network not up yet after a start) shows this computer's, and the
-  // pick comes back with it
-  connectURL = urls.includes(connectWant) ? connectWant : g.url;
+  // pick comes back with it. With none picked, MAGPIE_PUBLIC_URL is where
+  // it starts: it says the address other machines use (#1551)
+  const first = g.publicURL && urls.includes(g.publicURL) ? g.publicURL : g.url;
+  connectURL = urls.includes(connectWant) ? connectWant : first;
   // a gateway MAGPIE_ADDR puts on the network (a Docker image's, whose
   // host is another machine to it) is shown with a gateway key everywhere
   const remote = connectURL !== g.url || !!g.onNetwork;
@@ -5938,7 +5944,7 @@ function renderConnect() {
 
   const b = el("div", "val");
   if (urls.length > 1) b.append(connectPick("connectAddress", "Address", base,
-    urls.map((u) => ({ v: u, name: f.base(u), note: t(u === g.url ? "This computer" : "Local network") })), connectURL,
+    urls.map((u) => ({ v: u, name: f.base(u), note: t(u === g.url ? "This computer" : u === g.publicURL ? "Public address" : "Local network") })), connectURL,
     (u) => { connectWant = u; keepPick("magpie.connectAddress", u); renderConnect(); }));
   else b.append(el("code", "", base));
   b.append(copyBtn(base, "Base URL"));
@@ -19491,6 +19497,8 @@ function renderSettings() {
   row(t("Config folder"), s.portable ? t("Portable: everything magpie keeps, in the data folder beside it") : t("providers, profiles and these settings"), s.dir, copyBtn(s.dir, t("Path")), open);
   renderCLI(row(t("Command line"), t("Checking your shells…"), ""));
   row(t("Gateway URL"), t("the address every agent is pointed at"), s.gateway, copyBtn(s.gateway, t("Gateway URL")));
+  // MAGPIE_PUBLIC_URL, where other machines reach it (#1551)
+  if (s.publicURL) row(t("Public address"), t("MAGPIE_PUBLIC_URL: where other computers reach the gateway, with a gateway key"), s.publicURL, copyBtn(s.publicURL, t("Public address"))).id = "publicURLRow";
   const join = el("button", "discord");
   join.innerHTML = DISCORD_SVG;
   join.append(el("span", "", t("Join Discord")));
@@ -20694,7 +20702,8 @@ function renderSearch(s, keep) {
   }
   // the same search as an MCP server of the gateway's (Kayphoon on
   // Discord), for an agent to mount as its web_search tool
-  const mcpURL = (s.gateway || providers?.gateway?.url || `http://127.0.0.1:${s.port || 3425}`).replace(/\/+$/, "") + "/mcp/magpie/web-search";
+  // a page other machines open (magpie web) shows MAGPIE_PUBLIC_URL's (#1551)
+  const mcpURL = ((web && s.publicURL) || s.gateway || providers?.gateway?.url || `http://127.0.0.1:${s.port || 3425}`).replace(/\/+$/, "") + "/mcp/magpie/web-search";
   const mcp = row(t("MCP server"), t("Cursor, Claude Desktop and other agents can add this search as an MCP server (Streamable HTTP) with one web_search tool. From another computer, send a gateway key as Authorization: Bearer <key>."),
     el("code", "", mcpURL), copyBtn(mcpURL, t("Address")));
   mcp.id = "searchMcpRow";

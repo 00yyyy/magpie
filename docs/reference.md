@@ -1363,8 +1363,12 @@ it.
 The gateway listens on `127.0.0.1:3425` (`MAGPIE_ADDR` changes it) and starts
 with the app; `magpie serve` runs it alone. For reverse-proxied or container
 deployments, set `MAGPIE_PUBLIC_URL=https://magpie.example.com` to the base
-URL shown in the console and CLI, including connection examples. Local
-agent configs still use the local gateway address.
+URL shown in the console and CLI, including connection examples. While
+other machines are let in (Share on local network, or a `MAGPIE_ADDR` on
+the network), the Gateway page's Connect starts at it until you pick
+another address there, Settings › About lists it beside the local URL, and
+`magpie web` shows it as the gateway's address. Local agent configs still
+use the local gateway address.
 
 Building an app or agent that should use magpie, or get a row on the
 Agents page: see [Integrating your app or agent](integrating.md).

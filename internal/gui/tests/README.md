@@ -1779,6 +1779,14 @@ about the gateway: loopback, open to the network (listening beyond loopback
 with nothing shared), and a network address that needs an enabled gateway
 key. English and Chinese, Chromium and WebKit, with `/api/plugins` faked.
 
+`public-url-default.test.cjs` checks that Connect starts at MAGPIE_PUBLIC_URL,
+labelled Public address, with the snippets on it, until an address is
+picked, and that a pick (this computer's) is kept after a reload (#1551).
+About shows the public URL beside the local one; magpie web shows it as the
+gateway's address and the MCP server's, the app keeps those local. Without
+MAGPIE_PUBLIC_URL Connect starts at this computer's. Every language,
+Chromium and WebKit, at 1100 and 420 wide.
+
 `provider-picks-stay.test.cjs` checks that the models picked in one
 provider's editor never go to another's (#464): a Refresh or a Forget whose
 list comes back after the editor was left for another provider's leaves that

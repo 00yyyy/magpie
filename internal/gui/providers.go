@@ -338,6 +338,9 @@ type gatewayJSON struct {
 	URL     string   `json:"url"`
 	LAN     bool     `json:"lan"`
 	LANURLs []string `json:"lanURLs,omitempty"`
+	// PublicURL is MAGPIE_PUBLIC_URL when it is among LANURLs: Connect
+	// starts there until the user picks an address (#1551)
+	PublicURL string `json:"publicURL,omitempty"`
 	// OnNetwork: MAGPIE_ADDR puts it beyond loopback (a server, a Docker
 	// image), so every caller is shown a gateway key, and LAN is true too:
 	// callers from elsewhere, a container's host among them, need one
@@ -736,6 +739,9 @@ func providersState() providersJSON {
 	s.Gateway.LAN = settings.Load().LAN || s.Gateway.OnNetwork
 	if s.Gateway.LAN {
 		s.Gateway.LANURLs = gateway.LANURLs()
+		if u := gateway.PublicURL(); slices.Contains(s.Gateway.LANURLs, u) {
+			s.Gateway.PublicURL = u
+		}
 	}
 	for _, e := range cat {
 		if e.Group == "" {

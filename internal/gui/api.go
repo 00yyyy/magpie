@@ -330,6 +330,11 @@ type settingsJSON struct {
 	Version string `json:"version"`
 	Dir     string `json:"dir"`     // where magpie keeps its files, as shown
 	Gateway string `json:"gateway"` // the local endpoint
+	// PublicURL is MAGPIE_PUBLIC_URL while other machines are let in
+	// (shared, or MAGPIE_ADDR on the network): where they reach the
+	// gateway, shown beside the local address agents here are pointed at
+	// (#1551)
+	PublicURL string `json:"publicURL,omitempty"`
 	// MAGPIE_ADDR, when it sets the gateway's address over Settings' port
 	AddrEnv string `json:"addrEnv,omitempty"`
 	// Dir is the data folder beside a portable magpie (#508)
@@ -501,6 +506,9 @@ func searchState(s *settingsJSON) {
 func settingsState() settingsJSON {
 	s := settingsJSON{Settings: settings.Load(), Version: Version, Dir: tilde(settings.Dir()), Portable: settings.Portable() != "", Gateway: gateway.URL()}
 	s.AddrEnv = os.Getenv("MAGPIE_ADDR")
+	if s.LAN || gateway.OnNetwork() {
+		s.PublicURL = gateway.PublicURL()
+	}
 	s.WSL = runtime.GOOS == "windows"
 	s.Web = webPage.Load()
 	s.GatewayOn, s.GatewayWhy = gatewayMode(s.Web)
