@@ -3298,12 +3298,16 @@ async function load(again) {
     paintUpdateAll(true);
     loadCLIs(); // after the rows, never holding them up
     loadInstalls();
-    if (mode === "panel") { renderPanelQuota(); loadQuotas(); }
+    // the panel brought up on its Allowances tab is the reader opening
+    // them (#1588); the page loaded while the panel is still put away is not
+    if (mode === "panel") { renderPanelQuota(); panelTab === "usage" && !document.hidden && (again || document.hasFocus()) ? quotasOpened() : loadQuotas(); }
     // an open provider editor is someone typing: coming back to the window
     // must not rebuild it under them
     if ((view === "providers" || view === "gateway") && !(editing || adding)) await loadProviders();
     // the window back on the Usage page reads the tab shown as its own timer
-    // does: drawn again only on a change, with no skeleton between
+    // does: drawn again only on a change, with no skeleton between; on the
+    // Overview, where the allowances are, that is opening them (#1588)
+    if (view === "usage" && again && usageTab === "usage") quotasOpened();
     if (view === "usage") await (again && usageDrawn() ? refreshUsage() : loadUsage());
     // so is an open sync form (WebDAV, export, import): its passwords are
     // never sent back, so a rebuild would empty it
@@ -13479,7 +13483,7 @@ let usageRead = 0;
 async function loadUsage(asked) {
   renderUsageTab();
   renderUsageEvery(); // the refresh's tooltip says what it reads on this tab
-  if (asked) loadQuotas(true);
+  if (asked) quotasOpened();
   if (usageTab === "sessions") return loadSessions();
   if (usageTab === "requests") return loadLedger();
   if (usageTab === "context") return window.loadContext?.();
@@ -13492,6 +13496,21 @@ async function loadUsage(asked) {
   renderUsage();
 }
 
+// quotasOpened: the reader opened what shows the allowances (the Usage
+// page's Overview, the tray panel's Allowances tab, a menu bar cell, either
+// brought back to the front), which is asking to see them now (#1588,
+// qq666666qq), as Refresh now is: an asked read, the one that goes out
+// with allowances read only when asked (#1518). Each one asked makes the
+// backend read every account again, so opening within QUOTAS_OPEN_GAP of
+// the last asked read (switching tabs and back, the window's focus and
+// visibility both firing, focus-follows-mouse) asks nothing: it takes what
+// is kept, or the read on its way. Refresh now asks every time.
+const QUOTAS_OPEN_GAP = 30e3;
+let quotasAskedAt = -Infinity;
+function quotasOpened() {
+  return loadQuotas(performance.now() - quotasAskedAt >= QUOTAS_OPEN_GAP);
+}
+
 // An asked load is never swallowed by one already on its way that wasn't:
 // it goes after it.
 // An answer said to be read while the accounts' usage is being read again
@@ -13502,6 +13521,7 @@ async function loadUsage(asked) {
 let quotasLoading = null, quotasLater = 0, quotasTries = 0;
 function loadQuotas(asked, again) {
   if (quotasLoading && (!asked || quotasLoading.asked)) return quotasLoading;
+  if (asked) quotasAskedAt = performance.now();
   if (!again) quotasTries = 0;
   let reading = false, same = false;
   const p = Promise.resolve(quotasLoading).catch(() => {})
@@ -14728,6 +14748,7 @@ function panelQuotaFocus(id) {
   panelPeek = id;
   panelArranging = false;
   setPanelTab("usage");
+  quotasOpened(); // the cell clicked opens them (#1588)
   renderPanelQuota();
   requestAnimationFrame(focusQuotaCard);
 }
@@ -14738,7 +14759,8 @@ if (mode === "panel") {
   tabs.setAttribute("role", "tablist");
   for (const b of tabs.querySelectorAll("button")) {
     b.setAttribute("role", "tab");
-    b.onclick = () => setPanelTab(b.dataset.ptab);
+    // Allowances picked is the reader opening them (#1588)
+    b.onclick = () => { setPanelTab(b.dataset.ptab); if (panelTab === "usage") quotasOpened(); };
   }
   setPanelTab(panelTab);
   // the bar drawn before the panel has its width puts the card again, still;
@@ -17624,7 +17646,8 @@ function renderUsageTab() {
       usageTab = id;
       try { localStorage.setItem("magpie.usageTab", id); } catch {}
       $("#usageCost").replaceChildren();
-      loadUsage().catch((e) => status(e.message, "err"));
+      // to the Overview is to the allowances (#1588)
+      loadUsage(id === "usage").catch((e) => status(e.message, "err"));
     };
     seg.append(b);
   }
