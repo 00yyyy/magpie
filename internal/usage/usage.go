@@ -83,6 +83,17 @@ type Record struct {
 	// long the vendor took to its first content. 0 where it isn't known
 	// (a reply not streamed, or a vendor magpie doesn't reach over HTTP).
 	Sent int64 `json:"sent_ms,omitempty"`
+	// Of Sent, what was magpie's: Own is magpie's own work on the request
+	// (reading it, translating it, choosing whom to ask), Retried the
+	// tries that failed first and the pauses after them, Queued the wait
+	// for a slot of a key's or account's MaxConcurrency or MaxRPM; the
+	// rest, Sent-Own-Retried-Queued, is connecting to the vendor and
+	// sending it the body. #1532: a vendor that held a try ~100 s and
+	// said 503 read as 104 s "In magpie". 0 in a record written before
+	// they were, where Sent is all that is known.
+	Own     int64 `json:"own_ms,omitempty"`
+	Retried int64 `json:"retried_ms,omitempty"`
+	Queued  int64 `json:"queued_ms,omitempty"`
 	// Flow: the ms the reply's content took to come, from where its speed
 	// is counted (DecodeOf): from a tenth of its content to nine tenths,
 	// spread over the whole. A reply a vendor held and let go in one burst

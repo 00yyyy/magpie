@@ -1831,6 +1831,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// what the tries' held streams sent the agent ahead of a reply (#751)
 	kept := &keptAlive{proto: from, told: start}
 	var sentMs int64 // ms from the request to its answering try going to the vendor
+	// of it, magpie's own, the tries that failed first and the wait for a
+	// slot (usage.Record.Own, Retried, Queued: #1532)
+	var ownMs, retriedMs, queuedMs int64
+	var firstBegan time.Time // when the first try began
 	streams := streamOf(body)
 	kept.streams = streams
 	if from == provider.Gemini {
@@ -1892,8 +1896,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		providerAccount = accountOf(c.p)
 		began := time.Now()
+		if firstBegan.IsZero() {
+			firstBegan = began
+		}
 		hw.first.start = began
-		var wrote atomic.Int64
+		// when the request that last went out began to (GetConn), and
+		// when its body was written
+		var asking, asked, wrote atomic.Int64
 		attemptBody := body
 		if from == provider.Responses {
 			// reasoning another sealed, which this one refused earlier in
@@ -2055,11 +2064,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				ctx, autoPicked = provider.WithAutoPicks(ctx, func(m string) { noteMember(hw, r, p, m) })
 			}
 			// when the request last went out to the vendor, its body
-			// written: what came before is magpie's, what after the
-			// vendor's (Record.Sent)
-			ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) {
-				wrote.Store(time.Now().UnixNano())
-			}})
+			// written: what came after is the vendor's (Record.Sent).
+			// Before it, from when it began to go out, is connecting and
+			// sending the body, and before that magpie's (#1532)
+			ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+				GetConn: func(string) { asking.Store(time.Now().UnixNano()) },
+				WroteRequest: func(httptrace.WroteRequestInfo) {
+					asked.Store(asking.Load())
+					wrote.Store(time.Now().UnixNano())
+				}})
 			// a key or account with a MaxConcurrency is asked once one of
 			// its slots is free, in turn; the agent gone while it waits,
 			// nothing is sent (the 499 below)
@@ -2180,9 +2193,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// the request's, from when it came as its ms are: the time before
 		// this try, the ones that failed first, is in it
 		call.TTFT, call.FirstText = sinceStart(began.Sub(start), hw.first.first), sinceStart(began.Sub(start), hw.first.text)
-		sentMs = 0
+		sentMs, ownMs, retriedMs, queuedMs = 0, 0, 0, 0
 		if at := wrote.Load(); at > 0 && call.TTFT > 0 {
 			sentMs = min(max(time.Unix(0, at).Sub(start).Milliseconds(), 1), call.TTFT)
+			ownMs, retriedMs, queuedMs = splitSent(sentMs, start, firstBegan, began, asked.Load(), queued)
 		}
 		if r.Context().Err() != nil && !hw.ended {
 			// the agent went away: nobody failed, and nobody else is asked
@@ -2714,7 +2728,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			Requested: call.Model, Served: call.Usage.Served, Upstream: call.Usage.Upstream,
 			Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 			CacheWrite: call.Usage.CacheWrite, CacheWrite1h: call.Usage.CacheWrite1h, Reasoning: call.Usage.Reasoning, Effort: sent, Millis: call.Millis, Status: call.Status,
-			TTFT: call.TTFT, FirstText: call.FirstText, Flow: call.Flow, Sent: sentMs, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
+			TTFT: call.TTFT, FirstText: call.FirstText, Flow: call.Flow, Sent: sentMs, Own: ownMs, Retried: retriedMs, Queued: queuedMs, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 			RequestID: call.Usage.RequestID, ResponseID: call.Usage.ResponseID, Endpoint: endpointOf(r, from, call.To, lastTried, model), Stop: call.Usage.Stop, Archive: call.archiveName()}
 		if tries > 1 {
 			// answered, or not, after a try that failed first: the ledger
@@ -5509,3 +5523,27 @@ func tooLong(status int, msg string) bool {
 
 // paceWords say a limit on how fast or how much, not on one prompt's size.
 var paceWords = regexp.MustCompile(`(?i)rate.?limit|per (minute|hour|day)|\bTP[MD]\b|please wait|try again later|throttl`)
+
+// splitSent tells what of sent, the ms from the request (start) to its
+// answering try's body written, was magpie's own work, the tries that
+// failed first with their pauses (from the first try's start to this
+// one's), and this try's wait for a slot (queued). asked is when the
+// request that went out began to (GetConn, UnixNano; 0 when unknown):
+// after it is connecting and sending the body, which is neither. #1532:
+// OpenCode Go held a try ~100 s before its 503, and the detail called the
+// whole of it magpie's.
+func splitSent(sent int64, start, firstBegan, began time.Time, asked, queued int64) (own, retried, waited int64) {
+	retried = min(max(began.Sub(firstBegan).Milliseconds(), 0), sent)
+	waited = min(max(queued, 0), sent-retried)
+	own = sent - retried - waited
+	if asked > 0 {
+		// before the first try, and in this one up to its going out
+		before := firstBegan.Sub(start) + time.Unix(0, asked).Sub(began)
+		own = min(max(before.Milliseconds()-waited, 0), own)
+	}
+	if own < 1 {
+		// under a ms, still known: a record with none has no split
+		own = 1
+	}
+	return own, retried, waited
+}

@@ -16364,10 +16364,21 @@ function ledDetail(r, cols) {
   // model the conversation never picked reads as what it is (#714)
   if (r.kind) add("Called for", window.kindName ? window.kindName(r.kind) : r.kind);
   if (r.ttft_ms) add("First token", ledTook(r.ttft_ms));
-  // of it, magpie's own time before the request went to the vendor, and the
-  // vendor's wait from then to its first token
+  // of it, what came before the request went to the vendor, and the
+  // vendor's wait from then to its first token. Before it, magpie's own
+  // time is told apart from the tries that failed first, a wait for a
+  // slot and connecting and sending the body (#1532: a vendor that held a
+  // try ~100 s before its 503 read as 104 s in magpie); a record from
+  // before they were kept has only the whole
   if (r.ttft_ms && r.sent_ms) {
-    add("In magpie", ledTook(r.sent_ms));
+    const split = r.own_ms != null;
+    add("In magpie", ledTook(split ? r.own_ms : r.sent_ms));
+    if (split) {
+      if (r.retried_ms > 0) add("Tries that failed first", ledTook(r.retried_ms));
+      if (r.queued_ms > 0) add("Waiting for a slot", ledTook(r.queued_ms));
+      const sending = r.sent_ms - r.own_ms - (r.retried_ms || 0) - (r.queued_ms || 0);
+      if (sending > 0) add("Connecting and sending", ledTook(sending));
+    }
     add("Vendor's first token", ledTook(Math.max(0, r.ttft_ms - r.sent_ms)));
   }
   if (r.reasoning) add("Reasoning tokens", ledNum(r.reasoning));
