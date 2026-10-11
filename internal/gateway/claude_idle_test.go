@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -48,37 +49,68 @@ func TestClaudeIdleReplacementKeepsItsKey(t *testing.T) {
 // X, Sma1lboy: magpie grew to 158 GB in two days. One run under two keys
 // was the oldest on every pass of keepIdle's loop past idleMost, which
 // took out one key only, so the loop never ended and grew its drop list
-// with the bridge's lock held. Run in a child, which a hang or runaway
-// memory takes down rather than the suite.
+// with the bridge's lock held. Run in a child, which the old loop is taken
+// down with rather than left spinning in the suite. The child fails on what
+// the loop allocates (drop), not on a deadline: the loop that ends is done
+// in microseconds, but a busy machine may take seconds to start the child.
 func TestClaudeIdleEvictionEnds(t *testing.T) {
 	const child = "MAGPIE_TEST_IDLE_EVICTION"
 	if scenario := os.Getenv(child); scenario != "" {
-		b := idleTestBridge()
-		stale := &subscriptionRun{bridge: b, idleAt: time.Unix(1, 0), closed: true}
-		if scenario == "stale" {
-			// an entry whose run says it waits elsewhere
-			b.idle["before"] = stale
-		} else {
-			b.keepIdle(stale, "before", "")
-			b.keepIdle(stale, "after", "")
-		}
-		for i := 0; i < idleMost+2; i++ {
-			b.keepIdle(&subscriptionRun{bridge: b, closed: true}, fmt.Sprint(i), "")
-		}
-		if len(b.idle) != idleMost || b.idle["before"] != nil || b.idle["after"] != nil {
-			t.Fatalf("kept %d runs; the oldest still there: %t", len(b.idle), b.idle["before"] != nil || b.idle["after"] != nil)
-		}
+		idleEvictionChild(t, scenario)
 		return
 	}
 	for _, scenario := range []string{"rekey", "stale"} {
 		t.Run(scenario, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
-			cmd := proc.CommandContext(ctx, os.Args[0], "-test.run=^TestClaudeIdleEvictionEnds$", "-test.timeout=5s")
-			cmd.Env = append(os.Environ(), child+"="+scenario, "GOMEMLIMIT=64MiB")
+			cmd := proc.CommandContext(ctx, os.Args[0], "-test.run=^TestClaudeIdleEvictionEnds$", "-test.timeout=4m")
+			cmd.Env = append(os.Environ(), child+"="+scenario)
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("keepIdle past idleMost did not end: %v\n%s", err, out)
 			}
 		})
+	}
+}
+
+func idleEvictionChild(t *testing.T, scenario string) {
+	b := idleTestBridge()
+	stale := &subscriptionRun{bridge: b, closed: true}
+	if scenario == "stale" {
+		// an entry whose run says it waits elsewhere
+		b.idle["before"] = stale
+	} else {
+		b.keepIdle(stale, "before", "")
+		b.keepIdle(stale, "after", "")
+	}
+	// the longest waiting, set after keepIdle stamps it: a coarse clock
+	// (Windows) would otherwise give the runs below the same time
+	stale.idleAt = time.Unix(1, 0)
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < idleMost+2; i++ {
+			b.keepIdle(&subscriptionRun{bridge: b, closed: true}, fmt.Sprint(i), "")
+		}
+		close(done)
+	}()
+	var at runtime.MemStats
+	runtime.ReadMemStats(&at)
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-done:
+			if len(b.idle) != idleMost || b.idle["before"] != nil || b.idle["after"] != nil {
+				t.Fatalf("kept %d runs; the oldest still there: %t", len(b.idle), b.idle["before"] != nil || b.idle["after"] != nil)
+			}
+			return
+		case <-tick.C:
+			var now runtime.MemStats
+			runtime.ReadMemStats(&now)
+			if grew := now.TotalAlloc - at.TotalAlloc; grew > 256<<20 {
+				// the loop holds b.mu and never returns: the process ends
+				fmt.Fprintf(os.Stderr, "keepIdle allocated %d MiB without ending\n", grew>>20)
+				os.Exit(2)
+			}
+		}
 	}
 }

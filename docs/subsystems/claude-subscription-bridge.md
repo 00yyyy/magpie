@@ -127,7 +127,8 @@ run under two keys was the oldest on every pass, the pass took out only
 its newer key, and the loop never ended: it held `b.mu`, stopping every
 Claude subscription request, and grew its list of runs to let go without
 bound. `claude_idle_test.go` (`TestClaudeIdleEvictionEnds` runs the loop
-in a child process, so the old code fails by timing out there).
+in a child process, which on the old code fails on what the loop
+allocates, not on a deadline).
 
 ## Finding the run: keys
 
