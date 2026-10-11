@@ -2156,8 +2156,11 @@ function setAgentHidden(a, hide) {
 }
 
 const ALT = /^Mac/.test(navigator.platform) ? "⌥" : "Alt+";
+const SHIFT = /^Mac/.test(navigator.platform) ? "⇧" : "Shift+";
 // the arrows of a row menu's Move up and Move down (agents, routing groups)
 const MOVE_UP = "M8 12.5v-9M4 7.25l4-3.75 4 3.75", MOVE_DOWN = "M8 3.5v9M4 8.75l4 3.75 4-3.75";
+// Move to Top and Move to Bottom: the arrow to a bar (a provider row's menu)
+const MOVE_TOP = "M8 13v-7.5M4.5 9l3.5-3.5 3.5 3.5M3.5 2.75h9", MOVE_BOTTOM = "M8 3v7.5M4.5 7l3.5 3.5 3.5-3.5M3.5 13.25h9";
 const EYE_OFF = "M6.6 3.7A6.9 6.9 0 0 1 8 3.5c3.75 0 6.25 4.5 6.25 4.5a11 11 0 0 1-1.5 2M4.4 4.4C2.7 5.55 1.75 8 1.75 8S4.25 12.5 8 12.5c1.2 0 2.25-.45 3.1-1.05M6.75 6.75a1.75 1.75 0 0 0 2.5 2.5M2 2l12 12";
 const EYE = "M1.75 8S4.25 3.5 8 3.5 14.25 8 14.25 8 11.75 12.5 8 12.5 1.75 8 1.75 8ZM8 9.75a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Z";
 
@@ -5068,6 +5071,8 @@ function renderProviders() {
     // a provider on is listed, and tried, in the order the user puts it in
     // (#499): its logo is the handle, as an agent row's is
     row.append(p.off ? icon(p.icon || "generic") : providerHandle(p, row), who, uses, key, providerSwitch(p), chev);
+    // right-click: Move to Top, Move Up, Move Down, Move to Bottom (#1614)
+    if (!p.off) row.oncontextmenu = (ev) => { ev.preventDefault(); openProviderMenu(row.querySelector(".pv-handle"), p); };
     row.onclick = async () => {
       if (providerDirty() && !(await confirmDiscard())) return;
       editing = open ? null : p.id; draft = null; renderProviders();
@@ -5075,6 +5080,7 @@ function renderProviders() {
     list.append(row);
     if (open) dialog = renderEditor(p);
   }
+  findProviders();
   renderExcluded();
   renderFileError();
   renderMovable();
@@ -5099,27 +5105,127 @@ function providerHandle(p, row) {
   const b = el("button", "ag-handle pv-handle");
   b.type = "button";
   b.setAttribute("aria-label", t("Arrange {agent}", { agent: p.name }));
-  b.title = t("Drag to reorder — a model several providers serve goes to the higher one first · Alt+↑/↓ to move");
+  b.title = t("Drag to reorder — a model several providers serve goes to the higher one first · Alt+↑/↓ to move") + " · " + t("right-click to move it to the top or the bottom");
   b.append(icon(p.icon || "generic"));
   b.onkeydown = (e) => {
     if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
     e.preventDefault();
     e.stopPropagation();
-    const ids = providers.providers.filter((x) => !x.off).map((x) => x.id);
-    arrangeProvider(p.id, ids.indexOf(p.id) + (e.key === "ArrowUp" ? -1 : 1), true);
+    const up = e.key === "ArrowUp";
+    // Alt+Shift+↑/↓: all the way to the top or the bottom
+    if (e.shiftKey) arrangeProvider(p.id, up ? 0 : onProviderIds().length - 1, true);
+    else stepProvider(p.id, up ? -1 : 1, true);
   };
   // the click that ends a drag doesn't open the row
   b.addEventListener("click", (e) => { if (b.dataset.dragged) { e.stopPropagation(); e.preventDefault(); } });
   b.onpointerdown = (e) => {
     if (providerArranging) return;
     const list = $("#providers");
-    providerArranging = dragRows(e, b, row, list, [...list.children].filter((r) => r.classList.contains("provider")),
-      (to) => arrangeProvider(p.id, to), closeProtoMenu, () => {
+    // while a search hides some, the row moves among the ones shown: it
+    // takes the place of the one it is dropped on (shownToOn)
+    const rows = [...list.children].filter((r) => r.classList.contains("provider") && !r.hidden);
+    providerArranging = dragRows(e, b, row, list, rows,
+      (to) => arrangeProvider(p.id, shownToOn(rows[to]?.dataset.id)), () => { closeProtoMenu(); closeAgentMenu(); }, () => {
         providerArranging = false;
         if (accountRenderPending && !accountArranging) { accountRenderPending = false; renderProviders(); }
       });
   };
   return b;
+}
+
+// The ids of the providers that are on, in their order, and of those a
+// search shows. While searching, a provider moves among the ones shown:
+// Alt+↑ puts it just above the one shown above it, a drop puts it where the
+// row dropped on was; the ones hidden keep their order among themselves.
+// Move to Top and Move to Bottom go to the top or the bottom of them all.
+const onProviderIds = () => providers.providers.filter((x) => !x.off).map((x) => x.id);
+const shownProviderIds = () => [...$("#providers").children].filter((r) => r.classList.contains("provider") && !r.hidden).map((r) => r.dataset.id);
+const shownToOn = (id) => (id ? onProviderIds().indexOf(id) : -1);
+function stepProvider(id, by, keyboard) {
+  const shown = shownProviderIds(), i = shown.indexOf(id);
+  if (i < 0 || i + by < 0 || i + by >= shown.length) return;
+  arrangeProvider(id, shownToOn(shown[i + by]), keyboard);
+}
+
+// openProviderMenu: a provider row's right-click, the quick way through a
+// long list (#1614): Move to Top and Move to Bottom beside one step up or
+// down, each with its keys.
+function openProviderMenu(anchor, p) {
+  if (!anchor) return;
+  const again = agentMenu?.anchor === anchor;
+  closeAgentMenu();
+  if (again) return;
+  const on = onProviderIds(), shown = shownProviderIds();
+  const i = on.indexOf(p.id), k = shown.indexOf(p.id);
+  if (i < 0) return;
+  openRowMenu(anchor, [
+    { name: "Move to top", icon: MOVE_TOP, key: ALT + SHIFT + "↑", off: i === 0, run: () => arrangeProvider(p.id, 0) },
+    { name: "Move up", icon: MOVE_UP, key: ALT + "↑", off: k <= 0, run: () => stepProvider(p.id, -1) },
+    { name: "Move down", icon: MOVE_DOWN, key: ALT + "↓", off: k < 0 || k >= shown.length - 1, run: () => stepProvider(p.id, 1) },
+    { name: "Move to bottom", icon: MOVE_BOTTOM, key: ALT + SHIFT + "↓", off: i === on.length - 1, run: () => arrangeProvider(p.id, on.length - 1) },
+  ]);
+}
+
+// Providers' search (#1614, ququdu: "供应商很多，然后经常需要翻找"): the
+// words typed keep the rows that say them all, on and off alike, matched on
+// the row's own text and on what it doesn't show: its id, preset, addresses,
+// every model's id and name, each account's user and plan, and the keys'
+// names. The ones turned off show unfolded while searching. Escape or
+// clearing the box brings back every row, the fold as it was.
+let pvQuery = "";
+function providerText(p, row) {
+  const a = p.account;
+  return [row.textContent, p.id, p.name, p.preset, p.host, p.chat, p.responses, p.anthropic, p.gemini,
+    ...(p.models || []).flatMap((m) => [m.id, m.name]),
+    a?.user, a?.agentName, a?.plan, ...(a?.logins || []).flatMap((l) => [l.user, l.plan]),
+    ...Object.values(p.accountNames || {}), ...(p.keyList || []).map((k) => k.name),
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+function findProviders() {
+  const view = $("#view-providers"), q = $("#pvQ"), none = $("#pvNone");
+  q.setAttribute("aria-label", t("Find a provider"));
+  $("#pvHead").hidden = !providers.providers.length;
+  view.classList.toggle("pv-searching", !!pvQuery);
+  const words = pvQuery.split(/\s+/).filter(Boolean), byId = new Map(providers.providers.map((p) => [p.id, p]));
+  let on = 0, off = 0;
+  for (const row of view.querySelectorAll("#providers > .row.provider, #offProviders > .row.provider")) {
+    const p = byId.get(row.dataset.id);
+    const hit = !p || words.every((w) => providerText(p, row).includes(w));
+    row.hidden = !hit;
+    if (hit) p?.off ? off++ : on++;
+  }
+  const offs = providers.providers.filter((p) => p.off).length;
+  // while searching, the ones off that match show, whatever the fold says
+  const fold = $("#foldOff");
+  fold.disabled = !!pvQuery;
+  fold.setAttribute("aria-expanded", String(!!pvQuery || !offFolded));
+  if (pvQuery) {
+    $("#providers").hidden = !on;
+    $("#offHead").hidden = !off;
+    $("#offProviders").hidden = !off;
+    $("#offCount").textContent = off ? String(off) : "";
+  } else {
+    $("#providers").hidden = offs === providers.providers.length;
+    $("#offHead").hidden = !offs;
+    $("#offProviders").hidden = !offs || offFolded;
+    $("#offCount").textContent = offs ? String(offs) : "";
+  }
+  none.hidden = !pvQuery || on + off > 0;
+  none.textContent = none.hidden ? "" : t("No provider matches “{q}”", { q: q.value.trim() });
+}
+{
+  const q = $("#pvQ");
+  if (q) {
+    q.oninput = () => { pvQuery = q.value.trim().toLowerCase(); findProviders(); };
+    q.onkeydown = (e) => {
+      if (e.key !== "Escape" || !q.value) return;
+      e.preventDefault();
+      e.stopPropagation();
+      q.value = "";
+      pvQuery = "";
+      findProviders();
+    };
+  }
 }
 
 // arrangeProvider puts the provider at index `to` among the ones on; the
@@ -5149,10 +5255,12 @@ async function arrangeProvider(id, to, keyboard) {
   }
   // a later move, made while this one was saved, has the last word
   if (seq !== providerArrangeSeq) return;
-  const held = document.activeElement === handle();
+  // the handle the keyboard is on keeps it as the list is drawn again: this
+  // one's, or another's taken up while this one was saved
+  const a = document.activeElement, held = a?.matches?.("#providers .pv-handle") ? a.closest(".row.provider").dataset.id : null;
   providers = next;
   renderProviders();
-  if (held) handle()?.focus({ preventScroll: true });
+  if (held) $(`#providers .row.provider[data-id="${CSS.escape(held)}"] .pv-handle`)?.focus({ preventScroll: true });
 }
 let providerArrangeSeq = 0;
 

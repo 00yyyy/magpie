@@ -1810,6 +1810,14 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* providers switched off, folded below the ones on */
 #view-providers .off-head { margin: 14px 0 6px; padding: 0 2px; flex: none; }
 #view-providers .off-head .note { font-size: 11px; color: var(--faint); }
+/* Providers' search (#1614): a toolbar field over the list, at its right
+   edge as Settings' is; across the page when the window is narrow. While
+   searching, the Turned off fold stays open on the ones that match. */
+#view-providers .pv-head { display: flex; justify-content: flex-end; margin: 0 0 10px; flex: none; }
+#view-providers .pv-q { flex: 0 1 220px; min-width: 120px; }
+#view-providers .pv-none { margin: 18px 2px; }
+#view-providers .off-head .fold:disabled { cursor: default; opacity: 1; }
+@media (max-width: 520px) { #view-providers .pv-q { flex: 1 1 100%; } }
 /* the Models head folds the list away: a chevron, the label, how many */
 .fold { display: inline-flex; align-items: center; gap: 5px; margin-left: -4px; padding: 3px 6px 3px 4px; border-radius: 6px; color: var(--faint); transition: background .12s, color .12s; }
 .fold:hover { background: var(--pill); color: var(--muted); }

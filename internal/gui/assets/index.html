@@ -87,6 +87,8 @@
     <div class="who" role="status" aria-live="polite"><b id="providerDiscoveryCount"></b><span id="providerDiscoverySources"></span></div>
     <div class="actions"><button class="text primary" id="reviewProviderDiscovery">Review and import…</button><button class="text" id="dismissProviderDiscovery" data-t data-tt="Hide these configurations until they change">Ignore</button></div>
   </aside>
+  <div class="pv-head" id="pvHead" hidden><input class="sess-filter pv-q" id="pvQ" type="search" spellcheck="false" autocomplete="off" placeholder="Find a provider" aria-label="Find a provider" data-tp></div>
+  <p class="set-none pv-none" id="pvNone" role="status" hidden></p>
   <div class="list" id="providers"></div>
   <div class="row-head off-head" id="offHead" hidden><button class="fold" id="foldOff" aria-expanded="false" aria-controls="offProviders"><span class="label" data-t>Turned off</span><span class="note" id="offCount"></span></button></div>
   <div class="list" id="offProviders" hidden></div>
