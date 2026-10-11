@@ -11772,6 +11772,9 @@ function quotaError(err) {
   if (/^remote magpie isn't shared/.test(err)) return t("That computer's magpie isn't shared — turn on Settings → Share on local network there");
   if (/^remote magpie didn't take this key/.test(err)) return t("That computer's magpie didn't take this key — use one of its gateway keys in this provider");
   if (/^couldn't reach the remote magpie/.test(err)) return t("Couldn't reach that computer's magpie — check that it is running and its address");
+  // a remote magpie's gateway key card (#1547, remote_key_limits.go)
+  if (/^remote magpie is too old to tell this key's limit/.test(err)) return t("That computer's magpie is too old to tell this key's limit — update magpie there");
+  if (/answered its key's limit in a form magpie doesn't read$/.test(err)) return t("That computer answered this key's limit in a form magpie doesn't read — hover for more");
   // a ClinePass card with its balance but not its limits (#79): the
   // built-in key card (clineLimitsUnread, cline_usage.go) and the Cline
   // plugin both begin their error with these words
@@ -13753,7 +13756,7 @@ function renderQuotas() {
     card.dataset.provider = first.provider;
     if (!first.user) card.dataset.card = first.provider;
     const head = el("div", "subscription-head");
-    head.append(groups.length > 1 ? usageHandle(first, card) : icon(first.icon), el("b", "", first.name));
+    head.append(groups.length > 1 ? usageHandle(first, card) : icon(first.icon), el("b", "", quotaName(first)));
     // a card with no account's name to it (a plugin's ZCode) is named in
     // its head, as the user named it or for the key plan it stands in for
     if (!first.user && first.alias) head.append(...quotaWho(first));
@@ -13795,6 +13798,9 @@ function renderQuotas() {
       // its tooltip; the curve and the rest only in full
       if (brief) meters.classList.add("brief");
       card.append(meters);
+      // a remote magpie's gateway key: what its windows don't say (#1547)
+      const keyLine = !brief && keyLimitLine(sub);
+      if (keyLine) card.append(keyLine);
       // WorkBuddy's, Trae CN's or MiniMax Code's daily check-in, how this account's went,
       // and the switch for it, on the card rather than only in Settings
       // (#694); the switch on the first card of each vendor's
@@ -14924,7 +14930,7 @@ function renderPanelQuota() {
       else parts.push({ bals: [q] });
       continue;
     }
-    if (!groups.has(q.name)) parts.push({ name: q.name, qs: groups.set(q.name, []).get(q.name) });
+    if (!groups.has(q.name)) parts.push({ name: quotaName(q), qs: groups.set(q.name, []).get(q.name) });
     groups.get(q.name).push(q);
   }
   for (const part of parts) {
@@ -15774,6 +15780,28 @@ function holdsLine(h) {
     t("A heavier model fills a window sooner: this holds for the models used so far"),
   ].join("\n");
   return line;
+}
+
+// isKeyCard: the card of a remote magpie's gateway keys (#1547,
+// remote_key_limits.go), "<remote>/~keys", one account per key; quotaName
+// says so by its name, which is the remote's.
+const isKeyCard = (q) => /\/~keys$/.test(q.provider || "");
+function quotaName(q) {
+  return isKeyCard(q) ? t("Gateway keys · {name}", { name: q.name }) : q.name;
+}
+// keyLimitLine: what a gateway key's windows don't say: the length of a
+// cycle of days, the calls made in it, that it is used up, and calls with
+// no known price that leave its spend low.
+function keyLimitLine(sub) {
+  const g = sub.gatewayKey;
+  if (!g?.limited || sub.error) return null;
+  const parts = [];
+  if (g.period === "days" && g.days) parts.push(t(g.days === 1 ? "1-day cycle" : "{n}-day cycle", { n: g.days }));
+  if (g.calls) parts.push(t(g.calls === 1 ? "1 call" : "{n} calls", { n: g.calls }));
+  if (g.spent) parts.push(t("Used up: that computer refuses this key until it resets"));
+  if (g.unpriced && g.costLeft != null) parts.push(t(g.unpriced === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n: g.unpriced }));
+  if (!parts.length) return null;
+  return el("div", "quota-keyline" + (g.spent ? " spent" : ""), parts.join(" · "));
 }
 
 // quotaWindows: one account's allowance as meters, or why there are none.

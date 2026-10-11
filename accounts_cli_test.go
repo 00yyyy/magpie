@@ -139,6 +139,10 @@ func TestQuotaCell(t *testing.T) {
 	if !strings.HasPrefix(pooled, "Gemini 7d 80%") {
 		t.Fatalf("pooled: %q", pooled)
 	}
+	// a window with no cap says so, not 0% (#1547)
+	if got := quotaCell(quotaSpan{Name: "Limit", Unlimited: true}, now); got != "Limit unlimited" {
+		t.Fatalf("unlimited: %q", got)
+	}
 }
 
 // accountRows shows a pool's own windows in place of its models', as the

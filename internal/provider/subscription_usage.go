@@ -148,6 +148,10 @@ type SubscriptionQuota struct {
 	// handed out, never cached.
 	Alias string `json:"alias,omitempty"`
 	Seat  string `json:"seat,omitempty"`
+	// GatewayKey is set on the card of a gateway key a remote magpie gave
+	// this computer (#1547, remote_key_limits.go): the limit that magpie
+	// holds the key to, beside the windows that show it.
+	GatewayKey *GatewayKeyLimit `json:"gatewayKey,omitempty"`
 	// In-process read order, separate from the vendor's ReadAt and never
 	// persisted: restarting starts a new sequence.
 	readSeq uint64

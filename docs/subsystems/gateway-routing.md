@@ -84,6 +84,12 @@ APIs. Gemini clients enter through the local Gemini adapter and follow the
 same model routing as other conversation clients. Responses uses HTTP/SSE;
 its WebSocket route still answers 426. Discovery and older-peer behavior
 are described in [Providers and accounts](providers-accounts.md#remote-magpie).
+`GET /v1/magpie/limit` (`keyLimit` in
+[`key_limit.go`](../../internal/gateway/key_limit.go)) answers the limit of
+the gateway key the request carries (`access.Caller`) and of no other: it
+reads nothing from the request but its key. A local magpie asks it with
+each of its remote-magpie keys for that key's card on its Usage page
+(#1547).
 
 System One uses `RouteDecider` and `postDecide` in
 [`decide.go`](../../internal/gateway/decide.go), taking one provider prefix
@@ -185,7 +191,7 @@ Covered by `TestSearchMCPServesWebSearch`, `TestSearchMCPWithNoSearcher`,
 ```sh
 go test -tags nogui ./internal/gateway -run 'TestLoop|TestLongReplyThatDoesNotLoop|TestQuiet|TestSilentHeld|TestRotateSpreadsSessions|TestRouting|TestSmartRouting|TestFallback|TestNoFallbackForOtherErrors|TestLastFallbackErrorReachesTheAgent|TestRateLimitedSinksToTheBack|TestGroupRateLimitedSinks|TestAffinity|TestSeveralKeysOnTakeOverFromEachOther|TestModelNotInPlanRestsTheModelNotTheKey|TestSubscriptionAccountsTakeOver|TestGroup|TestTrace|TestImageTool|TestCodexNoCredits|TestWindowCapsHoldTheAccount|TestAccountCap|TestClaudeGoesOnMessagesWhereTheRelayHasThem|TestAutoRelaysOnTheClientsOwnAPI|TestSearchOfferedStaysOnTheClientsAPI|TestSearchFollowsTheSearchersProxy|TestCodexSearchAnsweredOnResponses|TestAgentEffortOnCursorLocal|TestAzureCompactionWithoutMagpiesReasoning|TestCodexCompact|TestProtection|TestSearchedConversation|TestUnsearchedConversationUnchanged|TestNotAnAPIReply|TestAPIReplyUntouched|TestCodexBackendWebPage|TestSub2APIKeyLimitIsQuota|TestKeysWeighedByTheirWindows|TestGroupWeighsKeyWindows|TestKeyOutOfItsWindowRestsUntilReset|TestKeyPoolErrorDoesNotRestForWindow|TestKeyBackOnceItsWindowIsNotFull|TestRestingKeyReadAgainInAnOrderedGroup|TestClaudeAccountBackOnceItsWindowRenews|TestThinkingStreams|TestHeldThinkingKeepsTheAgentAlive|TestCodexHeardWithinItsIdleTimeout|TestRefusalAfterThinkingFailsOver|TestGeminiEmptyRepliesAskedAgain|TestLocalUnredacted|TestCORS|TestForeignPagesRefused|TestAIStudioThinking|TestGeminiThoughtsThroughLocalProxy|TestGeminiRefusedLevel|TestGeminiThinkingOffAtItsLowest|TestThinkingOff|TestClaudeFiveFiveThinkingOffOnTheWire|TestSamplingAsTheModelTakesIt|TestHaikuFiveFiveSamplingOnTheWire|TestGeminiThoughtsMarkedInExtraContent|TestGeminiThinkingLevelRefused|TestGeminiMinimalRefusedTwiceAtOnce|TestPassthroughGeminiMinimalRefused|TestPassthroughEffortNoneRefused|TestPassthroughMinimalRefusedNoneTaken|TestOtherOffNamed|TestClaudeSignInNotToldItsSignInFailed|TestSignInWriterReleasesA403|TestSignInBetaStaysWithMagpie|TestStructuredOutput|TestResponsesTextKeepsVerbosityBesideFormat|TestRefusedFormatToldInWords|RPM|TestQueued|TestCustomGeminiUpstream|TestWholeNums|TestGrokCalls|TestOnlyGrokCalls|TestGrokModel|TestGrokPluginCalls'
 go test -tags nogui ./internal/gateway -run 'TestVertex'
-go test -tags nogui ./internal/gateway -run 'TestRemoteMagpie|TestRedactedKinds'
+go test -tags nogui ./internal/gateway -run 'TestRemoteMagpie|TestRedactedKinds|TestKeyLimitTellsOnlyTheCaller'
 go test -tags nogui ./internal/gateway -run 'TestSearchMCP'
 go test -tags nogui ./internal/redact ./internal/gui -run 'TestMoreKinds|TestCategoryDefaults|TestRedactKindsAreRedacts'
 go test -tags nogui ./internal/gateway -run 'TestCodexModelList|TestCodexModelsEtag'

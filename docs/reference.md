@@ -445,7 +445,10 @@ reset stop counting, so it doesn't drift off the calendar. The reset is
 stored with the key (`since` in caller-keys.json, magpie's own: a value a
 client sends is ignored), so it survives a restart; the usage log itself is
 untouched. Keys saved before keep their JSON as it was.
-A key can read its own status with `GET /v1/magpie/limit`. Requests from
+A key can read its own status with `GET /v1/magpie/limit`; it is told its
+own and no other key's, whatever the request names. A magpie that has this
+one as a Remote magpie provider shows each of its keys' limits on its
+Usage page this way (#1547). Requests from
 this computer that send no gateway key are not limited; a gateway key used
 from this computer is.
 

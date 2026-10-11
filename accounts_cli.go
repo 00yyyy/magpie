@@ -373,6 +373,11 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 // quotaCell is one window in a line as of now: "5h 42% ↻2h13m 14:13".
 func quotaCell(w quotaSpan, now time.Time) string {
 	name := strings.NewReplacer(" hours", "h", " hour", "h", " days", "d", " day", "d", " · ", " ").Replace(w.Name)
+	if w.Unlimited {
+		// no cap is not 0% of one: a remote magpie's gateway key held to
+		// no limit (#1547) read "Limit 0%"
+		return name + " unlimited"
+	}
 	cell := fmt.Sprintf("%s %.0f%%", name, w.Used)
 	if w.Display != "" {
 		cell += " (" + w.Display + ")"
