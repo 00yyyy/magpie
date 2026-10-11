@@ -206,6 +206,9 @@ func readCalls(f file) *callFile {
 		}
 		return &callFile{Path: f.path, Agent: f.agent}
 	}
+	// a file to read: few at once while only the warm-up asks (quiet.go)
+	defer readSlot()()
+	defer readBegin()()
 	// Agents whose calls are read whole rather than line by line: a session
 	// that changed is read again, and one that did not is kept. OpenCode's
 	// and ZCode's are rows of a database or JSON documents; dsh's file is

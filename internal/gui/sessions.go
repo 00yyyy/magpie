@@ -407,11 +407,15 @@ func warmSessions() {
 	}
 	go func() {
 		time.Sleep(3 * time.Second)
-		warmUp(
-			func() { statsFor(0) },
-			func() { statsFor(30) },
-			func() { usage.QueryPage(usage.All, usage.Filter{}, 0, 50) },
-		)
+		// with few readers, as nobody waits on it yet: after an update
+		// that reads every file again, it held every core (#1665)
+		sessions.Warm(func() {
+			warmUp(
+				func() { statsFor(0) },
+				func() { statsFor(30) },
+				func() { usage.QueryPage(usage.All, usage.Filter{}, 0, 50) },
+			)
+		})
 	}()
 }
 

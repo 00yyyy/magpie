@@ -43,6 +43,7 @@ import (
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/redact"
+	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -1825,6 +1826,11 @@ func held(h http.Handler) http.Handler {
 			defer provider.Hold()()
 			// and the files read, not looked at again for each look-up
 			defer filememo.Hold()()
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/sessions") || strings.HasPrefix(r.URL.Path, "/api/usage") {
+			// a page waits on the session files: the warm-up reading
+			// them reads at full speed meanwhile
+			defer sessions.Ask()()
 		}
 		if !(api && r.Method == http.MethodGet) {
 			// anything that may have written drops what was held, once it
