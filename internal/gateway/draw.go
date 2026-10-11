@@ -755,12 +755,13 @@ func (s *Server) sendWith(ctx context.Context, p provider.Provider, method, url,
 	}
 	defer res.Body.Close()
 	answered := time.Since(asked)
-	b, err := io.ReadAll(io.LimitReader(res.Body, 256<<20))
+	rb := &tracked{r: res.Body, last: time.Now()}
+	b, err := io.ReadAll(io.LimitReader(rb, 256<<20))
 	if err != nil {
 		if ctx.Err() != nil {
 			// not a bare "context deadline exceeded" (#1576): the vendor
 			// began answering, and its answer is what ran out of time
-			return nil, 504, fmt.Errorf("%s began answering after %s (%d %s) but hadn't sent all of its answer in %s", p.Name, answered.Round(time.Second), res.StatusCode, http.StatusText(res.StatusCode), drawTimeout)
+			return nil, 504, fmt.Errorf("%s began answering after %s (%d %s) but hadn't sent all of its answer in %s: %s", p.Name, answered.Round(time.Second), res.StatusCode, http.StatusText(res.StatusCode), drawTimeout, stalledAt(b, time.Since(rb.last)))
 		}
 		return nil, 502, err
 	}
@@ -772,6 +773,47 @@ func (s *Server) sendWith(ctx context.Context, p provider.Provider, method, url,
 		return b, res.StatusCode, fmt.Errorf("%s: %d %s%s%s", provider.HostOf(url), res.StatusCode, http.StatusText(res.StatusCode), vendorSaid(vendorMessage(b)), hint)
 	}
 	return b, res.StatusCode, nil
+}
+
+// tracked is a body that notes when its last bytes came.
+type tracked struct {
+	r    io.Reader
+	last time.Time
+}
+
+func (t *tracked) Read(p []byte) (int, error) {
+	n, err := t.r.Read(p)
+	if n > 0 {
+		t.last = time.Now()
+	}
+	return n, err
+}
+
+// stalledAt says where an answer that didn't finish stopped (#1576): how
+// much had come, how long nothing more had, and whether the image was
+// coming as a link (so the answer itself stuck, after its start) or as
+// b64_json (so it was the image's own bytes that came too slowly). A relay
+// may answer one size with either, so the two point at different fixes.
+func stalledAt(got []byte, quiet time.Duration) string {
+	where := fmt.Sprintf("%s had come, and nothing more for the last %s", sizeOf(len(got)), quiet.Round(time.Second))
+	switch {
+	case bytes.Contains(got, []byte(`"b64_json"`)):
+		return "it was sending the image itself as b64_json; " + where
+	case bytes.Contains(got, []byte(`"url"`)):
+		return "it was answering with the image's url, not the image; " + where
+	}
+	return "what came doesn't yet say whether the image was coming as a url or as b64_json; " + where
+}
+
+// sizeOf is n bytes for a reader: 386 B, 12.4 KB, 3.0 MB.
+func sizeOf(n int) string {
+	switch {
+	case n < 1000:
+		return fmt.Sprintf("%d B", n)
+	case n < 1000*1000:
+		return fmt.Sprintf("%.1f KB", float64(n)/1000)
+	}
+	return fmt.Sprintf("%.1f MB", float64(n)/1000/1000)
 }
 
 // vendorMessage is the message of a vendor's error, or its body.
