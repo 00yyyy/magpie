@@ -993,7 +993,7 @@ func passing(status int, header http.Header, body []byte, again int) (time.Durat
 	case status == 429:
 		// a relay's 429 often says nothing of when (#503: "负载已饱和，请稍
 		// 后再试"); a plan used up or no money left won't clear in seconds
-		return wait, again < rateRetries && failure(status, body) == failRate && !creditWords.Match(body)
+		return wait, again < rateRetries && failure(status, body) == failRate && !creditWords.Match(wordsOf(body))
 	}
 	return 0, false
 }

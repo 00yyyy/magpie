@@ -23,6 +23,12 @@ const (
 	wbEn = "WorkBuddy AI: usage exceeds frequency limit, but don't worry, your usage will reset at 2026-10-11 12:37:53 UTC+8, alternatively, you can switch to the other models to continue using it."
 )
 
+// escaped is msg as a vendor's JSON error whose encoder escapes what
+// isn't ASCII as \uXXXX, as Python's json.dumps does by default.
+func escaped(msg, code string) string {
+	return `{"error":{"message":` + strconv.QuoteToASCII(msg) + `,"code":"` + code + `"}}`
+}
+
 // wbAt is WorkBuddy's refusal in lang, saying it resets at t.
 func wbAt(lang string, t time.Time) string {
 	at := t.In(time.FixedZone("", 8*3600)).Format("2006-01-02 15:04:05")
@@ -56,6 +62,8 @@ func TestResetsWritten(t *testing.T) {
 		{"en +08:00", strings.Replace(wbEn, "UTC+8", "UTC+08:00", 1), at("2026-10-11 10:00:00"), 2*time.Hour + 37*time.Minute + 53*time.Second},
 		{"en -5", strings.Replace(wbEn, "2026-10-11 12:37:53 UTC+8", "2026-10-10 23:37:53 UTC-5", 1), at("2026-10-11 10:00:00"), 2*time.Hour + 37*time.Minute + 53*time.Second},
 		{"zh JSON", `{"error":{"message":"` + wbZh + `","code":"6004"}}`, at("2026-10-11 17:00:00"), 3*time.Hour + 16*time.Minute + 2*time.Second},
+		{"zh escaped", escaped(wbZh, "6004"), at("2026-10-11 17:00:00"), 3*time.Hour + 16*time.Minute + 2*time.Second},
+		{"zh escaped, cut short", escaped(wbZh[:strings.Index(wbZh, "+8重置")], "6004"), at("2026-10-11 17:00:00"), 0},
 		// cut short: never read as UTC, or as a time without its seconds
 		{"zh cut after UTC", wbZh[:strings.Index(wbZh, "+8重置")], at("2026-10-11 17:00:00"), 0},
 		{"zh cut after +", wbZh[:strings.Index(wbZh, "8重置")], at("2026-10-11 17:00:00"), 0},
@@ -102,10 +110,13 @@ func TestWrittenResetRestsUntilThen(t *testing.T) {
 	near := func(d, want time.Duration) bool { return d > want-time.Minute && d <= want }
 	back := 5*time.Hour + 30*time.Minute
 
-	for _, lang := range []string{"zh", "en"} {
+	for _, lang := range []string{"zh", "en", "zh-escaped"} {
 		user := lang + "@x.com"
 		c := acct("workbuddy", user, "glm-5")
 		body := []byte(`{"error":{"message":"` + wbAt(lang, time.Now().Add(back)) + `","code":"6004"}}`)
+		if lang == "zh-escaped" {
+			body = []byte(escaped(wbAt("zh", time.Now().Add(back)), "6004"))
+		}
 		if f := failure(429, body); f != failQuota {
 			t.Fatalf("%s: %s", lang, f)
 		}
@@ -132,7 +143,7 @@ func TestWrittenResetRestsUntilThen(t *testing.T) {
 
 		// cut short before its offset: the fallback, never a wrong time
 		c = acct("workbuddy", lang+"-cut@x.com", "glm-5")
-		cut := wbAt(lang, time.Now().Add(back))
+		cut := wbAt(strings.TrimSuffix(lang, "-escaped"), time.Now().Add(back))
 		cut = cut[:strings.Index(cut, "UTC")+3]
 		if r := s.restAfter(c, 429, http.Header{}, []byte(cut)); time.Until(r.Until) > quotaRest {
 			t.Fatalf("%s cut short: rests %v by %s", lang, time.Until(r.Until), r.By)
@@ -253,4 +264,26 @@ func TestPluginWrittenResetRests(t *testing.T) {
 		}
 	}
 	t.Fatalf("no rest of fake-1 until the stated time: %v", got)
+}
+
+// The word lists read a JSON error that escapes its Chinese as \uXXXX the
+// same as one that doesn't (#1669): Zhipu's 1113 is out of credit, not a
+// rate limit, and a sub2api key's "7天限额已用完" sent as
+// rate_limit_exceeded is out of quota.
+func TestFailureReadsEscapedWords(t *testing.T) {
+	for _, c := range []struct {
+		body, want string
+	}{
+		{escaped("余额不足或无可用资源包，请充值。", "1113"), failCredit},
+		{`{"error":{"type":"rate_limit_exceeded","message":` + strconv.QuoteToASCII("api key 7天限额已用完") + `}}`, failQuota},
+		{escaped(wbZh, "6004"), failQuota},
+		{escaped("请求太频繁，请稍后再试", "1302"), failRate},
+	} {
+		if !strings.Contains(c.body, `\u`) {
+			t.Fatalf("not escaped: %s", c.body)
+		}
+		if got := failure(429, []byte(c.body)); got != c.want {
+			t.Errorf("%s: %s, want %s", c.body, got, c.want)
+		}
+	}
 }

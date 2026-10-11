@@ -12,6 +12,7 @@ package gateway
 // what the Routing page says is when the account really comes back.
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 	"net/http"
@@ -212,6 +213,39 @@ const loopErrType = "reply_loop"
 // over HTTP (proxyconnect) or SOCKS (socks connect).
 var proxyDown = regexp.MustCompile(`proxyconnect |socks connect `)
 
+// wordsOf is an error body as its words are matched: a JSON body that
+// escapes what isn't ASCII as \uXXXX (Python's json.dumps does by default)
+// has its strings decoded and put after it, one to a line, so "用量",
+// "频率" or "将在 … 重置" are read whether the vendor escaped them or not
+// (#1669). Any other body is matched as it is.
+func wordsOf(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`\u`)) {
+		return body
+	}
+	var v any
+	if json.Unmarshal(body, &v) != nil {
+		return body
+	}
+	out := append([]byte(nil), body...)
+	var walk func(any)
+	walk = func(x any) {
+		switch x := x.(type) {
+		case string:
+			out = append(append(out, '\n'), x...)
+		case map[string]any:
+			for _, y := range x {
+				walk(y)
+			}
+		case []any:
+			for _, y := range x {
+				walk(y)
+			}
+		}
+	}
+	walk(v)
+	return out
+}
+
 // failure says why a reply failed.
 func failure(status int, body []byte) string {
 	if status == http.StatusBadGateway && proxyDown.Match(body) {
@@ -220,6 +254,8 @@ func failure(status int, body []byte) string {
 	if _, ok := provider.Verification(body); ok && (status == 401 || status == 403) {
 		return failVerify
 	}
+	// the words are matched decoded, too
+	body = wordsOf(body)
 	switch {
 	case overflowed(status, body):
 		// Kimi's "exceeded model token limit" is the conversation's
@@ -393,7 +429,7 @@ const longestWritten = 7 * 24 * time.Hour
 // none, it isn't a real date, it has passed, or it is over longestWritten
 // off.
 func resetsWritten(body []byte, now time.Time) time.Duration {
-	m := resetsWhen.FindSubmatch(body)
+	m := resetsWhen.FindSubmatch(wordsOf(body))
 	if m == nil {
 		return 0
 	}
@@ -528,7 +564,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// a refusal that names its reset and points to the account's other
 	// models is the model's limit: the others still answer (WorkBuddy's
 	// "您也可以切换其他模型继续使用", #1669)
-	if pooled || unserved || why == failQuota && resetsWhen.Match(body) && otherModels.Match(body) {
+	if pooled || unserved || why == failQuota && resetsWhen.Match(wordsOf(body)) && otherModels.Match(wordsOf(body)) {
 		id = c.restID()
 	}
 	r.Key = id

@@ -46,7 +46,7 @@ func busy(status int, body []byte) bool {
 	case 408, 500, 502, 503, 504, 529:
 		return failure(status, body) == failOther && !protectionRefused(status, body)
 	case 429:
-		return failure(status, body) == failRate && !creditWords.Match(body)
+		return failure(status, body) == failRate && !creditWords.Match(wordsOf(body))
 	}
 	return false
 }
