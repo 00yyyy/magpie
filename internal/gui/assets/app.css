@@ -310,6 +310,14 @@ body.side-nav { --side-w: 212px; padding-left: var(--side-w); }
   display: flex; flex-direction: column;
   background: var(--bg); border-right: .5px solid var(--line);
 }
+/* its edge drags it wider or narrower, as a Mac app's sidebar's does
+   (app.js sideDrag): the reach a little either side of the line, the line
+   itself unchanged */
+.side-edge { position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; z-index: 1; cursor: col-resize; touch-action: none; }
+/* a finger needs more than a pointer's reach: an iPad's in magpie web */
+@media (pointer: coarse) { .side-edge { right: -12px; width: 24px; } }
+.side-edge:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+body.side-drag, body.side-drag * { cursor: col-resize !important; user-select: none; }
 .side-top { flex: none; display: flex; align-items: center; height: 46px; padding: 0 18px; }
 .side-top .brand { font-size: 13.5px; }
 /* the traffic lights are the sidebar's top left, as in a Mac app's sidebar;

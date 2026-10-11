@@ -22912,8 +22912,72 @@ function layoutNav() {
   navSubs();
   navSubs.quiet = false;
   if (!on) { slide(nav, "nav"); navInSight(); } else { sideGwRead(); renderSideGw(); }
+  sideWidth();
   renderSideToggle();
   fitTop();
+}
+// the sidebar's width, the reader's own once they drag its edge (sideDrag):
+// kept for the window, as a Mac app keeps it; none set, app.css's. A narrow
+// window has it no wider than a third of itself and a little, so the page
+// keeps the room
+var SIDE_MIN = 168, SIDE_MAX = 320;
+var sideW = 0;
+try { sideW = Math.round(+localStorage.getItem("magpie.sideWidth")) || 0; } catch { /* app.css's, then */ }
+function sideFit(w) { return Math.round(Math.max(SIDE_MIN, Math.min(w, SIDE_MAX, innerWidth * 0.36))); }
+function sideWidth() {
+  const edge = $("#sideEdge");
+  if (sideW) document.body.style.setProperty("--side-w", sideFit(sideW) + "px");
+  else document.body.style.removeProperty("--side-w");
+  if (!edge || !sideNav()) return;
+  const w = Math.round($("#side").getBoundingClientRect().width);
+  edge.setAttribute("aria-valuenow", String(w));
+  edge.setAttribute("aria-valuemin", String(SIDE_MIN));
+  edge.setAttribute("aria-valuemax", String(sideFit(SIDE_MAX)));
+  edge.setAttribute("aria-label", t("Sidebar width"));
+}
+function sideKeep(w) {
+  sideW = sideFit(w);
+  try { localStorage.setItem("magpie.sideWidth", String(sideW)); } catch { /* this time only */ }
+  sideWidth();
+}
+// dragged, its edge follows the pointer; dragged well past its narrowest,
+// it folds away, as a Mac app's sidebar does, the width kept for when it
+// comes back. The arrow keys move it too
+function sideDrag(edge) {
+  edge.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || !sideNav()) return;
+    e.preventDefault();
+    edge.setPointerCapture(e.pointerId);
+    const from = $("#side").getBoundingClientRect().width - e.clientX;
+    document.body.classList.add("side-drag");
+    let w = 0;
+    const move = (m) => {
+      const want = from + m.clientX;
+      // folded, it comes back as wide as it was before this drag
+      if (want < SIDE_MIN - 64) { w = 0; end(); sideWidth(); toggleSideNav(); return; }
+      w = sideFit(want);
+      document.body.style.setProperty("--side-w", w + "px");
+    };
+    const end = () => {
+      edge.removeEventListener("pointermove", move);
+      edge.removeEventListener("pointerup", end);
+      edge.removeEventListener("pointercancel", end);
+      if (edge.hasPointerCapture(e.pointerId)) edge.releasePointerCapture(e.pointerId);
+      document.body.classList.remove("side-drag");
+      if (w) sideKeep(w);
+    };
+    edge.addEventListener("pointermove", move);
+    edge.addEventListener("pointerup", end);
+    edge.addEventListener("pointercancel", end);
+  });
+  edge.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 32 : 8;
+    const d = { ArrowLeft: -step, ArrowRight: step }[e.key];
+    if (!d || !sideNav()) return;
+    e.preventDefault();
+    sideKeep($("#side").getBoundingClientRect().width + d);
+  });
+  addEventListener("resize", () => { if (sideW) sideWidth(); });
 }
 // the sidebar's button in the title bar, as a Mac app has it, at every
 // width; ⌃⌘S as the Mac's View menu has it
@@ -23116,6 +23180,7 @@ if (mode === "window") {
   sideQuery.addEventListener?.("change", layoutNav);
   layoutNav();
   $("#sideToggle").onclick = toggleSideNav;
+  sideDrag($("#sideEdge"));
   if (!web) addEventListener("keydown", (e) => {
     const mac = /^Mac/.test(navigator.platform);
     const mod = mac ? e.metaKey && e.ctrlKey && !e.shiftKey : e.ctrlKey && e.shiftKey && !e.metaKey;
