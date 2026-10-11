@@ -1057,11 +1057,7 @@ func putClaudeLogin(l savedLogin) error {
 	_, loc, found := readClaudeCredential()
 	if !found {
 		// signed out: put it where Claude Code keeps it on this system
-		dir := appdir.Getenv("CLAUDE_CONFIG_DIR")
-		if dir == "" {
-			home, _ := os.UserHomeDir()
-			dir = filepath.Join(home, ".claude")
-		}
+		dir := appdir.ClaudeDir()
 		loc = claudeCredentialLocation{path: filepath.Join(dir, ".credentials.json")}
 		if claudeKeychain {
 			loc = claudeCredentialLocation{keychain: true, account: claudeKeychainAccount()}

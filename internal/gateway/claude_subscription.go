@@ -267,13 +267,7 @@ type bridgeTool struct {
 	InputSchema json.RawMessage `json:"inputSchema"`
 }
 
-func claudeConfigDir() string {
-	if d := appdir.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
-		return d
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude")
-}
+func claudeConfigDir() string { return appdir.ClaudeDir() }
 
 // claudeProjectName is the folder Claude Code keeps a working directory's
 // sessions under: the path with everything but letters and digits made "-".

@@ -483,11 +483,7 @@ func fileExists(p string) bool {
 }
 
 func claudeSettingsPath() string {
-	if dir := appdir.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-		return filepath.Join(dir, "settings.json")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", "settings.json")
+	return filepath.Join(appdir.ClaudeDir(), "settings.json")
 }
 
 // readClaudeSettings is the relay Claude Code was pointed at in its own

@@ -44,12 +44,7 @@ type Target struct {
 
 func home() string { h, _ := os.UserHomeDir(); return h }
 
-func claudeDir() string {
-	if d := appdir.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
-		return d
-	}
-	return filepath.Join(home(), ".claude")
-}
+func claudeDir() string { return appdir.ClaudeDirIn(home()) }
 
 // claudeJSON is where Claude Code keeps its user-wide MCP servers: beside
 // its folder, or in it when CLAUDE_CONFIG_DIR moves it.
