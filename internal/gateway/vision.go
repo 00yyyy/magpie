@@ -138,8 +138,34 @@ func missingSeerNote() string {
 	return ""
 }
 
+// noSeerNote is what a request turned away for an image says of why no
+// model described it: the picked one is missing, Image recognition is
+// off, or none of the models the user enabled can see.
+func noSeerNote() string {
+	if n := missingSeerNote(); n != "" {
+		return n
+	}
+	if provider.HeldSettings().Vision == "off" {
+		return "; Image recognition is off in magpie's Settings → Models"
+	}
+	if _, ok := seer(); !ok {
+		return "; none of the models enabled in magpie can see images to describe it: enable one that can, or pick one in Settings → Models → Image recognition"
+	}
+	return ""
+}
+
+// autoSeerNote is what a request whose image wasn't described says of a
+// describer magpie picked itself, which the user may not know of.
+func autoSeerNote(see string) string {
+	if provider.HeldSettings().Vision != "" {
+		return ""
+	}
+	return fmt.Sprintf("; magpie picked %s of the models you enabled: pick another in Settings → Models → Image recognition", see)
+}
+
 // AutoVision is the model magpie picks to describe images when the
-// Settings name none: a small model that sees of the providers set up — a
+// Settings name none: a small model that sees, of the models the user
+// enabled on the providers switched on (smallModel) — a
 // Claude account's, a Codex account's, the cheapest of an API key's,
 // another account's. "" when no model sees.
 func AutoVision() string {
@@ -350,7 +376,7 @@ func smallModelWhere(p provider.Provider, keep func(catalog.Model) bool) (string
 	if id == "" {
 		return "", 0
 	}
-	for _, m := range p.Available() {
+	for _, m := range p.Exposed() {
 		if m.ID == id && m.Price != nil {
 			return id, m.Price.Input + m.Price.Output
 		}
