@@ -1200,10 +1200,14 @@ function sheet(box, open, done) {
   run.oncancel = run.onfinish;
 }
 
-// startField: the field an agent's model is picked in, magpie's among
-// its options (Gemini CLI's model, not how it signs in)
+// startField: the field an agent's model is picked in (Gemini CLI's model,
+// not how it signs in). Its model is that field whatever the providers
+// on: one switched off changes only what it lists, so Codex's model with
+// none of magpie's left isn't traded for its subagent model, which still
+// has a ChatGPT account's (#1582). A model with nothing to list (Ante's,
+// magpie's only) leaves the field it connects through.
 function startField(a) {
-  return a.fields.find((f) => f.key === "model" && f.options.some((o) => o.ref)) || connectField(a);
+  return a.fields.find((f) => f.key === "model" && f.options.length) || connectField(a);
 }
 
 // startButton picks the model an agent starts on, from the row. It says
