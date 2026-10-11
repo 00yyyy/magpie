@@ -598,7 +598,9 @@ Provider attribution stays independent; CSV puts `provider_key_*` before
 An existing LAN key becomes **Magpie** without changing the credential.
 `lanKey` remains in settings for older Magpie versions. Disabling or removing
 the default key replaces that mirror with a random non-empty revoked value;
-rotation does not re-enable it. The key store records migration completion,
+rotation does not re-enable it. Turning sharing off and on again neither
+re-enables a disabled default key nor makes a removed one again; only
+asking for a new sharing key makes one. The key store records migration completion,
 even if `lanKeyId` cannot be saved, so reads do not keep retrying that write.
 A migration write failure is logged without preventing gateway startup,
 CLI key management, or the Settings and key-list pages from opening.

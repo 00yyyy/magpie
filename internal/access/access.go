@@ -487,6 +487,14 @@ func configureLAN(on, rotate bool) error {
 			return err
 		}
 		i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == s.LANKeyID || k.LAN })
+		// a default key the user removed stays removed when sharing is
+		// turned on again: making a fresh "Magpie" key then read as a
+		// default key that keeps coming back beside the user's own
+		// (#1655, GradientLive). Only an explicit new key makes one.
+		if i < 0 && !rotate && removedDefault(s) {
+			s.LAN = on
+			return settings.Save(s)
+		}
 		if i < 0 || rotate {
 			token, err := random(24)
 			if err != nil {
@@ -512,6 +520,13 @@ func configureLAN(on, rotate bool) error {
 	}
 	s.LAN = on
 	return settings.Save(s)
+}
+
+// removedDefault: sharing made a default key before and it is no longer in
+// the store — its id is recorded (LANKeyID), or an older magpie that
+// drops that id kept only the revoked mirror Update leaves behind.
+func removedDefault(s settings.Settings) bool {
+	return s.LANKeyID != "" || strings.HasPrefix(s.LANKey, revokedLANPrefix)
 }
 
 func save(keys []Key) error {
