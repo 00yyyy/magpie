@@ -732,7 +732,16 @@ func buildAnthropic(r *Request, model string) []byte {
 	if maxTokens <= 0 {
 		maxTokens = 16384
 	}
-	if (r.Thinking || r.Effort != "") && adaptiveOnly(model) {
+	// a client that turned reasoning off — Codex's or a Chat client's
+	// effort none, which Effort reads as low — is sent thinking off, not a
+	// low budget: it was thinking at 4096 tokens while the log said none
+	// (#1636). A model that won't stop thinking is asked again as before
+	// (forwardTranslated); thinkingOffAsTaken fits off to each Claude
+	think := (r.Thinking || r.Effort != "") && !r.ThinkOff
+	if r.ThinkOff {
+		out["thinking"] = map[string]any{"type": "disabled"}
+	}
+	if think && adaptiveOnly(model) {
 		// Opus 4.7 and later leave the thinking text out unless asked
 		// (display "omitted" by default), and a Chat or Responses client
 		// that asked to reason would see none of it; OpenAI is asked for
@@ -744,7 +753,7 @@ func buildAnthropic(r *Request, model string) []byte {
 			}
 			out["output_config"] = map[string]any{"effort": e}
 		}
-	} else if think, budget := r.Thinking || r.Effort != "", budgetOf(r.Effort); think && (r.MaxTokens <= 0 || r.MaxTokens > 2048) {
+	} else if budget := budgetOf(r.Effort); think && (r.MaxTokens <= 0 || r.MaxTokens > 2048) {
 		if r.MaxTokens > 0 {
 			// the client's cap is what the model can write (Pi sends the
 			// model's own output limit): the budget fits under it, leaving
