@@ -21799,7 +21799,23 @@ async function renderUpdate(r, u) {
   const sub = who.querySelector(".sub") || who.appendChild(el("div", "sub"));
   sub.title = "";
   sub.classList.remove("wraps");
-  for (const b of val.querySelectorAll("button")) b.remove();
+  // the release page's button outlives a redraw: a download redraws every
+  // 700ms, and a button made again under the pointer loses its click
+  const kept = val.querySelector("button.update-page");
+  for (const b of val.querySelectorAll("button")) if (b !== kept) b.remove();
+  let pageShown = false;
+  // where GitHub is slow to magpie, the update can be fetched in the
+  // browser instead, through its own proxy or accelerator (PapainTea on X)
+  const page = () => {
+    if (!u.url) return;
+    const b = kept || el("button", "text update-page");
+    b.textContent = t("Open the release page");
+    b.disabled = false; // a Check dims every button until its answer
+    b.classList.remove("busy");
+    b.onclick = () => (web ? window.open(u.url, "_blank", "noopener") : api("open", { url: u.url }).catch(() => {}));
+    if (val.lastElementChild !== b) val.append(b);
+    pageShown = true;
+  };
   const btn = (label, fn, dim) => {
     const b = el("button", "text" + (dim ? " busy" : ""), label);
     if (dim) b.disabled = true;
@@ -21877,11 +21893,13 @@ async function renderUpdate(r, u) {
       sub.textContent = t("{v} is out", { v: u.latest });
       if (u.stuck) sub.textContent += " · " + updateStuck(u);
       btn(t("Download"), () => (web && u.url ? window.open(u.url, "_blank", "noopener") : api("update/install", {})));
+      if (!web) page();
       break;
     case "downloading":
       sub.textContent = t("Downloading {v}…", { v: u.latest });
       if (u.total) sub.textContent += " " + Math.floor((u.done / u.total) * 100) + "% · " + t("{done} of {total} MB", { done: (u.done / 1e6).toFixed(1), total: (u.total / 1e6).toFixed(1) });
       else if (u.done) sub.textContent += " " + t("{done} MB", { done: (u.done / 1e6).toFixed(1) });
+      page();
       again(700);
       break;
     case "checking":
@@ -21918,6 +21936,7 @@ async function renderUpdate(r, u) {
         });
       }
       btn(t("Check"), check);
+      if (u.latest) page();
       break;
     case "blocked": {
       // the new version didn't start on this computer (#894) and this one
@@ -21940,6 +21959,7 @@ async function renderUpdate(r, u) {
     default: // built from source
       sub.textContent = "";
   }
+  if (kept && !pageShown) kept.remove();
 }
 
 // renderPluginCheckins draws a Daily check-in row for each plugin's
