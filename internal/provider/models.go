@@ -760,17 +760,26 @@ func anyImageInput(a, b *bool) *bool {
 
 // Serves reports whether key k can be asked for model: false only when the
 // vendor's lists say another of the provider's keys sees it and k doesn't.
+// A key no list marks — its own wasn't answered, or it was added since —
+// is unknown, and serves: a failed list is not an empty one (#1598, the
+// first of five keys left out of every request).
 func (p Provider) Serves(k KeyAccount, model string) bool {
 	live, _, ok := p.live()
 	if !ok {
 		return true
 	}
+	id := keyID(k.Key)
+	var keys []string
+	found, listed := false, false
 	for _, m := range live {
 		if m.ID == model {
-			return len(m.Keys) == 0 || slices.Contains(m.Keys, keyID(k.Key))
+			keys, found = m.Keys, true
+		}
+		if !listed && slices.Contains(m.Keys, id) {
+			listed = true
 		}
 	}
-	return true
+	return !found || len(keys) == 0 || !listed || slices.Contains(keys, id)
 }
 
 // Exposed lists the models magpie offers to agents for this provider: the
