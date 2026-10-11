@@ -21769,6 +21769,7 @@ function keepHeld() {
   requestAnimationFrame(keepHeld);
 }
 addEventListener("click", (e) => {
+  const readers = performance.now() < purposeUntil;
   purposeUntil = flingUntil = 0; // what came before the click (Space pressed on a button, a tremble, the lift of a tap) is no scroll
   // a pick in a menu (in body, outside any view) is a click on the pill that
   // opened it: what it changes comes in around that pill, which stays put (#961)
@@ -21777,8 +21778,15 @@ addEventListener("click", (e) => {
   if (!v || v.hidden) { held = null; return; }
   // a click before a frame has held the one before it (a tab list's keys
   // pressed in quick turn) holds that one first: the page it shrank is put
-  // back, so this one is taken where the reader left it, not at the top
+  // back, so this one is taken where the reader left it, not at the top.
+  // So is a scroll the page hasn't heard of yet: the browser tells of a
+  // scroll at the next frame, and a scroll made just before the click and
+  // not the reader's (a field focused on the press, scrolled to; a scroll by
+  // code; a test's click scrolling what it clicks into view while the view
+  // slides in) would be heard of only after it, and kept as where the reader
+  // was (#1554).
   if (held?.v === v) hold(held);
+  else if (!readers && barDrag !== v) backToReader(v);
   const chain = [];
   const from = at.closest?.("[data-unrolls]")?.parentElement || at;
   for (let n = from; n && n !== v; n = n.parentElement) {
