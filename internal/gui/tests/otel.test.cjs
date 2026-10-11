@@ -5,6 +5,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 
@@ -62,7 +63,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const page = await context.newPage();
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, posts));
+        await watchSettingsReads(page);
         await page.goto("http://magpie.test/?view=settings&tab=otel");
+        await settingsDrawn(page); // rows found are the ones that stay (#1659)
         await page.locator("#otelExportRow").waitFor();
         const off = lang === "zh" ? "关闭" : "Off";
         const modes = lang === "zh" ? ["仅元数据", "最多 256 KB", "完整内容"] : ["Metadata only", "Up to 256 KB", "Full content"];

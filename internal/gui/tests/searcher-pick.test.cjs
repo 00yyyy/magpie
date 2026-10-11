@@ -21,6 +21,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const choices = [
@@ -112,7 +113,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const posted = [];
       const st = { searcher: "", unused: "" };
       await page.route("**/*", serve(lang, posted, st));
+      await watchSettingsReads(page);
       await page.goto("http://magpie.test/?view=settings&tab=models");
+      await settingsDrawn(page); // rows found are the ones that stay (#1659)
       const row = page.locator("#searchList .row.searcher-row");
       await row.waitFor();
       await row.scrollIntoViewIfNeeded();
@@ -272,7 +275,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         for (const width of [560, 1000]) {
           await page.mouse.move(0, 0);
           await page.setViewportSize({ width, height: 900 });
+          await watchSettingsReads(page);
           await page.goto("http://magpie.test/?view=settings&tab=models");
+          await settingsDrawn(page); // rows found are the ones that stay (#1659)
           const row = page.locator("#searchList .searcher-row");
           await row.waitFor();
           // Hover retries if Settings' startup refresh replaces the row.
@@ -318,7 +323,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       st.relays = [];
       st.leftOut = [];
       st.searcher = "";
+      await watchSettingsReads(page);
       await page.goto("http://magpie.test/?view=settings&tab=models");
+      await settingsDrawn(page); // rows found are the ones that stay (#1659)
       const row = page.locator("#searchList .searcher-row");
       await row.waitFor();
       assert((await row.locator(".sub").innerText()).startsWith(h.help));

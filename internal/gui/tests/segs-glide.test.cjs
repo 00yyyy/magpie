@@ -17,6 +17,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 
@@ -124,7 +125,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const st = {}, ctl = { hold: 0, refuse: false };
         await page.route("**/*", serve(lang, st, ctl));
         // opened on another tab: General is drawn while hidden
+        await watchSettingsReads(page);
         await page.goto("http://magpie.test/?view=settings&tab=about");
+        await settingsDrawn(page); // rows found are the ones that stay (#1659)
         await page.locator("#setTab-general").waitFor();
         await page.waitForTimeout(300);
         await page.locator("#setTab-general").click();

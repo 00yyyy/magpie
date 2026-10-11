@@ -37,8 +37,12 @@ async function click(page, locator) {
 // after the first is detached under whatever the test does to it next
 // (#1653: scrollIntoViewIfNeeded in WebKit on a busy machine). Call
 // watchSettingsReads before page.goto; settingsDrawn then waits until load()
-// has asked for its read and every read asked for has been drawn.
+// has asked for its read and every read asked for has been drawn. A page is
+// watched once however many times it is opened.
+const watched = new WeakSet();
 async function watchSettingsReads(page) {
+  if (watched.has(page)) return;
+  watched.add(page);
   await page.addInitScript(() => {
     const reads = window.__settingsReads = { asked: 0, drawn: 0 };
     const fetch0 = window.fetch;

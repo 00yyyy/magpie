@@ -9,6 +9,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 
@@ -77,7 +78,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", server(lang, posts, 0));
         const posted = async (n) => { for (let i = 0; i < 100 && posts.length < n; i++) await page.waitForTimeout(20); assert.equal(posts.length, n, "posts"); return posts[n - 1]; };
         const w = words[lang];
+        await watchSettingsReads(page);
         await page.goto("http://magpie.test/?view=settings&tab=usage");
+        await settingsDrawn(page); // rows found are the ones that stay (#1659)
         const opts = page.locator("#turnDoneSegs .opt");
         await opts.first().waitFor();
 
@@ -120,7 +123,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     t.after(() => browser.close());
     page.setDefaultTimeout(5000);
     await page.route("**/*", server("en", [], 45));
+    await watchSettingsReads(page);
     await page.goto("http://magpie.test/?view=settings&tab=usage");
+    await settingsDrawn(page); // rows found are the ones that stay (#1659)
     await page.locator("#turnDoneSegs .opt").first().waitFor();
     assert.deepEqual(await page.locator("#turnDoneSegs .opt").allTextContents(), ["Off", "1 min", "3 min", "10 min", "45 s"]);
     assert.equal(await page.locator("#turnDoneSegs .opt.on").textContent(), "45 s");
