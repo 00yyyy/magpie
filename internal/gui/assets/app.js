@@ -2863,13 +2863,13 @@ async function openAgentModels(a, anchor, ev) {
 
   document.body.append(box);
   // under the line, or over it where there's no room; the list scrolls
-  const r = anchor.getBoundingClientRect(), pad = 8;
+  const r = anchor.getBoundingClientRect(), pad = 8, top = popTop(pad);
   const w = Math.min(railed ? 580 : 380, innerWidth - pad * 2);
   box.style.width = w + "px";
   const x = Math.max(pad, Math.min(r.left - 10, innerWidth - w - pad));
   box.style.left = x + "px";
   box.style.setProperty("--ox", Math.max(18, Math.min(w - 18, r.left + Math.min(r.width, 60) / 2 - x)) + "px");
-  const below = innerHeight - r.bottom - 8 - pad, above = r.top - 8 - pad;
+  const below = innerHeight - r.bottom - 8 - pad, above = r.top - 8 - top;
   const want = Math.min(560, box.scrollHeight);
   if (want > below && above > below) {
     box.classList.add("up");
@@ -3739,11 +3739,29 @@ function score(q, o) {
   return 0;
 }
 
+// popTop is the highest a popover's top edge may go, pad under the window's
+// own chrome: on a Mac window the traffic lights are drawn over the page's
+// header.top, so a list that opens upward in a short window stops under it
+// rather than over them (#1573, lyston11). Elsewhere the header is the
+// page's own row and the edge is pad, as it always was. The header's
+// measured bottom already counts the text size (--zoom).
+function popTop(pad) {
+  const b = document.body.classList;
+  if (!b.contains("window") || !b.contains("mac")) return pad;
+  const head = document.querySelector("header.top");
+  return Math.max(0, head ? head.getBoundingClientRect().bottom : 0) + pad;
+}
+
 function placePop(anchor, w, h) {
   const pop = $("#pop");
-  const r = anchor.getBoundingClientRect(), pad = 8;
+  const r = anchor.getBoundingClientRect(), pad = 8, top = popTop(pad);
   w = Math.min(w, innerWidth - pad * 2);
-  h = Math.min(h, innerHeight - pad * 2);
+  // a window too short for it holds it to the room between the chrome and
+  // the foot, and its list scrolls, rather than running off the bottom
+  const most = innerHeight - pad - top;
+  pop.style.maxHeight = "";
+  if (!(parseFloat(getComputedStyle(pop).maxHeight) <= most)) pop.style.maxHeight = most + "px";
+  h = Math.min(h, most);
   pop.style.width = w + "px";
   let x = Math.max(pad, Math.min(r.left, innerWidth - w - pad));
   let y = r.bottom + 5;
@@ -3753,13 +3771,13 @@ function placePop(anchor, w, h) {
   pop.style.setProperty("--ox", Math.max(16, Math.min(w - 16, r.left + r.width / 2 - x)) + "px");
   // h is the most it can be: opened upward, its bottom edge is held to the
   // button, so a short list sits on the button rather than h above it
-  if (y + h > innerHeight - pad && r.top - 5 - h >= pad) {
+  if (y + h > innerHeight - pad && r.top - 5 - h >= top) {
     pop.classList.add("up");
     pop.style.top = "auto";
     pop.style.bottom = innerHeight - r.top + 5 + "px";
     return;
   }
-  if (y + h > innerHeight - pad) y = Math.max(pad, innerHeight - pad - h);
+  if (y + h > innerHeight - pad) y = Math.max(top, innerHeight - pad - h);
   pop.style.bottom = "auto";
   pop.style.top = y + "px";
 }
@@ -12928,19 +12946,19 @@ function closeProtoMenu() {
 // itself, so its last item can be reached in a short window (#1437). align
 // "right" lines its right edge up with the anchor's; dx nudges it sideways.
 function placeMenu(box, anchor, align = "left", dx = 0) {
-  const r = anchor.getBoundingClientRect(), h = box.offsetHeight, pad = 8;
+  const r = anchor.getBoundingClientRect(), h = box.offsetHeight, pad = 8, top = popTop(pad);
   let y = r.bottom + 5;
-  const below = innerHeight - pad - y, above = r.top - 5 - pad;
+  const below = innerHeight - pad - y, above = r.top - 5 - top;
   if (h > below && above >= h) { y = r.top - 5 - h; box.classList.add("up"); }
   else if (h > below && above > below) {
     box.style.maxHeight = above + "px";
-    y = pad;
+    y = top;
     box.classList.add("up");
   } else if (h > below) box.style.maxHeight = Math.max(below, 0) + "px";
   const w = box.offsetWidth;
   const left = (align === "right" ? r.right - w : r.left) + dx;
   box.style.left = Math.max(pad, Math.min(left, innerWidth - w - pad)) + "px";
-  box.style.top = Math.max(pad, y) + "px";
+  box.style.top = Math.max(top, y) + "px";
 }
 function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key speaks", cls = "", align = "left", live = false, search = "") {
   closeProtoMenu();
