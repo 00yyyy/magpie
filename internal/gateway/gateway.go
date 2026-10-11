@@ -30,7 +30,6 @@ import (
 
 	"github.com/yetone/magpie/internal/awake"
 
-	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/redact"
@@ -341,16 +340,10 @@ type Server struct {
 func New() *Server {
 	redact.SetKeyPath(filepath.Join(settings.Dir(), "redact.key"))
 	return &Server{
-		// a provider with a proxy of its own is sent through a transport
-		// kept for that proxy (#237); a request counted against a MaxRPM
-		// waits for room in its minute first (rpm.go)
-		client: &http.Client{Transport: rpmTransport{netproxy.Dispatch(&http.Transport{
-			Proxy:                 netproxy.Func,
-			ResponseHeaderTimeout: 10 * time.Minute,
-			MaxIdleConnsPerHost:   8,
-			IdleConnTimeout:       90 * time.Second,
-			ForceAttemptHTTP2:     true,
-		})}},
+		// a request counted against a MaxRPM waits for room in its minute
+		// first (rpm.go); the ChatGPT backend is spoken to over HTTP/1.1
+		// (codex_http1.go)
+		client:       &http.Client{Transport: rpmTransport{newCodexHTTP1(upstreamTransport(nil))}},
 		unfit:        make(map[string]bool),
 		subscription: newSubscriptionBridge(),
 		debug:        os.Getenv("MAGPIE_DEBUG") != "",
