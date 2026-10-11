@@ -277,12 +277,29 @@ func (a *Agent) Detected() bool {
 	if a.Dir != "" && !a.dirShared && agentDir(a.Dir) {
 		return true
 	}
-	if a.Bin != "" {
-		if _, err := exec.LookPath(a.Bin); err == nil {
-			return true
-		}
+	if a.Bin != "" && binAt(a.Bin) != "" {
+		return true
 	}
 	return false
+}
+
+// binAt is where the agent's command name is, as magpie runs it: on
+// magpie's own PATH, else, on Windows, where a terminal opened now finds it
+// or a user's tools are installed (proc.FindTool: the registry's PATH now,
+// ~/.local/bin, npm's, bun's, Volta's, pnpm's). Windows has no login shell
+// to lend magpie its PATH (proc.UserPath does nothing there), so a magpie
+// started before Claude Code's installer put claude.exe in ~/.local/bin
+// and added that to the user's PATH, or a self-update restarting with the
+// PATH it had then, never listed it, while the sign-in, which asked
+// FindTool, found it (#839, #1482). "" when it is in none.
+func binAt(name string) string {
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	if runtime.GOOS == "windows" {
+		return proc.FindTool(name)
+	}
+	return ""
 }
 
 // agentDir reports whether p is a folder an agent itself made. Skill

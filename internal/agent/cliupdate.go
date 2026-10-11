@@ -638,8 +638,8 @@ func (a *Agent) cliBin() (string, cliSpec) {
 		}
 		return "", spec
 	}
-	bin, err := exec.LookPath(a.Bin)
-	if err != nil {
+	bin := binAt(a.Bin)
+	if bin == "" {
 		return "", spec
 	}
 	if abs, err := filepath.Abs(bin); err == nil {
