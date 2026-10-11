@@ -1197,9 +1197,10 @@ func (r *subscriptionRun) ended(req *Request, said, stop string, ok bool) {
 func (b *subscriptionBridge) keepIdle(r *subscriptionRun, key, conv string) {
 	var drop []*subscriptionRun
 	b.mu.Lock()
-	// a run waits at one point of its conversation: kept again (a reply
-	// that ends after its turn was taken back, letGo), it leaves the key it
-	// waited at, unless another run waits there now. Left there, the same
+	// a run waits at one point of its conversation: kept again, it leaves
+	// the key it waited at, unless another run waits there now (#1596:
+	// which caller kept one run twice isn't known; ended and letGo of one
+	// request exclude each other through gone()). Left there, the same
 	// run under two keys was the oldest again after each pass below, which
 	// let go of one key only, so the loop never ended and drop grew with
 	// b.mu held (X, Sma1lboy: magpie at 158 GB after two days).

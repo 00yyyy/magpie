@@ -15,8 +15,7 @@ func idleTestBridge() *subscriptionBridge {
 	return &subscriptionBridge{runs: map[string]*subscriptionRun{}, calls: map[string]*subscriptionRun{}, idle: map[string]*subscriptionRun{}, shelf: map[string]*savedSession{}}
 }
 
-// A run kept again (a reply that ends after letGo took its turn back)
-// moves to its new key: left under the old one too, a request there would
+// A run kept again moves to its new key: left under the old one too, a request there would
 // take a run already waiting elsewhere.
 func TestClaudeIdleRunMoves(t *testing.T) {
 	b := idleTestBridge()

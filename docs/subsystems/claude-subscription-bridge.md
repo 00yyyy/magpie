@@ -117,10 +117,13 @@ hands (`pending`).
 
 ### One key per waiting run
 
-A run waits under one key (`keepIdle`). The reply to a turn the client
-gave up on can still end after `letGo` kept the run at `backKey`, and
-`ended` then keeps it at the turn after; kept again, a run leaves the key
-it waited at, unless another run now waits there. Past `idleMost`, the
+A run waits under one key (`keepIdle`, the only writer of `b.idle`);
+kept again, a run leaves the key it waited at, unless another run now
+waits there. Which order of calls kept one run twice in the reporter's
+gateway isn't known: `ended` and `letGo` of one request exclude each
+other (`serveSubscription`'s ended callback runs only when `gone()`
+stopped the `AfterFunc` that calls `letGo`), so it isn't those two of one
+request. `keepIdle` holds the rule whichever caller it was (#1596). Past `idleMost`, the
 eviction loop takes out the key it found as oldest, not the run's own.
 Before (X, Sma1lboy: magpie at 158 GB after two days of omp agents), one
 run under two keys was the oldest on every pass, the pass took out only
