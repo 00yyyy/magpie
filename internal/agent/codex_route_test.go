@@ -16,6 +16,9 @@ func codexHome(t *testing.T, auth, config string) (home string, read func() stri
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	// an app's data on Linux (Grok App's, #1668)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
 	t.Setenv("CODEX_HOME", "")
 	t.Setenv("HANA_HOME", "")
 	// folders an agent's own variable moves out of the sandbox home
