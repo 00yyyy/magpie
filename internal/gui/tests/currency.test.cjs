@@ -109,6 +109,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // ¥ CNY moves nothing
         await page.locator("#currencySegs").hover();
         for (let i = 0; i < 20 && !(await view(page)); i++) { await page.mouse.wheel(0, 200); await page.waitForTimeout(20); }
+        // and back until the row is clear of the header, as a reader would
+        // before clicking it: a button partly under the header is scrolled
+        // into view by the browser as it takes focus
+        for (let i = 0; i < 40; i++) {
+          const box = await segs.nth(1).boundingBox();
+          if (box && box.y >= 60) break;
+          await page.mouse.wheel(0, -60);
+          await page.waitForTimeout(30);
+        }
         const before = await view(page);
         assert(before > 0, "the settings list must be long enough to scroll");
         const tall = () => page.locator("#view-settings").evaluate((v) => v.getBoundingClientRect().height);

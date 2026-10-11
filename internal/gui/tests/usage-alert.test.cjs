@@ -173,14 +173,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await settled();
 
         // another setting saved later keeps both alerts. The currency row
-        // sits above the alert rows: in zh, since the Allowance reads row
-        // (e9221e96d), the wheel stops at the bottom with it 0.02px above
-        // the view, and Playwright scrolls a target into view before it
-        // clicks. So the alert clicks are checked here, and the currency
-        // click from where its row is in view.
+        // sits above the alert rows, out of view in zh with them mid-page,
+        // and a scroll made by a script is put back as the page is drawn
+        // again: so the alert clicks are checked here, and the currency
+        // row is wheeled into view, as a reader would, before its click.
         assert.equal(await view(page), before, "no alert click moved the page");
         const cny = page.locator("#currencySegs .opt", { hasText: w.cny });
-        await cny.scrollIntoViewIfNeeded();
+        for (let i = 0; i < 40; i++) {
+          const box = await cny.boundingBox();
+          if (box && box.y >= 60) break;
+          await page.mouse.wheel(0, -60);
+          await page.waitForTimeout(30);
+        }
         const atCurrency = await view(page);
         await cny.click();
         const c = await posted(5);
