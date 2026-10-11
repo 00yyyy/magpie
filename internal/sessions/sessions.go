@@ -454,6 +454,7 @@ func Dirs() []string {
 		{FactoryDir(), filepath.Join(FactoryDir(), "sessions")},
 		{CursorDir(), filepath.Join(CursorDir(), "chats")},
 		{AlmaDir(), almaDB()},
+		{MiniMaxDir(), minimaxSessions()},
 	} {
 		if _, err := os.Stat(d.sessions); err == nil {
 			out = append(out, d.dir)
