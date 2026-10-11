@@ -116,7 +116,8 @@ func claudeDesktop(home string) *Agent {
 					}
 				}
 			}
-			return false
+			// installed on Windows and not yet opened: none of them yet
+			return desktopdir.Installed(desktopdir.OS, home, os.Getenv)
 		},
 		Notice: func() string {
 			if desktopWiredAny(ps) {
