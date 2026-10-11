@@ -358,7 +358,8 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	q := SubscriptionQuota{Provider: l.Agent, Plan: l.Plan, Windows: []QuotaWindow{}}
 	if l.Agent == "claude" && !l.Active {
-		// a saved account is never asked: what Claude Code told of it
+		// a saved account: what Claude Code told of it, or, when its card
+		// is refreshed, its /usage run in the account's own directory
 		ws, err := claudeWindows(ctx, l.User, false)
 		q.Windows = ws
 		if err != nil {

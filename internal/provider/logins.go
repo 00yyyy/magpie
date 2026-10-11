@@ -972,6 +972,13 @@ func switchLogin(agent, user string) error {
 // the agent's own store, and answers the account it replaced: "" when there
 // was none, or the agent was on that one already.
 func switchSavedLogin(agent, user string) (from string, _ error) {
+	if agent == "claude" {
+		// nor while Claude Code runs in the account's own directory for
+		// magpie (inSavedClaudeDir), which may refresh it there
+		mu := claudeDirRun(user)
+		mu.Lock()
+		defer mu.Unlock()
+	}
 	// not while a saved account is being refreshed: the agent would be
 	// given the refresh token that refresh is spending
 	savedTokenMu.Lock()
