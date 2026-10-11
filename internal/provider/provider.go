@@ -1043,6 +1043,11 @@ func normalize(p Provider) Provider {
 			p.Decide = pr.Decide
 		}
 	}
+	// an oMLX provider saved before its preset had System One (#1641)
+	// asks it where its chat completions are, at whatever port it was given
+	if p.Preset == OMLXPreset && p.Decide == "" && p.Chat != "" {
+		p.Decide = p.Chat
+	}
 	if p.Routing != Ordered && p.Routing != Rotate && p.Routing != LeastUsed && p.Routing != Pace && p.Routing != Weighted {
 		p.Routing = ""
 	}

@@ -536,9 +536,12 @@ var presets = []PresetDef{
 	{ID: "lmstudio", Name: "LM Studio", Icon: "lmstudio", Kind: KindLocal, NoKey: true,
 		Chat: "http://localhost:1234/v1",
 		Note: "local server on :1234", Website: "https://lmstudio.ai"},
-	{ID: "omlx", Name: "oMLX", Icon: "omlx", Kind: KindLocal, NoKey: true,
+	// its decision models (Clef, OpenJev), served at /v1/systemone since
+	// 0.7.1, are the ones its /v1/models/status says are (omlx_decide.go)
+	{ID: OMLXPreset, Name: "oMLX", Icon: "omlx", Kind: KindLocal, NoKey: true,
 		Chat: "http://localhost:8000/v1", Responses: "http://localhost:8000/v1", Anthropic: "http://localhost:8000",
-		Note: "local server on :8000", Website: "https://omlx.ai"},
+		Decide: "http://localhost:8000/v1",
+		Note:   "local server on :8000", Website: "https://omlx.ai"},
 	{ID: "mlx-serve", Name: "MLX-Serve", Icon: "mlx-serve", Kind: KindLocal, NoKey: true,
 		Chat: "http://localhost:11234/v1", Responses: "http://localhost:11234/v1", Anthropic: "http://localhost:11234",
 		Note: "local server on :11234", Website: "https://github.com/ddalcu/mlx-serve"},
