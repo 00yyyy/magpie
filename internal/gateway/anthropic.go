@@ -365,7 +365,8 @@ var alwaysThinks = regexp.MustCompile(`(?i)always engages in thinking|thinking (
 // it takes: Sub2API's gpt-6.1-sol, "gpt-6.1-sol does not support reasoning
 // effort \"none\"; use low, medium, high, xhigh or max" (#1465).
 func refusesThinkingOff(b []byte) bool {
-	return alwaysThinks.Match(b) || mandatoryReasoning.Match(b) || thinkingOffRefused.Match(b) ||
+	// alwaysThinks' words are matched decoded, too (#1678): 思考 escaped as \uXXXX
+	return alwaysThinks.Match(wordsOf(b)) || mandatoryReasoning.Match(b) || thinkingOffRefused.Match(b) ||
 		effortLevelsNamed.Match(b) && noneQuoted.Match(b)
 }
 
