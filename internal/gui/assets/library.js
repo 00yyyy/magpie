@@ -468,17 +468,40 @@
   // the library as the page shows it: what a change did is said once, not shown
   const seen = (v) => JSON.stringify({ ...v, result: undefined });
 
-  // Every change answers with the page as it is after it, and what it did.
+  // Every change answers with the page as it is after it, and what it did;
+  // one to the instructions with them alone, the rest kept as it is (#1624).
+  // One change is on its way at a time: while it is, the page's buttons
+  // can't be pressed and the one pressed says it is saving, so a second
+  // click doesn't make or remove a set twice (Hipple, #1624: a minute a
+  // click with nothing to show for it).
+  let changing = false;
   async function change(path, body, done) {
+    if (changing) return false;
+    changing = true;
+    const ev = window.event;
+    const pressed = ev?.type === "click" && ev.target?.closest?.("button:not(.lib-switch):not(.lib-radio)");
+    const held = [...document.querySelectorAll("#view-library button, #modal.lib button")].filter((b) => !b.disabled);
+    for (const b of held) b.disabled = true;
+    page.setAttribute("aria-busy", "true");
+    if (pressed && pressed.textContent.trim()) saving(pressed, t("Saving…"));
+    status(t("Saving…"), "", 120000);
+    let ok = false;
     try {
       const v = await api("library/" + path, body);
-      take(v);
+      take(v.part === "instructions" ? { ...lib, instructions: v.instructions, problems: v.problems, result: v.result } : v);
+      status(""); // what it did, said next, or nothing for one that says nothing
       report(v.result, done);
-      render();
+      ok = true;
       return true;
     } catch (e) {
       status(e.message, "err", 6000);
       return false;
+    } finally {
+      changing = false;
+      page.removeAttribute("aria-busy");
+      for (const b of held) b.disabled = false;
+      if (pressed) doneSaving(pressed);
+      if (ok) render();
     }
   }
   // given, for a row's agent chips, is the agents that have it now: an

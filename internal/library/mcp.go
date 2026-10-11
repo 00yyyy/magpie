@@ -1260,10 +1260,13 @@ func appOwned(s *Server) bool {
 	return false
 }
 
-func foundServers(l *Library) []Found {
+func foundServers(l *Library) []Found { return foundServersOf(l, Targets()) }
+
+// foundServersOf is foundServers among these agents.
+func foundServersOf(l *Library, targets []*Target) []Found {
 	byName := map[string]*Found{}
 	var names []string
-	for _, t := range Targets() {
+	for _, t := range targets {
 		if t.MCP == nil {
 			continue
 		}

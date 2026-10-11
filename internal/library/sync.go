@@ -306,10 +306,6 @@ func Read(problems []Problem) (*View, error) { return readView(problems, false) 
 func Glance(problems []Problem) (*View, error) { return readView(problems, true) }
 
 func readView(problems []Problem, glance bool) (*View, error) {
-	iv, err := ReadInstructions()
-	if err != nil {
-		return nil, err
-	}
 	mu.Lock()
 	locked := true
 	defer func() {
@@ -321,8 +317,10 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: iv, Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, Partial: glance}
+	// the agents are found once for the whole read: finding them looks
+	// through every agent's folders, in WSL too (#1624)
 	targets := Targets()
+	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, Partial: glance}
 	for _, t := range targets {
 		av := AgentView{ID: t.Agent.ID, Name: t.Agent.Name, Icon: t.Agent.Icon, Instructions: t.Instructions, Skills: t.Skills,
 			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID),
@@ -416,7 +414,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 		sv.Edited, _ = l.editState(s, targets)
 		v.Skills = append(v.Skills, sv)
 	}
-	v.FoundServers = foundServers(l)
+	v.FoundServers = foundServersOf(l, targets)
 	for i := range v.FoundServers {
 		v.FoundServers[i].Icon = serverIcon(l, v.FoundServers[i].Server)
 	}
