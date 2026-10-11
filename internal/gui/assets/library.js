@@ -3790,6 +3790,8 @@
       if (seq !== m.seq) return;
       m.items = r.items || [];
       m.error = r.error || "";
+      // the source that didn't answer when the rest did (#1589)
+      m.failed = r.failed ? { source: r.failed, cause: r.cause || "" } : null;
       // a search that is an address nothing listed is at: the server
       // there, to add by hand
       m.custom = r.custom || null;
@@ -3797,6 +3799,7 @@
       if (seq !== m.seq) return;
       m.items = m.items || [];
       m.custom = null;
+      m.failed = null;
       m.error = e.message;
     }
     m.loading = false;
@@ -3886,7 +3889,13 @@
       }
       return;
     }
-    if (m.error) grid.append(el("div", "mk-msg err", m.error));
+    // one source not answering while the others did is a short list, not
+    // a failed search: it says which one, over what the rest found (#1589)
+    if (m.error && m.failed && m.items.length) {
+      grid.append(el("div", "mk-msg mk-partial", kind === "mcp"
+        ? t("The MCP Registry didn't answer ({error}), so these are only magpie's featured servers that match.", { error: m.failed.cause })
+        : t("skills.sh's search didn't answer ({error}), so these are only the matches among magpie's picks and the most installed skills.", { error: m.failed.cause })));
+    } else if (m.error) grid.append(el("div", "mk-msg err", m.error));
     if (kind === "mcp" && q && m.custom) grid.append(customAt(q, m.custom, m.items.length));
     else if (!m.items.length && !m.error) {
       grid.append(el("div", "mk-msg", q ? t("Nothing matches “{q}”.", { q }) : t("Nothing to show.")));

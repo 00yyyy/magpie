@@ -2,6 +2,7 @@ package gui
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -58,6 +59,18 @@ type marketJSON struct {
 	// Custom is a server to add by hand, for a search that is an address
 	// nothing listed is at
 	Custom *library.Custom `json:"custom,omitempty"`
+	// Failed is the source the search couldn't reach, and Cause why; the
+	// items are then what the others found (#1589)
+	Failed string `json:"failed,omitempty"`
+	Cause  string `json:"cause,omitempty"`
+}
+
+func marketOf(items any, err error) marketJSON {
+	m := marketJSON{Items: items, Error: errText(err)}
+	if se := (*library.SearchError)(nil); errors.As(err, &se) {
+		m.Failed, m.Cause = se.Source, se.Err.Error()
+	}
+	return m
 }
 
 func errText(err error) string {
@@ -116,11 +129,13 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 	// once asked for, which skills.sh gives one at a time
 	mux.HandleFunc("GET /api/library/market/servers", func(rw http.ResponseWriter, r *http.Request) {
 		list, err := library.MarketServers(r.URL.Query().Get("q"))
-		writeJSON(rw, marketJSON{Items: list, Error: errText(err), Custom: library.CustomAt(r.URL.Query().Get("q"), list)})
+		m := marketOf(list, err)
+		m.Custom = library.CustomAt(r.URL.Query().Get("q"), list)
+		writeJSON(rw, m)
 	})
 	mux.HandleFunc("GET /api/library/market/skills", func(rw http.ResponseWriter, r *http.Request) {
 		list, err := library.MarketSkills(r.URL.Query().Get("q"))
-		writeJSON(rw, marketJSON{Items: list, Error: errText(err)})
+		writeJSON(rw, marketOf(list, err))
 	})
 	mux.HandleFunc("POST /api/library/market/about", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ IDs []string }
