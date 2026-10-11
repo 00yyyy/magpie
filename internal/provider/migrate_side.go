@@ -150,7 +150,7 @@ func init() {
 
 	movers[CommandCodePlanID] = &mover{
 		pkg:    "@magpie-community/opencode-commandcode-auth",
-		min:    "0.1.9", // a Go key the Provider API refuses is taken as Go's and asked at /alpha/generate (#969); a failure's status and its sign-in mark as the built-in's; a Go account lists Go's models; a model the plugin doesn't know takes pictures as models.dev says
+		min:    "0.1.10", // a Go request says the agent's folder and git repository as magpie tells them, not the home's (plugins #86); 0.1.9: a Go key the Provider API refuses is taken as Go's and asked at /alpha/generate (#969); a failure's status and its sign-in mark as the built-in's; a Go account lists Go's models; a model the plugin doesn't know takes pictures as models.dev says
 		agents: []string{CommandCodePlanID},
 		out: func() ([]Moving, error) {
 			var out []Moving
