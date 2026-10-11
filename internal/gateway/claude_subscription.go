@@ -1187,16 +1187,30 @@ func (r *subscriptionRun) ended(req *Request, said, stop string, ok bool) {
 	r.bridge.mu.Lock()
 	r.loose = loose
 	r.bridge.mu.Unlock()
-	r.bridge.keepIdle(r, key, conv)
+	if !r.bridge.keepIdle(r, key, conv) {
+		return // it ended during its reply (#1667)
+	}
 	r.timer.Reset(idleLongest)
 }
 
 // keepIdle leaves run waiting for the turn after the conversation key
 // names, the longest waiting let go past idleMost; conv, when set, is that
-// conversation whatever the model (convKey).
-func (b *subscriptionBridge) keepIdle(r *subscriptionRun, key, conv string) {
+// conversation whatever the model (convKey). A run that has ended isn't
+// kept, and keepIdle says so: its 30-minute timer can end it during a
+// reply that still reaches the client whole (#1667), and kept, it held one
+// of idleMost places until pushed out, as removeRun, which takes it out,
+// had already been. finish says it ended before removeRun takes b.mu, so a
+// run kept here before then is taken out by it.
+func (b *subscriptionBridge) keepIdle(r *subscriptionRun, key, conv string) bool {
 	var drop []*subscriptionRun
 	b.mu.Lock()
+	r.mu.Lock()
+	closed := r.closed
+	r.mu.Unlock()
+	if closed {
+		b.mu.Unlock()
+		return false
+	}
 	// a run waits at one point of its conversation: kept again, it leaves
 	// the key it waited at, unless another run waits there now (#1596:
 	// which caller kept one run twice isn't known; ended and letGo of one
@@ -1237,6 +1251,7 @@ func (b *subscriptionBridge) keepIdle(r *subscriptionRun, key, conv string) {
 	for _, run := range drop {
 		run.abort()
 	}
+	return true
 }
 
 // shelfMost is how many saved sessions the shelf keeps, the longest
@@ -1533,7 +1548,9 @@ func (r *subscriptionRun) letGo() {
 	// stops (an interrupted result) is read past
 	r.endSegment()
 	// found at once by a resend, which waits for the rewind (resume)
-	r.bridge.keepIdle(r, back, "")
+	if !r.bridge.keepIdle(r, back, "") {
+		return // it ended since (#1667): there is nothing to take back
+	}
 	if err := r.rewind(turn); err != nil {
 		log.Printf("claude: a turn the client gave up on could not be taken back, its run let go: %v", err)
 		r.abort()

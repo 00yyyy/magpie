@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"testing"
@@ -35,10 +36,13 @@ func TestClaudeIdleRunMoves(t *testing.T) {
 // it waits.
 func TestClaudeIdleReplacementKeepsItsKey(t *testing.T) {
 	b := idleTestBridge()
-	old := &subscriptionRun{bridge: b, closed: true}
+	old := &subscriptionRun{bridge: b}
 	replacement := &subscriptionRun{bridge: b}
 	b.keepIdle(old, "same", "")
-	b.keepIdle(replacement, "same", "")
+	// another run waits at old's key now, old not told: kept there through
+	// keepIdle, old would have been ended, and an ended run isn't kept (#1667)
+	b.idle["same"] = replacement
+	replacement.idleKey = "same"
 	b.keepIdle(old, "other", "")
 	if b.idle["same"] != replacement || b.idle["other"] != old {
 		t.Fatal("moving a run took out the one that replaced it")
@@ -73,7 +77,7 @@ func TestClaudeIdleEvictionEnds(t *testing.T) {
 
 func idleEvictionChild(t *testing.T, scenario string) {
 	b := idleTestBridge()
-	stale := &subscriptionRun{bridge: b, closed: true}
+	stale := &subscriptionRun{bridge: b}
 	if scenario == "stale" {
 		// an entry whose run says it waits elsewhere
 		b.idle["before"] = stale
@@ -87,7 +91,7 @@ func idleEvictionChild(t *testing.T, scenario string) {
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < idleMost+2; i++ {
-			b.keepIdle(&subscriptionRun{bridge: b, closed: true}, fmt.Sprint(i), "")
+			b.keepIdle(&subscriptionRun{bridge: b}, fmt.Sprint(i), "")
 		}
 		close(done)
 	}()
@@ -112,4 +116,31 @@ func idleEvictionChild(t *testing.T, scenario string) {
 			}
 		}
 	}
+}
+
+// #1667: a resumed turn's 30-minute timer that fires mid-reply ends the run
+// (abort), and the reply's last event, already in the segment, still reaches
+// the client whole, so ended is told it went well. The ended run was kept
+// idle then, holding one of idleMost slots until evicted: its timer, re-armed,
+// found it closed and never took it out.
+func TestClaudeRunEndedMidReplyIsNotKeptIdle(t *testing.T) {
+	b := idleTestBridge()
+	in, out := io.Pipe()
+	defer in.Close()
+	r := &subscriptionRun{bridge: b, stdin: out, owner: "owner"}
+	fired := make(chan struct{}, 2)
+	r.timer = time.AfterFunc(time.Hour, func() { r.abort(); fired <- struct{}{} })
+	// the timer fires while the reply is going out, and abort is through
+	// (removeRun included) before the reply's end is told
+	r.timer.Reset(time.Nanosecond)
+	<-fired
+	req := &Request{Model: "claude-sonnet-4-5", Tools: []Tool{{Name: "Read"}}, Messages: []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: "hi"}}}}}
+	r.ended(req, "hello", "stop", true)
+	b.mu.Lock()
+	kept := len(b.idle)
+	b.mu.Unlock()
+	if kept != 0 {
+		t.Fatalf("a run its timer ended mid-reply is kept idle (%d runs), holding a slot of %d", kept, idleMost)
+	}
+	r.timer.Stop()
 }

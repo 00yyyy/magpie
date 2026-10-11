@@ -133,6 +133,17 @@ bound. `claude_idle_test.go` (`TestClaudeIdleEvictionEnds` runs the loop
 in a child process, which on the old code fails on what the loop
 allocates, not on a deadline).
 
+`keepIdle` refuses a run that has ended, and its callers then leave the
+run's timer alone (#1667). A resumed turn's 30-minute timer can end a run
+(`abort` → `finish` → `removeRun`) while its reply is going out, and the
+reply's last event, already in the segment, still reaches the client
+whole, so `ended` is told it went well. Before, the ended run was kept,
+held one of `idleMost` places until pushed out, and its re-armed timer
+found it closed and never took it out. `finish` sets `closed` before
+`removeRun` takes `b.mu`, and `keepIdle` reads it under `b.mu`, so a run
+is either refused or kept and then taken out by `removeRun`.
+`TestClaudeRunEndedMidReplyIsNotKeptIdle` fires the timer before `ended`.
+
 ## Finding the run: keys
 
 - `nextTurn` splits a request at its last reply that calls no tool: the
