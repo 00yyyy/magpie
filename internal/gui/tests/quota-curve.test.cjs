@@ -9,7 +9,8 @@
 // across a reload, and no click moves the page. Several accounts on a card
 // are set apart by a rule, a curve's legend before the next one too. An
 // account with no readings has no curve. The tray's card has a thin line of
-// its first window's cycle.
+// its first window's cycle, with no now line (#1601), and a click into the
+// tray's list rings nothing.
 // English and Chinese, light and dark; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -183,9 +184,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await spark.locator("path.qc-line").count(), 1);
       assert.equal((((await spark.locator("path.qc-line").getAttribute("d")).match(/M/g)) || []).length, 1, "the current cycle only");
       assert.equal(await spark.locator("line.qc-even").count(), 1);
+      // the line ends at now already; in 16px a dotted now line read as a
+      // stray mark under the curve (#1601)
+      assert.equal(await spark.locator("line.qc-now").count(), 0, "no now line in the thin spark");
       const sb = await spark.boundingBox(), cb = await pcard.boundingBox();
       assert.ok(sb.height <= 17 && sb.width > cb.width * 0.7, `thin and across the card: ${JSON.stringify(sb)}`);
       assert.equal(await panel.locator(".pq-card", { hasText: "Kimi" }).locator(".pq-spark").count(), 0);
+      // a click into the list, then a key to scroll it, rings nothing: the
+      // view takes focus only so the keys scroll it (#1601, WebKitGTK)
+      // (after the spark is measured: the click focuses the window, whose
+      // focus reloads and redraws the cards, so a card measured then can be
+      // between two draws)
+      await panel.mouse.click(220, 300);
+      await panel.keyboard.press("ArrowDown");
+      const ring = await panel.evaluate(() => { const a = document.activeElement, cs = getComputedStyle(a); return { view: a.classList.contains("view"), outline: cs.outlineStyle === "none" ? "none" : cs.outlineStyle + " " + cs.outlineWidth }; });
+      assert.deepEqual(ring, { view: true, outline: "none" }, "the scrolled view shows no focus ring");
       // turned off in the window, the tray's line goes too, and stays gone
       const win = await panel.context().newPage();
       await win.route("**/*", serve(lang, "dark", false, data));

@@ -441,6 +441,9 @@ body.window .view { padding: 2px 16px 8px; }
    switch at the other (#860); the tables and charts of Routing, Usage and
    Sessions take the whole width */
 body.window :is(#view-agents, #view-providers, #view-gateway, #view-library, #view-plugins, #view-settings) { padding-left: max(16px, calc(50% - 600px)); padding-right: max(16px, calc(50% - 600px)); }
+/* a view takes focus (tabIndex -1) only so the keys scroll it after a click;
+   a ring round the whole list there marks nothing a reader can act on (#1601) */
+.view:focus { outline: none; }
 .view > .view-room { flex: none; pointer-events: none; } /* see "where the reader is" */
 /* Windows and Linux draw a classic scrollbar, arrows and all; a thin rounded
    thumb instead, like the overlay one macOS shows (left as it is there) */

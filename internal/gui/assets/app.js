@@ -14684,7 +14684,9 @@ function drawQuotaPlot(g, lines, x0, x1, w, h, now, thin) {
     const d = quotaPaths(l.points, x0, x1, w, h);
     if (d) g.append(sv("path", { d, class: "qc-line" + (short ? " qc-short" : ""), "data-name": l.name }, { stroke: color }));
   });
-  if (now >= x0 && now <= x1) g.append(sv("line", { x1: X(now), x2: X(now), y1: 0, y2: h, class: "qc-now" }));
+  // a spark ends at now already, and in 16px the dotted now line read as a
+  // stray mark under the curve (#1601); the large curve keeps it
+  if (!thin && now >= x0 && now <= x1) g.append(sv("line", { x1: X(now), x2: X(now), y1: 0, y2: h, class: "qc-now" }));
 }
 // quotaCurve: an account's windows over time, under its meters, with the
 // range turned for every card at once
