@@ -395,6 +395,14 @@ func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool
 		}
 	}
 	if !ok && !local(r) {
+		if over, retry := tooManyAuthFails(); over {
+			// A flood of wrong keys: stop answering each one (no 401 oracle,
+			// no unbounded work) until the bucket refills. A valid key never
+			// reaches here, so a real caller is not held.
+			w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+			writeError(w, provider.Chat, http.StatusTooManyRequests, "too many failed authentications; slow down and send an enabled magpie gateway key")
+			return r, false
+		}
 		msg := refusedKey(callerKey(r))
 		log.Printf("refused %s %s from %s: %s", r.Method, r.URL.Path, r.RemoteAddr, msg)
 		writeError(w, provider.Chat, http.StatusUnauthorized, msg)
