@@ -88,24 +88,21 @@ const devinIdentityTimeout = 30 * time.Second
 // and the account stays as it was (#154): only a CLI that says nobody is,
 // whose account's token was refused, or that keeps no credentials.toml, is
 // sure of nobody.
-func askDevinStatus() (user, plan string, ok bool, err error) { return askDevinStatusAt("") }
+func askDevinStatus() (user, plan string, ok bool, err error) {
+	return askDevinStatusAt(context.Background(), "")
+}
 
-// askDevinIdentity is who the CLI says is signed in, sure or not: the
-// sign-in has just written the credentials and has to name the account.
-func askDevinIdentity() (user, plan string, ok bool) {
-	u, p, ok, _ := askDevinStatusAt("")
+// askDevinIdentityAt is who the CLI says is signed in in home ("" for its
+// own), sure or not: a sign-in has just written the credentials and has to
+// name the account.
+func askDevinIdentityAt(ctx context.Context, home string) (user, plan string, ok bool) {
+	u, p, ok, _ := askDevinStatusAt(ctx, home)
 	return u, p, ok
 }
 
-// askDevinIdentityAt is askDevinIdentity for the account signed in in home
-// ("" for the CLI's own).
-func askDevinIdentityAt(home string) (user, plan string, ok bool) {
-	u, p, ok, _ := askDevinStatusAt(home)
-	return u, p, ok
-}
-
-// askDevinStatusAt asks the CLI who is signed in in home ("" for its own).
-func askDevinStatusAt(home string) (user, plan string, ok bool, err error) {
+// askDevinStatusAt asks the CLI who is signed in in home ("" for its own),
+// through the proxy ctx names, else the account's (devinCommand).
+func askDevinStatusAt(ctx context.Context, home string) (user, plan string, ok bool, err error) {
 	if settings.AccountDiscoveryOff() {
 		return "", "", false, nil
 	}
@@ -113,7 +110,7 @@ func askDevinStatusAt(home string) (user, plan string, ok bool, err error) {
 	if path == "" {
 		return "", "", false, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), devinIdentityTimeout)
+	ctx, cancel := context.WithTimeout(ctx, devinIdentityTimeout)
 	defer cancel()
 	out, err := devinCommand(ctx, home, path, "auth", "status").Output()
 	user, plan, _ = parseDevinStatus(string(out))
@@ -664,7 +661,7 @@ func devinExchange(ctx context.Context, code, verifier, redirect string) (savedL
 			removeDevinHome(home)
 			return savedLogin{}, err
 		}
-		user, plan, err := addDevinLogin(home)
+		user, plan, err := addDevinLogin(ctx, home)
 		if err != nil {
 			removeDevinHome(home)
 			return savedLogin{}, err
@@ -679,7 +676,7 @@ func devinExchange(ctx context.Context, code, verifier, redirect string) (savedL
 	}
 	forgetDevinStatus()
 	forgetAccountCaches()
-	user, plan, ok := askDevinIdentity()
+	user, plan, ok := askDevinIdentityAt(ctx, "")
 	if !ok {
 		// the account is only ever seen through the CLI: without it
 		// answering, magpie has nothing to show and nothing to run
