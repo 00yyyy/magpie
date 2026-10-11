@@ -8564,16 +8564,21 @@ function drawEditor(p, presetID) {
   }
 
   // Volcengine Ark tells a Coding or Agent Plan's windows only to the
-  // account's access key, never to the plan's key (#1427); the saved
-  // Secret is never sent back here, only that one is saved
-  const access = p ? p.accessKey : pr?.accessKey ? { id: "", secretSet: false } : null;
+  // account's access key, never to the plan's key (#1427), and Tencent
+  // Cloud a Token Plan 企业版's only to its SecretId and SecretKey (#1574),
+  // asked only at the regions that are that plan; the saved Secret is
+  // never sent back here, only that one is saved
+  const access = p ? p.accessKey : pr?.accessKey ? { vendor: pr.accessKeyVendor || "volcengine", id: "", secretSet: false } : null;
+  let accessAt = () => {}, accessShown = () => !!access;
   if (access) {
+    const tc = access.vendor === "tencent";
+    const idName = tc ? t("SecretId") : t("AccessKey ID"), secretName = tc ? t("SecretKey") : t("Secret Access Key");
     if (draft.accessKeyID === undefined) draft.accessKeyID = access.id || "";
-    const ak = input(draft.accessKeyID, t("AccessKey ID"));
+    const ak = input(draft.accessKeyID, idName);
     ak.classList.add("volc-ak");
     ak.oninput = () => { draft.accessKeyID = ak.value.trim(); };
     const saved = access.secretSet && !draft.clearAccessKey;
-    const sk = input(draft.secretAccessKey || "", saved ? t("saved · paste a new one to replace it") : t("Secret Access Key"), "password");
+    const sk = input(draft.secretAccessKey || "", saved ? t("saved · paste a new one to replace it") : secretName, "password");
     sk.classList.add("volc-sk");
     sk.oninput = () => { draft.secretAccessKey = sk.value.trim(); };
     sk.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") cancelEdit(); };
@@ -8582,12 +8587,28 @@ function drawEditor(p, presetID) {
     if (saved) {
       const side = el("div", "side");
       const drop = el("button", "text", t("Remove"));
-      drop.onclick = () => { draft.clearAccessKey = true; draft.accessKeyID = ""; draft.secretAccessKey = ""; ak.value = ""; sk.value = ""; sk.placeholder = t("Secret Access Key"); drop.remove(); };
+      drop.onclick = () => { draft.clearAccessKey = true; draft.accessKeyID = ""; draft.secretAccessKey = ""; ak.value = ""; sk.value = ""; sk.placeholder = secretName; drop.remove(); };
       side.append(drop);
       pair.append(side);
     }
-    ed.append(...field(t("AccessKey ID"), ak, ""));
-    ed.append(...field(t("Secret Access Key"), pair, t("The plan's 5-hour, weekly and monthly windows are told only to the account's access key (Volcengine console → API Access Keys), not to the plan's API key. Give it here for the Usage page to show them; it is used for nothing else.")));
+    const rows = [
+      ...field(idName, ak, ""),
+      ...field(secretName, pair, tc
+        ? t("Token Plan Enterprise's usage is told only to the Tencent Cloud account's API key (console → Access management → API keys), not to the plan's API key. Give its SecretId and SecretKey here for the Usage page to show it; a sub-user's key that may read TokenHub is enough. It is used for nothing else.")
+        : t("The plan's 5-hour, weekly and monthly windows are told only to the account's access key (Volcengine console → API Access Keys), not to the plan's API key. Give it here for the Usage page to show them; it is used for nothing else.")),
+    ];
+    ed.append(...rows);
+    // a preset with the plan at some of its regions only (Tencent Cloud's
+    // 企业版 beside its personal plan) asks for it at those, and at an
+    // endpoint none of its regions has, which may be one of them
+    const at = pr?.accessKeyRegions;
+    if (at?.length) {
+      accessAt = (r) => {
+        const on = !r || at.includes(r.id) || !regionAt(pr, draft);
+        for (const x of rows) x.hidden = !on;
+      };
+      accessShown = () => !rows[0].hidden;
+    }
   }
 
   // a relay that offers several regional endpoints, or a vendor whose plans
@@ -8608,12 +8629,14 @@ function drawEditor(p, presetID) {
           site.textContent = hostOf(site.dataset.url) + " ↗";
         }
         onRegion(r);
+        accessAt(r);
         for (const x of seg.querySelectorAll(".opt")) x.classList.toggle("on", x === b);
         slide(seg, "regions");
         refreshEndpoints();
       };
       seg.append(b);
     }
+    accessAt(cur);
     queueMicrotask(() => {
       slide(seg, "regions");
       // the region in use in view, where they scroll
@@ -8841,7 +8864,7 @@ function drawEditor(p, presetID) {
       body.accessKeyID = draft.accessKeyID || "";
       if (draft.secretAccessKey) body.secretAccessKey = draft.secretAccessKey;
       else if (draft.clearAccessKey) body.clearAccessKey = true;
-      if (body.accessKeyID && !body.secretAccessKey && !(access.secretSet && !draft.clearAccessKey)) { ed.querySelector(".volc-sk")?.focus({ preventScroll: true }); return editorError(t("Give the access key's Secret too"), "warn"); }
+      if (accessShown() && body.accessKeyID && !body.secretAccessKey && !(access.secretSet && !draft.clearAccessKey)) { ed.querySelector(".volc-sk")?.focus({ preventScroll: true }); return editorError(t("Give the access key's Secret too"), "warn"); }
     }
     if (vertex) body.vertex = vertexOfDraft();
     if (isNew && custom && !body.name) { name.focus(); return editorError(t("Give it a name"), "warn"); }

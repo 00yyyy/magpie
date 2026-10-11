@@ -54,8 +54,10 @@ type Provider struct {
 
 	// AccessKeyID and SecretAccessKey are a Volcengine account's access
 	// key (TakesVolcAccessKey), what Ark tells its Coding or Agent Plan's
-	// windows to (volcengine_usage.go); not the plan's inference key in
-	// Key. They are kept, backed up and synced as the keys are: the Secret
+	// windows to (volcengine_usage.go), or a Tencent Cloud account's API
+	// key, its SecretId and SecretKey (TakesTencentAccessKey), what TokenHub
+	// tells Token Plan 企业版's usage to (tencent_usage.go); not the plan's
+	// inference key in Key. They are kept, backed up and synced as the keys are: the Secret
 	// is never sent to the GUI, and a backup without keys has neither.
 	AccessKeyID     string `json:"accessKeyID,omitempty"`
 	SecretAccessKey string `json:"secretAccessKey,omitempty"`

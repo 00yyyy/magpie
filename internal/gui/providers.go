@@ -122,9 +122,10 @@ type providerJSON struct {
 	// a Zhipu or Z.ai key's team, for a team's GLM Coding Plan (#236):
 	// set, if empty, for those providers alone, which the editor asks it of
 	ZhipuTeam *provider.ZhipuTeam `json:"zhipuTeam,omitempty"`
-	// a Volcengine account's access key, which its plan's windows are
-	// read with (provider.TakesVolcAccessKey): whether the provider takes
-	// one, its ID, and whether a Secret is saved; never the Secret itself
+	// a Volcengine account's access key or a Tencent Cloud account's
+	// SecretId and SecretKey, which its plan's windows are read with
+	// (provider.AccessKeyVendor): whether the provider takes one, whose,
+	// its ID, and whether a Secret is saved; never the Secret itself
 	AccessKey *accessKeyJSON `json:"accessKey,omitempty"`
 	// a Google Vertex AI provider's project, location and Google
 	// credentials, which it is asked with in place of a key: set for it
@@ -219,11 +220,34 @@ type moveJSON struct {
 
 // stepPlanJSON: whether a StepFun provider's platform sign-in is kept, and
 // where and how the user gets one
-// accessKeyJSON is a provider's Volcengine access key as the editor sees
-// it: the ID, and whether a Secret is saved, never the Secret.
+// accessKeyJSON is a provider's account access key as the editor sees
+// it: whose ("volcengine", "tencent"), the ID, and whether a Secret is
+// saved, never the Secret.
 type accessKeyJSON struct {
+	Vendor    string `json:"vendor"`
 	ID        string `json:"id"`
 	SecretSet bool   `json:"secretSet"`
+}
+
+// presetAccessKey is whose account access key a preset's plans are read
+// with ("volcengine", "tencent", "" for none) and, when only some of its
+// regions are such a plan (Tencent Cloud's Token Plan 企业版 beside its
+// personal plan and pay as you go, #1574), their ids; nil when all are.
+func presetAccessKey(pr provider.PresetDef) (string, []string) {
+	vendor := provider.AccessKeyVendor(provider.Provider{Chat: pr.Chat, Responses: pr.Responses, Anthropic: pr.Anthropic})
+	var ids []string
+	for _, r := range pr.Regions {
+		if v := provider.AccessKeyVendor(provider.Provider{Chat: r.Chat, Responses: r.Responses, Anthropic: r.Anthropic}); v != "" {
+			ids = append(ids, r.ID)
+			if vendor == "" {
+				vendor = v
+			}
+		}
+	}
+	if vendor == "" || len(ids) == len(pr.Regions) {
+		return vendor, nil
+	}
+	return vendor, ids
 }
 
 type stepPlanJSON struct {
@@ -320,9 +344,13 @@ type presetJSON struct {
 	// ZhipuTeam: a key of it may be on a team's GLM Coding Plan, whose
 	// organization and project the editor offers to take
 	ZhipuTeam bool `json:"zhipuTeam,omitempty"`
-	// AccessKey: a Volcengine Ark plan, whose windows are read with the
-	// account's access key, which the editor offers to take
-	AccessKey bool `json:"accessKey,omitempty"`
+	// AccessKey: a plan whose windows are read with the account's access
+	// key (Volcengine Ark's, Tencent Cloud's Token Plan 企业版), which the
+	// editor offers to take; AccessKeyVendor whose, and AccessKeyRegions
+	// the regions it is asked at when not all of them (presetAccessKey)
+	AccessKey        bool     `json:"accessKey,omitempty"`
+	AccessKeyVendor  string   `json:"accessKeyVendor,omitempty"`
+	AccessKeyRegions []string `json:"accessKeyRegions,omitempty"`
 	// Vertex: it is Google Vertex AI, whose editor asks for a Google Cloud
 	// project and the Google credentials to sign with, not a key
 	Vertex bool `json:"vertex,omitempty"`
@@ -501,8 +529,14 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 			*out.ZhipuTeam = *p.ZhipuTeam
 		}
 	}
-	if provider.TakesVolcAccessKey(p) || p.AccessKeyID != "" || p.SecretAccessKey != "" {
-		out.AccessKey = &accessKeyJSON{ID: p.AccessKeyID, SecretSet: p.SecretAccessKey != ""}
+	// a provider of a preset with such a plan among its regions takes one
+	// wherever it is, the editor showing it at those regions
+	vendor := provider.AccessKeyVendor(p)
+	if pr := provider.Preset(p.Preset); vendor == "" && pr != nil {
+		vendor, _ = presetAccessKey(*pr)
+	}
+	if vendor != "" || p.AccessKeyID != "" || p.SecretAccessKey != "" {
+		out.AccessKey = &accessKeyJSON{Vendor: vendor, ID: p.AccessKeyID, SecretSet: p.SecretAccessKey != ""}
 	}
 	if p.IsVertex() {
 		out.Vertex = &provider.Vertex{}
@@ -732,7 +766,8 @@ func providersState() providersJSON {
 	for _, pr := range provider.Presets() {
 		bases := provider.Provider{Chat: pr.Chat, Responses: pr.Responses, Anthropic: pr.Anthropic}
 		team := provider.TakesZhipuTeam(bases)
-		s.Presets = append(s.Presets, presetJSON{PresetDef: pr, Added: have[pr.ID], ZhipuTeam: team, AccessKey: provider.TakesVolcAccessKey(bases), Vertex: pr.ID == provider.VertexPreset})
+		vendor, keyRegions := presetAccessKey(pr)
+		s.Presets = append(s.Presets, presetJSON{PresetDef: pr, Added: have[pr.ID], ZhipuTeam: team, AccessKey: vendor != "", AccessKeyVendor: vendor, AccessKeyRegions: keyRegions, Vertex: pr.ID == provider.VertexPreset})
 	}
 	cat := provider.Catalog()
 	s.Gateway = gatewayJSON{URL: gateway.URL(), OnNetwork: gateway.OnNetwork(), Models: len(cat), Calls: []gateway.Call{}, Groups: []gwGroupJSON{}}
@@ -967,9 +1002,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// ClearBalanceToken drops the saved balance token, which a
 			// blank one in the form otherwise keeps
 			ClearBalanceToken bool `json:"clearBalanceToken"`
-			// AccessKeyID is a Volcengine access key's ID, "" for none; a
-			// save that leaves it out keeps it. Its Secret (SecretAccessKey)
-			// is kept when sent blank, unless ClearAccessKey drops it.
+			// AccessKeyID is a Volcengine access key's ID or a Tencent
+			// Cloud SecretId, "" for none; a save that leaves it out keeps
+			// it. Its Secret (SecretAccessKey, a Tencent SecretKey) is kept
+			// when sent blank, unless ClearAccessKey drops it.
 			AccessKeyID    *string `json:"accessKeyID"`
 			ClearAccessKey bool    `json:"clearAccessKey"`
 			// From is the id the provider had: another is a rename

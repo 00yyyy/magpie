@@ -2241,3 +2241,22 @@ zh, zh-TW, ja and de. English and Chinese, Chromium and WebKit.
 node --test internal/gui/tests/volc-access-key.test.cjs
 go test -tags nogui ./internal/gui -run TestProviderSaveKeepsVolcengineSecret
 ```
+
+## Tencent Cloud SecretId and SecretKey
+
+`tencent-access-key.test.cjs` covers #1574: Token Plan 企业版's usage is told
+only to the account's SecretId and SecretKey, so a Tencent Cloud provider's
+editor asks for them, named so, with Tencent's hint, at the two Enterprise
+plan regions alone (the preset's `accessKeyRegions`). At the personal plan
+or pay as you go they are hidden and come back when an Enterprise region is
+picked; a SecretId with no SecretKey is refused only where they are shown.
+The saved SecretKey is never in the page; Save, a new SecretKey and Remove
+post as Ark's do. Saved at Enterprise, saved at the personal plan, and being
+added; 420px wide with no sideways scroll; every string in zh, zh-TW, ja
+and de. English and Chinese, Chromium and WebKit.
+`TestProviderListTellsTencentAccessKey` checks what the listing tells.
+
+```sh
+node --test internal/gui/tests/tencent-access-key.test.cjs
+go test -tags nogui ./internal/gui -run TestProviderListTellsTencentAccessKey
+```
