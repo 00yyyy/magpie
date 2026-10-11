@@ -592,19 +592,14 @@ func viaFor(p provider.Provider, model string) drawVia {
 // hands the request to the next, as a Plus account further down draws
 // what the pinned one may not (#545). The refusal is of images alone, so
 // no account rests for text over it. It answers with the account that
-// drew, or the last one's error when every one refused.
+// drew, or the last one's error when every one refused. A provider's keys
+// are gone over the same way (#1657): a key whose own list of models
+// leaves the image model out never draws, nor is the first key used for
+// one only another lists; with every key or account set not to serve the
+// model, it is refused with why, as a chat is.
 func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider.Provider, model string, d drawing) (provider.Provider, drawn, int, time.Time, error) {
-	if p.Account == nil {
-		// a key of its own: the calling key's accounts hold it as one,
-		// drawn with a key it may use — of those in use, not the
-		// provider's first alone, which a key held to a later one was
-		// refused by — or none, refused
-		if keyWho, held := accountHolds(r); held {
-			var ok bool
-			if p, ok = allowedKey(keyWho, p, model); !ok {
-				return p, drawn{}, http.StatusForbidden, time.Time{}, errors.New(keyAccountsError(keyWho, d.Model))
-			}
-		}
+	if p.Account == nil && p.Key == "" {
+		// no key and no account (a local ollama): nothing to go over
 		out, code, err := s.draw(ctx, p, model, d)
 		return p, out, code, time.Time{}, err
 	}
@@ -615,7 +610,7 @@ func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider
 	// when another's list is unknown; for drawing it is asked last
 	_, _, left, barred := perKeyBarred(q, model, provider.Chat)
 	for _, c := range left {
-		if !slices.ContainsFunc(cs, func(o candidate) bool { return accountOf(o.p) == accountOf(c.p) }) {
+		if !slices.ContainsFunc(cs, func(o candidate) bool { return o.p.AccountID() == c.p.AccountID() }) {
 			cs = append(cs, c)
 		}
 	}
@@ -632,6 +627,10 @@ func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider
 		// every account is held at its usage cap
 		msg, back := cappedError(model, barredOf(barred, q, false, provider.Chat, nil), time.Now())
 		return p, drawn{}, http.StatusTooManyRequests, back, errors.New(msg)
+	}
+	if len(cs) == 0 && len(barred) > 0 {
+		// every key or account is set not to serve the model (#474)
+		return p, drawn{}, http.StatusForbidden, time.Time{}, errors.New(barredError(d.Model, barredOf(barred, q, false, provider.Chat, nil)))
 	}
 	if len(cs) == 0 {
 		cs = []candidate{{p: p, model: model, rest: p.ID}}

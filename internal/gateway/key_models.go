@@ -224,13 +224,14 @@ func accountAllowed(who access.Identity, c candidate) bool {
 
 // allowedKey is p sent on the first of its keys in use the calling key
 // may use (#905), for the paths that send on one key of the provider
-// rather than over its candidates — a video, a drawing — in place of the
-// first, which may be one the key may not: a key held to a later one is
-// sent on it, and refused only when it may use none. A provider of an
-// account keeps its one account, checked as it is; one with no account
-// and no key (a local ollama) has nothing to hold. A key's own list of
-// models (#474) is not weighed here; the decision path, which gates on
-// one, picks its key itself.
+// rather than over its candidates — a Grok or Volcengine video, which is
+// asked after on the first key again — in place of the first, which may
+// be one the key may not: a key held to a later one is sent on it, and
+// refused only when it may use none. A provider of an account keeps its
+// one account, checked as it is; one with no account and no key (a local
+// ollama) has nothing to hold. A key's own list of models (#474) is not
+// weighed here; the paths that can go over the keys do (onKeys, a
+// drawing's, the decision path's).
 func allowedKey(who access.Identity, p provider.Provider, model string) (provider.Provider, bool) {
 	if p.Key == "" {
 		return p, p.Account == nil || accountAllowed(who, candidate{p: p, model: model})
@@ -241,6 +242,38 @@ func allowedKey(who access.Identity, p provider.Provider, model string) (provide
 		}
 	}
 	return p, false
+}
+
+// onKeys is the keys or accounts of p a request for model that isn't a
+// chat goes over (a drawing, a video, an embedding), as a chat's go over
+// them (#1657): in its routing's order, a key or account whose own list
+// of models (#474) leaves the model out never, one the vendor lists the
+// model to another only after those that list it, and those the calling
+// key may not use (#905) left out. p's fallback models are not among
+// them. With none left it gives the status and what the caller is told:
+// 403 when every one is set not to serve the model, or is one the calling
+// key may not use. A provider with no key and no account (a local ollama)
+// is itself.
+func (s *Server) onKeys(r *http.Request, p provider.Provider, model, asked string) ([]candidate, int, string) {
+	if p.Account == nil && p.Key == "" {
+		return []candidate{{p: p, model: model, rest: p.ID}}, 0, ""
+	}
+	q := p
+	q.Fallback = nil
+	cs, pl := s.plan(q, model, provider.Chat)
+	if len(cs) == 0 && len(pl.left) > 0 && !slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred }) {
+		return nil, http.StatusForbidden, barredError(asked, pl.left)
+	}
+	if keyWho, held := accountHolds(r); held {
+		cs = slices.DeleteFunc(cs, func(c candidate) bool { return !accountAllowed(keyWho, c) })
+		if len(cs) == 0 {
+			return nil, http.StatusForbidden, keyAccountsError(keyWho, asked)
+		}
+	}
+	if len(cs) == 0 {
+		cs = []candidate{{p: p, model: model, rest: p.ID}}
+	}
+	return cs, 0, ""
 }
 
 // keyModelError is what a request for a model its key may not use is told.

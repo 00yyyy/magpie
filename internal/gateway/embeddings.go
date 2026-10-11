@@ -88,6 +88,18 @@ func (s *Server) retrieve(path, operation string) http.HandlerFunc {
 			if cs, _ := s.planGroup(g.Live(), ms, provider.Chat); len(cs) > 0 {
 				tries = cs
 			}
+		} else {
+			// a model of one provider goes over its keys or accounts as a
+			// chat does, never on one whose own list of models leaves it
+			// out (#1657)
+			cs, code, msg := s.onKeys(r, p, model, asked)
+			if code != 0 {
+				call.Status, call.Error = code, msg
+				writeError(w, provider.Chat, code, msg)
+				s.record(call)
+				return
+			}
+			tries = cs
 		}
 		// the accounts or keys the calling key may not use are left out of
 		// the tries too (#905): a group's members through it no less
