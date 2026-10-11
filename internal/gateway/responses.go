@@ -693,14 +693,18 @@ func replaysReasoning(model, host string) bool {
 }
 
 // withReasoningText gives each reasoning item in a Responses request that
-// carries no reasoning_text its summary as one, for an upstream that wants
-// the reasoning back (replaysReasoning). Codex sends an item back as it got
-// it, and one from a turn magpie translated, or another provider served,
-// has only a summary: passed on as it is, DeepSeek refuses the whole
-// request with "The reasoning_text in the thinking mode must be passed back
-// to the API" (#1104). An item with neither is left as it is.
+// carries no reasoning_text its summary as one, else noReasoning, and each
+// tool call a step made with no reasoning item one holding noReasoning, for
+// an upstream that wants the reasoning back (replaysReasoning). Codex sends
+// an item back as it got it: one from a turn magpie translated has only a
+// summary, one the ChatGPT backend sealed has only encrypted_content, and a
+// turn another model in a mixed group served may have no reasoning item at
+// all. DeepSeek refuses the whole request over any of them, and over an
+// empty reasoning_text, with "The `reasoning_text` in the thinking mode must
+// be passed back to the API" (#1104, #1592). A body with nothing to give
+// comes back byte for byte.
 func withReasoningText(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"reasoning"`)) {
+	if !bytes.Contains(body, []byte(`"reasoning"`)) && !bytes.Contains(body, []byte(`_call"`)) {
 		return body
 	}
 	var q map[string]json.RawMessage
@@ -712,14 +716,37 @@ func withReasoningText(body []byte) []byte {
 		return body
 	}
 	changed := false
-	for i, raw := range items {
+	// thought: the step the model is on (since the last user message or
+	// tool output) has a reasoning item
+	thought := false
+	out := make([]json.RawMessage, 0, len(items))
+	for _, raw := range items {
 		var it struct {
 			Type    string  `json:"type"`
+			Role    string  `json:"role"`
 			Summary []rText `json:"summary"`
 			Content []rText `json:"content"`
 		}
-		if json.Unmarshal(raw, &it) != nil || it.Type != "reasoning" ||
+		if json.Unmarshal(raw, &it) != nil {
+			out = append(out, raw)
+			continue
+		}
+		switch {
+		case it.Type == "reasoning":
+			thought = true
+		case it.Type == "function_call", it.Type == "custom_tool_call":
+			if !thought {
+				r, _ := json.Marshal(map[string]any{"type": "reasoning", "summary": []any{},
+					"content": []map[string]string{{"type": "reasoning_text", "text": noReasoning}}})
+				out = append(out, r)
+				thought, changed = true, true
+			}
+		case strings.HasSuffix(it.Type, "_output"), it.Type == "message" && it.Role != "assistant", it.Type == "" && it.Role != "" && it.Role != "assistant":
+			thought = false
+		}
+		if it.Type != "reasoning" ||
 			slices.ContainsFunc(it.Content, func(c rText) bool { return c.Type == "reasoning_text" && c.Text != "" }) {
+			out = append(out, raw)
 			continue
 		}
 		var b strings.Builder
@@ -727,22 +754,23 @@ func withReasoningText(body []byte) []byte {
 			b.WriteString(s.Text)
 		}
 		if b.Len() == 0 {
-			continue
+			b.WriteString(noReasoning)
 		}
 		var m map[string]json.RawMessage
 		if json.Unmarshal(raw, &m) != nil {
+			out = append(out, raw)
 			continue
 		}
 		m["content"], _ = json.Marshal([]map[string]string{{"type": "reasoning_text", "text": b.String()}})
 		if nb, err := json.Marshal(m); err == nil {
-			items[i] = nb
-			changed = true
+			raw, changed = nb, true
 		}
+		out = append(out, raw)
 	}
 	if !changed {
 		return body
 	}
-	q["input"], _ = json.Marshal(items)
+	q["input"], _ = json.Marshal(out)
 	nb, err := json.Marshal(q)
 	if err != nil {
 		return body
@@ -775,6 +803,8 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	replay := replaysReasoning(model, host)
 	var input []any
 	for _, m := range r.Messages {
+		// thought: this assistant turn has sent a reasoning item
+		thought := false
 		var content []map[string]any
 		flushMsg := func() {
 			if len(content) == 0 {
@@ -814,9 +844,18 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 					flushMsg()
 					input = append(input, map[string]any{"type": "reasoning", "summary": []any{},
 						"content": []map[string]any{{"type": "reasoning_text", "text": p.Text}}})
+					thought = true
 				}
 			case ToolCall:
 				flushMsg()
+				if replay && !thought {
+					// a call with no thinking (another model's turn, or
+					// reasoning sealed by the ChatGPT backend), which
+					// DeepSeek turns the whole request away for (#1592)
+					input = append(input, map[string]any{"type": "reasoning", "summary": []any{},
+						"content": []map[string]any{{"type": "reasoning_text", "text": noReasoning}}})
+					thought = true
+				}
 				id := p.ID
 				if id == "" {
 					id = "call_" + newID()
