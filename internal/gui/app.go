@@ -181,12 +181,12 @@ func (h *host) fitPanel(height int, g Glide) {
 	if h.panel == nil { // let go: made again at this height
 		return
 	}
-	if h.panel.IsVisible() && h.glidePanel(height, g) {
+	if windowOpen(h.panel) && h.glidePanel(height, g) {
 		return
 	}
 	h.glides.Add(1)
 	h.panel.SetSize(h.panelW(), height)
-	if h.panel.IsVisible() {
+	if windowOpen(h.panel) {
 		_ = h.tray.PositionWindow(h.panel, 6)
 	}
 }
@@ -255,7 +255,7 @@ func (h *host) zoomWindows() {
 	}
 	setPageZoom(h.panel, z)
 	h.panel.SetSize(w, ht)
-	if h.panel.IsVisible() {
+	if windowOpen(h.panel) {
 		_ = h.tray.PositionWindow(h.panel, 6)
 	}
 }
@@ -678,6 +678,20 @@ func (h *host) togglePanelNow() {
 			return
 		}
 		h.placePanel()
+	}
+	if runtime.GOOS == "darwin" {
+		// Wails' ToggleWindow goes by IsVisible, which on the Mac is the
+		// window's occlusion: under a window over the whole screen (a
+		// remote-desktop server's, above every app's) the open panel read
+		// as closed, and the icon showed it again instead of closing it
+		// (#1661). Open is windowOpen: shown, covered or not.
+		if windowOpen(h.panel) {
+			h.panel.Hide()
+			return
+		}
+		_ = h.tray.PositionWindow(h.panel, 6)
+		h.panel.Show().Focus()
+		return
 	}
 	h.tray.ToggleWindow()
 }
