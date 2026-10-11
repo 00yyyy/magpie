@@ -275,6 +275,12 @@ func knownAgents() []Known {
 	return append(slices.Clip(own), more...)
 }
 
+// IsAgent says whether id is an agent magpie knows, its own or a plugin's,
+// rather than the product name of some other client (Python-urllib).
+func IsAgent(id string) bool {
+	return slices.ContainsFunc(knownAgents(), func(k Known) bool { return k.ID == id || slices.Contains(k.Names, id) })
+}
+
 // AgentOf names the agent behind a client User-Agent. Known agents map to
 // their magpie id; anything else keeps its product name.
 func AgentOf(ua string) string {

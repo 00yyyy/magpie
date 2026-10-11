@@ -71,6 +71,17 @@ func agentOf(r *http.Request) string {
 	return usage.AgentOf(ua)
 }
 
+// startedByAgent says whether a request is from no agent magpie knows but
+// from something an agent started with its environment (a hook's script): it
+// came with the plain gateway token, not one magpie gave an agent, and
+// its User-Agent names no agent.
+func startedByAgent(r *http.Request, agent string) bool {
+	if _, ok := strings.CutPrefix(callerKey(r), Token+"-"); ok {
+		return false
+	}
+	return agent != "claude-desktop" && agent != "cursor-local" && !usage.IsAgent(agent)
+}
+
 // StandIn is the model an agent is set to use in place of one it named that
 // magpie doesn't serve it: Claude Code asks for claude-haiku-… by name for
 // its small tasks, whatever its haiku tier is set to, and that goes to the
@@ -136,9 +147,23 @@ var claudeFamily = regexp.MustCompile(`^claude-(?:[0-9][0-9.-]*-)?(?:opus|sonnet
 // still has it; one magpie found (auto-…) was never picked for it. "" when
 // the id is no such one, the agent isn't Claude Code, or Claude Code isn't
 // routed through magpie (StandIn says nothing).
-func claudeTierStandIn(agent, asked string) string {
-	if StandIn == nil || agent != "claude" || !claudeFamily.MatchString(strings.ToLower(strings.TrimSuffix(asked, "[1m]"))) {
+//
+// A client magpie doesn't know as an agent (Python-urllib, an Anthropic SDK)
+// naming such an id that magpie doesn't serve is taken for one Claude Code
+// started: a hook, statusline or plugin script inherits Claude Code's
+// ANTHROPIC_BASE_URL and token, and asks for claude-sonnet-4-6 by name,
+// which went nowhere, a 404 (tbxark on X). It gets Claude Code's tier too.
+// An id the user does serve (a Claude account, an Anthropic key) goes
+// where it is served, and an agent magpie knows keeps its own models.
+func claudeTierStandIn(r *http.Request, agent, asked string) string {
+	if StandIn == nil || !claudeFamily.MatchString(strings.ToLower(strings.TrimSuffix(asked, "[1m]"))) {
 		return ""
+	}
+	if agent != "claude" {
+		if !startedByAgent(r, agent) || !unserved(asked) {
+			return ""
+		}
+		agent = "claude"
 	}
 	if gid, ok := provider.GroupFor(asked); ok && !strings.HasPrefix(gid, provider.GroupPrefix+"auto-") {
 		return ""
@@ -987,7 +1012,7 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	plain := body
 	w, body, unmask := redacted(w, body)
 	defer unmask()
-	if m := claudeTierStandIn(agentOf(r), model); m != "" {
+	if m := claudeTierStandIn(r, agentOf(r), model); m != "" {
 		model = m // counted on the model the request will go to
 	}
 	model, _ = askedAt(model) // counted as the model, whatever its effort
@@ -1362,7 +1387,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		return m
 	}
-	if m := claudeTierStandIn(agent, asked); m != "" {
+	if m := claudeTierStandIn(r, agent, asked); m != "" {
 		// Claude Code (or a wrapper, T3 Code) naming one of Anthropic's
 		// models by its full id: the model it is set to use for that tier,
 		// whether or not magpie serves the id too
