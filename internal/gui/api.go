@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1875,6 +1876,13 @@ func fail(rw http.ResponseWriter, err error) {
 	var signedIn *provider.SignedInError
 	if errors.As(err, &signedIn) {
 		out["code"], out["agent"], out["user"] = "signed_in", signedIn.Agent, signedIn.User
+	}
+	// a text that isn't a group to import (laincatx on X), said in the
+	// reader's language
+	var share *provider.ShareError
+	if errors.As(err, &share) {
+		out["code"], out["share"] = "share", share.Why
+		out["format"], out["models"] = strconv.Itoa(share.Format), strings.Join(share.Models, ", ")
 	}
 	// an agent's npm update, or RTK's winget, that needed an administrator
 	// and didn't get one, said in the reader's language

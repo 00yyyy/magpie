@@ -114,6 +114,16 @@ async function api(path, body, heads, signal) {
       err.code = data.code;
       err.message = t("{agent} is signed in to {user} now: sign it in to another of its accounts first (Use on that account), then remove this one", { agent: { codex: "Codex", claude: "Claude Code" }[data.agent] || data.agent, user: data.user });
     }
+    // a text Import can't add as a routing group (laincatx on X)
+    if (data?.code === "share") {
+      err.code = data.code;
+      err.message = {
+        newer: t("This group was shared from a newer magpie (format {n}): update magpie to import it", { n: data.format }),
+        no_format: t("This shared group says no format it is in: copy it again with Copy to share"),
+        unreadable: t("This shared group can't be read: copy it again with Copy to share"),
+        none_here: t("None of the group's models is in your magpie: {models}", { models: data.models }),
+      }[data.share] || t("This is not a routing group shared from magpie: copy one with Copy to share in a group's menu");
+    }
     // an agent's npm update whose global folder (Program Files) needs an
     // administrator, or RTK's winget for every user, the prompt declined or
     // not to be had (新v学员 on Discord): what to do, in the reader's language

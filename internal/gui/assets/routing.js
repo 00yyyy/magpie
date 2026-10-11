@@ -3174,6 +3174,14 @@
   gQ.autocomplete = "off";
   gQ.oninput = () => renderGroups();
   gQ.onkeydown = (e) => { if (e.key === "Escape" && gQ.value) { e.stopPropagation(); gQ.value = ""; renderGroups(); } };
+  // gImport: Import a group's box (laincatx on X): the text pasted, kept
+  // in the page across redraws as gQ is, and what the import added and
+  // left out once it has; null while closed
+  let gImport = null;
+  const gImportText = el("textarea", "rt-gimport-text");
+  gImportText.spellcheck = false;
+  gImportText.rows = 4;
+  gImportText.onkeydown = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeImport(); } };
   // groupMatches: every word of the filter in the group's name, id, or a
   // member's id or label (its provider and model names)
   function groupMatches(g, words) {
@@ -3203,6 +3211,12 @@
     const own = all.some((g) => !g.auto), tpls = groups.templates || [];
     if (!gSel) {
       if (own && tpls.length) head.push(templateButton(tpls));
+      const imp = el("button", "text rt-gimportbtn", t("Import"));
+      imp.type = "button";
+      imp.title = t("Add a routing group someone shared from their magpie");
+      imp.setAttribute("aria-expanded", gImport ? "true" : "false");
+      imp.onclick = () => gImport ? closeImport() : openImport();
+      head.push(imp);
       // several removed at once: pick them, then Remove
       if (all.length > 1) {
         const pick = el("button", "text rt-gselect", t("Select"));
@@ -3223,6 +3237,7 @@
     const rows = [];
     if (!gSel && !own && !words.length && tpls.length) rows.push(templateCards(tpls));
     if (gSel) rows.push(selectBar(shown));
+    if (gImport && !gSel) rows.push(importBox());
     if (gEdit && !gEdit.id) rows.push(groupEditor(null));
     for (const g of shown) rows.push(gSel ? pickedRow(g) : gEdit?.id === g.id ? groupEditor(g) : groupRow(g));
     if (!rows.length && all.length) rows.push(el("div", "none rt-gnone", t("No group or model matches “{q}”", { q: gQ.value.trim() })));
@@ -3250,8 +3265,77 @@
       h.append(b);
       rows.push(h);
     }
-    gList.replaceChildren(...rows);
+    // the import box's text stays in the page as the list is drawn again
+    replaceKeeping(gList, rows);
     renderPools();
+  }
+  // Copy to share (laincatx on X): the group as text, its models, routing
+  // and rules and no key (provider.ShareGroup), for anyone to paste into
+  // their magpie's Import
+  async function shareGroup(g) {
+    try {
+      const st = await api("groups/share", { id: g.id });
+      await copy(st.shared, g.name, null, t("{name} copied: paste it into Import on another magpie's Routing page", { name: g.name }));
+    } catch (e) { status(e.message, "err"); }
+  }
+  async function openImport() {
+    if (groupDirty() && !(await confirmDiscard())) return;
+    gEdit = null; gSel = null;
+    gImport = {};
+    gImportText.value = "";
+    renderGroups();
+    gImportText.focus({ preventScroll: true });
+  }
+  function closeImport() {
+    gImport = null;
+    gImportText.value = "";
+    renderGroups();
+  }
+  // importBox: paste a shared group, Import adds it; then what was added,
+  // and what of it this magpie has none of, until Done
+  let gImportBox = null;
+  function importBox() {
+    gImportBox ||= el("div", "rt-gimport");
+    const box = gImportBox, res = gImport.res;
+    const parts = [];
+    if (!res) {
+      gImportText.placeholder = t("Paste a group copied with Copy to share");
+      gImportText.setAttribute("aria-label", t("A routing group shared from magpie"));
+      const go = el("button", "text primary rt-gimport-go", t("Import"));
+      go.type = "button";
+      go.onclick = async () => {
+        const text = gImportText.value;
+        if (!text.trim()) { gImportText.focus({ preventScroll: true }); return; }
+        go.disabled = true;
+        try {
+          groups = await api("groups/import", { text });
+          gImport = { res: groups.imported };
+          gImportText.value = "";
+          status(t("Added {name}", { name: groups.imported.name }), "ok");
+          renderGroups();
+          load(); // the gateway's model list, the agents' pickers
+        } catch (e) { go.disabled = false; status(e.message, "err"); }
+      };
+      const no = el("button", "text", t("Cancel"));
+      no.type = "button";
+      no.onclick = closeImport;
+      const acts = el("div", "acts");
+      acts.append(go, no);
+      parts.push(el("div", "rt-gtpl-head", t("Paste a routing group someone shared from their magpie: its models, routing and rules come with it, never a key")), gImportText, acts);
+    } else {
+      parts.push(el("div", "rt-gimport-done", t("Added {name}", { name: res.name })));
+      if (res.missing?.length) parts.push(el("div", "rt-gimport-missing", t("Not in your magpie, left out: {models}", { models: res.missing.join(", ") })));
+      if (res.instead?.length) parts.push(el("div", "rt-gimport-note", t("The same model from your own provider: {models}", { models: res.instead.join(", ") })));
+      if (res.rules) parts.push(el("div", "rt-gimport-note", t(res.rules === 1 ? "1 rule left out with them" : "{n} rules left out with them", { n: res.rules })));
+      const done = el("button", "text", t("Done"));
+      done.type = "button";
+      done.onclick = closeImport;
+      const acts = el("div", "acts");
+      acts.append(done);
+      parts.push(acts);
+    }
+    replaceKeeping(box, parts);
+    return box;
   }
   // a template's name and what it does, in the user's language
   // (provider.TemplateNames)
@@ -3553,6 +3637,9 @@
       // change without touching the one agents use (lc on Discord)
       { name: "Duplicate", icon: COPY_ICON, sep: true, tip: t("A copy of {name} with its models, routing and rules, listed after it", { name: g.name }),
         run: async () => { if (!groupDirty() || await confirmDiscard()) groupAction("copy", { id: g.id, name: t("{name} copy", { name: g.name }) }, t("Duplicated {name}", { name: g.name })); } },
+      // the group as text for someone else's magpie (laincatx on X)
+      { name: "Copy to share", icon: OUT, tip: t("{name} as text to paste into another magpie: its models, routing and rules, no key", { name: g.name }),
+        run: () => shareGroup(g) },
     ]);
   }
   // nextTo: where a group moved one up (-1) or down goes, among them all:
