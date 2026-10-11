@@ -170,7 +170,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 // task was sealed there (plugins#70).
 func sealedTaskError(model, lead, earlier string) string {
 	if earlier != "" {
-		return fmt.Sprintf("This subagent's task was sealed by the ChatGPT backend that answered its lead, and only that backend can open it: a ChatGPT account, or the Responses API provider that answered the lead. %s can't. %s answered the lead's earlier turns, but it neither seals a task nor opens one: the lead has since been on one of Codex's own models. Give the subagent the lead's model, or a lead model that isn't served by the ChatGPT backend, so its subagents get a task they can read. To go on with this task, use the lead's model, or have the lead spawn the subagent again.", model, earlier)
+		return fmt.Sprintf("This subagent's task was sealed by the ChatGPT backend, which answered the agent that sent it on one of Codex's own models (a subagent of this thread put there, or the lead after a switch), and only a ChatGPT account can open it. %s can't. %s answered the lead's earlier turns, but it neither seals a task nor opens one. Set Codex's subagent model on magpie's Agents page to a model of a ChatGPT account added in magpie, or to one that isn't served by the ChatGPT backend, so subagents get tasks they can read. To go on with this task, have it spawned again from an agent that isn't on Codex's own models.", model, earlier)
 	}
 	if lead != "" {
 		return fmt.Sprintf("This subagent's task was sealed by the server that answered its lead (%s), and only that server can open it; %s can't. Give the subagent the lead's model, or a lead model that isn't served by the ChatGPT backend, so its subagents get a task they can read. To go on with this task, use a model on %s for the lead and the subagent, or have the lead spawn the subagent again.", lead, model, lead)
@@ -398,6 +398,85 @@ func hasSealedAgentMessage(body []byte) bool {
 		}
 	}
 	return false
+}
+
+// withoutSealedMessages is a request's input with each sealed agent message
+// that is not a task left out, a note in its place; ok says one was. In
+// MultiAgentV2 an agent on one of Codex's own models has its send_message
+// sealed by the ChatGPT backend, and Codex hands it on as encrypted_content
+// under a plain header (codex-rs protocol.rs to_model_input_item: "Message
+// Type: MESSAGE" for a message, NEW_TASK for a task, spawn_agent's or
+// followup_task's). A lead or subagent served by a model that can't open
+// it was turned away whole, though all it lost was that message: the
+// sender's final result reaches its lead as text all the same (#1613). A
+// task is kept, and still turned away (serve): the subagent would have
+// nothing to do. An item whose header says neither is taken as a task.
+func withoutSealedMessages(body []byte) ([]byte, bool) {
+	var q map[string]json.RawMessage
+	if json.Unmarshal(body, &q) != nil {
+		return body, false
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(q["input"], &items) != nil {
+		return body, false
+	}
+	changed := false
+	for i, raw := range items {
+		var item map[string]json.RawMessage
+		if json.Unmarshal(raw, &item) != nil || string(item["type"]) != `"agent_message"` {
+			continue
+		}
+		var parts []map[string]any
+		if json.Unmarshal(item["content"], &parts) != nil {
+			continue
+		}
+		message, sealed := false, false
+		for _, p := range parts {
+			switch p["type"] {
+			case "input_text":
+				t, _ := p["text"].(string)
+				message = message || strings.HasPrefix(t, "Message Type: MESSAGE\n")
+			case "encrypted_content":
+				c, _ := p["encrypted_content"].(string)
+				sealed = sealed || nativeSealedAgentPayload.MatchString(c)
+			}
+		}
+		if !message || !sealed {
+			continue
+		}
+		var from string
+		json.Unmarshal(item["author"], &from)
+		if from == "" {
+			from = "another agent"
+		}
+		note := "[magpie: this message from " + from + " was sealed by the ChatGPT backend, which answered that agent on one of Codex's own models, and only it can open it; this model can't, so it was left out. An agent's final result still reaches the agent that spawned it as text.]"
+		for j, p := range parts {
+			if c, _ := p["encrypted_content"].(string); p["type"] == "encrypted_content" && nativeSealedAgentPayload.MatchString(c) {
+				parts[j] = map[string]any{"type": "input_text", "text": note}
+			}
+		}
+		b, err := marshalPlain(parts)
+		if err != nil {
+			continue
+		}
+		item["content"] = b
+		if b, err = marshalPlain(item); err != nil {
+			continue
+		}
+		items[i], changed = b, true
+	}
+	if !changed {
+		return body, false
+	}
+	var err error
+	if q["input"], err = marshalPlain(items); err != nil {
+		return body, false
+	}
+	nb, err := marshalPlain(q)
+	if err != nil {
+		return body, false
+	}
+	return nb, true
 }
 
 // compactSigninHeld is the calling key when its accounts (#905) hold a

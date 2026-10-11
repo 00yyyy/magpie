@@ -1499,6 +1499,19 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			sealedLead = sealers[1] // a lead's own turn: who answered it
 		}
 		if !readable() {
+			// a sealed message, not a task, is left out with a note in its
+			// place: the lead or subagent it was sent to goes on where it
+			// is, and the sender's final result still reaches its lead as
+			// text (#1613)
+			if b, ok := withoutSealedMessages(body); ok {
+				body = b
+				if masked != nil {
+					masked, _ = withoutSealedMessages(masked)
+				}
+				sealedTask = hasSealedAgentMessage(body)
+			}
+		}
+		if sealedTask && !readable() {
 			call.Status, call.Error = 400, "sealed subagent task"
 			// a lead answered by a chat provider, then on one of Codex's
 			// own models, is remembered as answered by the chat provider,
