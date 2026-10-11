@@ -187,7 +187,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // the line ends at now already; in 16px a dotted now line read as a
       // stray mark under the curve (#1601)
       assert.equal(await spark.locator("line.qc-now").count(), 0, "no now line in the thin spark");
-      const sb = await spark.boundingBox(), cb = await pcard.boundingBox();
+      // measured in one go once drawn: the cards are drawn again when the
+      // allowances read on opening the tab come back, and a card looked up
+      // in one call and measured in the next could be the one taken out
+      // (red under load, on main too)
+      const { sb, cb } = await panel.waitForFunction(() => {
+        const c = [...document.querySelectorAll("#panelQuota .pq-card")].find((c) => c.textContent.includes("a@x.com"));
+        const s = c?.querySelector(".pq-spark");
+        if (!s || !s.getBoundingClientRect().width) return null;
+        const box = (e) => { const r = e.getBoundingClientRect(); return { width: r.width, height: r.height }; };
+        return { sb: box(s), cb: box(c) };
+      }).then((h) => h.jsonValue());
       assert.ok(sb.height <= 17 && sb.width > cb.width * 0.7, `thin and across the card: ${JSON.stringify(sb)}`);
       assert.equal(await panel.locator(".pq-card", { hasText: "Kimi" }).locator(".pq-spark").count(), 0);
       // a click into the list, then a key to scroll it, rings nothing: the
