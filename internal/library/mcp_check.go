@@ -35,6 +35,10 @@ type ServerHealth struct {
 	// sign-in or a key) or error (Why says what went wrong)
 	State string `json:"state"`
 	Tools int    `json:"tools"`
+	// ToolList is each tool's name and what it says it does, as tools/list
+	// gave them, for the page to list (nf1qaz2w on Discord); at most
+	// maxToolList, while Tools counts every one
+	ToolList []Tool `json:"toolList,omitempty"`
 	// Why is the kind of error, for the page to put in its own words:
 	// notfound, start, exited, timeout, http, refused, unreachable,
 	// protocol, novar (a ${NAME} magpie's environment hasn't: Detail names
@@ -257,22 +261,113 @@ func initializeReq() []byte {
 
 var initializedNote = []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
 
-// toolsOf is the health the reply to tools/list says: a server with no
-// tools may not know the method at all.
-func toolsOf(m *rpcMsg) ServerHealth {
+// Tool is one tool a server listed: its name, and the first paragraph of
+// its description, cut short.
+type Tool struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+// What of the tools a check keeps: every tool's name up to maxToolList,
+// a description up to maxToolDesc runes, and up to maxToolPages pages of
+// tools/list, each with a step's budget of its own.
+const (
+	maxToolList  = 500
+	maxToolName  = 128
+	maxToolDesc  = 500
+	maxToolPages = 10
+)
+
+// clip is s with its whitespace runs made one space, cut at n runes.
+func clip(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > n {
+		return strings.TrimSpace(string(r[:n])) + "…"
+	}
+	return s
+}
+
+// toolDesc is the first paragraph of a tool's description: the rest is
+// usually how to call it, which the agent reads, not the person.
+func toolDesc(d string) string {
+	d = strings.TrimSpace(strings.ReplaceAll(d, "\r\n", "\n"))
+	if i := strings.Index(d, "\n\n"); i >= 0 {
+		d = d[:i]
+	}
+	return clip(d, maxToolDesc)
+}
+
+// toolsOf is the health one reply to tools/list says, and the cursor of
+// the page after it: a server with no tools may not know the method at all.
+func toolsOf(m *rpcMsg) (ServerHealth, string) {
 	if m.Error != nil {
 		if m.Error.Code == -32601 {
-			return ServerHealth{State: "ok"}
+			return ServerHealth{State: "ok"}, ""
 		}
-		return failed("protocol", "tools/list: "+m.Error.Message)
+		return failed("protocol", "tools/list: "+m.Error.Message), ""
 	}
 	var r struct {
-		Tools []json.RawMessage `json:"tools"`
+		Tools []struct {
+			Name        string `json:"name"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		} `json:"tools"`
+		NextCursor string `json:"nextCursor"`
 	}
 	if err := json.Unmarshal(m.Result, &r); err != nil {
-		return failed("protocol", "tools/list: "+err.Error())
+		return failed("protocol", "tools/list: "+err.Error()), ""
 	}
-	return ServerHealth{State: "ok", Tools: len(r.Tools)}
+	h := ServerHealth{State: "ok", Tools: len(r.Tools)}
+	for _, t := range r.Tools {
+		if len(h.ToolList) == maxToolList {
+			break
+		}
+		d := toolDesc(t.Description)
+		if d == "" {
+			d = clip(t.Title, maxToolDesc)
+		}
+		h.ToolList = append(h.ToolList, Tool{Name: clip(t.Name, maxToolName), Description: d})
+	}
+	return h, r.NextCursor
+}
+
+// listTools asks for the server's tools, a page at a time while it names
+// a next one, up to maxToolPages. ask sends a request and reads the reply
+// to its id. A page after the first that is refused ends the list there.
+func listTools(ctx context.Context, ask func(id int, req []byte) (*rpcMsg, *ServerHealth)) ServerHealth {
+	var all ServerHealth
+	cursor := ""
+	for page := 0; page < maxToolPages; page++ {
+		stepTo(ctx, "tools/list")
+		var params any
+		if cursor != "" {
+			params = map[string]any{"cursor": cursor}
+		}
+		id := 2 + page
+		m, bad := ask(id, request(id, "tools/list", params))
+		if bad != nil {
+			return *bad
+		}
+		h, next := toolsOf(m)
+		if h.State != "ok" {
+			if page == 0 {
+				return h
+			}
+			break
+		}
+		all.State = "ok"
+		all.Tools += h.Tools
+		for _, t := range h.ToolList {
+			if len(all.ToolList) < maxToolList {
+				all.ToolList = append(all.ToolList, t)
+			}
+		}
+		if next == "" || next == cursor {
+			break
+		}
+		cursor = next
+	}
+	return all
 }
 
 // initError is what an error reply to initialize says.
@@ -425,13 +520,10 @@ func checkStdio(ctx context.Context, s *Server) ServerHealth {
 		return *h
 	}
 	_ = send(initializedNote)
-	stepTo(ctx, "tools/list")
-	_ = send(request(2, "tools/list", nil))
-	m, h = await(2)
-	if h != nil {
-		return *h
-	}
-	return toolsOf(m)
+	return listTools(ctx, func(id int, req []byte) (*rpcMsg, *ServerHealth) {
+		_ = send(req)
+		return await(id)
+	})
 }
 
 func exitHealth(err error, errs *tail) ServerHealth {
@@ -574,12 +666,7 @@ func checkHTTP(ctx context.Context, s *Server) ServerHealth {
 	} else if ctx.Err() != nil {
 		return timedOut(ctx)
 	}
-	stepTo(ctx, "tools/list")
-	m, h = call(2, request(2, "tools/list", nil))
-	if h != nil {
-		return *h
-	}
-	return toolsOf(m)
+	return listTools(ctx, call)
 }
 
 // endSession tells the server the check is done with its session, as a
@@ -784,13 +871,10 @@ func checkSSE(ctx context.Context, s *Server) ServerHealth {
 	if h := post(initializedNote); h != nil && h.Why == "timeout" {
 		return *h
 	}
-	stepTo(ctx, "tools/list")
-	if h := post(request(2, "tools/list", nil)); h != nil {
-		return *h
-	}
-	m, h = await(2)
-	if h != nil {
-		return *h
-	}
-	return toolsOf(m)
+	return listTools(ctx, func(id int, req []byte) (*rpcMsg, *ServerHealth) {
+		if h := post(req); h != nil {
+			return nil, h
+		}
+		return await(id)
+	})
 }
