@@ -1655,6 +1655,32 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// one masking rule changed in place (nf1qaz2w on Discord): the rule at
+	// At, which must still be Was, becomes Rule, checked as an added one is.
+	// A rule that can't be used is said and every rule is kept as it was.
+	mux.HandleFunc("POST /api/settings/redact-rule", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			At   int         `json:"at"`
+			Was  redact.Rule `json:"was"`
+			Rule redact.Rule `json:"rule"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		next, err := editRedactRule(s.RedactRules, in.At, in.Was, in.Rule)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		s.RedactRules = next
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// the GitHub token the library's requests to GitHub carry: set, or
 	// taken away with ""
 	mux.HandleFunc("POST /api/settings/github-token", func(rw http.ResponseWriter, r *http.Request) {
@@ -1922,4 +1948,30 @@ func codexUsers() []string {
 		}
 	}
 	return out
+}
+
+// editRedactRule is rules with the one at at, which must still be was,
+// changed to to: tidied and checked as an added rule is, in the same place.
+// It is refused when that rule is no longer there (changed or removed
+// meanwhile), when to has neither a prefix nor a pattern (taking a rule
+// away is Remove), and when to is another rule already listed.
+func editRedactRule(rules []redact.Rule, at int, was, to redact.Rule) ([]redact.Rule, error) {
+	if at < 0 || at >= len(rules) || rules[at] != was {
+		return nil, fmt.Errorf("that masking rule is no longer there: it was changed or removed meanwhile")
+	}
+	tidy, err := redact.CheckRules([]redact.Rule{to})
+	if err != nil {
+		return nil, err
+	}
+	if len(tidy) == 0 {
+		return nil, fmt.Errorf("a masking rule needs a prefix or a regular expression")
+	}
+	for i, o := range rules {
+		if i != at && o == tidy[0] {
+			return nil, fmt.Errorf("the masking rule %s is there already", o.Kind)
+		}
+	}
+	next := slices.Clone(rules)
+	next[at] = tidy[0]
+	return next, nil
 }
