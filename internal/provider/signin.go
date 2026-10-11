@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -69,6 +70,9 @@ type SignInState struct {
 	// than a new account added (#413)
 	Again bool   `json:"again,omitempty"`
 	Error string `json:"error,omitempty"`
+	// Proxy is the one the sign-in goes through ("" the global one,
+	// "direct" none): the one the account's requests will (#1663)
+	Proxy string `json:"proxy,omitempty"`
 }
 
 type signInFlow struct {
@@ -97,6 +101,49 @@ type signInFlow struct {
 	// sign-in done reads as done once the account is shown again
 	finished bool
 	done     chan struct{}
+
+	// proxy is the one the sign-in's requests go through, as netproxy.With
+	// takes it: the one the account's will go through once it is signed in
+	// (ProxyOfLogin), or the one picked for it (chosen), which is kept as
+	// the account's once it is done (#1663)
+	proxy  string
+	chosen bool
+	// user is the account signed in to again, "" for a new one
+	user string
+}
+
+// SignInOptions are a sign-in's choices beyond its subscription.
+type SignInOptions struct {
+	Site string // where to sign in, for one with more than one (StartSignInAt)
+	// Proxy is the one to sign in through, as netproxy.With takes it ("" the
+	// global one, "direct" none, or its address); nil for the one the
+	// account's requests would go through. Picked, it is kept as the
+	// account's own once the sign-in is done.
+	Proxy *string
+	// User is the account signed in to again, for the proxy it goes through
+	User string
+}
+
+// via is ctx for the sign-in's requests: through its proxy, so the vendor
+// sees an account signed in from where its requests will come from, not
+// signed in through the global proxy and used through its own (#1663).
+func (s *signInFlow) via(ctx context.Context) context.Context {
+	return netproxy.With(ctx, s.proxy)
+}
+
+// pickProxy sets the proxy a sign-in to agent goes through.
+func (s *signInFlow) pickProxy(agent string, o SignInOptions) error {
+	s.user = strings.TrimSpace(o.User)
+	s.proxy = ProxyOfLogin(agent, s.user)
+	if o.Proxy == nil {
+		return nil
+	}
+	p := strings.TrimSpace(*o.Proxy)
+	if err := settings.CheckProxy(p); err != nil {
+		return err
+	}
+	s.proxy, s.chosen = p, true
+	return nil
 }
 
 var signIns = struct {
@@ -124,6 +171,13 @@ func StartSignIn(agent string) (SignInState, error) {
 // StartSignInAt is StartSignIn on one of the sites an agent signs in on:
 // ZCode's "zai" (the default) or "bigmodel".
 func StartSignInAt(agent, site string) (SignInState, error) {
+	return StartSignInWith(agent, SignInOptions{Site: site})
+}
+
+// StartSignInWith is StartSignIn with the sign-in's choices: its site and
+// the proxy it goes through.
+func StartSignInWith(agent string, o SignInOptions) (SignInState, error) {
+	site := o.Site
 	if settings.AccountDiscoveryOff() {
 		return SignInState{}, errAccountDiscoveryOff
 	}
@@ -133,7 +187,10 @@ func StartSignInAt(agent, site string) (SignInState, error) {
 		return SignInState{}, fmt.Errorf("%s runs on its plugin: sign in through the plugin (magpie plugin login %s)", agent, agent)
 	}
 	s := &signInFlow{verifier: randomToken(48), state: randomToken(24), done: make(chan struct{}), site: site}
-	s.st = SignInState{ID: randomToken(9), Agent: agent, State: "waiting"}
+	if err := s.pickProxy(agent, o); err != nil {
+		return SignInState{}, err
+	}
+	s.st = SignInState{ID: randomToken(9), Agent: agent, State: "waiting", Proxy: s.proxy}
 	cli, install := missingCLI(agent)
 	var installing context.Context
 	if install {
@@ -569,13 +626,19 @@ func (s *signInFlow) finish(out SignInState) bool {
 	}
 	s.finished = true
 	if out.State == "done" {
-		agent := s.st.Agent
+		agent, proxy, chosen := s.st.Agent, s.proxy, s.chosen
 		s.mu.Unlock()
 		// signing in again brings back an account removed from magpie
 		_ = ShowAccount(agent)
+		if chosen {
+			// the proxy picked for it is the account's from now on
+			if err := keepSignInProxy(agent, out.User, proxy); err != nil {
+				out.Error = "signed in, but its proxy wasn't kept: " + err.Error()
+			}
+		}
 		s.mu.Lock()
 	}
-	out.ID, out.Agent, out.URL, out.Code = s.st.ID, s.st.Agent, s.st.URL, s.st.Code
+	out.ID, out.Agent, out.URL, out.Code, out.Proxy = s.st.ID, s.st.Agent, s.st.URL, s.st.Code, s.st.Proxy
 	s.st = out
 	stop, srv := s.stop, s.srv
 	s.mu.Unlock()
@@ -635,7 +698,7 @@ func (s *signInFlow) callback(w http.ResponseWriter, r *http.Request) {
 		signInPage(w, false, "This sign-in is already finishing", "magpie shows the account when it's done.")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.via(r.Context()), 30*time.Second)
 	defer cancel()
 	if app, ok := googleAppOf(s.st.Agent); ok {
 		s.googleDone(ctx, w, app, q.Get("code"))

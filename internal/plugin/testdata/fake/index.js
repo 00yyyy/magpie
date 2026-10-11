@@ -123,12 +123,14 @@ export const FakePlugin = async ({ client }) => ({
         ],
         // $FAKE_LOOPBACK: the page comes back to a port here, as Devin's
         // and Kiro's plugins sign in
-        authorize: async (inputs) => process.env.FAKE_LOOPBACK ? loopbackSignIn(inputs) : ({
+        // $FAKE_SIGNIN: the sign-in asks the vendor there, as a device
+        // sign-in asks for its code and trades it for the tokens (#1663)
+        authorize: async (inputs) => process.env.FAKE_LOOPBACK ? loopbackSignIn(inputs) : (process.env.FAKE_SIGNIN && (await fetch(process.env.FAKE_SIGNIN + "/device").catch(() => {})), {
           url: "https://fake.invalid/auth?where=" + inputs.where,
           instructions: "Paste the code",
           method: "code",
           callback: async (code) =>
-            code === "good"
+            (process.env.FAKE_SIGNIN && (await fetch(process.env.FAKE_SIGNIN + "/token").catch(() => {})), code === "good")
               ? { type: "success", refresh: "r-" + (inputs.team ?? "none"), access: "stale", expires: 0, ...fakeWho(inputs.team) }
               : code === "expired"
                 ? { type: "failed", error: "the sign-in page expired" }

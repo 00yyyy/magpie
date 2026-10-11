@@ -524,7 +524,9 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 			Provider string
 			Method   int
 			Inputs   map[string]string
-			Key      string // an "api" method's key
+			Key      string  // an "api" method's key
+			Proxy    *string // the one picked to sign in through (#1663)
+			User     string  // the account signed in to again
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&in); err != nil {
 			fail(rw, err)
@@ -546,7 +548,7 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 			writeJSON(rw, provider.SignInState{Agent: id, State: "done", User: pp.Name})
 			return
 		}
-		st, err := provider.StartPluginSignIn(in.Provider, in.Method, in.Inputs)
+		st, err := provider.StartPluginSignInWith(in.Provider, in.Method, in.Inputs, provider.SignInOptions{Proxy: in.Proxy, User: in.User})
 		if err != nil {
 			fail(rw, err)
 			return

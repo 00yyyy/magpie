@@ -410,6 +410,8 @@ func pluginLogin(ctx context.Context, name, method string) error {
 			fmt.Println(msg)
 		}
 	}
+	// signed in through the proxy its requests will go through (#1663)
+	ctx = provider.Via(ctx, provider.PluginID(pp.ID))
 	var saved plugin.Saved
 	if pp.Methods[m].Type == "api" {
 		key, err := secret("key", keyPrompt(pp.Name, pp.Methods[m]), false)

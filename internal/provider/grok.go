@@ -879,7 +879,7 @@ func runCLISignIn(s *signInFlow, what string, env []string, using bool, failed f
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := proc.CommandContext(ctx, path, args...)
 	cmd.Dir, _ = os.UserHomeDir()
-	cmd.Env = netproxy.Env(env)
+	cmd.Env = netproxy.EnvWith(s.proxy, env)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()

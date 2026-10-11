@@ -55,6 +55,8 @@ if [ "$1 $2" = "auth status" ]; then
   %s
 fi
 [ "$1 $2" = "auth login" ] || exit 2
+# the proxy it was run with, beside it (#1663)
+printf '%%s' "$HTTPS_PROXY" > "${0%%/*}/login-proxy"
 echo "Opening browser to sign in…"
 "$BROWSER" '%s'
 echo "If the browser didn't open, visit: %s"
