@@ -1,7 +1,8 @@
 package provider
 
 // A rule as it is typed: use=<model> tokens=200k images effort=high
-// agents=a,b intent="…" compact time=09:00-18:00 days=mon-fri, or
+// agents=a,b intent="…" compact time=09:00-18:00 days=mon-fri
+// folders=~/work,"~/My Project", or
 // pause=<model> time=… days=… agents=… — by magpie group rule and the
 // TUI's routing page.
 
@@ -155,6 +156,20 @@ func ParseRule(g Group, words []string) (r Rule, at int, classifier string, err 
 				r.Time = &TimeWindow{From: "00:00", To: "00:00"} // the whole day, unless time= says
 			}
 			r.Time.Days = days
+		case "folders", "folder", "in", "project", "projects":
+			for _, p := range strings.Split(v, ",") {
+				if p = strings.TrimSpace(p); p == "" {
+					continue
+				}
+				c, err := cleanFolder(p)
+				if err != nil {
+					return r, 0, "", err
+				}
+				r.Folders = append(r.Folders, c)
+			}
+			if len(r.Folders) == 0 {
+				return r, 0, "", fmt.Errorf("folders names the working folders it holds in: folders=~/work/acme,~/oss")
+			}
 		case "classifier", "classify", "by":
 			if classifier = strings.TrimSpace(v); classifier == "" {
 				return r, 0, "", fmt.Errorf("classifier=<model>: the model that tells which intent a message is")
@@ -166,13 +181,13 @@ func ParseRule(g Group, words []string) (r Rule, at int, classifier string, err 
 			}
 			at = n
 		default:
-			return r, 0, "", fmt.Errorf(UnknownRuleWord+"%q (use, pause, tokens, images, effort, agents, intent, compact, time, days, classifier, at)", w)
+			return r, 0, "", fmt.Errorf(UnknownRuleWord+"%q (use, pause, tokens, images, effort, agents, intent, compact, time, days, folders, classifier, at)", w)
 		}
 	}
 	if r.Use == "" {
 		return r, 0, "", fmt.Errorf("use=<model> (or pause=<model>) is missing: one of %s", strings.Join(g.Members, ", "))
 	}
-	if r.Pause && (r.Tokens > 0 || r.Images || r.Effort != "" || r.Intent != "" || r.Compact) {
+	if r.Pause && (r.Tokens > 0 || r.Images || r.Effort != "" || r.Intent != "" || r.Compact || len(r.Folders) > 0) {
 		return r, 0, "", fmt.Errorf("pause=<model> holds by time=, days= or agents= only")
 	}
 	if r.Pause && r.Time == nil && len(r.Agents) == 0 {
@@ -275,6 +290,13 @@ func (r Rule) Line() string {
 		if len(r.Time.Days) > 0 {
 			out = append(out, "days="+strings.ReplaceAll(strings.ToLower(r.Time.DaysText()), "–", "-"))
 		}
+	}
+	if len(r.Folders) > 0 {
+		v := strings.ReplaceAll(strings.Join(r.Folders, ","), `"`, "")
+		if strings.ContainsAny(v, " \t") {
+			v = `"` + v + `"`
+		}
+		out = append(out, "folders="+v)
 	}
 	return strings.Join(out, " ")
 }

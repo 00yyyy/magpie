@@ -184,7 +184,7 @@
       <tr><td>オフ <code>off</code></td><td>リクエストごとに改めてルーティングします。</td></tr>
     </table></div>
     <h3 id="rules">ルール · ターンを指定したモデルへ</h3>
-    <p>グループの <span class="ui">Rules</span> は、指定した種類のターンをグループ内の特定のモデルに送ります。種類とは、長いもの（<code>tokens ≥ N</code>）、画像を含むもの、推論を求めるもの（オン、または一定レベル以上）、特定のエージェントからのもの、あなたが記述した内容を求めるもの（<em>インテント</em>）、エージェントがコンテキストを圧縮するもの、です。メッセージを送ると上から順に評価され、最初に一致したルールのモデルが先頭になり、失敗したときはグループの他のモデルが後に続きます。どのルールにも一致しないターンは、グループの通常のルーティングに従い、それまでの送り先に留まります。</p>
+    <p>グループの <span class="ui">Rules</span> は、指定した種類のターンをグループ内の特定のモデルに送ります。種類とは、長いもの（<code>tokens ≥ N</code>）、画像を含むもの、推論を求めるもの（オン、または一定レベル以上）、特定のエージェントからのもの、あなたが記述した内容を求めるもの（<em>インテント</em>）、エージェントがコンテキストを圧縮するもの、特定のフォルダ（プロジェクト）で作業しているもの、です。ルールの条件はすべて満たす必要があるので、「~/work/acme 内で、かつ長い」のようにも書けます。メッセージを送ると上から順に評価され、最初に一致したルールのモデルが先頭になり、失敗したときはグループの他のモデルが後に続きます。どのルールにも一致しないターンは、グループの通常のルーティングに従い、それまでの送り先に留まります。</p>
     <ul>
       <li>ルールはターンの開始時に決まり、エージェントがツールの結果を返している間もそのターンは同じモデルに留まるため、ベンダーのキャッシュが途中で失われません。唯一の例外として、ターンがモデルのコンテキストを超えて大きくなった場合は、それを受け付けられるメンバーに移ります。</li>
       <li>トークン数は、リクエストのサイズから推定した値と、会話の直前のリクエストでベンダーが数えた値のうち、大きいほうを使います。余裕を持たせてください。200k のモデルなら、ルールは 199k ではなく 150k にします。</li>
@@ -192,7 +192,8 @@
       <li>インテントは、ユーザーが求めていることを数語で表したものです（「テストを書く・直す」「ちょっとした質問」など）。ターンの開始時に、グループの分類モデル（magpie にある任意のモデル。小さく高速で推論なしのものが最適です）に、一致しうるインテントのうちユーザーのメッセージがどれに当たるかを一度だけ尋ねます。送られるのはそのメッセージだけで、会話全体ではありません。分類モデルが失敗した、遅すぎた（8 秒）、または判断できなかった場合は、どのインテントも一致せず、そのターンは他のルールに従います。インテントのないルールでいずれにせよ決まる場合は問い合わせず、同じメッセージについて二度尋ねることもありません。その呼び出しは使用量に magpie 自身の呼び出しとして表示されます。何を尋ねるのか、回答がどう使われるのか、失敗したらどうなるのかの詳細は<a href="/docs/ja/intent">インテントルーティング</a>を参照してください。</li>
       <li><span class="ui">compacting</span> は、エージェントが会話を圧縮するとき（Claude Code の <code>/compact</code> と自動圧縮、Codex、OpenCode、Pi、Gemini CLI、Qwen Code、Kimi Code）に一致します。これにより、会話は元のモデルのまま、要約だけをより安く速いモデルに書かせられます。圧縮は単独で判断されます。圧縮が起きたターンとそのキャッシュは元の送り先に留まります。会話がルールのモデルが受け付けられる長さを超えている場合は、次に一致するルール、またはグループの順序で決まります。</li>
       <li><b>時間帯と曜日。</b>ルールは、このコンピューターの時計で、特定の時間帯や曜日だけ有効にできます（ベンダーのピーク時間など）。その間のターンを別のモデルに送るルールでは、ベンダーのモデルはフォールバックとして後ろに残ります。完全に外すには、ルールの <span class="ui">送信先</span> を <span class="ui">一時停止</span> に変えます。ルールが有効な間（時間帯、曜日、エージェント）、そのモデルはグループから外れ、先頭にもフォールバックにもならず、会話の継続でも使われません。時間帯が終われば戻ります。一時停止は時間帯、曜日、エージェントだけで判断し、グループのモデルがすべて一時停止中ならエージェントにそう伝えます。</li>
-      <li>ルーティングタブには、各ターンをどのルールがどこへ送ったか、分類モデルが何と答えたかが表示されます。</li>
+      <li><b>フォルダ。</b><span class="ui">フォルダ</span> は、エージェントの作業フォルダが指定したフォルダのどれか、またはその中にあるときに一致します。<code>~/work/acme</code> は <code>~/work/acme/web</code> を含み、<code>~/work/acme-old</code> は含みません。フォルダはエージェントがリクエストでモデルに伝えるもの（Claude Code、Codex、OpenCode、Pi が伝えます）なので、伝えないエージェントはフォルダのルールに一致しません。<code>~</code> はホームフォルダ、<code>C:\work</code> は WSL の <code>/mnt/c/work</code> と同じで、macOS と Windows では大文字小文字を区別しません。</li>
+      <li>ルーティングタブには、各ターンをどのルールがどこへ送ったか、分類モデルが何と答えたか、エージェントが伝えた作業フォルダが表示されます。</li>
     </ul>
     <h3 id="nested">グループの中のグループ</h3>
     <p>グループのモデルには別のグループも含められます。<span class="ui">Add a model</span> の <em>Routing groups</em> の下から選ぶか、ターミナルで <code>models+=group/&lt;id&gt;</code> を使います。中に入ったグループは順序の中でその位置を占め、自分のモデルの間では自分のルーティングとルールに従って振り分けます。たとえば Coder を <code>deepseek-v4-pro</code>、次に <em>Fast</em> とし、Fast は安いモデルを独自の順序で並べる、といった構成ができます。Coder のルールでターンを <code>group/fast</code> に送れば、どのモデルを先にするかは Fast 自身のルールが決めます。</p>
@@ -217,6 +218,7 @@ magpie group set opus-anywhere models+=openrouter/anthropic/claude-opus-5.5
 magpie group rule add opus-anywhere use=openrouter/anthropic/claude-opus-5.5 tokens=150k  <span class="c"># 長いターンはまずこれへ</span>
 magpie group rule add opus-anywhere use=copilot/claude-opus-5.5 intent=<span class="s">"ちょっとした質問"</span> classifier=groq/llama-3.1-8b-instant
 magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash compact  <span class="c"># /compact の要約は安いモデルへ</span>
+magpie group rule add opus-anywhere use=kimi/kimi-k2.6 folders=~/oss,<span class="s">"~/My Project"</span>  <span class="c"># これらのプロジェクトのターンはまずこのモデルへ</span>
 magpie group rule add opus-anywhere pause=copilot/claude-opus-5.5 time=14:00-18:00 days=mon-fri  <span class="c"># その時間帯は外す</span>
 magpie group set coder models+=group/opus-anywhere  <span class="c"># グループの中のグループ</span>
 magpie group rule opus-anywhere      <span class="c"># ルール一覧。rule rm|mv &lt;n&gt;、rule classifier &lt;group&gt; &lt;model&gt;</span>

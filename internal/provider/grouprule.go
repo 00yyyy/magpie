@@ -61,6 +61,12 @@ type Rule struct {
 	// Time: the turn begins within these hours of the day, local time — a
 	// vendor's peak-price hours sent to another, say.
 	Time *TimeWindow `json:"time,omitempty"`
+	// Folders: the request's working folder, as the agent states it in
+	// the request, is one of these or inside one — a project, or every
+	// project under a folder (Cario0x on X). "~/work", "/Users/me/x",
+	// "C:\work"; WSL's /mnt/c/work is C:\work. When the agent doesn't
+	// say its folder, it doesn't match.
+	Folders []string `json:"folders,omitempty"`
 	// Pause: rather than sending to Use first, the rule leaves Use out of
 	// the group while it holds (John on Discord: a model paused in a
 	// vendor's peak hours). Only Time and Agents can be its conditions,
@@ -241,6 +247,9 @@ func (r Rule) Conditions() []string {
 	if r.Time != nil {
 		out = append(out, "time "+r.Time.Text())
 	}
+	if len(r.Folders) > 0 {
+		out = append(out, "folder "+strings.Join(r.Folders, "|"))
+	}
 	return out
 }
 
@@ -255,6 +264,20 @@ func cleanRules(rules []Rule, members []string) ([]Rule, error) {
 			r.Agents[j] = strings.ToLower(r.Agents[j])
 		}
 		n := i + 1
+		var folders []string
+		for _, p := range r.Folders {
+			if strings.TrimSpace(p) == "" {
+				continue
+			}
+			c, err := cleanFolder(p)
+			if err != nil {
+				return nil, fmt.Errorf("rule %d: %w", n, err)
+			}
+			if !slices.Contains(folders, c) {
+				folders = append(folders, c)
+			}
+		}
+		r.Folders = folders
 		if r.Time != nil {
 			w := *r.Time
 			if err := w.clean(); err != nil {
@@ -277,8 +300,8 @@ func cleanRules(rules []Rule, members []string) ([]Rule, error) {
 		case len([]rune(r.Intent)) > MaxIntent:
 			return nil, fmt.Errorf("rule %d: an intent is at most %d characters", n, MaxIntent)
 		case len(r.Conditions()) == 0:
-			return nil, fmt.Errorf("rule %d: it needs a condition (tokens, images, effort, agents, intent, compacting or time)", n)
-		case r.Pause && (r.Tokens > 0 || r.Images || r.Effort != "" || r.Intent != "" || r.Compact):
+			return nil, fmt.Errorf("rule %d: it needs a condition (tokens, images, effort, agents, intent, compacting, time or folders)", n)
+		case r.Pause && (r.Tokens > 0 || r.Images || r.Effort != "" || r.Intent != "" || r.Compact || len(r.Folders) > 0):
 			return nil, fmt.Errorf("rule %d: a pause holds by hours, days or agents only", n)
 		}
 		if len(r.Agents) == 0 {
@@ -304,6 +327,9 @@ type RuleRequest struct {
 	// At is when the request came, for a rule's hours; a zero time is in
 	// none.
 	At time.Time
+	// Folder is the working folder the agent says the request is from;
+	// "" when it doesn't say, which is in no rule's folders.
+	Folder string
 }
 
 // Matches reports whether the request is one the rule sends to its member
@@ -331,6 +357,9 @@ func (r Rule) MatchesBesidesIntent(q RuleRequest) bool {
 		return false
 	}
 	if r.Time != nil && !r.Time.Holds(q.At) {
+		return false
+	}
+	if len(r.Folders) > 0 && !slices.ContainsFunc(r.Folders, func(root string) bool { return FolderUnder(q.Folder, root) }) {
 		return false
 	}
 	switch r.Effort {
@@ -431,11 +460,11 @@ func ruledEntry(e *Entry, g Group, ms []Member, entries []Entry) {
 		if !ok || r.Pause {
 			continue
 		}
-		if r.Images && r.Tokens == 0 && r.Effort == "" && len(r.Agents) == 0 && r.Intent == "" && !r.Compact && r.Time == nil && sees(x) && !e.Images &&
+		if r.Images && r.Tokens == 0 && r.Effort == "" && len(r.Agents) == 0 && r.Intent == "" && !r.Compact && r.Time == nil && len(r.Folders) == 0 && sees(x) && !e.Images &&
 			!slices.ContainsFunc(g.Rules[:i], func(b Rule) bool { y, ok := of(b.Use); return !b.Pause && (!ok || !sees(y)) }) {
 			e.Images, e.ImageInput = true, x.ImageInput
 		}
-		if r.Tokens == 0 || r.Images || r.Effort != "" || len(r.Agents) > 0 || r.Intent != "" || r.Compact || r.Time != nil || x.Context <= e.Context {
+		if r.Tokens == 0 || r.Images || r.Effort != "" || len(r.Agents) > 0 || r.Intent != "" || r.Compact || r.Time != nil || len(r.Folders) > 0 || x.Context <= e.Context {
 			continue // only a rule of length alone takes every long request
 		}
 		// every request up to the rule's length must fit whoever may get

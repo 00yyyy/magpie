@@ -16,7 +16,7 @@ const ruleUsage = `usage:
   magpie group rule <group>               the group's rules
   magpie group rule add <group> use=<model> [tokens=<n>] [images] [effort=on|low|medium|high|xhigh|max] [agents=a,b…]
                         [intent="<what the message asks for>"] [compact] [time=HH:MM-HH:MM] [days=mon-fri]
-                        [classifier=<model>] [at=<n>]
+                        [folders=<folder>,…] [classifier=<model>] [at=<n>]
                                           a rule: a turn that matches it goes to <model>, one of the group's
                                           (or group/<id>, a group in it), first; a model in the group at an
                                           effort of its own is named with it (use=glm/glm-5.3-flash:high)
@@ -52,6 +52,11 @@ const ruleUsage = `usage:
            runs past midnight) — a provider's peak-price hours sent to another, say
   days     only on these days (mon-fri, sat,sun); with time, a window past midnight is of the day it
            begins on. Days alone hold all day
+  folders  the agent works in one of these folders, or a folder inside one (~/work/acme, ~/oss;
+           C:\work, which is /mnt/c/work in WSL): a project, or every project under a folder. The
+           folder is the one the agent tells its model in the request (Claude Code, Codex, OpenCode,
+           Pi); a request that doesn't tell it matches no folder. Quote a folder with a space:
+           folders="~/My Project,~/oss"
 
   e.g. magpie group rule add opus-anywhere use=openrouter/google/gemini-3-pro tokens=200k
        magpie group rule add opus-anywhere use=a/vision-model images
@@ -59,6 +64,7 @@ const ruleUsage = `usage:
        magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash compact
        magpie group rule add cheap use=glm/glm-5.3 time=14:00-18:00 days=mon-fri
        magpie group rule add cheap pause=glm/glm-5.3 time=14:00-18:00 days=mon-fri
+       magpie group rule add opus-anywhere use=kimi/kimi-k2.6 folders=~/oss
        magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash intent="a quick question" classifier=groq/llama-3.1-8b-instant`
 
 // parseTokens reads 200000, 200k, 1.5m.
