@@ -193,7 +193,7 @@ func readJev(b []byte, intents []string, levels bool, prev before) (verdict, err
 			Output int `json:"output_tokens"`
 		} `json:"usage"`
 	}
-	if err := json.Unmarshal(b, &out); err != nil {
+	if err := decodeJSON(b, &out); err != nil {
 		return verdict{}, answerError{fmt.Errorf("not a System One answer")}
 	}
 	var v verdict
@@ -275,7 +275,7 @@ func (s *Server) jevLevelled(ctx context.Context, p provider.Provider, model str
 			Score *float64 `json:"score"`
 		} `json:"answers"`
 	}
-	if json.Unmarshal(b, &out) != nil || out.Answers["levels"].Noul == nil {
+	if decodeJSON(b, &out) != nil || out.Answers["levels"].Noul == nil {
 		return levelling{}, answerError{fmt.Errorf("not a System One answer")}
 	}
 	l.levels = *out.Answers["levels"].Noul >= 0.5
@@ -337,7 +337,7 @@ func (s *Server) systemOne(ctx context.Context, p provider.Provider, model strin
 			Output int `json:"output_tokens"`
 		} `json:"usage"`
 	}
-	_ = json.Unmarshal(b, &use)
+	_ = decodeJSON(b, &use)
 	var keyID, keyName string
 	if p.Account == nil && p.Key != "" {
 		keyID, keyName = provider.KeyID(p.Key), p.KeyName
@@ -411,7 +411,7 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 	var q struct {
 		Model string `json:"model"`
 	}
-	if json.Unmarshal(body, &q) != nil {
+	if decodeJSON(body, &q) != nil {
 		writeError(w, provider.Chat, http.StatusBadRequest, "not a System One request")
 		return
 	}
@@ -498,7 +498,7 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 			Output int `json:"output_tokens"`
 		} `json:"usage"`
 	}
-	_ = json.Unmarshal(b, &use)
+	_ = decodeJSON(b, &use)
 	errMsg := ""
 	if status >= 300 {
 		errMsg = provider.APIError(b, fmt.Sprintf("%d %s", status, http.StatusText(status)))
@@ -549,7 +549,7 @@ func withEffort(proto provider.Protocol, body []byte, effort string) []byte {
 		OutputConfig map[string]any `json:"output_config"`
 		MaxTokens    int            `json:"max_tokens"`
 	}
-	if effort == "" || json.Unmarshal(body, &v) != nil {
+	if effort == "" || decodeJSON(body, &v) != nil {
 		return body
 	}
 	switch proto {
@@ -617,7 +617,7 @@ func requestEffort(proto provider.Protocol, body []byte) string {
 			Effort string `json:"effort"`
 		} `json:"output_config"`
 	}
-	if json.Unmarshal(body, &v) != nil || v.Thinking == nil || v.Thinking.Type != "enabled" && v.Thinking.Type != "adaptive" {
+	if decodeJSON(body, &v) != nil || v.Thinking == nil || v.Thinking.Type != "enabled" && v.Thinking.Type != "adaptive" {
 		return ""
 	}
 	if e := effortOf(v.OutputConfig.Effort); e != "" {
@@ -676,7 +676,7 @@ func withFixedEffort(proto provider.Protocol, body []byte, effort string) []byte
 		var v struct {
 			Reasoning map[string]any `json:"reasoning"`
 		}
-		if json.Unmarshal(body, &v) != nil {
+		if decodeJSON(body, &v) != nil {
 			return body
 		}
 		if v.Reasoning == nil {
@@ -691,7 +691,7 @@ func withFixedEffort(proto provider.Protocol, body []byte, effort string) []byte
 			} `json:"thinking"`
 			MaxTokens int `json:"max_tokens"`
 		}
-		if json.Unmarshal(body, &v) != nil {
+		if decodeJSON(body, &v) != nil {
 			return body
 		}
 		if effort == "none" {

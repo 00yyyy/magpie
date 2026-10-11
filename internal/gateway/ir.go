@@ -564,7 +564,7 @@ func stringOrText(raw json.RawMessage) string {
 		return ""
 	}
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if decodeJSON(raw, &s) == nil {
 		return s
 	}
 	var blocks []struct {
@@ -572,7 +572,7 @@ func stringOrText(raw json.RawMessage) string {
 		Text     string `json:"text"`
 		ToolName string `json:"tool_name"`
 	}
-	if json.Unmarshal(raw, &blocks) == nil {
+	if decodeJSON(raw, &blocks) == nil {
 		var b strings.Builder
 		for _, x := range blocks {
 			switch x.Type {
@@ -609,7 +609,7 @@ func toolOutput(raw json.RawMessage) (string, []Part) {
 		} `json:"source"`
 		ImageURL json.RawMessage `json:"image_url"`
 	}
-	if len(raw) == 0 || raw[0] != '[' || json.Unmarshal(raw, &blocks) != nil {
+	if len(raw) == 0 || raw[0] != '[' || decodeJSON(raw, &blocks) != nil {
 		return text, nil
 	}
 	var images []Part
@@ -623,11 +623,11 @@ func toolOutput(raw json.RawMessage) (string, []Part) {
 			}
 		case "input_image", "image_url":
 			var u string
-			if json.Unmarshal(b.ImageURL, &u) != nil {
+			if decodeJSON(b.ImageURL, &u) != nil {
 				var o struct {
 					URL string `json:"url"`
 				}
-				json.Unmarshal(b.ImageURL, &o)
+				decodeJSON(b.ImageURL, &o)
 				u = o.URL
 			}
 			if u != "" {

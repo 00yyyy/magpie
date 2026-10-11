@@ -274,7 +274,7 @@ func ServedBy() Served {
 		Version string `json:"version"`
 		Window  bool   `json:"window"`
 	}
-	if json.Unmarshal(b, &info) != nil || info.Name != "magpie" {
+	if decodeJSON(b, &info) != nil || info.Name != "magpie" {
 		return Served{Running: bytes.Contains(b, []byte(`"magpie"`)), Window: bytes.Contains(b, []byte(`"window":true`))}
 	}
 	return Served{Running: true, Window: info.Window, Version: info.Version}
@@ -1238,7 +1238,7 @@ func (s *Server) geminiCount(w http.ResponseWriter, model string, body []byte) {
 	var wrap struct {
 		Inner json.RawMessage `json:"generateContentRequest"`
 	}
-	if json.Unmarshal(body, &wrap) == nil && len(wrap.Inner) > 0 {
+	if decodeJSON(body, &wrap) == nil && len(wrap.Inner) > 0 {
 		body = wrap.Inner
 	}
 	req, err := parseGemini(body)
@@ -4312,11 +4312,11 @@ func refusedOptional(status int, msg, body []byte) []string {
 		return nil
 	}
 	var m map[string]json.RawMessage
-	if json.Unmarshal(body, &m) != nil {
+	if decodeJSON(body, &m) != nil {
 		return nil
 	}
 	var fault any
-	if json.Unmarshal(msg, &fault) != nil {
+	if decodeJSON(msg, &fault) != nil {
 		fault = string(msg)
 	}
 	var out []string
@@ -4469,7 +4469,7 @@ func refusedInMessages(status int, msg, body []byte) []string {
 		return nil
 	}
 	var fault any
-	if i := bytes.IndexByte(msg, '{'); i < 0 || json.Unmarshal(msg[i:], &fault) != nil {
+	if i := bytes.IndexByte(msg, '{'); i < 0 || decodeJSON(msg[i:], &fault) != nil {
 		return nil
 	}
 	var out []string
@@ -4849,7 +4849,7 @@ func requiredAllowlist(proto provider.Protocol, body []byte) bool {
 		var q struct {
 			ToolChoice struct{ Type, Mode string } `json:"tool_choice"`
 		}
-		return json.Unmarshal(body, &q) == nil && q.ToolChoice.Type == "allowed_tools" && q.ToolChoice.Mode == "required"
+		return decodeJSON(body, &q) == nil && q.ToolChoice.Type == "allowed_tools" && q.ToolChoice.Mode == "required"
 	case provider.Gemini:
 		var q struct {
 			ToolConfig struct {
@@ -4859,7 +4859,7 @@ func requiredAllowlist(proto provider.Protocol, body []byte) bool {
 				} `json:"functionCallingConfig"`
 			} `json:"toolConfig"`
 		}
-		return json.Unmarshal(body, &q) == nil && strings.EqualFold(q.ToolConfig.FunctionCallingConfig.Mode, "ANY") && len(q.ToolConfig.FunctionCallingConfig.AllowedFunctionNames) > 0
+		return decodeJSON(body, &q) == nil && strings.EqualFold(q.ToolConfig.FunctionCallingConfig.Mode, "ANY") && len(q.ToolConfig.FunctionCallingConfig.AllowedFunctionNames) > 0
 	}
 	return false
 }
@@ -5017,7 +5017,7 @@ func streamOf(body []byte) bool {
 	var v struct {
 		Stream bool `json:"stream"`
 	}
-	json.Unmarshal(body, &v)
+	decodeJSON(body, &v)
 	return v.Stream
 }
 
@@ -5028,7 +5028,7 @@ func decodeRequest(body []byte, dst any) error {
 	if len(body) == 0 || body[0] != '{' {
 		return errors.New("invalid request: expected a JSON object")
 	}
-	if err := json.Unmarshal(body, dst); err != nil {
+	if err := decodeJSON(body, dst); err != nil {
 		return fmt.Errorf("invalid request: %w", err)
 	}
 	return nil
@@ -5091,7 +5091,7 @@ func modelOf(body []byte) string {
 	var v struct {
 		Model string `json:"model"`
 	}
-	json.Unmarshal(body, &v)
+	decodeJSON(body, &v)
 	return v.Model
 }
 
@@ -5217,7 +5217,7 @@ func conversationID(in http.Header, body []byte) string {
 		Contents []json.RawMessage `json:"contents"`
 	}
 	// An undecodable body still gets an id: the hash of the whole body.
-	_ = json.Unmarshal(body, &m)
+	_ = decodeJSON(body, &m)
 	items := m.Messages
 	geminiContents := len(items) == 0 && len(m.Contents) > 0
 	if geminiContents {
@@ -5225,7 +5225,7 @@ func conversationID(in http.Header, body []byte) string {
 	}
 	if len(items) == 0 && len(m.Input) > 0 && m.Input[0] == '[' {
 		// A malformed input array leaves items empty, and the whole body is hashed.
-		_ = json.Unmarshal(m.Input, &items)
+		_ = decodeJSON(m.Input, &items)
 	}
 	first := []byte(m.Input)
 	if len(items) > 0 {
@@ -5236,7 +5236,7 @@ func conversationID(in http.Header, body []byte) string {
 			Role string `json:"role"`
 		}
 		// Gemini treats an omitted role as user; Chat and Responses do not.
-		if json.Unmarshal(it, &r) == nil && (r.Role == "user" || (geminiContents && r.Role == "")) {
+		if decodeJSON(it, &r) == nil && (r.Role == "user" || (geminiContents && r.Role == "")) {
 			first = it
 			break
 		}
@@ -5349,7 +5349,7 @@ func bodyEffort(proto provider.Protocol, body []byte) string {
 			Effort string `json:"effort"`
 		} `json:"output_config"`
 	}
-	if json.Unmarshal(body, &v) != nil {
+	if decodeJSON(body, &v) != nil {
 		return ""
 	}
 	switch {
@@ -5373,7 +5373,7 @@ func withBodyEffort(proto provider.Protocol, body []byte, effort string) []byte 
 		var v struct {
 			OutputConfig map[string]any `json:"output_config"`
 		}
-		if json.Unmarshal(body, &v) != nil || v.OutputConfig == nil {
+		if decodeJSON(body, &v) != nil || v.OutputConfig == nil {
 			return body
 		}
 		v.OutputConfig["effort"] = effort
@@ -5384,7 +5384,7 @@ func withBodyEffort(proto provider.Protocol, body []byte, effort string) []byte 
 		var v struct {
 			Reasoning map[string]any `json:"reasoning"`
 		}
-		if json.Unmarshal(body, &v) != nil || v.Reasoning == nil {
+		if decodeJSON(body, &v) != nil || v.Reasoning == nil {
 			return body
 		}
 		v.Reasoning["effort"] = effort
@@ -5403,23 +5403,23 @@ func hasReasoningDisabled(body []byte) bool {
 // accepts when OpenRouter says reasoning is mandatory.
 func withoutReasoningOff(body []byte) ([]byte, bool) {
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(body, &fields) != nil {
+	if decodeJSON(body, &fields) != nil {
 		return nil, false
 	}
 	changed := false
 	var effort string
-	if json.Unmarshal(fields["reasoning_effort"], &effort) == nil && strings.EqualFold(effort, "none") {
+	if decodeJSON(fields["reasoning_effort"], &effort) == nil && strings.EqualFold(effort, "none") {
 		delete(fields, "reasoning_effort")
 		changed = true
 	}
 	var reasoning map[string]json.RawMessage
-	if json.Unmarshal(fields["reasoning"], &reasoning) == nil && reasoning != nil {
+	if decodeJSON(fields["reasoning"], &reasoning) == nil && reasoning != nil {
 		var enabled bool
-		if json.Unmarshal(reasoning["enabled"], &enabled) == nil && !enabled {
+		if decodeJSON(reasoning["enabled"], &enabled) == nil && !enabled {
 			delete(reasoning, "enabled")
 			changed = true
 		}
-		if json.Unmarshal(reasoning["effort"], &effort) == nil && strings.EqualFold(effort, "none") {
+		if decodeJSON(reasoning["effort"], &effort) == nil && strings.EqualFold(effort, "none") {
 			delete(reasoning, "effort")
 			changed = true
 		}
@@ -5520,7 +5520,7 @@ func withoutLoneToolChoice(body []byte) []byte {
 	var q struct {
 		Tools []json.RawMessage `json:"tools"`
 	}
-	if json.Unmarshal(body, &q) != nil || len(q.Tools) > 0 {
+	if decodeJSON(body, &q) != nil || len(q.Tools) > 0 {
 		return body
 	}
 	return withoutFields(body, "tool_choice")

@@ -66,7 +66,7 @@ type cRequest struct {
 
 func parseChat(body []byte) (*Request, error) {
 	var c cRequest
-	if err := json.Unmarshal(body, &c); err != nil {
+	if err := decodeJSON(body, &c); err != nil {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: c.Model, MaxTokens: c.MaxCompletionTokens, Temp: c.Temperature, TopP: c.TopP,
@@ -80,10 +80,10 @@ func parseChat(body []byte) (*Request, error) {
 	}
 	r.ThinkOff = strings.EqualFold(strings.TrimSpace(c.ReasoningEffort), "none")
 	var stop string
-	if json.Unmarshal(c.Stop, &stop) == nil && stop != "" {
+	if decodeJSON(c.Stop, &stop) == nil && stop != "" {
 		r.Stop = []string{stop}
 	} else {
-		json.Unmarshal(c.Stop, &r.Stop)
+		decodeJSON(c.Stop, &r.Stop)
 	}
 	var sys []string
 	for _, m := range c.Messages {
@@ -120,7 +120,7 @@ func parseChat(body []byte) (*Request, error) {
 		r.Tools = append(r.Tools, Tool{Name: t.Function.Name, Description: t.Function.Description, Schema: t.Function.Parameters, Strict: t.Function.Strict != nil && *t.Function.Strict})
 	}
 	var tc string
-	if json.Unmarshal(c.ToolChoice, &tc) == nil {
+	if decodeJSON(c.ToolChoice, &tc) == nil {
 		r.ToolChoice = tc
 	} else {
 		var o struct {
@@ -129,7 +129,7 @@ func parseChat(body []byte) (*Request, error) {
 				Name string `json:"name"`
 			} `json:"function"`
 		}
-		if json.Unmarshal(c.ToolChoice, &o) == nil && o.Function.Name != "" {
+		if decodeJSON(c.ToolChoice, &o) == nil && o.Function.Name != "" {
 			r.ToolChoice = "name:" + o.Function.Name
 		}
 	}
@@ -139,7 +139,7 @@ func parseChat(body []byte) (*Request, error) {
 // chatParts reads a message's content: a string, or an array of parts.
 func chatParts(raw json.RawMessage) []Part {
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if decodeJSON(raw, &s) == nil {
 		if s == "" {
 			return nil
 		}
@@ -157,7 +157,7 @@ func chatParts(raw json.RawMessage) []Part {
 			Filename string `json:"filename"`
 		} `json:"file"`
 	}
-	json.Unmarshal(raw, &items)
+	decodeJSON(raw, &items)
 	var out []Part
 	for _, it := range items {
 		switch it.Type {
@@ -662,7 +662,7 @@ func thinkingEffort(body []byte) []byte {
 		ReasoningEffort *string        `json:"reasoning_effort"`
 		Thinking        map[string]any `json:"thinking"`
 	}
-	if json.Unmarshal(body, &v) != nil || v.ReasoningEffort != nil {
+	if decodeJSON(body, &v) != nil || v.ReasoningEffort != nil {
 		return body
 	}
 	effort, _ := v.Thinking["effort"].(string)
@@ -913,7 +913,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal([]byte(data), &ch); err != nil {
+	if err := decodeJSON([]byte(data), &ch); err != nil {
 		return nil
 	}
 	if ch.Error != nil {
@@ -948,7 +948,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 			t += think
 			content = text
 		} else {
-			json.Unmarshal(c.Delta.Content, &content)
+			decodeJSON(c.Delta.Content, &content)
 		}
 		if c.Delta.ExtraContent.Google.Thought {
 			t, content = t+content, ""
@@ -1001,17 +1001,17 @@ func chatChoiceIndex(raw json.RawMessage) (string, bool) {
 		return "", false
 	}
 	var text string
-	if json.Unmarshal(raw, &text) == nil {
+	if decodeJSON(raw, &text) == nil {
 		raw = json.RawMessage(text)
 	}
 	var n json.Number
-	if json.Unmarshal(raw, &n) != nil {
+	if decodeJSON(raw, &n) != nil {
 		return "", false
 	}
 	index, err := n.Int64()
 	if err != nil {
 		var f float64
-		if json.Unmarshal(raw, &f) != nil || f < 0 || f != float64(int64(f)) {
+		if decodeJSON(raw, &f) != nil || f < 0 || f != float64(int64(f)) {
 			return "", false
 		}
 		index = int64(f)

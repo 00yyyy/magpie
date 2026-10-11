@@ -372,11 +372,11 @@ func leadFirst(scope, parent string, cands []candidate, pl planned) ([]candidate
 // fields (including ordinary model history) keep their existing handling.
 func hasSealedAgentMessage(body []byte) bool {
 	var request map[string]json.RawMessage
-	if json.Unmarshal(body, &request) != nil {
+	if decodeJSON(body, &request) != nil {
 		return false
 	}
 	var items []json.RawMessage
-	if json.Unmarshal(request["input"], &items) != nil {
+	if decodeJSON(request["input"], &items) != nil {
 		return false
 	}
 	for _, raw := range items {
@@ -384,7 +384,7 @@ func hasSealedAgentMessage(body []byte) bool {
 			Type    string            `json:"type"`
 			Content []json.RawMessage `json:"content"`
 		}
-		if json.Unmarshal(raw, &item) != nil || item.Type != "agent_message" {
+		if decodeJSON(raw, &item) != nil || item.Type != "agent_message" {
 			continue
 		}
 		for _, content := range item.Content {
@@ -392,7 +392,7 @@ func hasSealedAgentMessage(body []byte) bool {
 				Type             string `json:"type"`
 				EncryptedContent string `json:"encrypted_content"`
 			}
-			if json.Unmarshal(content, &part) == nil && part.Type == "encrypted_content" && nativeSealedAgentPayload.MatchString(part.EncryptedContent) {
+			if decodeJSON(content, &part) == nil && part.Type == "encrypted_content" && nativeSealedAgentPayload.MatchString(part.EncryptedContent) {
 				return true
 			}
 		}

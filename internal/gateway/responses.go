@@ -47,7 +47,7 @@ type rArgs string
 
 func (a *rArgs) UnmarshalJSON(b []byte) error {
 	var s string
-	if json.Unmarshal(b, &s) == nil {
+	if decodeJSON(b, &s) == nil {
 		*a = rArgs(s)
 	} else if string(b) != "null" {
 		*a = rArgs(b)
@@ -114,11 +114,11 @@ func customInput(args string) string {
 	var a struct {
 		Input *string `json:"input"`
 	}
-	if json.Unmarshal([]byte(args), &a) == nil && a.Input != nil {
+	if decodeJSON([]byte(args), &a) == nil && a.Input != nil {
 		return *a.Input
 	}
 	var str string
-	if json.Unmarshal([]byte(args), &str) == nil {
+	if decodeJSON([]byte(args), &str) == nil {
 		return str
 	}
 	return args
@@ -166,7 +166,7 @@ func unsealed(schema json.RawMessage) json.RawMessage {
 		return schema
 	}
 	var v any
-	if json.Unmarshal(schema, &v) != nil {
+	if decodeJSON(schema, &v) != nil {
 		return schema
 	}
 	var strip func(any)
@@ -224,7 +224,7 @@ type rRequest struct {
 // in each upstream's own words. A format of plain text stays where it was.
 func textFormat(text json.RawMessage) (json.RawMessage, *Format) {
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(text, &fields) != nil {
+	if decodeJSON(text, &fields) != nil {
 		return text, nil
 	}
 	f := openAIFormat(fields["format"])
@@ -251,7 +251,7 @@ func parseResponses(body []byte) (*Request, error) {
 	// Responses Lite's tools, sent as the first input item (#350)
 	body = liftAdditionalTools(body)
 	var q rRequest
-	if err := json.Unmarshal(body, &q); err != nil {
+	if err := decodeJSON(body, &q); err != nil {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: q.Model, System: q.Instructions, MaxTokens: q.MaxOutputTokens, Temp: q.Temperature,
@@ -265,11 +265,11 @@ func parseResponses(body []byte) (*Request, error) {
 	}
 	var found []rTool // what Codex's tool searches found
 	var s string
-	if json.Unmarshal(q.Input, &s) == nil {
+	if decodeJSON(q.Input, &s) == nil {
 		r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: Text, Text: s}}})
 	} else {
 		var items []rItem
-		if err := json.Unmarshal(q.Input, &items); err != nil {
+		if err := decodeJSON(q.Input, &items); err != nil {
 			return nil, fmt.Errorf("invalid input: %v", err)
 		}
 		// replied: the conversation has had a turn answered. Codex adds a
@@ -341,9 +341,9 @@ func parseResponses(body []byte) (*Request, error) {
 					// collect a streamed response for a non-streaming client.
 					// Retain the original notification, including absent IDs.
 					if rawItems == nil {
-						_ = json.Unmarshal(q.Input, &rawItems)
+						_ = decodeJSON(q.Input, &rawItems)
 					}
-					_ = json.Unmarshal(rawItems[i], &part.Standalone)
+					_ = decodeJSON(rawItems[i], &part.Standalone)
 				}
 				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{part}})
 			case it.Type == "reasoning":
@@ -351,7 +351,7 @@ func parseResponses(body []byte) (*Request, error) {
 				// summary (all magpie gives a client of a translated reply)
 				var b strings.Builder
 				var content []rText
-				_ = json.Unmarshal(it.Content, &content)
+				_ = decodeJSON(it.Content, &content)
 				for _, c := range content {
 					if c.Type == "reasoning_text" {
 						b.WriteString(c.Text)
@@ -367,7 +367,7 @@ func parseResponses(body []byte) (*Request, error) {
 					// sealed: the item goes back to a Responses API as it
 					// came, id, summary and all (#1445)
 					if rawItems == nil {
-						_ = json.Unmarshal(q.Input, &rawItems)
+						_ = decodeJSON(q.Input, &rawItems)
 					}
 					if i < len(rawItems) {
 						part.Sealed, part.SealedBy = rawItems[i], sealResponses
@@ -424,7 +424,7 @@ func parseResponses(body []byte) (*Request, error) {
 		}
 	}
 	var tc string
-	if json.Unmarshal(q.ToolChoice, &tc) == nil {
+	if decodeJSON(q.ToolChoice, &tc) == nil {
 		r.ToolChoice = tc
 	} else {
 		var o struct {
@@ -437,7 +437,7 @@ func parseResponses(body []byte) (*Request, error) {
 				Namespace string `json:"namespace"`
 			} `json:"tools"`
 		}
-		if json.Unmarshal(q.ToolChoice, &o) == nil {
+		if decodeJSON(q.ToolChoice, &o) == nil {
 			switch o.Type {
 			case "allowed_tools":
 				if o.Mode != "auto" && o.Mode != "required" {
@@ -486,11 +486,11 @@ func parseResponses(body []byte) (*Request, error) {
 // requiring paired outputs still need the delivered text, without a fake call ID.
 func orphanedToolOutputs(body []byte) []byte {
 	var q map[string]json.RawMessage
-	if json.Unmarshal(body, &q) != nil {
+	if decodeJSON(body, &q) != nil {
 		return body
 	}
 	var input []json.RawMessage
-	if json.Unmarshal(q["input"], &input) != nil {
+	if decodeJSON(q["input"], &input) != nil {
 		return body
 	}
 	changed := false
@@ -507,7 +507,7 @@ func orphanedToolOutputs(body []byte) []byte {
 			CallID string          `json:"call_id"`
 			Output json.RawMessage `json:"output"`
 		}
-		if json.Unmarshal(raw, &item) != nil {
+		if decodeJSON(raw, &item) != nil {
 			flush()
 			inCalls = false
 			out = append(out, raw)
@@ -580,11 +580,11 @@ func pairToolItems(body []byte) []byte {
 		return body
 	}
 	var q map[string]json.RawMessage
-	if json.Unmarshal(body, &q) != nil {
+	if decodeJSON(body, &q) != nil {
 		return body
 	}
 	var input []json.RawMessage
-	if json.Unmarshal(q["input"], &input) != nil {
+	if decodeJSON(q["input"], &input) != nil {
 		return body
 	}
 	type item struct {
@@ -594,7 +594,7 @@ func pairToolItems(body []byte) []byte {
 	items := make([]item, len(input))
 	answered := map[string]bool{}
 	for i, raw := range input {
-		if json.Unmarshal(raw, &items[i]) != nil {
+		if decodeJSON(raw, &items[i]) != nil {
 			items[i] = item{}
 		}
 		if t := items[i].Type; (t == "function_call_output" || t == "custom_tool_call_output") && items[i].CallID != "" {
@@ -656,7 +656,7 @@ func mergeTurns(msgs []Message) []Message {
 
 func responsesParts(raw json.RawMessage) []Part {
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if decodeJSON(raw, &s) == nil {
 		if s == "" {
 			return nil
 		}
@@ -667,7 +667,7 @@ func responsesParts(raw json.RawMessage) []Part {
 		Text     string `json:"text"`
 		ImageURL string `json:"image_url"`
 	}
-	json.Unmarshal(raw, &items)
+	decodeJSON(raw, &items)
 	var out []Part
 	for _, it := range items {
 		switch it.Type {
@@ -708,11 +708,11 @@ func withReasoningText(body []byte) []byte {
 		return body
 	}
 	var q map[string]json.RawMessage
-	if json.Unmarshal(body, &q) != nil {
+	if decodeJSON(body, &q) != nil {
 		return body
 	}
 	var items []json.RawMessage
-	if json.Unmarshal(q["input"], &items) != nil {
+	if decodeJSON(q["input"], &items) != nil {
 		return body
 	}
 	changed := false
@@ -727,7 +727,7 @@ func withReasoningText(body []byte) []byte {
 			Summary []rText `json:"summary"`
 			Content []rText `json:"content"`
 		}
-		if json.Unmarshal(raw, &it) != nil {
+		if decodeJSON(raw, &it) != nil {
 			out = append(out, raw)
 			continue
 		}
@@ -757,7 +757,7 @@ func withReasoningText(body []byte) []byte {
 			b.WriteString(noReasoning)
 		}
 		var m map[string]json.RawMessage
-		if json.Unmarshal(raw, &m) != nil {
+		if decodeJSON(raw, &m) != nil {
 			out = append(out, raw)
 			continue
 		}
@@ -790,7 +790,7 @@ func sealedReasoning(p Part) bool {
 		Enc     string            `json:"encrypted_content"`
 		Content []json.RawMessage `json:"content"`
 	}
-	return json.Unmarshal(p.Sealed, &it) == nil && it.Enc != "" && len(it.Content) == 0
+	return decodeJSON(p.Sealed, &it) == nil && it.Enc != "" && len(it.Content) == 0
 }
 
 // buildResponses renders a request for a Responses upstream.
@@ -893,7 +893,7 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	}
 	if len(r.Text) > 0 || r.Format != nil {
 		text := map[string]any{}
-		json.Unmarshal(r.Text, &text)
+		decodeJSON(r.Text, &text)
 		if r.Format != nil {
 			text["format"] = r.Format.responses()
 		}
@@ -1082,7 +1082,7 @@ func (d *responsesDecoder) decode(data string, emit func(Event)) error {
 		} `json:"error"`
 		Message string `json:"message"`
 	}
-	if err := json.Unmarshal([]byte(data), &ev); err != nil {
+	if err := decodeJSON([]byte(data), &ev); err != nil {
 		return nil
 	}
 	switch ev.Type {
@@ -1130,7 +1130,7 @@ func (d *responsesDecoder) decode(data string, emit func(Event)) error {
 			var whole struct {
 				Item json.RawMessage `json:"item"`
 			}
-			if json.Unmarshal([]byte(data), &whole) == nil && len(whole.Item) > 0 {
+			if decodeJSON([]byte(data), &whole) == nil && len(whole.Item) > 0 {
 				emit(Event{Kind: KSealed, Name: sealResponses, ID: ev.Item.ID, Text: string(whole.Item)})
 			}
 		}

@@ -110,7 +110,7 @@ type aRequest struct {
 
 func parseAnthropic(body []byte) (*Request, error) {
 	var a aRequest
-	if err := json.Unmarshal(body, &a); err != nil {
+	if err := decodeJSON(body, &a); err != nil {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: a.Model, System: stringOrText(a.System), MaxTokens: a.MaxTokens,
@@ -128,13 +128,13 @@ func parseAnthropic(body []byte) (*Request, error) {
 	for _, m := range a.Messages {
 		msg := Message{Role: m.Role}
 		var s string
-		if json.Unmarshal(m.Content, &s) == nil {
+		if decodeJSON(m.Content, &s) == nil {
 			if s != "" {
 				msg.Parts = append(msg.Parts, Part{Kind: Text, Text: s})
 			}
 		} else {
 			var blocks []aBlock
-			if err := json.Unmarshal(m.Content, &blocks); err != nil {
+			if err := decodeJSON(m.Content, &blocks); err != nil {
 				return nil, fmt.Errorf("invalid message content: %v", err)
 			}
 			var raws []json.RawMessage // each block as the client sent it
@@ -158,7 +158,7 @@ func parseAnthropic(body []byte) (*Request, error) {
 					// goes back to Messages whole, and is nothing to
 					// another API (#1445)
 					if raws == nil {
-						_ = json.Unmarshal(m.Content, &raws)
+						_ = decodeJSON(m.Content, &raws)
 					}
 					if i < len(raws) {
 						msg.Parts = append(msg.Parts, Part{Kind: Thinking, Sealed: raws[i], SealedBy: sealAnthropic})
@@ -223,7 +223,7 @@ func thinkingOffUnlessAsked(body []byte) []byte {
 	var v struct {
 		Thinking json.RawMessage `json:"thinking"`
 	}
-	if json.Unmarshal(body, &v) != nil || v.Thinking != nil {
+	if decodeJSON(body, &v) != nil || v.Thinking != nil {
 		return body
 	}
 	// added at the end, the rest left byte for byte as the agent sent it
@@ -266,7 +266,7 @@ func withThinkingOnToolTurns(body []byte) []byte {
 	}
 	var q map[string]json.RawMessage
 	var msgs []json.RawMessage
-	if json.Unmarshal(body, &q) != nil || json.Unmarshal(q["messages"], &msgs) != nil {
+	if decodeJSON(body, &q) != nil || decodeJSON(q["messages"], &msgs) != nil {
 		return body
 	}
 	space, _ := json.Marshal(aBlock{Type: "thinking", Thinking: noReasoning})
@@ -275,8 +275,8 @@ func withThinkingOnToolTurns(body []byte) []byte {
 		var m map[string]json.RawMessage
 		var role string
 		var blocks []json.RawMessage
-		if json.Unmarshal(raw, &m) != nil || json.Unmarshal(m["role"], &role) != nil || role != "assistant" ||
-			json.Unmarshal(m["content"], &blocks) != nil {
+		if decodeJSON(raw, &m) != nil || decodeJSON(m["role"], &role) != nil || role != "assistant" ||
+			decodeJSON(m["content"], &blocks) != nil {
 			continue
 		}
 		var out []json.RawMessage
@@ -285,7 +285,7 @@ func withThinkingOnToolTurns(body []byte) []byte {
 			var t struct {
 				Type string `json:"type"`
 			}
-			json.Unmarshal(b, &t)
+			decodeJSON(b, &t)
 			switch t.Type {
 			case "thinking":
 				thought = true
@@ -350,7 +350,7 @@ func withoutThinkingOff(body []byte) ([]byte, bool) {
 	var th struct {
 		Type string `json:"type"`
 	}
-	if json.Unmarshal(body, &q) != nil || json.Unmarshal(q["thinking"], &th) != nil || th.Type != "disabled" {
+	if decodeJSON(body, &q) != nil || decodeJSON(q["thinking"], &th) != nil || th.Type != "disabled" {
 		return nil, false
 	}
 	delete(q, "thinking")
@@ -696,7 +696,7 @@ func withOutputEffort(body []byte, levels []string) []byte {
 	var v struct {
 		OutputConfig map[string]any `json:"output_config"`
 	}
-	if e == "" || json.Unmarshal(body, &v) != nil {
+	if e == "" || decodeJSON(body, &v) != nil {
 		return body
 	}
 	oc := v.OutputConfig
@@ -950,7 +950,7 @@ func (d *anthropicDecoder) decode(data string, emit func(Event)) error {
 			Type string `json:"type"`
 		} `json:"delta"`
 	}
-	if json.Unmarshal([]byte(data), &ev) == nil {
+	if decodeJSON([]byte(data), &ev) == nil {
 		switch ev.Type {
 		case "content_block_start":
 			d.server[ev.Index] = ev.ContentBlock.Type == "server_tool_use"
@@ -979,7 +979,7 @@ func (d *anthropicDecoder) decode(data string, emit func(Event)) error {
 // object with something in it.
 func fullInput(in json.RawMessage) bool {
 	var m map[string]any
-	return json.Unmarshal(in, &m) == nil && len(m) > 0
+	return decodeJSON(in, &m) == nil && len(m) > 0
 }
 
 // decodeAnthropic turns an Anthropic event stream into events.
@@ -1017,7 +1017,7 @@ func decodeAnthropic(data string, emit func(Event)) error {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal([]byte(data), &ev); err != nil {
+	if err := decodeJSON([]byte(data), &ev); err != nil {
 		return nil // keep going: pings and unknown shapes are harmless
 	}
 	switch ev.Type {
@@ -1046,7 +1046,7 @@ func decodeAnthropic(data string, emit func(Event)) error {
 			var whole struct {
 				Block json.RawMessage `json:"content_block"`
 			}
-			if json.Unmarshal([]byte(data), &whole) == nil && len(whole.Block) > 0 {
+			if decodeJSON([]byte(data), &whole) == nil && len(whole.Block) > 0 {
 				emit(Event{Kind: KSealed, Name: sealAnthropic, Text: string(whole.Block)})
 			}
 		}
@@ -1455,7 +1455,7 @@ func objectSchema(schema json.RawMessage) json.RawMessage {
 		return schema
 	}
 	var m map[string]any
-	if json.Unmarshal(schema, &m) != nil || !provider.ObjectRoot(m) {
+	if decodeJSON(schema, &m) != nil || !provider.ObjectRoot(m) {
 		return schema
 	}
 	b, err := json.Marshal(m)
