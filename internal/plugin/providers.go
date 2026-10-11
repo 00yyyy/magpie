@@ -877,6 +877,11 @@ type UsageWindow struct {
 	Models    []string `json:"models"`
 	NotModels []string `json:"notModels"`
 	Aside     bool     `json:"aside"`
+	// RunsOutAt (RFC 3339) is when the soonest credits left in the window
+	// are lost, and RunsOut how many, when the vendor's credits expire
+	// apart from the window's reset (WorkBuddy's packages)
+	RunsOutAt string  `json:"runsOutAt"`
+	RunsOut   float64 `json:"runsOut"`
 }
 
 // Checkin is what came of an account's daily check-in, as the plugin's

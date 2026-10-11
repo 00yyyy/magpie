@@ -11984,6 +11984,8 @@ function accountQuota(data, user, capFor = () => 0, settable = null) {
       m.title = resetText(at, at.toLocaleString());
       if (used >= 80) m.append(el("span", "aq-r", resetInText(at)));
     }
+    const out = runsOutText(w, (at) => at.toLocaleString());
+    if (out) m.title = [m.title, out].filter(Boolean).join("\n");
     if (w.tiers) m.title = tiersText(w);
     line.append(settable ? settable(m, w) : m);
   }
@@ -12518,6 +12520,16 @@ function resetText(at, when = at <= Date.now() ? at.toLocaleString() : resetCloc
 
 function resetInText(at) {
   return at <= Date.now() ? t("Reset time passed") : t("resets {in}", { in: untilText(at) });
+}
+
+// runsOutText: when the soonest of what a window has left is lost, apart
+// from its reset (WorkBuddy's credits come in packages that each end on
+// their own day, runsOutAt): "232.4 credits expire tomorrow 00:39"; ""
+// when not known or past. Smart routing spends such an account first.
+function runsOutText(w, when = resetClock) {
+  const at = w.runsOutAt ? new Date(w.runsOutAt) : null;
+  if (!at || !(at > Date.now()) || !(w.runsOut > 0)) return "";
+  return t("{n} expire {when}", { n: countFormat.format(w.runsOut) + (w.unit ? " " + t(w.unit) : ""), when: when(at) });
 }
 
 // accountAction changes which account a provider uses, or which it has,
@@ -15952,6 +15964,14 @@ function quotaWindows(sub) {
       if (at > Date.now()) r.append(" ", el("span", "", untilText(at)));
       quota.append(r);
       quota.title = resetText(at, at.toLocaleString());
+    }
+    // credits that run out before then, or with no reset at all
+    const out = runsOutText(w);
+    if (out) {
+      if (!r) quota.append(r = el("div", "quota-reset"));
+      else r.append(" · ");
+      r.append(el("span", "", out + " ·"), " ", el("span", "", untilText(new Date(w.runsOutAt))));
+      quota.title = [quota.title, runsOutText(w, (at) => at.toLocaleString())].filter(Boolean).join("\n");
     }
     // what the whole window holds, by what magpie routed in it (Chiao), on
     // the reset's line, so the window keeps its three rows

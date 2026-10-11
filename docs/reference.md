@@ -1217,7 +1217,12 @@ each of these groups ordered by the share used.
   when the weeks renew in the same hour. Reset times are compared to the
   hour, by the clock: 13:55 and 14:05 are different hours, 14:05 and
   14:55 the same. An account
-  with no week (Claude Enterprise) goes by its 5 hours. A Claude account
+  with no week (Claude Enterprise) goes by its 5 hours. Credits that
+  run out before their window renews, or that have no reset at all
+  (WorkBuddy's packages, each ending on its own day), count as renewing
+  when they run out: of several WorkBuddy accounts, the one whose credits
+  left end first goes first. The daily Free Plan credits aren't counted,
+  since they end at the same midnight on every account. A Claude account
   magpie knows nothing of yet goes first once, to learn what it has left
   from the answer; any other unknown account goes after those known.
 - **In order**: the accounts in their order. The first takes every request

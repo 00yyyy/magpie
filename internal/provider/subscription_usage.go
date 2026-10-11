@@ -39,6 +39,12 @@ type QuotaWindow struct {
 	Amount float64 `json:"amount,omitempty"`
 	Limit  float64 `json:"limit,omitempty"`
 	Unit   string  `json:"unit,omitempty"`
+	// RunsOutAt is when the soonest of what is left is lost, and RunsOut
+	// how much (in Unit), when it runs out apart from the window's reset:
+	// WorkBuddy's credits come in packages that each end on their own
+	// day. Smart routing takes it for the window's renewal (cdredfox on X).
+	RunsOutAt *time.Time `json:"runsOutAt,omitempty"`
+	RunsOut   float64    `json:"runsOut,omitempty"`
 	// Family is the model family a per-model window belongs to (Antigravity's
 	// "Gemini 3.1 Pro (High)" is Gemini's), for the GUI to show one figure a
 	// family, the tightest; each window is still here, and routing reads
