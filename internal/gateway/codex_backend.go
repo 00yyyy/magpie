@@ -1201,11 +1201,13 @@ func codexInput(body []byte, magpieModel bool) (_ []byte, compact bool) {
 	b, _ := json.Marshal(out)
 	q["input"] = b
 	if compact {
-		// the summary is text; a tool call would be no summary. Otherwise
-		// it goes as Codex asks for its own summary, streamed with its
-		// tool_choice: a relay in front of the ChatGPT backend turns away
-		// one that isn't ("invalid codex request", #292)
-		delete(q, "tools")
+		// the summary is text; a tool call would be no summary, so it
+		// offers none. Otherwise it goes as Codex asks for its own summary
+		// from a provider it reaches itself: "tools": [] (not left out,
+		// #1511), streamed with its tool_choice — a relay in front of the
+		// ChatGPT backend turns away one that isn't ("invalid codex
+		// request", #292)
+		q["tools"] = json.RawMessage("[]")
 		q["tool_choice"] = json.RawMessage(`"auto"`)
 		q["parallel_tool_calls"] = json.RawMessage("false")
 	}
@@ -1646,7 +1648,7 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 	}
 	rec, res, err := ask(body)
 	local := ""
-	if first := rec.status; first == http.StatusNotFound || itemNotFound(rec) || protectionRefused(first, rec.body.Bytes()) ||
+	if first := rec.status; first == http.StatusNotFound || itemNotFound(rec) || upstreamFailed(rec) || protectionRefused(first, rec.body.Bytes()) ||
 		err != nil && protectionWords.MatchString(err.Error()) {
 		who, msg := compactFailure(body, rec)
 		if err != nil {
@@ -1722,6 +1724,20 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		f.Flush()
 	}
 }
+
+// upstreamFailed is a relay's own word that the provider behind it turned
+// the request away, without saying why: "flyapi: Upstream request failed"
+// came as a 404 (#866), "apex: Upstream request failed" as a 400
+// invalid_request_error (#1511). Codex asking the same relay itself
+// compacts, so the summary request is asked again as text, and compacted
+// without a model when that fails too.
+func upstreamFailed(rec *recorder) bool {
+	return rec.status >= 400 && rec.status < 500 && rec.status != http.StatusUnauthorized &&
+		rec.status != http.StatusForbidden && rec.status != http.StatusTooManyRequests &&
+		upstreamFailedWords.Match(rec.body.Bytes())
+}
+
+var upstreamFailedWords = regexp.MustCompile(`(?i)upstream request failed`)
 
 // itemNotFound is a 400 refusing an item of the input by its id, as Azure
 // OpenAI's and OpenAI's API answer one they never stored ("Item with id
