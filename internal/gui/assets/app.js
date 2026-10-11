@@ -11046,31 +11046,38 @@ let signing = null; // the sign-in under way: { id, agent, url, state, installin
 const signingOpen = () => signing?.state === "waiting" || signing?.state === "installing";
 let justAdded = ""; // the account that just came in, to greet it
 
-async function startSignIn(agent, risky, site) {
+// o: { user } signing that account in again, { proxy } the one picked to
+// sign in through (#1663): none picked, the one the account's requests go
+// through
+async function startSignIn(agent, risky, site, o = {}) {
   if (signingOpen()) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
   // an account Google may suspend is added only once that is said
   if (subOf(agent)?.risk && !risky) {
-    signing = { agent, state: "risk" };
+    signing = { agent, state: "risk", forUser: o.user, picked: o.proxy };
     renderProviders();
     return;
   }
   // one on more than one site says which first
   if (subOf(agent)?.sites && !site) {
-    signing = { agent, state: "site" };
+    signing = { agent, state: "site", forUser: o.user, picked: o.proxy };
     renderProviders();
     return;
   }
-  if (subOf(agent)?.plugin) return startPluginSignIn(subOf(agent), pluginMethod(subOf(agent), site));
-  signing = { agent, site, state: "starting" };
+  if (subOf(agent)?.plugin) return startPluginSignIn(subOf(agent), pluginMethod(subOf(agent), site), {}, o);
+  const keep = { site, forUser: o.user, picked: o.proxy };
+  signing = { agent, ...keep, proxy: o.proxy ?? signInProxyOf(agent, o.user), state: "starting" };
   renderProviders();
   try {
-    signing = await api("signin", site ? { agent, site } : { agent });
-    signing.site = site;
+    const body = { agent };
+    if (site) body.site = site;
+    if (o.user) body.user = o.user;
+    if (o.proxy != null) body.proxy = o.proxy;
+    signing = { ...(await api("signin", body)), ...keep };
     if (web && signing.url) api("open", { url: signing.url });
     renderProviders();
     followSignIn(signing.id);
   } catch (e) {
-    signing = { agent, site, state: "failed", error: e.message };
+    signing = { agent, ...keep, proxy: o.proxy ?? signInProxyOf(agent, o.user), state: "failed", error: e.message };
     renderProviders();
   }
 }
@@ -11084,14 +11091,30 @@ async function followSignIn(id) {
     if (st.state === "waiting" || st.state === "installing") {
       // the CLI it needed is in: now the vendor's page can open
       if (signing.state === "installing" && st.state === "waiting" && st.url) api("open", { url: st.url }).catch(() => {});
-      if (signing.state !== st.state || signing.url !== st.url || signing.code !== st.code) { signing = { ...st, site: signing.site, method: signing.method }; renderProviders(); }
+      if (signing.state !== st.state || signing.url !== st.url || signing.code !== st.code) { signing = { ...st, ...signingKept() }; renderProviders(); }
       continue;
     }
     if (st.state === "done") return signedIn(st);
     // a failed one keeps its site and way, for Try again
-    signing = st.state === "canceled" ? null : { ...st, site: signing.site, method: signing.method };
+    signing = st.state === "canceled" ? null : { ...st, ...signingKept() };
     renderProviders();
   }
+}
+
+// signingKept: what a sign-in under way keeps across its updates, for Try
+// again and a proxy picked for it — its site and way, the account signed
+// in to again, the proxy picked
+function signingKept() {
+  return { site: signing.site, method: signing.method, inputs: signing.inputs, forUser: signing.forUser, picked: signing.picked, askProxy: signing.askProxy, customProxy: signing.customProxy };
+}
+
+// signInProxyOf: the proxy an account's sign-in goes through when none is
+// picked, as the server picks it (#1663): the account's own, else its
+// subscription's, else the global one ("")
+function signInProxyOf(agent, user) {
+  const p = providers?.providers?.find((x) => x.account?.agent === agent);
+  const own = user && p?.accountProxies?.[String(user).trim().toLowerCase()];
+  return own || (p?.proxy || "").trim();
 }
 
 // signedIn: a sign-in done — the account opened in the editor.
@@ -11117,7 +11140,7 @@ async function signedIn(st) {
 // startPluginSignIn: a plugin's provider signed in to as OpenCode's
 // `auth login` does — the way to sign in, the questions that way asks,
 // then the browser (and the code its page shows, pasted back) or a key.
-async function startPluginSignIn(sub, method, inputs = {}) {
+async function startPluginSignIn(sub, method, inputs = {}, o = {}) {
   const ms = sub.plugin.methods || [];
   if (!ms.length) {
     signing = { agent: sub.agent, state: "failed", error: t("The plugin has no way to sign in to {name}", { name: sub.name }) };
@@ -11125,32 +11148,35 @@ async function startPluginSignIn(sub, method, inputs = {}) {
   }
   if (method == null) {
     if (ms.length > 1) {
-      signing = { agent: sub.agent, state: "method" };
+      signing = { agent: sub.agent, state: "method", forUser: o.user, picked: o.proxy };
       return renderProviders();
     }
     method = 0;
   }
-  signing = { agent: sub.agent, method, inputs, state: "starting" };
+  const keep = { method, inputs, forUser: o.user, picked: o.proxy };
+  signing = { agent: sub.agent, ...keep, proxy: o.proxy ?? signInProxyOf(sub.agent, o.user), state: "starting" };
   renderProviders();
   try {
     const r = await api("plugin-signin/prompt", { provider: sub.pid, method, inputs });
     if (signing?.agent !== sub.agent) return;
     if (r.prompt) {
-      signing = { agent: sub.agent, method, inputs, prompt: r.prompt, state: "prompt" };
+      signing = { agent: sub.agent, ...keep, prompt: r.prompt, state: "prompt" };
       return renderProviders();
     }
     if (ms[method].type === "api") {
-      signing = { agent: sub.agent, method, inputs, state: "key" };
+      signing = { agent: sub.agent, ...keep, state: "key" };
       return renderProviders();
     }
-    signing = await api("plugin-signin", { provider: sub.pid, method, inputs });
-    signing.method = method;
+    const body = { provider: sub.pid, method, inputs };
+    if (o.user) body.user = o.user;
+    if (o.proxy != null) body.proxy = o.proxy;
+    signing = { ...(await api("plugin-signin", body)), ...keep };
     if (web && signing.url) api("open", { url: signing.url });
     renderProviders();
     followSignIn(signing.id);
   } catch (e) {
     if (signing?.agent !== sub.agent) return;
-    signing = { agent: sub.agent, method, state: "failed", error: e.message };
+    signing = { agent: sub.agent, ...keep, proxy: o.proxy ?? signInProxyOf(sub.agent, o.user), state: "failed", error: e.message };
     renderProviders();
   }
 }
@@ -11166,7 +11192,7 @@ async function pluginAnswer(sub, value) {
       signing = { ...flow, error: r.error, value };
       return renderProviders();
     }
-    startPluginSignIn(sub, flow.method, r.inputs);
+    startPluginSignIn(sub, flow.method, r.inputs, { user: flow.forUser, proxy: flow.picked });
   } catch (e) {
     if (signing === flow) { signing = { ...flow, error: e.message, value }; renderProviders(); }
   }
@@ -11191,6 +11217,7 @@ function renderPluginAsk(sub) {
   const box = el("div", "signing plugin-ask");
   const tt = el("span", "tt");
   box.append(tt);
+  const flow = signing;
   const close = el("button", "text", t("Cancel"));
   close.onclick = cancelSignIn;
   if (signing.state === "method") {
@@ -11201,13 +11228,12 @@ function renderPluginAsk(sub) {
     sub.plugin.methods.forEach((m, i) => {
       const b = el("button", "text primary", m.label || t(m.type === "api" ? "API key" : "Browser"));
       b.dataset.method = String(i);
-      b.onclick = () => startPluginSignIn(sub, i);
+      b.onclick = () => startPluginSignIn(sub, i, {}, { user: flow.forUser, proxy: flow.picked });
       ch.append(b);
     });
     return box;
   }
   const q = signing.prompt;
-  const flow = signing;
   const form = el("form", "callback-form");
   const why = el("span", "s why", flow.error || "");
   if (flow.state === "prompt" && q.type === "select") {
@@ -11316,6 +11342,99 @@ function cancelSignIn() {
   renderProviders();
 }
 
+// A sign-in goes through the proxy its account's requests will go through,
+// so the vendor sees the account come from one place (#1663,
+// demystify0137): the sheet says which, and another can be picked, which
+// starts it again through that one and is kept as the account's proxy.
+// proxyShown is a proxy's address without the name and password in it.
+function proxyShown(u) {
+  return String(u || "").replace(/^([a-z][a-z0-9+.-]*:\/\/)[^@/]*@/i, "$1");
+}
+function proxyName(v) {
+  return !v ? t("Global proxy") : v === "direct" ? t("Direct") : proxyShown(v);
+}
+
+// signInThrough: the sign-in under way started again through proxy v.
+function signInThrough(sub, v) {
+  const f = signing;
+  const o = { user: f?.forUser, proxy: v };
+  if (!sub.plugin) return startSignIn(sub.agent, true, f?.site, o); // which ends this one
+  if (f?.id && signingOpen()) api("signin/" + f.id + "/cancel", {}).catch(() => {});
+  startPluginSignIn(sub, f?.method, f?.inputs || {}, o);
+}
+
+// signInProxyChoices: the proxies a sign-in can go through — the global
+// one, none, the subscription's, the ones its other accounts go through,
+// or one typed in. The global one is left out while the subscription has
+// a proxy of its own and other accounts: an account can't be kept on the
+// global proxy then.
+function signInProxyChoices(sub) {
+  const p = providers?.providers?.find((x) => x.account?.agent === sub.agent);
+  const own = (p?.proxy || "").trim();
+  const me = String(signing.forUser || "").trim().toLowerCase();
+  const others = (p?.account?.logins || []).some((l) => String(l.user || "").trim().toLowerCase() !== me);
+  const opts = [];
+  const seen = new Set(["", "direct"]);
+  const add = (v, note) => {
+    if (seen.has(v)) return;
+    seen.add(v);
+    opts.push({ v, name: proxyShown(v), literalName: true, note });
+  };
+  if (!own || own === "direct" || !others) opts.push({ v: "", name: "Global proxy", note: "Follows the proxy in Settings" });
+  opts.push({ v: "direct", name: "Direct", note: "Through no proxy" });
+  if (own) add(own, t("{name}'s proxy", { name: sub.name }));
+  for (const [u, v] of Object.entries(p?.accountProxies || {})) add((v || "").trim(), t("{user}'s proxy", { user: u }));
+  if (signing.proxy) add(signing.proxy, "");
+  opts.push({ v: "\x01", name: "Custom…", note: "http://, https:// or socks5://" });
+  return opts;
+}
+
+// signInProxyLink: the proxy the sign-in goes through, a link that picks
+// another.
+function signInProxyLink(sub) {
+  const b = el("button", "link via", t("Proxy: {proxy}", { proxy: proxyName(signing.proxy) }));
+  // the whole address too, which a narrow sheet cuts short
+  b.title = proxyName(signing.proxy) + "\n" + t("The sign-in goes through this proxy, as the account's requests will. One picked here is kept as the account's.");
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  b.onclick = (e) => {
+    e.stopPropagation();
+    const flow = signing;
+    openProtoMenu(b, signInProxyChoices(sub), flow.askProxy ? "\x01" : flow.proxy || "", (v) => {
+      if (signing !== flow) return;
+      if (v === "\x01") { flow.askProxy = true; return renderProviders(); }
+      if (v === (flow.proxy || "") && !flow.askProxy) return;
+      signInThrough(sub, v);
+    }, "Sign in through");
+  };
+  return b;
+}
+
+// signInProxyForm: a proxy typed in to sign in through.
+function signInProxyForm(sub) {
+  const flow = signing;
+  const form = el("form", "callback-form proxy-ask");
+  const label = t("Proxy");
+  const inp = input(flow.customProxy || "", "http://127.0.0.1:7890");
+  inp.setAttribute("aria-label", label);
+  inp.autocomplete = "off";
+  inp.onkeydown = (e) => e.stopPropagation();
+  const go = el("button", "text primary", t("Sign in through it"));
+  go.type = "submit";
+  go.disabled = !inp.value.trim();
+  inp.oninput = () => { flow.customProxy = inp.value; go.disabled = !inp.value.trim(); };
+  const submit = (e) => {
+    e.preventDefault();
+    if (signing !== flow || !inp.value.trim()) return;
+    signInThrough(sub, inp.value.trim());
+  };
+  form.onsubmit = submit;
+  go.onclick = submit;
+  form.append(inp, go);
+  setTimeout(() => { if (inp.isConnected) inp.focus({ preventScroll: true }); });
+  return form;
+}
+
 // A Copilot account on GitHub Enterprise Cloud with data residency signs in
 // at its enterprise's <name>.ghe.com, not github.com (#723): the device
 // code's panel offers that, and the host is asked in place of the code.
@@ -11399,7 +11518,8 @@ function renderSigning(sub) {
     tt.append(el("span", "s", t(sub.riskNote || "Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose.")));
     box.append(tt);
     const go = el("button", "text primary", t("Sign in anyway"));
-    go.onclick = () => startSignIn(sub.agent, true);
+    const o = { user: signing.forUser, proxy: signing.picked };
+    go.onclick = () => startSignIn(sub.agent, true, undefined, o);
     const close = el("button", "text", t("Cancel"));
     close.onclick = cancelSignIn;
     if (sub.importable) {
@@ -11424,11 +11544,12 @@ function renderSigning(sub) {
     close.onclick = cancelSignIn;
     box.append(close);
     const sites = el("div", "sites");
+    const flow = signing;
     for (const [id, label, host] of sub.sites) {
       const b = el("button", "text primary", t(label));
       b.dataset.site = id;
       b.title = host;
-      b.onclick = () => startSignIn(sub.agent, true, id);
+      b.onclick = () => startSignIn(sub.agent, true, id, { user: flow.forUser, proxy: flow.picked });
       sites.append(b);
     }
     box.append(sites);
@@ -11441,7 +11562,7 @@ function renderSigning(sub) {
         if (labels.some((l) => (m.label || "").includes(l))) return;
         const b = el("button", "link", t(m.label || (m.type === "api" ? "API key" : "Browser")));
         b.dataset.method = String(i);
-        b.onclick = () => startPluginSignIn(sub, i);
+        b.onclick = () => startPluginSignIn(sub, i, {}, { user: flow.forUser, proxy: flow.picked });
         ways.append(b);
       });
       if (ways.childElementCount) box.append(ways);
@@ -11456,11 +11577,16 @@ function renderSigning(sub) {
     tt.append(el("span", "n", t("Sign-in didn't finish")), el("span", "s", signing.error || ""));
     box.append(tt);
     const again = el("button", "text primary", t("Try again"));
-    again.onclick = () => sub.plugin ? startPluginSignIn(sub, signing.method) : startSignIn(sub.agent, true, signing.site);
+    const o = { user: signing.forUser, proxy: signing.picked };
+    again.onclick = () => sub.plugin ? startPluginSignIn(sub, signing.method, signing.inputs || {}, o) : startSignIn(sub.agent, true, signing.site, o);
     const close = el("button", "text", t("Cancel"));
     close.onclick = cancelSignIn;
+    const acts = el("span", "acts");
     const ghe = copilotHostSwitch(sub);
-    if (ghe) tt.append(el("span", "acts", ghe));
+    if (ghe) acts.append(ghe);
+    acts.append(signInProxyLink(sub));
+    tt.append(acts);
+    if (signing.askProxy) tt.append(signInProxyForm(sub));
     box.append(close, again);
     return box;
   }
@@ -11502,7 +11628,13 @@ function renderSigning(sub) {
     acts.append(open);
     const ghe = copilotHostSwitch(sub);
     if (ghe) acts.append(ghe);
+    acts.append(signInProxyLink(sub));
     tt.append(acts);
+    if (signing.askProxy) tt.append(signInProxyForm(sub));
+  } else if (signing.state === "waiting") {
+    // a sign-in run by the vendor's CLI, no page of magpie's to show
+    tt.append(el("span", "acts", signInProxyLink(sub)));
+    if (signing.askProxy) tt.append(signInProxyForm(sub));
   }
   if (signing.pasteCallback || signing.pasteCode || signing.pasteKey) {
     const flow = signing;
@@ -11778,7 +11910,7 @@ function renderAccounts(a, p) {
       row.classList.add("signed-out");
       row.append(el("span", "using", t("Sign-in required")));
       const again = el("button", "text", t("Sign in again"));
-      again.onclick = () => startSignIn(a.agent);
+      again.onclick = () => startSignIn(a.agent, false, undefined, { user: l.user });
       row.append(again);
       // the one Claude Code is signed in to can't be forgotten (ForgetLogin)
       if (!l.active) {
@@ -11790,7 +11922,7 @@ function renderAccounts(a, p) {
       row.classList.add("signed-out");
       row.append(el("span", "using", t("Sign-in required")));
       const again = el("button", "text", t("Sign in again"));
-      again.onclick = () => startSignIn(a.agent);
+      again.onclick = () => startSignIn(a.agent, false, undefined, { user: l.user });
       const forget = el("button", "text quiet", t("Remove"));
       forget.title = l.own ? forgetOwnTitle(a) : t("magpie forgets this account's sign-in; the account itself is untouched");
       forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
