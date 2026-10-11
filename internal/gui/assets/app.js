@@ -14861,7 +14861,7 @@ function renderPanelUse() {
     // the total counts the cache's tokens too, so they're named beside in and out
     const cached = l.cache_read + l.cache_write;
     blk("Tokens", fmtN(allTokens(l)), t("{a} in · {b} out", { a: fmtN(l.input), b: fmtN(l.output) }) + (cached ? " · " + t("{n} cached", { n: fmtN(cached) }) : ""));
-    blk("Requests", ledNum(l.calls), l.errors ? t("{n} failed", { n: ledNum(l.errors) }) : t("none failed"), "", l.errors ? "bad" : "");
+    blk("Requests", ledNum(l.calls), [l.errors ? t("{n} failed", { n: ledNum(l.errors) }) : t("none failed"), l.retried ? t("{n} answered on a retry", { n: ledNum(l.retried) }) : ""].filter(Boolean).join(" · "), "", l.errors ? "bad" : "");
     const c = fmtCost(l);
     blk("Cost", c ? "≈" + c : "—", l.unpriced ? t("{n} unpriced", { n: l.unpriced }) : t("effective prices"), c ? "cost" : "");
     blk("Cache hit rate", prompt ? Math.round((100 * l.cache_read) / prompt) + "%" : "—", t("of the prompt"));
@@ -15975,7 +15975,7 @@ function renderUsage() {
   const hit = u.cache_read && promptTokens ? t("hit rate {p}", { p: Math.round(100 * u.cache_read / promptTokens) + "%" }) : "";
   tile(fmtN(u.cache_read), t("cache read"), hit, u.cache_write ? t("{n} written", { n: fmtN(u.cache_write) }) + cacheTTLs(u, fmtN) : "");
   tile(fmtN(u.reasoning), t("reasoning"), t("inside output"));
-  tile(String(u.calls), t(u.calls === 1 ? "call" : "calls"), u.errors ? t("{n} failed", { n: u.errors }) : "");
+  tile(String(u.calls), t(u.calls === 1 ? "call" : "calls"), [u.errors ? t("{n} failed", { n: u.errors }) : "", u.retried ? t("{n} answered on a retry", { n: u.retried }) : ""].filter(Boolean).join(" · "));
 
   // the timeline: one bar per hour, day or week; output sits on top of input
   const chart = $("#chart");
@@ -16015,6 +16015,7 @@ function renderUsage() {
       if (g.sub) sub.push(g.sub);
       sub.push(t(g.calls === 1 ? "{n} call" : "{n} calls", { n: g.calls }));
       if (g.errors) sub.push(t("{n} failed", { n: g.errors }));
+      if (g.retried) sub.push(t("{n} answered on a retry", { n: g.retried }));
       // how long the streamed replies took to begin, and how fast they
       // wrote after (#196)
       if (g.timed) {
@@ -16057,7 +16058,7 @@ function renderUsage() {
 // server pages it (/api/usage/requests) and saves it whole as CSV.
 
 let ledger = null; // the page shown: { rows, offset, total, agents, …totals }
-let ledOffset = 0, ledPurpose = "", ledAgent = "", ledProvider = "", ledAccount = "", ledCallerKey = "", ledFailed = false, ledQuery = "", ledModel = "", ledRoute = 0, ledComputer = "", ledDay = "", ledVia = "";
+let ledOffset = 0, ledPurpose = "", ledAgent = "", ledProvider = "", ledAccount = "", ledCallerKey = "", ledFailed = false, ledRetried = false, ledQuery = "", ledModel = "", ledRoute = 0, ledComputer = "", ledDay = "", ledVia = "";
 
 // computerOpts are the Computer filter's choices: this computer, the others
 // together, and each other one, as sync shares their usage (#542); none
@@ -16079,10 +16080,10 @@ try {
 
 let ledRouteInfo = null, ledBeforeRoute = null;
 window.openUsageRoute = (route) => {
-  if (!ledBeforeRoute) ledBeforeRoute = { period, ledOffset, ledPurpose, ledAgent, ledProvider, ledAccount, ledCallerKey, ledFailed, ledQuery, ledModel, ledComputer, ledDay, ledVia };
+  if (!ledBeforeRoute) ledBeforeRoute = { period, ledOffset, ledPurpose, ledAgent, ledProvider, ledAccount, ledCallerKey, ledFailed, ledRetried, ledQuery, ledModel, ledComputer, ledDay, ledVia };
   ledRoute = route.id;
   ledRouteInfo = route;
-  ledOffset = 0; ledPurpose = ""; ledAgent = ""; ledProvider = ""; ledAccount = ""; ledCallerKey = ""; ledFailed = false; ledQuery = ""; ledModel = ""; ledComputer = ""; ledVia = "";
+  ledOffset = 0; ledPurpose = ""; ledAgent = ""; ledProvider = ""; ledAccount = ""; ledCallerKey = ""; ledFailed = false; ledRetried = false; ledQuery = ""; ledModel = ""; ledComputer = ""; ledVia = "";
   ledDay = "";
   $("#ledQ").value = "";
   period = "all";
@@ -16103,6 +16104,7 @@ function ledParams(extra) {
   if (ledVia) q.set("via", ledVia);
   if (ledRoute) q.set("route", ledRoute);
   if (ledFailed) q.set("failed", "1");
+  if (ledRetried) q.set("retried", "1");
   if (ledModel) q.set("model", ledModel);
   else if (ledQuery.trim()) q.set("q", ledQuery.trim());
   if (extra) for (const k in extra) q.set(k, extra[k]);
@@ -16781,6 +16783,16 @@ function ledRail(rail, box) {
   };
 }
 
+// the request list's status filter: "" for all, "failed" or "retried"
+const ledStatusOf = () => ledFailed ? "failed" : ledRetried ? "retried" : "";
+function ledShowStatus(to) {
+  if (to === ledStatusOf()) return;
+  ledFailed = to === "failed";
+  ledRetried = to === "retried";
+  ledOffset = 0;
+  loadLedger().catch((e) => status(e.message, "err"));
+}
+
 function renderLedgerDash(l) {
   const dash = $("#ledDash");
   dash.hidden = !l.total && !l.day;
@@ -16799,8 +16811,25 @@ function renderLedgerDash(l) {
     return b;
   };
   const line = (...parts) => { const s = el("span", "sub"); s.append(...parts); return s; };
+  // a line holding a count's button wraps rather than cut the button off
+  // (German's "nach erneutem Versuch beantwortet" runs past a narrow card)
+  const jumps = (...parts) => { const s = line(...parts); s.classList.add("jumps"); return s; };
   block("Tokens", fmtN(total), line(t("{a} in · {b} out", { a: fmtN(l.input), b: fmtN(l.output) }), " · ", t("{a} cache", { a: fmtN(l.cache_read + l.cache_write) })), "", ledNum(total));
-  block("Requests", ledNum(l.calls), line(l.errors ? t("{n} failed", { n: ledNum(l.errors) }) + " · " + t("{p} succeeded", { p: (100 * (1 - l.errors / l.calls)).toFixed(l.errors ? 1 : 0) + "%" }) : t("none failed")));
+  // a request is counted once, by how it ended: one a later try answered
+  // is not a failure, and is counted beside them as answered on a retry
+  // (小一 on Discord). Each count is a button for its requests in the list.
+  const jump = (text, to, title) => {
+    const b = el("button", "led-jump" + (to === "failed" ? " bad" : "") + (ledStatusOf() === to ? " on" : ""), text);
+    b.type = "button";
+    b.title = title;
+    b.setAttribute("aria-pressed", ledStatusOf() === to ? "true" : "false");
+    b.onclick = () => ledShowStatus(ledStatusOf() === to ? "" : to);
+    return b;
+  };
+  block("Requests", ledNum(l.calls), l.errors
+    ? jumps(jump(t("{n} failed", { n: ledNum(l.errors) }), "failed", t("Show only the failed requests")), " · " + t("{p} succeeded", { p: (100 * (1 - l.errors / l.calls)).toFixed(1) + "%" }))
+    : line(t("none failed")));
+  if (l.retried) strip.lastChild.append(jumps(jump(t("{n} answered on a retry", { n: ledNum(l.retried) }), "retried", t("Show only the requests answered on a retry"))));
   const c = fmtCost(l);
   block("Cost", c ? "≈" + c : "—", line(l.unpriced ? t(l.unpriced === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n: l.unpriced }) : t("effective prices")), c ? "cost" : "");
   const hit = block("Cache hit rate", (100 * rate).toFixed(1) + "%", null, "", t("The share of the prompt read from the cache"));
@@ -17199,14 +17228,17 @@ function renderLedger() {
   })), "Gateway keys", (v) => { ledCallerKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   const seg = $("#ledStatus");
   seg.replaceChildren();
-  for (const [on, name] of [[false, "All"], [true, "Failed"]]) {
-    const b = el("button", "opt" + (on === ledFailed ? " on" : ""), t(name));
+  // every request, those the agent got an error for, and those answered
+  // after a try that failed first
+  const shown = ledStatusOf();
+  for (const [on, name] of [["", "All"], ["failed", "Failed"], ["retried", "Retried"]]) {
+    const b = el("button", "opt" + (on === shown ? " on" : ""), t(name));
+    if (on === "retried") b.title = t("Show only the requests answered on a retry");
     b.onclick = () => {
-      if (on === ledFailed) return;
+      if (on === ledStatusOf()) return;
       for (const x of seg.querySelectorAll(".opt")) x.classList.toggle("on", x === b);
       slide(seg, "ledStatus");
-      ledFailed = on; ledOffset = 0;
-      loadLedger().catch((e) => status(e.message, "err"));
+      ledShowStatus(on);
     };
     seg.append(b);
   }
@@ -17217,6 +17249,7 @@ function renderLedger() {
   if (l.total) {
     sum.push(t("{n} in", { n: fmtN(l.input) }), t("{n} out", { n: fmtN(l.output) }), t("{n} cache write", { n: fmtN(l.cache_write) }), t("{n} cache read", { n: fmtN(l.cache_read) }));
     if (l.errors) sum.push(t("{n} failed", { n: l.errors }));
+    if (l.retried) sum.push(t("{n} answered on a retry", { n: l.retried }));
   }
   $("#ledSum").textContent = sum.join(" · ");
   // the two sources and their total, in the same block of cells as the totals
@@ -17277,7 +17310,7 @@ function renderLedger() {
   $("#ledRouteClear").setAttribute("aria-label", t("Clear filter"));
   $("#ledRouteClear").onclick = () => {
     ledRoute = 0; ledRouteInfo = null;
-    if (ledBeforeRoute) ({ period, ledOffset, ledPurpose = "", ledAgent, ledProvider, ledAccount = "", ledCallerKey, ledFailed, ledQuery, ledModel, ledComputer = "", ledDay = "", ledVia = "" } = ledBeforeRoute);
+    if (ledBeforeRoute) ({ period, ledOffset, ledPurpose = "", ledAgent, ledProvider, ledAccount = "", ledCallerKey, ledFailed, ledRetried = false, ledQuery, ledModel, ledComputer = "", ledDay = "", ledVia = "" } = ledBeforeRoute);
     ledBeforeRoute = null;
     $("#ledQ").value = ledQuery;
     loadLedger().catch((e) => status(e.message, "err"));
@@ -17289,7 +17322,7 @@ function renderLedger() {
   const pager = $("#ledPager");
   if (!l.total) {
     wrap.classList.add("none");
-    const filtered = ledPurpose || ledDay || ledRoute || ledAgent || ledProvider || ledAccount || ledComputer || ledCallerKey || ledModel || ledVia || ledFailed || ledQuery.trim();
+    const filtered = ledPurpose || ledDay || ledRoute || ledAgent || ledProvider || ledAccount || ledComputer || ledCallerKey || ledModel || ledVia || ledFailed || ledRetried || ledQuery.trim();
     const none = noCallsIn(period);
     wrap.replaceChildren(el("div", "led-none", filtered ? t("No requests match these filters.") : t(none)));
     ledFit();
@@ -17403,8 +17436,11 @@ function renderLedger() {
     // and says only whether it went well
     let word = r.status ? String(r.status) : r.source === "log" ? (bad ? r.err_type || t("Failed") : t("Succeeded")) : "—";
     if (r.status && bad && r.err_type) word += " · " + r.err_type;
+    if (r.handed_on) word += " · " + t("handed on");
+    else if (r.tries > 1) word += " · " + t("{n} tries", { n: r.tries });
     st.append(el("i", "dot"), document.createTextNode(word));
-    td(st, "", bad ? (r.err || t("Failed: the agent was answered {status}", { status: r.status })) : "");
+    td(st, "", [r.handed_on && t("This try failed and the request was handed on to the next: the request is counted by how it ended, not by this try"),
+      bad ? (r.err || t("Failed: the agent was answered {status}", { status: r.status })) : ""].filter(Boolean).join("\n"));
     const detail = ledOpen.has(key) ? ledDetail(r, LED_COLS.length) : null;
     const toggle = () => {
       if (ledOpen.delete(key)) { tr.classList.remove("open"); tr.setAttribute("aria-expanded", "false"); tr.nextElementSibling?.classList.contains("led-detail") && tr.nextElementSibling.remove(); return; }

@@ -271,10 +271,22 @@ deleted keys keep their historical identity. Older records appear as
 **key not recorded**, never inferred from today's configured key.
 These are upstream credentials, not keys clients use to call Magpie.
 
-The CSV's `cache_write_tokens` is still every cache write; the last two
+The CSV's `cache_write_tokens` is still every cache write; the two
 columns, `cache_write_5m_tokens` and `cache_write_1h_tokens`, split it by how
 long Anthropic keeps it (a record from before the split is all 5-minute).
 The app shows the split on a request's Cache and the usage tiles' tooltips.
+
+**Requests and failures** count requests, each once by how it ended: a
+request failed when the agent got an error. One that a later try answered
+(the next member of a group, another account) is not a failure; the Usage
+page, the Requests card, its rankings and group rows, and `magpie usage`
+count it as answered on a retry (`retried` in the JSON). On the Requests
+card each count is a button for its requests in the list below (the
+Failed and Retried filters, `failed=1` and `retried=1`). A try a vendor
+refused or turned away keeps its own row, for what it billed and why, marked
+handed on, and isn't counted as a request. The CSV's last columns are
+`tries` (on the final row, when the request took more than one) and
+`handed_on`.
 
 **Output speed** (tok/s on the Usage and Routing pages, `magpie usage`) is
 output tokens over the time after the first token, summed per request: the
@@ -1478,7 +1490,7 @@ machine), with every session in `sessions` where the window's lists the
 top 100 by tokens; `sessionCount` is how many there are. `GET /v1/magpie/usage/requests` is its requests a page at a time
 (`offset`, `limit` up to 500), with the same filters as the Requests log:
 `period`, `day`, `agent`, `provider`, `model`, `account`, `callerKey`,
-`purpose`, `failed`, `q`, `via`, `computer`. What was said in a call is not
+`purpose`, `failed`, `retried`, `q`, `via`, `computer`. What was said in a call is not
 in either. Like `/v1/magpie/quotas`, they answer this machine, and another
 only with a gateway key. A key held to a budget, to some models or to some
 accounts is told its own calls alone: `/v1/magpie/usage` refuses it with a

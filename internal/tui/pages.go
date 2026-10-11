@@ -1032,6 +1032,9 @@ func (m model) usageBlock(b *strings.Builder, s usage.Summary, room int, names m
 	if s.Errors > 0 {
 		line += sMuted.Render(" · ") + sBad.Render(fmt.Sprintf("%d error%s", s.Errors, plural(s.Errors)))
 	}
+	if s.Retried > 0 { // answered after a try that failed first, not an error
+		line += sMuted.Render(fmt.Sprintf(" · %d answered on a retry", s.Retried))
+	}
 	b.WriteString(pad + "  " + line + "\n")
 	b.WriteString(pad + "  " + sMuted.Render("in "+fmtTokens(s.Input)+"  out "+fmtTokens(s.Output)+"  cache read "+fmtTokens(s.CacheRead)+"  cache write "+fmtTokens(s.CacheWrite)+"  reasoning "+fmtTokens(s.Reasoning)) + "\n\n")
 

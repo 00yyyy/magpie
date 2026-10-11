@@ -827,6 +827,11 @@ body.window .field.solo { grid-column: auto; }
 .led-strip .v.cost { color: var(--green); }
 .led-strip .sub { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .led-strip .sub b { font-weight: 600; color: var(--fg-2); }
+/* a count on the Requests card that lists its requests */
+.led-strip .sub.jumps { white-space: normal; overflow: visible; }
+.led-strip .led-jump { text-align: start; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.led-strip .led-jump.bad { color: var(--red); }
+.led-strip .led-jump:hover, .led-strip .led-jump.on { text-decoration-style: solid; }
 .led-strip .meter { height: 5px; margin-top: 8px; border-radius: 3px; background: var(--pill); overflow: hidden; }
 .led-strip .meter i { display: block; height: 100%; border-radius: 3px; background: var(--green); }
 .led-trend { padding: 10px 14px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
