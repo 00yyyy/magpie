@@ -21,8 +21,8 @@ const fixture = () => ({
   instructions: { agents: [], sets: [] }, foundServers: [], projects: [], foundSkills: [], skills: [],
   servers: [
     { name: "filesystem", transport: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", HOME], agents: ["claude"] },
-    { name: "bare", transport: "stdio", command: "bare-mcp", agents: [] },
-    ...Array.from({ length: 6 }, (_, i) => ({ name: "more" + i, transport: "stdio", command: "more-mcp", agents: [] })),
+    { name: "bare", transport: "stdio", command: "bare-mcp", agents: ["claude"] },
+    ...Array.from({ length: 6 }, (_, i) => ({ name: "more" + i, transport: "stdio", command: "more-mcp", agents: ["claude"] })),
   ],
 });
 const tools = [

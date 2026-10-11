@@ -27,7 +27,7 @@ const fixture = (off) => ({
   servers: [
     { name: "filesystem", transport: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", HOME], agents: ["claude", "codex", "cursor", "goose"], ...(off.length ? { disabledTools: off } : {}) },
     { name: "bare", transport: "stdio", command: "bare-mcp", agents: ["claude"] },
-    ...Array.from({ length: 6 }, (_, i) => ({ name: "more" + i, transport: "stdio", command: "more-mcp", agents: [] })),
+    ...Array.from({ length: 6 }, (_, i) => ({ name: "more" + i, transport: "stdio", command: "more-mcp", agents: ["claude"] })),
   ],
 });
 const tools = [
