@@ -501,7 +501,30 @@ function asked(input, init) {
   )
 }
 
+// MAGPIE_ONLY are the headers magpie tells a plugin's fetch where the agent
+// that asked works with (WorkDirHeader and WorkGitHeader in
+// internal/provider): for the plugin to read, never for its vendor, so a
+// plugin that sends on the headers it was given sends them nowhere.
+const MAGPIE_ONLY = ["x-magpie-work-dir", "x-magpie-work-git"]
+
+function unsaid(input, init) {
+  if (input instanceof Request && MAGPIE_ONLY.some((k) => input.headers.has(k))) {
+    const h = new Headers(input.headers)
+    for (const k of MAGPIE_ONLY) h.delete(k)
+    input = new Request(input, { headers: h })
+  }
+  if (init?.headers) {
+    const h = new Headers(init.headers)
+    if (MAGPIE_ONLY.some((k) => h.has(k))) {
+      for (const k of MAGPIE_ONLY) h.delete(k)
+      init = { ...init, headers: h }
+    }
+  }
+  return [input, init]
+}
+
 globalThis.fetch = Object.assign(function fetch(input, init) {
+  ;[input, init] = unsaid(input, init)
   const r = reach.getStore()
   if (!r) return asked(input, init)
   return asked(input, init).then(

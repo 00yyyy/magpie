@@ -52,6 +52,21 @@ A plugin can serve TypeSafe's System One for its provider (#1514). Its `config` 
 
 In [`decide.go`](../../internal/provider/decide.go) a plugin provider's decision models are the ones it marks (`pluginMarks`, read from the plugin's current listing) and Jev's by name (`jev-*`). They are kept from agents (`isDecision` in `buildEntries`), refused for chat ("only decides"), refused as a member of a group beside models that hold a conversation (a group of decision models alone answers `/v1/systemone`: [gateway-routing](gateway-routing.md#remote-magpie-apis)), and offered as a group's classifier (`Deciders`, `DecisionModels`). A mark counts only when the provider says `decide`; without it every model stays one to chat with. A plugin provider's editor (the account editor) has no address fields, so this address is never typed; the GUI marks the decision models from `deciders`.
 
+## Where the agent works, for a plugin's fetch
+
+A plugin's fetch runs in magpie's plugin host, so its `process.cwd()` is magpie's own folder, not the folder of the agent that asked. A plugin that tells its vendor the user's environment, as the ZCode plugin's Start Plan request does in its `# Environment` section, said magpie's `~/.config/magpie` as the working directory, and the model went looking there (magpie-community/plugins#86).
+
+The gateway tells the plugin instead. On every request to a plugin's provider, `forwardOnce` calls `tellWorkPlace` ([`workdir.go`](../../internal/gateway/workdir.go)), which reads the request as sent to the plugin with the same `workPlace` that rules by folder use ([gateway-routing](gateway-routing.md)) and sets two headers on the plugin's fetch:
+
+| Header | Value |
+| --- | --- |
+| `x-magpie-work-dir` (`provider.WorkDirHeader`) | The folder the agent says it works in, percent-encoded UTF-8 (`decodeURIComponent` reads it). |
+| `x-magpie-work-git` (`provider.WorkGitHeader`) | `yes` or `no`: whether that folder is in a git repository. The agent's own word beside the folder when it says one (Claude Code's `Is a git repository: true`/`false`, OpenCode's `Is directory a git repo: yes`/`no`), else a `.git` in the folder or above it when the folder is on this computer (`provider.GitSaid`, `provider.GitOnDisk` in [`workplace.go`](../../internal/provider/workplace.go)). |
+
+Each is left off when it isn't known: no folder said, or a folder not on this computer that the agent didn't say is a repository. A plugin then leaves out what it can't know rather than saying magpie's. The host's `fetch` (`unsaid` in `host.js`) takes both headers off every request a plugin sends, so a plugin that sends on the headers it was given sends them to no vendor.
+
+`TestPluginToldWhereTheAgentWorks` ([`plugin_workdir_test.go`](../../internal/gateway/plugin_workdir_test.go)) sends Claude Code's and Codex's captured requests and Pi-style ones from a folder in a repository and one not, through the fake plugin, and checks what the plugin read and that the vendor got neither header.
+
 ## Two plugins for one provider id
 
 The host runs one plugin per provider id. When two installed plugins have `auth` hooks for the same id, such as a third-party plugin and the user's own copy added by its folder, `auths()` in `host.js` takes the one picked for that id in `plugins.json`'s `prefer` map (provider id → spec). Without a pick it takes the last one in the list, as OpenCode does. Only the serving plugin's `provider.models` hook runs for that id. Every plugin's `config` hook still runs, so another plugin can still add models or a name to `config.provider[id]`.

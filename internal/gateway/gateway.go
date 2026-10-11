@@ -3160,6 +3160,7 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	}
 	if p.IsPlugin() {
 		req.Header.Set(provider.ConversationHeader, conversationID(in, body))
+		tellWorkPlace(req.Header, to, body)
 	}
 	if p.IsRemoteMagpie() {
 		passOnCaller(ctx, req)

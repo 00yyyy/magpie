@@ -151,6 +151,10 @@ export const FakePlugin = async ({ client }) => ({
         h.set("authorization", "Bearer " + (a.type === "oauth" ? a.access : a.key))
         h.set("x-models", Object.keys(provider.models).sort().join(","))
         h.set("x-body-type", typeof init.body)
+        // where magpie said the agent works, as the plugin read it; its own
+        // headers go on too, as a plugin that sends on what it got sends
+        // them, for the host to take off
+        for (const k of ["x-magpie-work-dir", "x-magpie-work-git"]) if (h.has(k)) h.set("x-saw-" + k.slice(9), h.get(k))
         // $FAKE_H2: the request goes on node:http2 to that origin, as
         // Cursor's plugin runs its chats
         if (process.env.FAKE_H2) return h2(process.env.FAKE_H2, new URL(url).pathname)

@@ -31,6 +31,17 @@ const pluginBase = "plugin://"
 // plugin's chat.headers hook as its session; it goes no further.
 const ConversationHeader = "X-Magpie-Conversation"
 
+// WorkDirHeader and WorkGitHeader tell a plugin's fetch where the agent
+// that asked works, as the agent says it in its request: the folder,
+// percent-encoded (decodeURIComponent reads it), and "yes" or "no" for
+// whether it is in a git repository. Each is left off when it isn't
+// known. The plugin host takes them off whatever the plugin sends on
+// (host.js), so they reach no vendor as headers.
+const (
+	WorkDirHeader = "X-Magpie-Work-Dir"
+	WorkGitHeader = "X-Magpie-Work-Git"
+)
+
 // PluginID is the id magpie gives the provider OpenCode calls id: the same,
 // unless a preset or a built-in subscription has it (google, openai,
 // anthropic), or a provider of the user's own made before the plugin was
