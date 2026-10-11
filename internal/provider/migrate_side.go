@@ -223,6 +223,7 @@ func init() {
 		pkg:    "@magpie-community/opencode-cursor-auth",
 		min:    "0.2.7", // a failure's status and its sign-in mark as the built-in's; Max Mode models retried in Max Mode; glm-5.3 listed; catalog entries written as CallDynamicTool calls, an empty turn retried (plugins #11); a tool step's usage from the dashboard's usage event, cache included (#676); far from Cursor a step whose event shows late is counted by the conversation's next steps instead of guessed (#1053); a turn's parallel calls split over two assistant messages keep their results (#1275); the list is Cursor's picker, a model once per context size with that window, effort and fast sent as the variant's parameters, and an id 0.1.x listed still runs as the variant it stood for (plugins #51); an id 0.1.x listed, at an effort only its other branch has, goes as that branch's nearest effort, not as the default's id with parameters that contradict it (plugins #54); a model listed at a size Cursor has a fast variant of says fast, for magpie's Fast switch (#1360); a Run HTTP/2 can't open (a proxy or network that blocks it, "h2 is not supported") goes over HTTP/1.1 as RunSSE + BidiAppend on api2 (plugins #59); a model asked for by its bare name (grok-4.7) counts in the pool its sized ids (grok-4.7@256k) are in (Will on Discord); an account with a Grok Bot allowance shows it on its Usage card, aside, so a spent Bot never stops Cursor requests (plugins #64); an account that may spend on-demand (a team or enterprise that pays past the included usage) is not used up when its included pools are, its On-demand spend is (fottencity on Discord, #1476); an assistant turn's reasoning_content is kept across a tool continuation (plugins #82)
 		agents: []string{"cursor"},
+		served: cursorServed,
 		out: func() ([]Moving, error) {
 			if CursorExecutable() == "" || cursorSignedOut() {
 				return nil, nil
@@ -253,6 +254,33 @@ const (
 	devinServer   = "https://server.codeium.com"
 	cursorCLIMark = "cursor-agent" // the Cursor plugin's sign-in that reads cursor-agent's token
 )
+
+// cursorServed is whether the Cursor plugin, listing listed, runs model,
+// an id the built-in listed. Since 0.2.0 (plugins #51) the plugin lists
+// Cursor's picker, a model once per context size (grok-4.7@256k) with
+// effort and fast as the request's parameters, and runs an id 0.1.x or
+// the built-in listed as the variant it stood for (its named()): the
+// built-in's grok-4.7-fast, claude-opus-5-thinking, cursor-grok-4.5 or a
+// stale grok-4.7-low. Such an id is served when its family, without effort,
+// thinking or fast, is a model the picker lists, with or without Cursor's
+// "cursor-" before it; Auto is the picker's default (#1656). A family the
+// picker hasn't got is still refused. The list is flat, so a fast id of a
+// family listed counts as served though the account may lack fast; the
+// plugin runs it as the family's nearest variant the account has.
+func cursorServed(model string, listed []string) bool {
+	names := map[string]bool{}
+	for _, l := range listed {
+		n, _, _ := strings.Cut(l, "@")
+		names[n] = true
+	}
+	if model == "default" || model == "auto" {
+		return names["auto"] || names["default"]
+	}
+	fam, _ := splitCursorID(model)
+	fam = strings.TrimSuffix(fam, "-fast")
+	fam = strings.TrimSuffix(fam, "-thinking")
+	return fam != "" && (names[fam] || names[strings.TrimPrefix(fam, "cursor-")] || names["cursor-"+fam])
+}
 
 // ownUser is the account the agent's own sign-in is saved as, else user.
 func ownUser(ls []savedLogin, agent, user string) string {
