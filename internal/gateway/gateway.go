@@ -3815,12 +3815,13 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// which a client reads as a reply cut off for no reason (#370:
 		// dsh's "stream ended before message_stop", not retried). A Chat
 		// stream may end without [DONE] and be whole, so only a read that
-		// failed counts there.
+		// failed counts there; a Gemini one ends on a candidate's
+		// finishReason (#1644).
 		var failed string
 		switch {
 		case rerr != nil && rerr != io.EOF:
 			failed = cutMidReply(p.Name, rerr)
-		case proto == provider.Anthropic || proto == provider.Responses:
+		case proto == provider.Anthropic || proto == provider.Responses || proto == provider.Gemini:
 			failed = p.Name + ": the reply ended before it was complete"
 		}
 		if failed != "" {
@@ -3854,6 +3855,10 @@ func streamFailure(proto provider.Protocol, msg string) []byte {
 		name = "response.failed"
 		v = map[string]any{"type": name, "response": map[string]any{"object": "response", "status": "failed",
 			"error": map[string]any{"code": "server_error", "message": msg}}}
+	case provider.Gemini:
+		// Gemini's own mid-stream error, as geminiEncoder writes it: a
+		// data line alone, Google's SDK reads no event names
+		v = map[string]any{"error": map[string]any{"code": 502, "message": msg, "status": "UNAVAILABLE"}}
 	default:
 		name = "error"
 		v = map[string]any{"type": name, "error": map[string]any{"type": "api_error", "message": msg}}
