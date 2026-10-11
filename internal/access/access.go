@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -140,7 +141,10 @@ func WithIdentity(ctx context.Context, who Identity) context.Context {
 }
 func Caller(ctx context.Context) Identity { who, _ := ctx.Value(contextKey{}).(Identity); return who }
 
-var mu sync.Mutex
+// mu is held for every read of caller-keys.json a change is made from,
+// and the write, across magpies too (#1674): a key revoked with magpie
+// keys while the window adds one is never written back.
+var mu = filelock.Mutex{Path: func() string { return Path() + ".lock" }}
 
 func Path() string { return filepath.Join(settings.Dir(), "caller-keys.json") }
 

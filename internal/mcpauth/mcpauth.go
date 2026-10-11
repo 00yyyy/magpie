@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/settings"
@@ -103,7 +104,10 @@ type Record struct {
 	Dead bool `json:"dead,omitempty"`
 }
 
-var fileMu sync.Mutex
+// fileMu is held for a change to mcp-signins.json read afresh under it,
+// across magpies too (#1674): the gateway renews a sign-in while a magpie
+// run from a terminal checks or renames a server.
+var fileMu = filelock.Mutex{Path: func() string { return path() + ".lock" }}
 
 func path() string { return filepath.Join(settings.Dir(), "mcp-signins.json") }
 
@@ -286,6 +290,10 @@ func renew(ctx context.Context, name string, still func(Record) bool) (string, e
 	mu := lockOf(name)
 	mu.Lock()
 	defer mu.Unlock()
+	// one renewal at a time across magpies as well: a server that rotates
+	// its refresh tokens takes each once
+	unlock, _ := filelock.Lock(path()+".renew.lock", filelock.Wait)
+	defer unlock()
 	r, ok := Get(name)
 	if !ok {
 		return "", ErrNotSignedIn
