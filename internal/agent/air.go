@@ -40,7 +40,6 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
-	"github.com/yetone/magpie/internal/gateway"
 )
 
 // airAgent is the name magpie's agent has in acp.json, and so in Air's
@@ -120,7 +119,7 @@ func air(home, cfg string) *Agent {
 				return "Air's Magpie agent (" + filepath.Base(path) + ") is gone, so Air no longer reaches magpie"
 			}
 			return wiringOff("Air", ocPath, func(k string) (string, bool) { return edit.GetJSON(ocPath, "provider."+magpieID+".options."+k) },
-				"baseURL", gatewayV1(), "apiKey", gateway.Token)
+				"baseURL", gatewayV1(), "apiKey", hereKey())
 		},
 		Sync: func() error {
 			return syncJSONInOrder(ocPath, "provider."+magpieID, provider)

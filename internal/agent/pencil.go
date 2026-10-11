@@ -114,7 +114,7 @@ func pencilProviderJSON(gw string) map[string]any {
 		ms = append(ms, e)
 	}
 	return map[string]any{"name": "magpie", "baseUrl": gw + "/v1", "api": "openai-completions",
-		"apiKey": gateway.TokenFor("pencil"), "models": ms}
+		"apiKey": agentKeyAt("pencil", gw), "models": ms}
 }
 
 // what pencil says after a change (notice.go)

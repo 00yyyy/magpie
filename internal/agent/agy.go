@@ -38,7 +38,7 @@ const agyModels = "customModelsConfig.customModels"
 // (x-goog-api-key) alone. A command copied before, with the plain token,
 // still reaches magpie.
 func AgyLaunch(model string) string {
-	key := gateway.TokenFor("agy")
+	key := agentKey("agy")
 	if runtime.GOOS == "windows" {
 		return `$env:GEMINI_API_KEY="` + key + `"; $env:GOOGLE_GEMINI_BASE_URL="` + gateway.URL() + `"; agy --model '` + strings.ReplaceAll(model, "'", "''") + `'`
 	}

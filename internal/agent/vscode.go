@@ -40,7 +40,6 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
-	"github.com/yetone/magpie/internal/gateway"
 )
 
 // vscodeDefault is chat.defaultModel, a key with a dot in it, escaped for
@@ -109,9 +108,9 @@ var (
 // as it always was.
 func (k vscodeKind) token() string {
 	if k.ua != nil {
-		return gateway.Token
+		return hereKey()
 	}
-	return gateway.TokenFor(k.id)
+	return agentKey(k.id)
 }
 
 // VS Code keeps its User folder under Application Support on macOS, Roaming
