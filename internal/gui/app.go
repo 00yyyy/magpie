@@ -602,7 +602,8 @@ func (h *host) setBird(b []byte) {
 	}
 }
 
-// panelOptions: the tray panel's window, frameless and see-through. On
+// panelOptions: the tray panel's window, frameless and (but on Linux)
+// see-through. On
 // Windows, Wails creates a frameless window as WS_OVERLAPPEDWINDOW with
 // DWM's frame extended into the whole client area (for the shadow and the
 // round corners), and with the close button left enabled (WS_SYSMENU) DWM
@@ -610,7 +611,15 @@ func (h *host) setBird(b []byte) {
 // where it shows through the panel's translucent page over the Settings
 // gear (#238). Hiding the caption buttons there takes WS_SYSMENU and the
 // minimise and maximise boxes off, so DWM has nothing to draw; the shadow
-// and corners stay. The Mac and Linux keep what they had.
+// and corners stay. The Mac keeps what it had.
+//
+// On Linux the panel is a solid window, as the main window is (#1803). A
+// see-through one is an RGBA, app-paintable GTK window under a transparent
+// webview, and scrolling it left a fainter copy of the old position's
+// paint behind (KDE Plasma 6, on Wayland and on XWayland, with WebKit's
+// compositing mode on or off), while the same page in the main window
+// never did. The page paints itself opaque there too (body.linux.panel in
+// app.css).
 func panelOptions(goos, theme string) application.WebviewWindowOptions {
 	o := application.WebviewWindowOptions{
 		Name:            "panel",
@@ -630,6 +639,9 @@ func panelOptions(goos, theme string) application.WebviewWindowOptions {
 			CornerRadius: 12,
 		},
 		Windows: application.WindowsWindow{HiddenOnTaskbar: true},
+	}
+	if goos == "linux" {
+		o.BackgroundType = application.BackgroundTypeSolid
 	}
 	if goos == "windows" {
 		o.MinimiseButtonState = application.ButtonHidden

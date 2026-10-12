@@ -116,6 +116,10 @@ body.panel { --panel-tint: color-mix(in srgb, var(--bg) 93%, transparent); backg
 /* on the Mac the panel's colour is painted under the page, where it keeps up
    with the panel as it grows (see tintPanel) */
 body.panel.tinted { background: transparent; }
+/* on Linux the panel is an opaque window, as the main window is, and its
+   page is opaque too: WebKitGTK repainting a scroll over the see-through
+   panel left the old position's paint showing through the new (#1803) */
+body.linux.panel { --panel-tint: var(--bg); }
 .tint-probe { display: none; background: var(--panel-tint); }
 /* on the frosted panel the surfaces are tints of the backdrop, not flat paint */
 @media (prefers-color-scheme: dark) {
