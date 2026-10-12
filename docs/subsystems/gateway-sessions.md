@@ -210,6 +210,28 @@ lists cut to its own rows (`usageapi.OwnPage`): the ledger's facets are drawn
 from every call in the period, so without the cut they would name other keys.
 `TestUsageOverGateway` covers both, and a red when either cut is removed.
 
+### Calls read from the agents' own files
+
+A call an agent made without magpie reaches Usage only when its own files
+are read (`sessions.Calls`, from `callSources` in
+[`calls.go`](../../internal/sessions/calls.go)). The readers are Claude
+Code's, Claude Desktop's and Cowork's, Codex's (and both in WSL), and,
+read a file at a time (`wholeCallReaders` in
+[`call_cache.go`](../../internal/sessions/call_cache.go)), OpenCode's
+(#680), ZCode's, DeepSeek Harness's (`dsh`), WorkBuddy's, CodeBuddy
+Code's (#1779), MiniMax Code's (#1605) and Kimi Code's (#1607,
+[`calls_kimi.go`](../../internal/sessions/calls_kimi.go)). Each skips the
+calls the agent made through magpie's own entry, which the gateway logged
+with the account that answered: Kimi Code's are the ones whose
+`usage.record` model begins `magpie/`. Kimi Code's calls are its
+`usage.record`s in every agent's `wire.jsonl` under
+`$KIMI_CODE_HOME/sessions` (else `~/.kimi-code`), protocols 1.4 and 1.5;
+a fork repeats its parent's records, so each is keyed by agent, time,
+model and usage and counted once. The other agents the Sessions page reads
+(pi, Cline, Qoder, Grok, Droid, omp, Cursor, Hermes, Alma) have no reader
+yet (#1607). Verification: `TestMiniMaxCodeCalls`, `TestKimiCode*` (the
+reporter's real wire files), `TestCodeBuddyCalls`, `TestWorkBuddyCalls*`.
+
 ### Calls an app reports itself
 
 `POST /v1/magpie/usage/requests`

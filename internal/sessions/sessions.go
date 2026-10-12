@@ -458,6 +458,7 @@ func Dirs() []string {
 		{filepath.Dir(cursorEditorDB()), cursorEditorDB()},
 		{AlmaDir(), almaDB()},
 		{MiniMaxDir(), minimaxSessions()},
+		{KimiCodeDir(), kimiSessions()},
 	} {
 		if _, err := os.Stat(d.sessions); err == nil {
 			out = append(out, d.dir)
