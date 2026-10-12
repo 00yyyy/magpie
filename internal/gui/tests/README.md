@@ -204,6 +204,15 @@ asked for and names the pill, with the bar held where it was; three days need
 no such pill; a window narrowed then widened fits again. Chromium and WebKit,
 in English, Chinese, Japanese and German.
 
+`dates-gui-lang.test.cjs` checks that dates and times read in the GUI's
+language, not the system's (#1843): English on a zh-CN browser, English on
+en-GB (the system's own English kept), and Chinese, Traditional Chinese,
+Japanese and German on en-US. Routing's day pills, those in the bar and those
+under its last pill's menu, and a request's time must match `intlLang()`'s
+tag and not the browser's. Chromium and WebKit, at 1100px and 390px.
+`TestDatesFollowGUILanguage` (Go, run in CI) fails on any formatting call in
+the assets given no locale, `[]` or `undefined`.
+
 `agent-disconnect-preview.test.cjs` checks the disconnect confirmation's
 file previews fill the body instead of the editor's label column. omp and
 Codex previews, restored values, expanding hidden lines, scrolling, Cancel,

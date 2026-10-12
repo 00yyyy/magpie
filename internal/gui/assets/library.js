@@ -838,7 +838,7 @@
       // only some (#741); one rtk couldn't give says why
       const g = rtk.gain;
       const gain = el("p", "lib-rtk-gain", g
-        ? t("{saved} tokens saved over {n} commands — {pct}% on average", { saved: tokens(g.saved), n: g.commands.toLocaleString(), pct: Math.round(g.pct) })
+        ? t("{saved} tokens saved over {n} commands — {pct}% on average", { saved: tokens(g.saved), n: g.commands.toLocaleString(intlLang()), pct: Math.round(g.pct) })
         : rtk.gainErr
           ? t("magpie couldn't read what RTK saved: {why}", { why: rtk.gainErr })
           : t("Nothing saved yet: the agents' commands go through RTK once it's switched on and the agent is restarted."));
@@ -957,7 +957,7 @@
       bar.append(saved, kept);
       const when = step === 7 ? t("week of {label}", { label: short(b.day) }) : short(b.day);
       bar.title = b.commands
-        ? t("{when} · {saved} tokens saved over {n} commands — {pct}%", { when, saved: tokens(b.saved), n: b.commands.toLocaleString(), pct: b.input ? Math.round(100 * b.saved / b.input) : 0 })
+        ? t("{when} · {saved} tokens saved over {n} commands — {pct}%", { when, saved: tokens(b.saved), n: b.commands.toLocaleString(intlLang()), pct: b.input ? Math.round(100 * b.saved / b.input) : 0 })
         : t("{when} · nothing", { when });
       bars.append(bar);
       const end = i === k - 1 && (k - 1) % every >= every / 2;
@@ -967,7 +967,7 @@
     const key = (cls, text) => { const x = el("span", "lib-rtk-key"); x.append(el("i", cls), el("span", "", text)); return x; };
     foot.append(key("out", t("saved")), key("in", t("still sent")), el("span", "grow"),
       el("span", "", sum.commands
-        ? t("{saved} tokens saved over {n} commands — {pct}%", { saved: tokens(sum.saved), n: sum.commands.toLocaleString(), pct: sum.input ? Math.round(100 * sum.saved / sum.input) : 0 })
+        ? t("{saved} tokens saved over {n} commands — {pct}%", { saved: tokens(sum.saved), n: sum.commands.toLocaleString(intlLang()), pct: sum.input ? Math.round(100 * sum.saved / sum.input) : 0 })
         : t("Nothing run through RTK in this time")));
     chart.append(head, bars, labels, foot);
     return chart;
@@ -3764,7 +3764,7 @@
     const l = c.limited;
     if (!l) return t(c.error);
     const d = l.until ? new Date(l.until) : null;
-    const time = d && !isNaN(d) ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    const time = d && !isNaN(d) ? d.toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) : "";
     if (l.token) return time ? t("GitHub's rate limit for your GitHub token is used up until {time}", { time })
       : t("GitHub's rate limit for your GitHub token is used up for now");
     return time ? t("GitHub allows 60 requests an hour without a token, used up until {time}. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.", { time })
@@ -3773,7 +3773,7 @@
 
   // what a check found of a skill, for a tooltip: the last commit to it
   function checkLine(c) {
-    const when = c.date ? new Date(c.date).toLocaleDateString() : "";
+    const when = c.date ? new Date(c.date).toLocaleDateString(intlLang()) : "";
     return [c.message, [when, c.commit?.slice(0, 7)].filter(Boolean).join(" · ")].filter(Boolean).join("\n");
   }
 
@@ -4395,7 +4395,7 @@
     if (!x.featured || x.installs) {
       const n = el("span", "mk-installs");
       n.append(svg(GLYPH.down, 11, 1.5), el("span", "", compact(x.installs)));
-      n.title = t("{n} installs", { n: x.installs.toLocaleString() });
+      n.title = t("{n} installs", { n: x.installs.toLocaleString(intlLang()) });
       foot.append(n);
     }
     foot.append(el("span", "grow"), addButton(x, () => addSkill(x)));

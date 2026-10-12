@@ -141,7 +141,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await check.waitFor();
         await check.click();
         await page.waitForFunction(() => document.querySelector("#view-library .lib-unchecked"));
-        const time = await page.evaluate((u) => new Date(u).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), UNTIL);
+        const time = await page.evaluate((u) => new Date(u).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }), UNTIL);
         const want = (st.from ? w.withToken : w.limited).replace("{time}", time);
         assert((await page.locator("#status").textContent()).includes(want), `status: ${await page.locator("#status").textContent()}`);
         assert.equal(await page.locator("#view-library .lib-unchecked").getAttribute("title"), want);

@@ -17929,7 +17929,7 @@ function setLocale(pref) {
   locale = p === "system" ? sysLocale(sys) : p;
   // set only when it changes: settings come back on every refresh, and a
   // view that redraws for a new language shouldn't redraw for the same one
-  const lang = intlLang() || "en";
+  const lang = LANG_TAGS[locale] || "en";
   if (document.documentElement.lang !== lang) document.documentElement.lang = lang;
   translateStatic();
 }
@@ -17941,10 +17941,17 @@ function sysLocale(sys) {
   return sys.startsWith("zh") ? "zh" : sys.startsWith("ja") ? "ja" : sys.startsWith("de") ? "de" : "en";
 }
 
-// intlLang is the language's tag for Intl's dates and numbers, undefined
-// for English (the system's own formats).
+// intlLang is the tag every date, time and number the GUI shows is
+// formatted in: the GUI's language, never the system's alone. English takes
+// the system's own English (en-GB keeps its day-month order) and is plain
+// "en" on a system in another language, so a Chinese Mac set to English
+// reads "Oct 11", not "10月11日" (#1843). Never format with no locale, [] or
+// undefined: those follow the system, not the language picked here.
+const LANG_TAGS = { zh: "zh-CN", "zh-TW": "zh-TW", ja: "ja-JP", de: "de-DE" };
 function intlLang() {
-  return { zh: "zh-CN", "zh-TW": "zh-TW", ja: "ja-JP", de: "de-DE" }[locale];
+  if (LANG_TAGS[locale]) return LANG_TAGS[locale];
+  const sys = navigator.language || "";
+  return /^en(-|$)/i.test(sys) ? sys : "en";
 }
 
 function t(s, vars) {

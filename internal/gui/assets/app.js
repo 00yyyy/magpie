@@ -3680,7 +3680,7 @@ function recoveredOnce() {
   const files = fresh.map((n) => n.file).join(", ");
   const bak = fresh.length === 1 && fresh[0].bak && !fresh[0].bak.startsWith("0001-") ? new Date(fresh[0].bak) : null;
   status(bak
-    ? t("{file} was damaged (the computer likely stopped mid-write), so magpie restored it from its backup of {time}. A change made after that may be missing; the damaged file is kept beside it.", { file: files, time: bak.toLocaleString(locale) })
+    ? t("{file} was damaged (the computer likely stopped mid-write), so magpie restored it from its backup of {time}. A change made after that may be missing; the damaged file is kept beside it.", { file: files, time: bak.toLocaleString(intlLang()) })
     : t("{file} was damaged (the computer likely stopped mid-write), so magpie restored it from its backup. A change made after that may be missing; the damaged file is kept beside it.", { file: files }), "warn", 20000);
 }
 
@@ -4666,7 +4666,7 @@ function contextTag(n, name) {
   if (!(n >= 1e6) || /\b\d+M\b/.test(name || "")) return null;
   const m = n / 1e6;
   const tag = el("span", "badge ctx", (Number.isInteger(m) ? m : m.toFixed(1)) + "M");
-  tag.title = t("holds {n} tokens", { n: n.toLocaleString() });
+  tag.title = t("holds {n} tokens", { n: n.toLocaleString(intlLang()) });
   return tag;
 }
 
@@ -6632,9 +6632,9 @@ function modelInfo(m) {
   lines.push(t(imgUnknown ? "Images: not known" : m.images ? (m.group ? "Accepts images (one of its models does)" : "Accepts images") : "Text only"));
   if (m.context) {
     box.append(el("span", "badge mi-ctx", ctxShort(m.context)));
-    lines.push(t(m.group ? "Context: {n} tokens (the largest of its models')" : "Context: {n} tokens", { n: m.context.toLocaleString() }));
+    lines.push(t(m.group ? "Context: {n} tokens (the largest of its models')" : "Context: {n} tokens", { n: m.context.toLocaleString(intlLang()) }));
   }
-  if (m.output) lines.push(t("Output: up to {n} tokens", { n: m.output.toLocaleString() }));
+  if (m.output) lines.push(t("Output: up to {n} tokens", { n: m.output.toLocaleString(intlLang()) }));
   if (m.group && m.members?.length) lines.push(t("Models: {models}", { models: m.members.join(", ") }));
   box.title = lines.join("\n");
   return box;
@@ -7160,7 +7160,7 @@ function renderActivity() {
     const chev = el("span", "call-chev");
     chev.append(svg(CHEV_R, 11, 1.6));
     r.append(chev);
-    r.append(el("span", "when", new Date(c.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })));
+    r.append(el("span", "when", new Date(c.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit" })));
     r.append(el("span", "a", c.agent || "—"));
     r.append(el("span", "m", c.model));
     r.append(el("span", "p", c.from === c.to ? c.from : `${c.from} → ${c.to}`));
@@ -12759,10 +12759,10 @@ function accountQuota(data, user, capFor = () => 0, settable = null) {
     m.append(el("span", "aq-n", t(w.name)), track, el("b", "", quotaText(w)));
     if (w.resetsAt) {
       const at = new Date(w.resetsAt);
-      m.title = resetText(at, at.toLocaleString());
+      m.title = resetText(at, at.toLocaleString(intlLang()));
       if (used >= 80) m.append(el("span", "aq-r", resetInText(at)));
     }
-    const out = runsOutText(w, (at) => at.toLocaleString());
+    const out = runsOutText(w, (at) => at.toLocaleString(intlLang()));
     if (out) m.title = [m.title, out].filter(Boolean).join("\n");
     if (w.tiers) m.title = tiersText(w);
     line.append(settable ? settable(m, w) : m);
@@ -12797,7 +12797,7 @@ function poolLine(line, ws, q, capFor = () => 0, settable = null) {
       m.append(settable ? settable(part, w) : part);
     }
     const w = p.ws[0];
-    m.title = p.ws.map((x) => t(x.name) + " " + quotaText(x) + (x.resetsAt ? " · " + resetText(new Date(x.resetsAt), new Date(x.resetsAt).toLocaleString()) : "")).join("\n")
+    m.title = p.ws.map((x) => t(x.name) + " " + quotaText(x) + (x.resetsAt ? " · " + resetText(new Date(x.resetsAt), new Date(x.resetsAt).toLocaleString(intlLang())) : "")).join("\n")
       + (w.members ? "\n\n" + poolTip(w) : w.tiers ? "\n\n" + tiersText(w) : "");
     line.append(m);
   }
@@ -12909,7 +12909,7 @@ function capHeldNote(held, cap, several, direct) {
     // signed in to it isn't: the note doesn't say it is safe at its cap
     const n = el("span", "using acap-held acap-direct", t("At its cap · {agent} still uses it", { agent: direct }));
     n.title = t("A usage window is at {n}%, past this account's {cap}% cap: requests through magpie are refused with a usage-cap error until it renews", { n: Math.round(held.used), cap })
-      + (held.back ? " · " + resetText(new Date(held.back), new Date(held.back).toLocaleString()) : "")
+      + (held.back ? " · " + resetText(new Date(held.back), new Date(held.back).toLocaleString(intlLang())) : "")
       + "\n" + directNote(direct);
     return n;
   }
@@ -12917,13 +12917,13 @@ function capHeldNote(held, cap, several, direct) {
     const names = held.some.join(", ");
     const n = el("span", "using acap-held", held.back ? t("{names} at its cap · back {in}", { names, in: untilText(held.back) }) : t("{names} at its cap", { names }));
     n.title = t("{names} is at {n}%, past this account's {cap}% cap, so magpie sends the requests it counts to the other accounts until it renews; other models still use this account", { names, n: Math.round(held.used), cap })
-      + (held.back ? " · " + resetText(new Date(held.back), new Date(held.back).toLocaleString()) : "")
+      + (held.back ? " · " + resetText(new Date(held.back), new Date(held.back).toLocaleString(intlLang())) : "")
       + (several ? "" : "\n" + t("With no other account on, those requests are refused with a usage-cap error until then"));
     return n;
   }
   const n = el("span", "using acap-held", held.back ? t("At its cap · back {in}", { in: untilText(held.back) }) : t("At its cap"));
   n.title = t("A usage window is at {n}%, past this account's {cap}% cap, so magpie counts it as used up and sends requests to the other accounts until that window renews", { n: Math.round(held.used), cap })
-    + (held.back ? " · " + resetText(new Date(held.back), new Date(held.back).toLocaleString()) : "")
+    + (held.back ? " · " + resetText(new Date(held.back), new Date(held.back).toLocaleString(intlLang())) : "")
     + (several ? "" : "\n" + t("With no other account on, requests are refused with a usage-cap error until then"));
   return n;
 }
@@ -12953,7 +12953,7 @@ function windowCapMeter(m, p, user, w) {
   b.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); b.click(); } };
   b.append(...m.childNodes);
   if (own) b.append(el("span", "aq-own", own >= 100 ? t("No cap") : t("Cap {n}%", { n: own })));
-  const reset = m.title || (w.resetsAt ? resetText(new Date(w.resetsAt), new Date(w.resetsAt).toLocaleString()) : "");
+  const reset = m.title || (w.resetsAt ? resetText(new Date(w.resetsAt), new Date(w.resetsAt).toLocaleString(intlLang())) : "");
   b.title = [reset, own >= 100 ? t("No cap on {window}: it is used to 100%, whatever this account's cap. Click to change", { window: name })
     : own ? t("{window} has a cap of its own: magpie counts this account as used up once {window} is at {n}%, until it renews. Click to change", { window: name, n: own })
     : t("Click to give {window} a cap of its own, apart from this account's", { window: name })].filter(Boolean).join("\n");
@@ -13292,7 +13292,7 @@ function untilText(at) {
   return t("in {n}d", { n: Math.round(h / 24) });
 }
 
-function resetText(at, when = at <= Date.now() ? at.toLocaleString() : resetClock(at)) {
+function resetText(at, when = at <= Date.now() ? at.toLocaleString(intlLang()) : resetClock(at)) {
   return t(at <= Date.now() ? "Reset time passed {when}" : "Resets {when}", { when });
 }
 
@@ -13469,7 +13469,7 @@ function renderKeyAccounts(p) {
     row.append(cp);
     // one the gateway passes over after a failure: why, and until when
     if (k.rest && new Date(k.rest.until) > Date.now()) {
-      const r = el("span", "key-rest", t("Resting · {why} · back at {time}", { why: (k.rest.status ? k.rest.status + " " : "") + t(KEY_FAIL[k.rest.why] || "failed"), time: new Date(k.rest.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }));
+      const r = el("span", "key-rest", t("Resting · {why} · back at {time}", { why: (k.rest.status ? k.rest.status + " " : "") + t(KEY_FAIL[k.rest.why] || "failed"), time: new Date(k.rest.until).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) }));
       r.title = t("The gateway passes this key over until then, and tries the next one");
       row.append(r);
     }
@@ -14388,7 +14388,7 @@ const dayOfKey = (k) => new Date(k + "T12:00:00");
 // isn't this one, one day alone as itself
 function rangeName({ from, to }) {
   const year = new Date().getFullYear();
-  const name = (k) => dayOfKey(k).toLocaleDateString(intlLang() || "en", { month: "short", day: "numeric", ...(dayOfKey(k).getFullYear() !== year ? { year: "numeric" } : {}) });
+  const name = (k) => dayOfKey(k).toLocaleDateString(intlLang(), { month: "short", day: "numeric", ...(dayOfKey(k).getFullYear() !== year ? { year: "numeric" } : {}) });
   return from === to ? name(from) : name(from) + " – " + name(to);
 }
 // noCallsIn is what an empty page says of the period it is on
@@ -14441,11 +14441,11 @@ function openRangeMenu(anchor, current, choose) {
   box.append(head, quick, nav, grid);
   const draw = (focusDay) => {
     head.textContent = start ? t("Now the last day") : t("Pick the first day, then the last");
-    month.textContent = shown.toLocaleDateString(intlLang() || "en", { year: "numeric", month: "long" });
+    month.textContent = shown.toLocaleDateString(intlLang(), { year: "numeric", month: "long" });
     next.disabled = dayKeyOf(new Date(shown.getFullYear(), shown.getMonth() + 1, 1, 12)) > today;
     const cells = [];
     // the weekdays, Monday first, as the app's weeks are
-    for (let i = 0; i < 7; i++) cells.push(el("span", "rm-wd", new Date(2024, 0, 1 + i, 12).toLocaleDateString(intlLang() || "en", { weekday: "narrow" })));
+    for (let i = 0; i < 7; i++) cells.push(el("span", "rm-wd", new Date(2024, 0, 1 + i, 12).toLocaleDateString(intlLang(), { weekday: "narrow" })));
     const first = new Date(shown);
     const lead = (first.getDay() + 6) % 7;
     for (let i = 0; i < lead; i++) cells.push(el("span", "rm-pad"));
@@ -14455,7 +14455,7 @@ function openRangeMenu(anchor, current, choose) {
       const b = el("button", "rm-day", String(d.getDate()));
       b.type = "button";
       b.dataset.day = k;
-      b.setAttribute("aria-label", d.toLocaleDateString(intlLang() || "en", { year: "numeric", month: "long", day: "numeric" }));
+      b.setAttribute("aria-label", d.toLocaleDateString(intlLang(), { year: "numeric", month: "long", day: "numeric" }));
       if (k === today) b.classList.add("today");
       if (lo && (k === lo || k === hi)) b.classList.add("end");
       if (lo && hi && k > lo && k < hi) b.classList.add("in");
@@ -15420,7 +15420,7 @@ function balanceCurve(sub) {
     if (d) g.append(sv("path", { d, class: "qc-line" }, { stroke: "var(--c1)" }));
     if (x1 > now) g.append(sv("line", { x1: X(now), x2: X(now), y1: 0, y2: H, class: "qc-now" }));
     pace.textContent = out ? t("Runs out {in} at this pace", { in: untilText(Math.max(out, now + 60e3)) }) : "";
-    pace.title = out ? new Date(out).toLocaleString() : "";
+    pace.title = out ? new Date(out).toLocaleString(intlLang()) : "";
     g.setAttribute("aria-label", t("Balance over time") + (out ? " · " + pace.textContent : ""));
     axis.replaceChildren(el("span", "", quotaTimeText(x0, now)), el("span", "", quotaTimeText(x1, now)));
   };
@@ -15466,7 +15466,7 @@ function planTerm(q) {
 }
 function planSpan(q) {
   const s = el("span", "plan", [q.plan, planTerm(q)].filter(Boolean).join(" · "));
-  if (q.until) s.title = t(q.renew === "auto" ? "Renews {date}" : q.renew === "off" ? "Expires {date}" : "Until {date}", { date: new Date(q.until).toLocaleString() });
+  if (q.until) s.title = t(q.renew === "auto" ? "Renews {date}" : q.renew === "off" ? "Expires {date}" : "Until {date}", { date: new Date(q.until).toLocaleString(intlLang()) });
   return s;
 }
 
@@ -16066,7 +16066,7 @@ async function hidePanelUsage(key, hide) {
 // now (a vendor rate limiting its usage endpoint) says when it was read.
 function asOfText(q, short = false) {
   const text = short ? t("As of {when}", { when: stamp(q.asOf) })
-    : t("As of {when} — couldn't be read just now", { when: new Date(q.asOf).toLocaleString() });
+    : t("As of {when} — couldn't be read just now", { when: new Date(q.asOf).toLocaleString(intlLang()) });
   return q.windows?.some((w) => w.resetsAt && new Date(w.resetsAt).getTime() <= Date.now())
     ? text + " · " + t("A cached window has expired; current allowance is unknown") : text;
 }
@@ -16127,7 +16127,7 @@ function panelQuotaCard(q) {
       rn.append(el("span", "", w.pool.split(/[ &]/)[0]), el("span", "", shortWindow(w.window)));
     }
     r.append(dial, rn);
-    r.title = t(w.name) + " · " + quotaText(w) + (w.resetsAt ? "\n" + resetText(new Date(w.resetsAt), new Date(w.resetsAt).toLocaleString()) + (new Date(w.resetsAt) > Date.now() ? " · " + untilText(new Date(w.resetsAt)) : "") : "")
+    r.title = t(w.name) + " · " + quotaText(w) + (w.resetsAt ? "\n" + resetText(new Date(w.resetsAt), new Date(w.resetsAt).toLocaleString(intlLang())) + (new Date(w.resetsAt) > Date.now() ? " · " + untilText(new Date(w.resetsAt)) : "") : "")
       + (w.tiers ? "\n\n" + tiersText(w) + "\n" : "")
       + (w.members ? "\n\n" + poolTip(w) + "\n" : "")
       + "\n" + t(quotaLeft ? "Show how much of each window is used" : "Show how much of each window is left");
@@ -16175,7 +16175,7 @@ function resetsWords(r, q) {
     if (r.until) {
       const at = new Date(r.until);
       w.append(el("span", "resets-until", " · " + t("until {when}", { when: resetClock(at) })));
-      if (!r.each?.length) w.title += "\n" + t("The first runs out {when}", { when: at.toLocaleString() });
+      if (!r.each?.length) w.title += "\n" + t("The first runs out {when}", { when: at.toLocaleString(intlLang()) });
     }
     if (r.each?.length) w.title += "\n" + resetsEach(r);
     return w;
@@ -16184,7 +16184,7 @@ function resetsWords(r, q) {
   if (r.until) {
     const at = new Date(r.until);
     w.append(el("span", "resets-until", " · " + t("until {when}", { when: resetClock(at) })));
-    w.title = r.each?.length ? resetsEach(r) : t("The first runs out {when}", { when: at.toLocaleString() });
+    w.title = r.each?.length ? resetsEach(r) : t("The first runs out {when}", { when: at.toLocaleString(intlLang()) });
     // whether the one that runs out first is kept from going to waste:
     // with Auto-use on it is used shortly before it does (#624, #719)
     if (q && autoResetKept(q)) {
@@ -16202,7 +16202,7 @@ function resetsWords(r, q) {
 // first, which the card already shows).
 function resetsEach(r) {
   return r.each.map((c, i) => {
-    const when = c.until ? new Date(c.until).toLocaleString() : "";
+    const when = c.until ? new Date(c.until).toLocaleString(intlLang()) : "";
     if (c.window === "fiveHour") return when ? t("Five-hour reset runs out {when}", { when }) : t("Five-hour reset never runs out");
     if (c.window === "weekly") return when ? t("Weekly reset runs out {when}", { when }) : t("Weekly reset never runs out");
     return when ? t("Reset {n} runs out {when}", { n: i + 1, when }) : t("Reset {n} never runs out", { n: i + 1 });
@@ -16214,7 +16214,7 @@ function resetsEach(r) {
 function resetUseTitle(q) {
   const r = q.resets;
   return (r.until
-    ? t("Uses the reset that runs out first ({when}), never one that lasts longer.", { when: new Date(r.until).toLocaleString() })
+    ? t("Uses the reset that runs out first ({when}), never one that lasts longer.", { when: new Date(r.until).toLocaleString(intlLang()) })
     : t("Uses one of its resets; none of them runs out."))
     + "\n" + t("This account's windows start again at once, as if none had been used. You're asked before anything is spent.");
 }
@@ -16510,7 +16510,7 @@ function askReset(q) {
   ed.append(el("p", "lib-confirm", t(q.resets.count === 1
     ? "{who} has 1 reset. Using it starts its windows again at once, as if none of them had been used. It can't be undone."
     : "{who} has {n} resets. Using one starts its windows again at once, as if none of them had been used. It can't be undone.", { who, n: q.resets.count })));
-  if (q.resets.until) ed.append(el("p", "lib-confirm", t("The one used is the one that runs out first, {when}.", { when: new Date(q.resets.until).toLocaleString() })));
+  if (q.resets.until) ed.append(el("p", "lib-confirm", t("The one used is the one that runs out first, {when}.", { when: new Date(q.resets.until).toLocaleString(intlLang()) })));
   // nothing used yet: a reset would start nothing again
   if (!q.windows?.some((w) => w.used > 0)) ed.append(el("p", "lib-confirm reset-idle", t("None of its windows has been used yet, so there is nothing to start again.")));
   const bar = el("div", "bar");
@@ -16655,7 +16655,7 @@ function readWhen(q, refresh = false) {
     const when = el("span", "quota-ago", t("Updated {when}", { when: ago(q.readAt) }));
     when.dataset.ago = q.readAt;
     s.append(when);
-    s.title = new Date(q.readAt).toLocaleString();
+    s.title = new Date(q.readAt).toLocaleString(intlLang());
   } else return null;
   if (refresh) s.prepend(quotaRefresh(q));
   return s;
@@ -16822,7 +16822,7 @@ function quotaWindows(sub) {
       r.append(el("span", "", resetText(at) + (at > Date.now() ? " ·" : "")));
       if (at > Date.now()) r.append(" ", el("span", "", untilText(at)));
       quota.append(r);
-      quota.title = resetText(at, at.toLocaleString());
+      quota.title = resetText(at, at.toLocaleString(intlLang()));
     }
     // credits that run out before then, or with no reset at all
     const out = runsOutText(w);
@@ -16830,7 +16830,7 @@ function quotaWindows(sub) {
       if (!r) quota.append(r = el("div", "quota-reset"));
       else r.append(" · ");
       r.append(el("span", "", out + " ·"), " ", el("span", "", untilText(new Date(w.runsOutAt))));
-      quota.title = [quota.title, runsOutText(w, (at) => at.toLocaleString())].filter(Boolean).join("\n");
+      quota.title = [quota.title, runsOutText(w, (at) => at.toLocaleString(intlLang()))].filter(Boolean).join("\n");
     }
     // what the whole window holds, by what magpie routed in it (Chiao), on
     // the reset's line, so the window keeps its three rows
@@ -16933,7 +16933,7 @@ function renderUsage() {
   const n = u.series.length;
   const every = n <= 8 ? 1 : n <= 31 ? Math.ceil(n / 6) : Math.ceil(n / 5);
   // the day in the reader's language (the label comes as "Sep 5" in every one)
-  const dayOf = (p) => u.bucket === "hour" || !p.time ? p.label : new Date(p.time).toLocaleDateString(intlLang() || "en", { month: "short", day: "numeric" });
+  const dayOf = (p) => u.bucket === "hour" || !p.time ? p.label : new Date(p.time).toLocaleDateString(intlLang(), { month: "short", day: "numeric" });
   u.series.forEach((p, i) => {
     const b = el("div", "bar");
     const inp = el("i", "in"), out = el("i", "out");
@@ -17189,7 +17189,7 @@ function renderLedgerLoading() {
   }
 }
 
-const ledNum = (n) => (n || 0).toLocaleString(intlLang() || "en");
+const ledNum = (n) => (n || 0).toLocaleString(intlLang());
 // an average first token is a fraction of a millisecond: whole ones under a
 // second, rounded first so 999.6 reads 1.0 s rather than 1000 ms
 const ledTook = (ms = 0) => (ms = Math.round(ms) || 0) < 1000 ? t("{n} ms", { n: ms }) : t("{n} s", { n: (ms / 1000).toFixed(ms < 10e3 ? 1 : 0) });
@@ -17197,7 +17197,7 @@ function ledTime(when) {
   const d = new Date(when), now = new Date();
   const opts = { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
   if (d.toDateString() !== now.toDateString()) Object.assign(opts, { month: "short", day: "numeric" });
-  return d.toLocaleString(intlLang() || "en", opts);
+  return d.toLocaleString(intlLang(), opts);
 }
 // the model the reply named: amber, as the Routing page's tag, when it is
 // another than the one sent; plain when it is that one under a dated name,
@@ -17539,7 +17539,7 @@ function ledCategories(l, split, metric) {
 
 // when a point is: the hour, the day or the week it stands for
 function ledWhen(p, bucket) {
-  const d = new Date(p.time), lang = intlLang() || "en";
+  const d = new Date(p.time), lang = intlLang();
   if (bucket === "hour") return d.toLocaleString(lang, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
   const day = d.toLocaleDateString(lang, { year: "numeric", month: "2-digit", day: "2-digit" });
   return bucket === "week" ? t("week of {label}", { label: day }) : day;
@@ -17547,7 +17547,7 @@ function ledWhen(p, bucket) {
 function ledTick(p, bucket) {
   const d = new Date(p.time);
   if (bucket === "hour") return String(d.getHours()).padStart(2, "0") + ":00";
-  return d.toLocaleDateString(intlLang() || "en", { month: "numeric", day: "numeric" });
+  return d.toLocaleDateString(intlLang(), { month: "numeric", day: "numeric" });
 }
 
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -17969,7 +17969,7 @@ async function loadLedHeat() {
 }
 const ledHeatDate = (s) => { const [y, m, d] = String(s).split("-").map(Number); return new Date(y, m - 1, d); };
 function ledHeatTip(x) {
-  const loc = intlLang() || "en";
+  const loc = intlLang();
   const tip = el("div");
   tip.append(el("b", "", x.day.toLocaleDateString(loc, { year: "numeric", month: "short", day: "numeric", weekday: "short" })));
   if (!x.calls) {
@@ -18027,7 +18027,7 @@ function drawLedHeat() {
       l.style.gridArea = `${i + 2} / 1`;
       grid.append(l);
     }
-    const loc = intlLang() || "en";
+    const loc = intlLang();
     const weeks = Math.ceil(days.length / 7), labels = [];
     let month = -1;
     days.forEach((x, i) => {
@@ -18355,7 +18355,7 @@ function renderLedger() {
   }
   const routeFilter = $("#ledRoute");
   routeFilter.hidden = !ledRoute;
-  $("#ledRouteLabel").textContent = ledRouteInfo ? t("Request: {what}", { what: new Date(ledRouteInfo.time).toLocaleString(intlLang() || "en") + " · " + ledRouteInfo.model }) : "";
+  $("#ledRouteLabel").textContent = ledRouteInfo ? t("Request: {what}", { what: new Date(ledRouteInfo.time).toLocaleString(intlLang()) + " · " + ledRouteInfo.model }) : "";
   $("#ledRouteClear").title = t("Clear filter");
   $("#ledRouteClear").setAttribute("aria-label", t("Clear filter"));
   $("#ledRouteClear").onclick = () => {
@@ -18406,7 +18406,7 @@ function renderLedger() {
       // the link opens the route, not the row's details as well
       when.onclick = (e) => { e.stopPropagation(); window.openRoute(r.route_id, r.t).catch((err) => status(err.message, "err")); };
     }
-    td(when, "when", new Date(r.t).toLocaleString(intlLang() || "en"));
+    td(when, "when", new Date(r.t).toLocaleString(intlLang()));
     const who = el("span", "who");
     // an agent on another computer, whose magpie passed the request on
     const name = r.agentName || r.agent;
@@ -18943,7 +18943,7 @@ function sessCost(s) {
 const sessModelNames = (models) => [...new Set(models.map((m) => m || t("a model with no name")))].join(", ");
 function ago(when) {
   const sec = (new Date(when) - Date.now()) / 1000;
-  const rtf = new Intl.RelativeTimeFormat(intlLang() || "en", { numeric: "auto" });
+  const rtf = new Intl.RelativeTimeFormat(intlLang(), { numeric: "auto" });
   for (const [unit, n] of [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]]) {
     if (Math.abs(sec) >= n) return rtf.format(Math.round(sec / n), unit);
   }
@@ -18976,7 +18976,7 @@ function renderSessRange(loading) {
 // a "YYYY-MM-DD" as a local date, and back
 const sessDate = (d) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
 const sessISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const sessDay = (d) => d.toLocaleDateString(intlLang() || "en", { month: "short", day: "numeric" });
+const sessDay = (d) => d.toLocaleDateString(intlLang(), { month: "short", day: "numeric" });
 // a length of time, as hours and minutes
 function fmtDur(sec) {
   const m = Math.round(sec / 60);
@@ -19294,7 +19294,7 @@ function sessLegend() {
 }
 // the short names of the days of the week, Monday first
 function sessWeekdays() {
-  const loc = intlLang() || "en";
+  const loc = intlLang();
   return Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(loc, { weekday: "short" }));
 }
 function sessCardHead(title) {
@@ -19484,7 +19484,7 @@ function sessCalendar(days, value, tip, pad = 0) {
     l.style.gridArea = `${i + 2} / 1`;
     cal.append(l);
   }
-  const loc = intlLang() || "en";
+  const loc = intlLang();
   let month = -1, labelAt = -9;
   // the days before the range, from the Monday it is laid out from: their
   // months named as the range's are, the days themselves left blank

@@ -305,7 +305,7 @@
       default: return t("npm answered with an error: {error}", { error: c.error || "" });
     }
   }
-  const checkedAt = () => checked ? new Date(checked.at).toLocaleTimeString(document.documentElement.lang || undefined, { hour: "2-digit", minute: "2-digit" }) : "";
+  const checkedAt = () => checked ? new Date(checked.at).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) : "";
 
   // the built-ins with accounts this plugin could run in their place
   const movableOf = (pkg) => (mine?.movable || []).filter((c) => c.package === pkg);
@@ -485,7 +485,7 @@
     if (l.npm?.weekly) {
       const d = el("span", "pm-dl");
       d.append(glyph(DOWN, 11, 1.5), el("span", "", t("{n}/week", { n: count(l.npm.weekly) })));
-      d.title = t("{n} downloads on npm last week", { n: l.npm.weekly.toLocaleString() });
+      d.title = t("{n} downloads on npm last week", { n: l.npm.weekly.toLocaleString(intlLang()) });
       meta.append(d);
     }
     if (l.npm?.version) {
@@ -517,7 +517,7 @@
   function stars(n) {
     const d = el("span", "pm-dl");
     d.append(glyph(STAR, 11, 1.4), el("span", "", count(n)));
-    d.title = t("{n} stars on GitHub", { n: (n || 0).toLocaleString() });
+    d.title = t("{n} stars on GitHub", { n: (n || 0).toLocaleString(intlLang()) });
     return d;
   }
 
@@ -861,7 +861,7 @@
     } else if (e.autoUpdated && e.autoUpdated.to === e.version) {
       // magpie updated it by itself lately: the row says so, quietly
       const c = el("span", "pm-chip soft", t("Auto-updated"));
-      c.title = t("magpie updated it from v{from} to v{to} on {date}", { from: e.autoUpdated.from, to: e.autoUpdated.to, date: new Date(e.autoUpdated.at).toLocaleDateString(document.documentElement.lang || undefined, { month: "short", day: "numeric" }) });
+      c.title = t("magpie updated it from v{from} to v{to} on {date}", { from: e.autoUpdated.from, to: e.autoUpdated.to, date: new Date(e.autoUpdated.at).toLocaleDateString(intlLang(), { month: "short", day: "numeric" }) });
       nm.append(c);
     } else if ((ck?.status === "current" || ck?.status === "update") && e.version) {
       const c = el("span", "pm-chip soft", t("Up to date"));
@@ -1096,7 +1096,7 @@
       d.title = m.error;
       return d;
     }
-    const lang = document.documentElement.lang || undefined;
+    const lang = intlLang();
     let s = t("Gateway middleware: {hooks}", { hooks: m.hooks.join(t(", ")) });
     if (m.calls) s += " · " + t("{n} calls, {us} µs each", { n: m.calls.toLocaleString(lang), us: m.avgMicros < 10 ? m.avgMicros.toFixed(1) : Math.round(m.avgMicros).toLocaleString(lang) });
     d.append(el("span", "", s));
@@ -1189,7 +1189,7 @@
     try {
       const p = await api("plugins/page?name=" + encodeURIComponent(l.package));
       const at = l.github && !entryOf(l.package) ? l.github.pushed : p.updated;
-      upd.textContent = at && !at.startsWith("0001") ? new Date(at).toLocaleDateString(document.documentElement.lang || undefined, { year: "numeric", month: "short", day: "numeric" }) : "—";
+      upd.textContent = at && !at.startsWith("0001") ? new Date(at).toLocaleDateString(intlLang(), { year: "numeric", month: "short", day: "numeric" }) : "—";
       readme.replaceChildren(markdown(p.readme || t("No README")));
     } catch (e) {
       upd.textContent = "—";

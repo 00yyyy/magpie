@@ -240,10 +240,15 @@
   }
   const took = (ms = 0) => ms < 1000 ? t("{n} ms", { n: ms }) : t("{n} s", { n: (ms / 1000).toFixed(ms < 10e3 ? 1 : 0) });
   // (the formats made once: made for each call, they were much of what the
-  // accounts' countdowns cost)
-  const HM = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" }), WD = new Intl.DateTimeFormat([], { weekday: "short" });
+  // accounts' countdowns cost), made again when the GUI's language changes
+  let fmtLang = null, HM, WD;
   function clock(s) {
     const d = new Date(s), n = new Date();
+    if (fmtLang !== intlLang()) {
+      fmtLang = intlLang();
+      HM = new Intl.DateTimeFormat(fmtLang, { hour: "2-digit", minute: "2-digit" });
+      WD = new Intl.DateTimeFormat(fmtLang, { weekday: "short" });
+    }
     const hm = HM.format(d);
     return d.toDateString() === n.toDateString() ? hm : WD.format(d) + " " + hm;
   }
@@ -685,7 +690,7 @@
   function condText(c) {
     let m;
     if ((m = /^intent "(.*)"$/.exec(c))) return t("asks for “{intent}”", { intent: m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\") });
-    if ((m = /^tokens ≥ (\d+)$/.exec(c))) return t("≥ {n} tokens", { n: Number(m[1]).toLocaleString() });
+    if ((m = /^tokens ≥ (\d+)$/.exec(c))) return t("≥ {n} tokens", { n: Number(m[1]).toLocaleString(intlLang()) });
     if (c === "images") return t("has an image");
     if (c === "reasoning") return t("reasoning on");
     if (c === "compacting") return t("compacting");
@@ -1922,7 +1927,7 @@
   const dayName = (d) => {
     const x = new Date(d + "T12:00:00"), n = new Date(), y = new Date(n.getTime() - 864e5);
     return x.toDateString() === n.toDateString() ? t("today") : x.toDateString() === y.toDateString() ? t("yesterday")
-      : x.toLocaleDateString([], { month: "short", day: "numeric", weekday: "short" });
+      : x.toLocaleDateString(intlLang(), { month: "short", day: "numeric", weekday: "short" });
   };
   async function loadDays(d) {
     try {
@@ -2227,7 +2232,7 @@
   }
   function reqRow(r, said, how, tr, ag, meta, metrics, title) {
     const b = el("button", "rt-req " + how);
-    const when = el("span", "at", new Date(r.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    const when = el("span", "at", new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     const asked = el("span", "asked");
     const sw = el("i", "ag");
     sw.style.setProperty("--agent", hueOf(r.agent));
@@ -2711,8 +2716,8 @@
   }
   function replayBar(p, fast) {
     const d = new Date(p.real);
-    rClock.textContent = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) + "." + Math.floor(d.getMilliseconds() / 100);
-    const day = d.toDateString() === new Date().toDateString() ? t("today") : d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    rClock.textContent = d.toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) + "." + Math.floor(d.getMilliseconds() / 100);
+    const day = d.toDateString() === new Date().toDateString() ? t("today") : d.toLocaleDateString(intlLang(), { weekday: "short", month: "short", day: "numeric" });
     setText(rDay, day);
     // a quiet stretch cut short: the clock runs fast through it, whatever
     // the speed picked
@@ -2739,7 +2744,7 @@
       const [said] = outcome(r);
       row.append(el("span", "rp-n", t("request {i} of {n}", { i: g.n, n: p.plan.length })), sw,
         el("b", "", agentName(r.agent)), el("code", "mdl", r.model), ...(r.kind ? [kindTag(r)] : []), el("span", "rp-to", "→ " + said),
-        el("span", "rp-at", t("sent {time}", { time: new Date(r.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })));
+        el("span", "rp-at", t("sent {time}", { time: new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })));
       row.onclick = () => { cur = r; renderLog(); };
       return row;
     }) : [el("span", "rp-wait", t("starting…"))]));
@@ -3072,7 +3077,7 @@
   // what a rule matches, in words
   function ruleText(r) {
     const bits = [];
-    if (r.tokens) bits.push(t("≥ {n} tokens", { n: r.tokens.toLocaleString() }));
+    if (r.tokens) bits.push(t("≥ {n} tokens", { n: r.tokens.toLocaleString(intlLang()) }));
     if (r.images) bits.push(t("has an image"));
     if (r.effort) bits.push(r.effort === "on" ? t("reasoning on") : t("reasoning ≥ {level}", { level: r.effort }));
     if (r.agents?.length) bits.push(r.agents.map((id) => (state.clients || state.agents || []).find((a) => a.id === id)?.name || id).join(" / "));
@@ -4170,10 +4175,10 @@
       ctxIn.setAttribute("aria-invalid", String(!!ctxErr));
       const big = ns.length ? Math.max(...ns) : 0, small = ns.length ? Math.min(...ns) : 0;
       ctxHint.textContent = ctxErr || (mode === "custom"
-        ? t("Agents are told the group takes {n} tokens; a longer conversation still goes on to a member with room for it.", { n: (d.context || 0).toLocaleString() })
+        ? t("Agents are told the group takes {n} tokens; a longer conversation still goes on to a member with room for it.", { n: (d.context || 0).toLocaleString(intlLang()) })
         : mode === "smallest"
-          ? (small ? t("Agents are told {n} tokens, its smallest model's, so they compact before any member would turn the conversation away.", { n: small.toLocaleString() }) : t("Agents are told its smallest model's window, so they compact before any member would turn the conversation away."))
-          : (big ? t("Agents are told {n} tokens, its largest model's; a conversation too long for one member goes on to one with room for it.", { n: big.toLocaleString() }) : t("Agents are told its largest model's window; a conversation too long for one member goes on to one with room for it.")));
+          ? (small ? t("Agents are told {n} tokens, its smallest model's, so they compact before any member would turn the conversation away.", { n: small.toLocaleString(intlLang()) }) : t("Agents are told its smallest model's window, so they compact before any member would turn the conversation away."))
+          : (big ? t("Agents are told {n} tokens, its largest model's; a conversation too long for one member goes on to one with room for it.", { n: big.toLocaleString(intlLang()) }) : t("Agents are told its largest model's window; a conversation too long for one member goes on to one with room for it.")));
     };
     const CTX_OPTS = [["largest", "Largest model's"], ["smallest", "Smallest model's"], ["custom", "Custom"]];
     ctxW.append(segs(CTX_OPTS.map(([id, n]) => [id, t(n)]), ctxMode(), (v) => {
@@ -4350,9 +4355,9 @@
           const m = infoOf(r.use), bits = [];
           if (r.pause) bits.push(t("left out of the group then: not tried, not a fallback"));
           if (!r.pause && r.images && m && m.ready && !m.images) bits.push(t("it doesn't take images"));
-          if (!r.pause && r.tokens && m?.context && m.context < r.tokens) bits.push(t("it takes {n} tokens", { n: m.context.toLocaleString() }));
+          if (!r.pause && r.tokens && m?.context && m.context < r.tokens) bits.push(t("it takes {n} tokens", { n: m.context.toLocaleString(intlLang()) }));
           // a summary longer than it takes goes by the next rule, or the group
-          if (!r.pause && r.compact && m?.context && d.members.some((id) => (infoOf(id)?.context || 0) > m.context)) bits.push(t("longer conversations skip it: it takes {n} tokens", { n: m.context.toLocaleString() }));
+          if (!r.pause && r.compact && m?.context && d.members.some((id) => (infoOf(id)?.context || 0) > m.context)) bits.push(t("longer conversations skip it: it takes {n} tokens", { n: m.context.toLocaleString(intlLang()) }));
           const from = clockOf(r.time?.from), to = clockOf(r.time?.to);
           if (from && to && to < from) bits.push(t("runs past midnight, into the next day"));
           hint.textContent = bits.join(" · ");
@@ -4941,7 +4946,7 @@
     const asked = el("span", "pr-a");
     asked.append(icon(ag?.icon || "generic"), el("span", "pr-who", agentName(r.agent)), el("code", "m", r.model));
     if (r.kind) asked.append(kindTag(r));
-    const when = el("span", "at", new Date(r.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }));
+    const when = el("span", "at", new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }));
     // where it went: the provider, the account or key, and the model that
     // answered — marked when the reply names another than the one sent
     const to = el("span", "pr-to");

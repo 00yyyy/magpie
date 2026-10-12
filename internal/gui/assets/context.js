@@ -608,7 +608,7 @@
       pre.append(document.createTextNode(text.slice(at, at + TEXT_STEP)));
       at = Math.min(text.length, at + TEXT_STEP);
       more.hidden = at >= text.length;
-      more.textContent = t("Show more · {n} characters left", { n: (text.length - at).toLocaleString() });
+      more.textContent = t("Show more · {n} characters left", { n: (text.length - at).toLocaleString(intlLang()) });
     };
     more.onclick = (e) => { e.stopPropagation(); step(); };
     step();
@@ -624,9 +624,9 @@
     if (pc.text) head.append(copyBtn(pc.text, pc.name || t(ROLE_NAMES[pc.role] || "Text")));
     box.append(head);
     if (pc.role === "image") box.append(el("div", "ctx-piece-note", t("An image: magpie doesn't show it here")));
-    else if (pc.role === "sealed") box.append(el("div", "ctx-piece-note", t("Sealed by the vendor, {n} bytes: only the vendor can read it", { n: (pc.size || 0).toLocaleString() })));
+    else if (pc.role === "sealed") box.append(el("div", "ctx-piece-note", t("Sealed by the vendor, {n} bytes: only the vendor can read it", { n: (pc.size || 0).toLocaleString(intlLang()) })));
     else {
-      if (pc.size) box.append(el("div", "ctx-piece-note", t("Sealed by the vendor, {n} bytes: only the vendor can read it", { n: pc.size.toLocaleString() })));
+      if (pc.size) box.append(el("div", "ctx-piece-note", t("Sealed by the vendor, {n} bytes: only the vendor can read it", { n: pc.size.toLocaleString(intlLang()) })));
       if (pc.text) box.append(longText(pc.text));
       else if (!pc.size) box.append(el("div", "ctx-piece-note", t("Empty")));
     }
