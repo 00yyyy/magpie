@@ -1409,8 +1409,19 @@
   const toolsOpen = new Set(); // the servers whose tools are shown
   const healthKey = (s) => JSON.stringify([s.transport, s.command, s.args, s.env, s.url, s.headers, s.signIn]);
   const toolList = (name) => { const h = health.get(name)?.h; return h?.state === "ok" ? h.toolList || [] : []; };
-  // whether any agent gets the server, here or in a project magpie keeps
-  const inUse = (s) => !!s.agents?.length || (lib.projects || []).some((p) => p.servers?.[s.name]?.length);
+  // whether an agent the page shows gets the server, here or in a project
+  // magpie keeps whose folder is there. The library keeps every agent it
+  // gave a server to, those the page leaves out too: one hidden on the
+  // Agents page, one no longer installed, one with no MCP of its own. A
+  // server on only for those has every chip off, and isn't started for
+  // them on its own (#1597, xiaozhu1337: ida-pro-mcp and windbg-mcp were)
+  const inUse = (s) => {
+    const shown = new Set(mcpAgents().map((a) => a.id)), inProjects = new Set(projectMCPAgents().map((a) => a.id));
+    return (s.agents || []).some((id) => shown.has(id))
+      || (lib.projects || []).some((p) => !p.missing && (p.servers?.[s.name] || []).some((id) => inProjects.has(id)));
+  };
+  // whether the library has it on for anyone at all, shown here or not
+  const onAnywhere = (s) => !!s.agents?.length || (lib.projects || []).some((p) => p.servers?.[s.name]?.length);
   // a click checks a server again, or for the first time one in no use;
   // not while it is being checked
   function recheck(name) {
@@ -1587,7 +1598,7 @@
         b.hidden = !s || inUse(s);
         b.className = "lib-health idle";
         b.replaceChildren(el("span", "", t("not checked")));
-        b.title = t("No agent has it, so it isn't checked on its own") + "\n" + t("Click to check it");
+        b.title = t(s && onAnywhere(s) ? "No agent shown here has it on, so it isn't checked on its own" : "No agent has it, so it isn't checked on its own") + "\n" + t("Click to check it");
         continue;
       }
       b.hidden = false;

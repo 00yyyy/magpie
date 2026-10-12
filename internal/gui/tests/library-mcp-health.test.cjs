@@ -18,7 +18,7 @@ const assets = path.resolve(__dirname, "../assets");
 const HOME = "/Users/lc";
 const fixture = () => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
-  agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", skills: `${HOME}/.claude/skills`, mcp: `${HOME}/.claude.json` }],
+  agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", skills: `${HOME}/.claude/skills`, mcp: `${HOME}/.claude.json`, projectMCP: ".mcp.json" }],
   instructions: { agents: [], sets: [] }, foundServers: [], foundSkills: [], skills: [],
   // github is on in a project only, which is still in use
   projects: [{ dir: `${HOME}/code/app`, name: "app", copy: false, skills: {}, placed: [], servers: { github: ["claude"] }, wrote: {} }],
