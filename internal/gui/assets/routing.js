@@ -920,6 +920,14 @@
   const src = () => rp ? rp.routes : routes; // the routes the stage plays from
   const LINGER = 12e3;      // how long an agent's last request stays on the stage
   let gen = 0, trips = [], waiters = [];
+  // a dot let go at an account waits there while it answers: it stays at
+  // the end of the wire to it as the stage is laid out again, the window
+  // resized or the view coming back narrow then wide (#1859: posed once,
+  // it stayed where the account had been)
+  const holds = new Map(); // packet → the row it waits at
+  function holdAll() {
+    for (const [dot, row] of holds) pose({ dot, legs: wiresTo(row).map((p) => ({ p })) }, 1);
+  }
   let capQ = [], capAt = -1e9, capLo = false, flipUntil = 0;
 
   // fly carries a dot along paths one after another, as one flight — and
@@ -1024,6 +1032,7 @@
       const up = f?.open ? f : row.up && subs.get(row.up), a = b(row.li);
       row.wire.setAttribute("d", up ? fromSub(up, a) : fromHub(a));
     }
+    holdAll();
   }
 
   // rankOf is an account's or key's place in its provider's own list, the
@@ -2627,7 +2636,10 @@
         away(carrier);
         carrier = null;
         dot.classList.add("held");
+        holds.set(dot, row);
+        holdAll();
         await until(() => g !== gen || rt().tries[i].done);
+        holds.delete(dot);
         if (g !== gen) break;
         r = rt();
         if (!routes.has(id)) break;
@@ -2675,6 +2687,7 @@
       away(carrier);
       away(back);
       flying.delete(dot);
+      holds.delete(dot);
       dot.remove();
       if (playing.get(id) === g) playing.delete(id);
       renderAll();
@@ -2690,7 +2703,7 @@
   // stopPlays ends whatever is flying: each play sees its gen gone and
   // clears up after itself
   function stopPlays() {
-    gen++; flying.clear(); playing.clear();
+    gen++; flying.clear(); holds.clear(); playing.clear();
     for (const p of sky.querySelectorAll(".pkt, .rt-flier")) p.remove();
     wake();
   }
