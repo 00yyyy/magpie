@@ -14575,7 +14575,11 @@ function keyCards(list) {
 // fold opened) only packs them again, so what was clicked stays where it
 // was, even as the view's scrollbar comes in and takes some of the width
 // (in WebKit a card turned to every model went to one column under its
-// neighbour, the page following it).
+// neighbour, the page following it). The last card in each column reaches
+// down to where the tallest column ends, so the bottoms line up: a row of
+// cards side by side is as tall as its tallest, and a short card stacked
+// under another ends with the tall one beside them (ikunbots on X: 卡片可以
+// 对齐吗). Each card is measured as tall as itself before that.
 const USAGE_MIN = 260, USAGE_GAP = 7;
 let usagePacked = null, usagePackFrame = 0;
 function packUsage() {
@@ -14587,7 +14591,7 @@ function packUsage() {
     // out of sight: the grid as it is without packing, packed once it shows
     list.classList.remove("packed");
     list.style.gridTemplateColumns = "";
-    for (const c of cards) c.style.gridArea = "";
+    for (const c of cards) { c.style.gridArea = ""; c.style.minHeight = ""; }
     usagePacked = null;
     return;
   }
@@ -14607,6 +14611,7 @@ function packUsage() {
     return { n, at, tall, empty };
   };
   const heights = () => {
+    for (const c of cards) c.style.minHeight = "";
     for (const g of list.querySelectorAll(".quota-windows")) fitQuota(g);
     return cards.map((c) => c.getBoundingClientRect().height);
   };
@@ -14630,9 +14635,14 @@ function packUsage() {
   }
   usagePacked = { most, keys, n: best.n };
   list.classList.add("packed");
+  // the last card in each column, down to the end of the tallest
+  const last = new Map(best.at.map(([c], i) => [c, i]));
   best.at.forEach(([c, top, h], i) => {
+    if (last.get(c) === i) h = best.tall - top;
     const area = `${top + 1} / ${c + 1} / span ${Math.max(1, h)} / span 1`;
     if (cards[i].style.gridArea !== area) cards[i].style.gridArea = area;
+    const min = last.get(c) === i ? `${h}px` : "";
+    if (cards[i].style.minHeight !== min) cards[i].style.minHeight = min;
   });
 }
 // a card's height or the page's width moved: packed again on the next frame
