@@ -1019,6 +1019,13 @@ status; its models are the one asked for, the one sent as asked and the one that
 do the same, text selected in the details is not a click, and the rows stay open
 when the list is asked for again; in English and Chinese.
 
+`ledger-cache-tokens.test.cjs` (#1839) opens a request's details and finds its
+tokens there at every width: in, out, cache read and cache creation, 0 said as
+0 for a prompt that missed the cache, with what was written for an hour; a
+failure that spent nothing has no tokens row. No click moves the page and
+nothing spills out of the details; in Chromium and WebKit at 1100 and 390 wide,
+in every language.
+
 `usage-ledger-chart.test.cjs` opens the Requests tab on what its requests add
 up to: a strip of four totals (tokens, requests, cost, the cache hit rate),
 then the trend of one metric — tokens, cost or requests — as columns by the

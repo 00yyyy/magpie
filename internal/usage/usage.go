@@ -55,11 +55,17 @@ type Record struct {
 	Served    string `json:"served,omitempty"`
 	// Upstream: the provider an aggregator (OpenRouter …) said answered
 	// behind it — DeepInfra, Novita — when its reply named one
-	Upstream   string `json:"upstream,omitempty"`
-	Input      int    `json:"in"`
-	Output     int    `json:"out"`
-	CacheRead  int    `json:"cache_read,omitempty"`
-	CacheWrite int    `json:"cache_write,omitempty"`
+	Upstream string `json:"upstream,omitempty"`
+	Input    int    `json:"in"`
+	Output   int    `json:"out"`
+	// CacheRead is the prompt tokens read from the vendor's cache, and
+	// CacheWrite those written to it (Anthropic's cache creation,
+	// cache_creation_input_tokens); neither is in Input. Both are written
+	// on every record, 0 too, as in and out are, so a call whose prompt
+	// missed the cache reads as that rather than as one whose cache wasn't
+	// kept (#1839). A record from before they were has neither: 0.
+	CacheRead  int `json:"cache_read"`
+	CacheWrite int `json:"cache_write"`
 	// CacheWrite1h is how many of CacheWrite were written to be kept for
 	// an hour (Anthropic's 1-hour TTL, billed at 2× input where 5 minutes'
 	// is 1.25×); the rest were for 5 minutes. A record from before it was
