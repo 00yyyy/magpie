@@ -5727,7 +5727,7 @@ func writeError(w http.ResponseWriter, proto provider.Protocol, status int, msg 
 		}
 	}
 	if h, held := w.(*holdWriter); status == http.StatusRequestEntityTooLarge && (!held || !h.hold) {
-		const hint = "This is a request-body byte limit; reduce images or large tool results, or start a new conversation with a short summary."
+		const hint = "This is a request-body byte limit, not the model's context: compact the conversation (/compact in Codex or Claude Code), or start a new one with a short summary; fewer images or smaller tool results also help."
 		if !strings.Contains(msg, hint) {
 			msg += " — " + hint
 		}
