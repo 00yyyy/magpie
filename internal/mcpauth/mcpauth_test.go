@@ -261,6 +261,37 @@ func TestSignInRefusesAssignedSecretJWT(t *testing.T) {
 	t.Fatalf("the sign-in page was opened for a client magpie can't authenticate as: %s", st.URL)
 }
 
+// An assignment magpie can do is taken, both ways round (#1490): a client
+// that asked none and was given a secret for basic or post sends it as
+// assigned, and one that asked for a secret method and was registered
+// public, with no secret, sends none; at the code exchange and at a
+// renewal both, which the fake's token endpoint checks against what it
+// assigned.
+func TestSignInTakesAnAssignedMethodItCanDo(t *testing.T) {
+	home(t)
+	for _, c := range []struct {
+		listed []string
+		assign string
+	}{
+		{[]string{"none", "client_secret_basic"}, "client_secret_basic"},
+		{[]string{"none", "client_secret_post"}, "client_secret_post"},
+		{[]string{"client_secret_post"}, "none"},
+		{[]string{"client_secret_basic"}, "client_secret_post"},
+	} {
+		f := mcpauthtest.New(t)
+		f.AuthMethods, f.Assign = c.listed, c.assign
+		f.SignIn(t, "neon")
+		r, _ := mcpauth.Get("neon")
+		if r.AuthMethod != c.assign || (r.Secret == "") != (c.assign == "none") || r.Access == "" || f.Exchanged != 1 {
+			t.Fatalf("%v assigned %s: record %+v, exchanged %d", c.listed, c.assign, r, f.Exchanged)
+		}
+		f.Revoke()
+		if tok, err := mcpauth.Renew(t.Context(), "neon", r.Access); err != nil || tok == r.Access || f.Refreshed != 1 {
+			t.Fatalf("%v assigned %s: renewed to %q, %v (renewals %d)", c.listed, c.assign, tok, err, f.Refreshed)
+		}
+	}
+}
+
 // An authorization server that is an OpenID provider, as Vercel's is, gives
 // a refresh token only to a sign-in that asks for offline_access, while the
 // server names only "openid": magpie asks for it too when the authorization

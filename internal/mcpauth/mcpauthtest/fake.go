@@ -137,7 +137,8 @@ func New(t *testing.T) *Fake {
 		id := fmt.Sprintf("client-%d", len(f.Registered))
 		// private_key_jwt and tls_client_auth need a key set or a
 		// certificate the registration didn't give
-		ok := slices.Contains(methods(), method) && method != "private_key_jwt" && method != "tls_client_auth"
+		// (a method the server assigns is one it supports, listed or not)
+		ok := (f.Assign != "" || slices.Contains(methods(), method)) && method != "private_key_jwt" && method != "tls_client_auth"
 		out := map[string]any{"client_id": id, "redirect_uris": reg["redirect_uris"], "token_endpoint_auth_method": method}
 		if ok && method != "none" {
 			f.secrets[id] = "secret-" + id
