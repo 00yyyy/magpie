@@ -1990,7 +1990,13 @@ For S3:
 - The access key needs to read and write `<prefix>/magpie/`. On AWS it also
   needs to list the bucket.
 - A server without conditional writes is supported. There magpie checks the
-  object's ETag just before each write.
+  object's ETag just before each write. Two computers that write in the
+  same moment can both pass that check (Aliyun OSS, #1776), and the later
+  write is the one kept. The other computer notices at its next sync, a
+  few minutes later. It finds a file other than the one it wrote, so it
+  merges again from before its own write: what it changed goes back up
+  beside the other computer's change. It never takes the other's file as
+  having seen its own.
 - Shared usage is reconciled only after a complete S3 listing. A missing or
   repeated continuation token, or a listing still truncated after 100 pages,
   reports a sync error and keeps previously downloaded usage days in place.
