@@ -1449,17 +1449,13 @@ func (h *holdWriter) Write(b []byte) (int, error) {
 		if sse, sure := sseStart(head); sure {
 			h.wholeUnsure = false
 			if sse {
-				// a stream under a type that doesn't say so: through as it
-				// comes, with what was held of its start
-				h.whole = false
-				h.held.Reset()
-				h.pass()
-				h.refusalAfter(head)
-				h.sent(head)
-				if _, err := h.w.Write(head); err != nil {
-					return 0, err
-				}
-				return len(b), nil
+				// a stream under a type that doesn't say so: held as a
+				// stream from here, its events read as they come, so an
+				// error before anything is said still goes to the next
+				// candidate. It went through at once before, and a 200
+				// that only framed a reply and then failed reached the
+				// agent (#1418)
+				h.whole, h.stream, h.since = false, true, time.Now()
 			}
 		}
 	}
@@ -2206,7 +2202,9 @@ func (p streamPart) thought() bool {
 }
 
 // said tells whether a part says anything an agent would show or act on:
-// text, reasoning, a call. What isn't known is taken as saying something.
+// text, reasoning, a call. Of what isn't known, a call or a tool's part
+// (web_search_call, mcp_tool_use, server_tool_use, ...) says something;
+// anything else only frames the reply until something does (#1418).
 func (p streamPart) said() bool {
 	switch p.Type {
 	case "text", "output_text", "summary_text", "reasoning_text":
@@ -2235,7 +2233,7 @@ func (p streamPart) said() bool {
 		}
 		return false
 	}
-	return true
+	return strings.Contains(p.Type, "call") || strings.Contains(p.Type, "tool") || strings.HasPrefix(p.Type, "mcp_")
 }
 
 // streamEvent says what one server-sent event of a reply is, in any of the
@@ -2444,7 +2442,39 @@ func streamEvent(ev []byte) (kind, status int, msg string) {
 		}
 		return eventLead, 0, ""
 	}
-	return eventContent, 0, ""
+	if replyEvent(typ) {
+		return eventContent, 0, ""
+	}
+	// what isn't known to carry a reply only frames it: it lets the
+	// stream through no more than a ping does. Taken for content, a 200
+	// that sent only such frames went through, and the overloaded error
+	// after them reached Codex with five candidates never asked
+	// (Aliceonly on #1418). A stream that ends well is released whole
+	return eventLead, 0, ""
+}
+
+// replyEvent tells whether an event, past the cases streamEvent tells
+// apart, is one of a protocol's events that carry a reply or end it:
+// Anthropic's blocks and stop, Responses' text, refusal, items, parts,
+// calls and audio, and its end.
+func replyEvent(typ string) bool {
+	switch typ {
+	case "content_block_start", "content_block_delta", "message_delta", "message_stop",
+		"response.completed", "response.incomplete", "response.done":
+		return true
+	}
+	rest, ok := strings.CutPrefix(typ, "response.")
+	if !ok {
+		return false
+	}
+	for _, p := range []string{"output_text.", "refusal.", "output_item.", "content_part.", "audio", "output_audio"} {
+		if strings.HasPrefix(rest, p) {
+			return true
+		}
+	}
+	// a call's arguments or a hosted tool's progress: function_call_
+	// arguments, custom_tool_call_input, web_search_call, mcp_call, ...
+	return strings.Contains(rest, "_call") || strings.HasPrefix(rest, "mcp_")
 }
 
 // anthropicDeltaThinks tells whether an Anthropic content_block_delta is
