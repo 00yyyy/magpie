@@ -52,6 +52,10 @@ const REQUEST_KINDS = {
     "purpose": "kind:review",
     "name": "Review"
   },
+  "routing": {
+    "purpose": "kind:routing",
+    "name": "Routing classifier"
+  },
   "thread_spawn": {
     "purpose": "kind:collab_spawn",
     "name": "Subagent"

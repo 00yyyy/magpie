@@ -120,6 +120,15 @@ type modelRef struct {
 	// sent only when true
 	Images        bool `json:"images,omitempty"`
 	ImagesUnknown bool `json:"imagesUnknown,omitempty"`
+	// Sub: a subscription account serves it (Provider.Account), so a
+	// group's classifier set to it asks that subscription at every turn,
+	// which the Routing page says (#1839)
+	Sub bool `json:"sub,omitempty"`
+}
+
+// servedRef is a served model as the Routing page lists it
+func servedRef(e provider.Entry) modelRef {
+	return modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts, CanFast: provider.CanFast(e.Provider, e.Model), OwnFast: provider.OwnFast(e.Provider, e.Model), Images: seesImages(e), ImagesUnknown: imagesUnknown(e), Sub: e.Provider.Account != nil}
 }
 
 type poolJSON struct {
@@ -198,12 +207,12 @@ func groupsState() groupsJSON {
 		}
 	}
 	for _, e := range provider.Deciders() {
-		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon})
+		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Sub: e.Provider.Account != nil})
 	}
 	served := provider.Served()
 	for _, e := range served {
 		if e.Group == "" {
-			out.Models = append(out.Models, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts, CanFast: provider.CanFast(e.Provider, e.Model), OwnFast: provider.OwnFast(e.Provider, e.Model), Images: seesImages(e), ImagesUnknown: imagesUnknown(e)})
+			out.Models = append(out.Models, servedRef(e))
 		}
 	}
 	// every provider's models read once for the groups, not once a group

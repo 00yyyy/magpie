@@ -4407,6 +4407,16 @@
     cw.append(cls);
     const deciders = groups.deciders || [];
     const isJev = (id) => deciders.some((x) => x.id === id);
+    // the subscription a classifier asks as every turn begins, by its
+    // model's name and provider: the model's own, or a group's first
+    // member's (the one asked first); "" when it is none
+    const classifierSub = (m, sg) => {
+      if (sg) {
+        const first = sg.members?.[0] || "";
+        m = groups.models.find((x) => x.id === first || first.startsWith(x.id + ":"));
+      }
+      return m?.sub ? `${m.name || m.id} · ${m.providerName}` : "";
+    };
     const drawClassifier = () => {
       const auto = d.effort === "auto";
       const intents = d.rules.some((r) => r.intent?.trim() || (r === asking && d.rules.includes(r)));
@@ -4438,6 +4448,16 @@
           : auto
           ? "As a turn begins, this model is asked which of the intents the message is and how hard the turn is, each once; a small, fast one without reasoning is best. If it can't say, no intent matches and the turn reasons as the agent asked. Its calls show in the usage as magpie’s own."
           : "As a turn begins, this model is asked which of the intents the message is — once; a small, fast one without reasoning is best. If it fails or can't say, no intent matches. Its calls show in the usage as magpie’s own.")));
+      // a subscription asked as every turn begins spends its allowance
+      // on it, beside the agent's own requests (#1839): said beside the
+      // pick, once for a model, for a group when the one it asks first is
+      const subWarn = classifierSub(m, sg);
+      if (subWarn) {
+        const two = auto && intents && !isJev(d.classifier);
+        cls.append(el("div", "hint rt-cls-sub", t(two
+          ? "Every turn starts with two requests to {name}, a subscription: they count against its allowance as the agent's own do. A free model or one on an API key leaves the subscription to the agents."
+          : "Every turn starts with a request to {name}, a subscription: it counts against its allowance as the agent's own do. A free model or one on an API key leaves the subscription to the agents.", { name: subWarn })));
+      }
       // picking the effort alone, the classifier can pick the model too
       if (!intents && d.members.length > 1) {
         const more = el("button", "text rt-cls-more", t("It can pick the model too: add a rule with an intent"));

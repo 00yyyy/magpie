@@ -342,7 +342,7 @@ func (s *Server) systemOne(ctx context.Context, p provider.Provider, model strin
 	if p.Account == nil && p.Key != "" {
 		keyID, keyName = provider.KeyID(p.Key), p.KeyName
 	}
-	usage.Append(usage.Record{Time: start, Agent: usage.AgentOf(RouterAgent), Provider: p.ID, Host: p.Where(), Model: model, Requested: model, Served: use.Model,
+	usage.Append(usage.Record{Time: start, Agent: usage.AgentOf(RouterAgent), Kind: "routing", Provider: p.ID, Host: p.Where(), Model: model, Requested: model, Served: use.Model,
 		ProviderKeyID: keyID, ProviderKeyName: keyName, ProviderAccount: accountOf(p),
 		Input: use.Usage.Input, Output: use.Usage.Output, Millis: time.Since(start).Milliseconds(), Status: status})
 	return b, nil

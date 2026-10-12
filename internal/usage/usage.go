@@ -588,6 +588,43 @@ type Group struct {
 	// Agent is the agent a session is of (sessions only).
 	Agent string `json:"agent,omitempty"`
 	Totals
+	// Own is the share of these calls magpie made by itself (Record.ByMagpie):
+	// a routing classifier's, a web search's or an image description's,
+	// counted in Totals too, since they went to the same key or account
+	// (#1839). Filled for models, keys and accounts; a value, so a
+	// summary's copies share nothing.
+	Own OwnShare `json:"own,omitzero"`
+}
+
+// OwnShare is what magpie's own calls of a group came to.
+type OwnShare struct {
+	Calls  int     `json:"calls"`
+	Tokens int     `json:"tokens"` // in and out, cache aside, as Totals.Tokens
+	Cost   float64 `json:"cost"`
+}
+
+// addOwn counts r in g's own share when magpie made it by itself.
+func (g *Group) addOwn(r Record, price *catalog.Price) {
+	if !r.ByMagpie() {
+		return
+	}
+	if !r.HandedOn {
+		g.Own.Calls++
+	}
+	g.Own.Tokens += r.Input + r.Output
+	if price != nil && r.Input+r.Output > 0 {
+		g.Own.Cost += r.CostAt(*price)
+	}
+}
+
+// ByMagpie is whether magpie made the call by itself rather than an agent:
+// its routing classifier, System One's decision, a web search or an
+// image description it asked for (#1839).
+func (r Record) ByMagpie() bool {
+	id := AgentOf(r.Agent)
+	// "magpie" as the agents know it; its own User-Agents (magpie-router/1,
+	// magpie-search/1) where they aren't loaded
+	return id == "magpie" || strings.HasPrefix(id, "magpie-")
 }
 
 // who is where a subscription's calls went as the account signed in
@@ -766,6 +803,7 @@ func summarizeFrom(p Period, now time.Time, first time.Time, historicalKeys map[
 			models[k] = m
 		}
 		m.add(r, pr)
+		m.addOwn(r, pr)
 		if r.CallerKeyID != "" {
 			g := callerKeys[r.CallerKeyID]
 			if g == nil {
@@ -784,6 +822,7 @@ func summarizeFrom(p Period, now time.Time, first time.Time, historicalKeys map[
 			}
 			g.ProviderKeyName = r.ProviderKeyName
 			g.add(r, pr)
+			g.addOwn(r, pr)
 		}
 		if accountProviders[r.Provider] {
 			who := r.Account()
@@ -794,6 +833,7 @@ func summarizeFrom(p Period, now time.Time, first time.Time, historicalKeys map[
 				accounts[id] = g
 			}
 			g.add(r, pr)
+			g.addOwn(r, pr)
 		}
 		if r.Session != "" {
 			g := sessions[id+"|"+r.Session]

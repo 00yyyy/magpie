@@ -1026,6 +1026,17 @@ failure that spent nothing has no tokens row. No click moves the page and
 nothing spills out of the details; in Chromium and WebKit at 1100 and 390 wide,
 in every language.
 
+`own-requests.test.cjs` (#1839) tells magpie's own requests from the agents':
+magpie's row among the agents and its ledger row carry the "magpie's own" mark,
+the agent's don't; the account's and the model's rows say how many calls magpie
+made itself, the other account's nothing; and the account's card says how many
+of the period's requests were magpie's own, also when the summary comes after
+the allowances. On the Routing page a classifier on a subscription's model says
+every turn starts with a request to it, a group asking a subscription first
+while picking the effort too says two, and one on a key says nothing. No click
+moves the page and nothing is wider than the window; in Chromium and WebKit at
+1100 and 390 wide, in every language.
+
 `usage-ledger-chart.test.cjs` opens the Requests tab on what its requests add
 up to: a strip of four totals (tokens, requests, cost, the cache hit rate),
 then the trend of one metric — tokens, cost or requests — as columns by the

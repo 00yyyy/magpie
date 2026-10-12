@@ -14598,6 +14598,38 @@ function quotaWho(q) {
   return out;
 }
 
+// magpie's own requests (#1839): the ones it made by itself, not an agent —
+// a routing group's classifier, a web search, an image description — which
+// go to the same keys and accounts as the agents' and count against them,
+// told apart wherever usage is shown: a mark on magpie's rows, and how many
+// of a model's, a key's or an account's calls were its own
+function ownWhy() {
+  return t("Requests magpie made by itself, not an agent: a routing group's classifier, a web search or an image description. They count against the key or account like any other request.");
+}
+function ownBadge() {
+  const b = el("span", "own-badge", t("magpie's own"));
+  b.title = ownWhy();
+  return b;
+}
+function ownCalls(n) {
+  return t("{n} by magpie itself", { n: fmtN(n) });
+}
+// ownLine is an account card's line saying how many of the period's
+// requests to it magpie made by itself, from the Overview's summary: the
+// account's own, or for a card of no account the provider's
+function ownLine(sub) {
+  const user = (sub.user || "").toLowerCase();
+  let n = 0;
+  for (const g of usage?.accounts || []) {
+    if (g.provider === sub.provider && (!user || (g.account || "").toLowerCase() === user)) n += g.own?.calls || 0;
+  }
+  if (!n) return null;
+  const line = el("div", "quota-own");
+  line.append(ownBadge(), el("span", "", t(n === 1 ? "{n} request in this period was magpie's own" : "{n} requests in this period were magpie's own", { n: fmtN(n) })));
+  line.title = ownWhy();
+  return line;
+}
+
 function renderQuotas() {
   renderPanelQuota();
   const subscriptions = $("#subscriptionUsage");
@@ -14695,6 +14727,9 @@ function renderQuotas() {
       // a remote magpie's gateway key: what its windows don't say (#1547)
       const keyLine = !brief && keyLimitLine(sub);
       if (keyLine) card.append(keyLine);
+      // how many of the period's requests to it magpie made itself (#1839)
+      const own = !brief && ownLine(sub);
+      if (own) card.append(own);
       // WorkBuddy's, Trae CN's or MiniMax Code's daily check-in, how this account's went,
       // and the switch for it, on the card rather than only in Settings
       // (#694); the switch on the first card of each vendor's
@@ -16927,6 +16962,11 @@ function renderUsage() {
       const sub = [];
       if (g.sub) sub.push(g.sub);
       sub.push(t(g.calls === 1 ? "{n} call" : "{n} calls", { n: g.calls }));
+      // magpie's own calls apart from the agents' (#1839): magpie's row
+      // says it is, and a model's, a key's or an account's how many of
+      // its calls were
+      if (id === "usageAgents" && g.id === "magpie") who.firstChild.append(ownBadge());
+      else if (g.own?.calls) sub.push(ownCalls(g.own.calls));
       if (g.errors) sub.push(t("{n} failed", { n: g.errors }));
       if (g.retried) sub.push(t("{n} answered on a retry", { n: g.retried }));
       // how long the streamed replies took to begin, and how fast they
@@ -16936,7 +16976,9 @@ function renderUsage() {
       }
       const gs = ledGroupSpeed(g);
       if (gs) sub.push(gs.text);
-      who.append(el("div", "sub", sub.join(" · ")));
+      const subLine = el("div", "sub", sub.join(" · "));
+      if (g.own?.calls) subLine.title = ownWhy();
+      who.append(subLine);
       r.append(who);
       const share = el("div", "share");
       const fill = el("i");
@@ -16999,6 +17041,9 @@ function renderUsage() {
   list("usageAccounts", u.accounts || []);
   list("usageKeys", u.callerKeys || []);
   $("#usageNote").textContent = t("Counted from the providers' own usage reports on every call through the gateway · {path}", { path: u.path });
+  // the account cards say how many of this period's requests were
+  // magpie's own (ownLine), which they could only once the summary came
+  if (quotas && (u.accounts?.some((g) => g.own?.calls) || $("#subscriptionUsage .quota-own"))) renderQuotas();
 }
 
 // hideUsageAgent takes a client out of the Usage page's Agents list, or
@@ -18368,6 +18413,8 @@ function renderLedger() {
     // one made on another computer, whose usage sync brought (#542)
     const at = r.computerName ? t("{agent} · on {computer}", { agent: name, computer: r.computerName }) : name;
     who.append(icon(r.icon || "generic"), el("span", "", [r.via ? t("{agent} · via {host}", { agent: at, host: r.via }) : at, r.callerKeyLabel || r.callerKeyName].filter(Boolean).join(" · ")));
+    // a request magpie made by itself, apart from the agents' own (#1839)
+    if (r.agent === "magpie") who.append(ownBadge());
     td(who, "", [r.kind, r.session && t("session {id}", { id: r.session })].filter(Boolean).join(" · "));
     td(r.req || "—", "model" + (r.req ? "" : " faint"), r.req || t("Not kept for requests before this version"));
     const local = r.source === "log";

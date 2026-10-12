@@ -27,6 +27,7 @@ var purposeKinds = func() map[string]PurposeKind {
 	add("Suggestions", "ambient_suggestions", "ambient_suggestion_safety")
 	add("Web search", "web_search")
 	add("Image description", "vision")
+	add("Routing classifier", "routing")
 	return out
 }()
 

@@ -344,6 +344,19 @@ func TestJevPicksTheIntent(t *testing.T) {
 	if code, out := postAs(t, s, "s3", `{"model":"ts/jev-latest","messages":[{"role":"user","content":"hi"}]}`); code != 400 || !strings.Contains(out, "only decides") {
 		t.Fatalf("chat to Jev: %d %s", code, out)
 	}
+	// its record is the routing classifier's, magpie's own (#1839)
+	n := 0
+	for _, r := range usage.Load(time.Time{}) {
+		if r.Provider == "ts" {
+			if r.Kind != "routing" || !r.ByMagpie() {
+				t.Fatalf("Jev's record: %+v", r)
+			}
+			n++
+		}
+	}
+	if n < 2 {
+		t.Fatalf("%d records of Jev's, one a turn at least", n)
+	}
 }
 
 // Intents that are levels (how hard a request is) leave no message out:

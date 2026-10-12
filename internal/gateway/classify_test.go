@@ -11,6 +11,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // clsUp is a Chat vendor that classifies: it answers what answer says,
@@ -142,15 +143,33 @@ func TestIntentRoutesATurn(t *testing.T) {
 	if r.Rule.Classified == nil || r.Rule.Classified.After != "" || strings.Contains(c.last(), "was of kind") || c.n() != 3 {
 		t.Fatalf("turn 3: %+v %s", r.Rule.Classified, c.last())
 	}
-	// the classifier's call is magpie's own, in the usage
+	// the classifier's call is magpie's own, in the usage, marked as the
+	// routing classifier's (#1839)
 	var seen bool
 	for _, call := range s.Recent() {
-		if call.Model == "c/cls" && call.Agent == "magpie-router" {
+		if call.Model == "c/cls" && call.Agent == "magpie-router" && call.Kind == "routing" {
 			seen = true
 		}
 	}
 	if !seen {
-		t.Fatal("the classifier's call isn't recorded as magpie-router's")
+		t.Fatal("the classifier's call isn't recorded as magpie-router's routing")
+	}
+	var recs, agents int
+	for _, r := range usage.Load(time.Time{}) {
+		switch {
+		case r.Provider == "c":
+			if r.Kind != "routing" || !r.ByMagpie() || usage.PurposeOf(r.Kind) != "kind:routing" {
+				t.Fatalf("the classifier's record: %+v", r)
+			}
+			recs++
+		case r.ByMagpie() || r.Kind == "routing":
+			t.Fatalf("an agent's record marked magpie's or routing: %+v", r)
+		default:
+			agents++
+		}
+	}
+	if recs != 3 || agents == 0 {
+		t.Fatalf("%d classifier records, %d the agent's", recs, agents)
 	}
 }
 
