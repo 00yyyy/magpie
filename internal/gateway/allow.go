@@ -34,20 +34,58 @@ const AllowIPsEnv = "MAGPIE_ALLOW_IPS"
 // AllowIPs is the allow list in force, as written, and whether
 // MAGPIE_ALLOW_IPS set it. Empty: no list, every address let in.
 func AllowIPs() (list []string, fromEnv bool) {
+	list, fromEnv, _ = allowList()
+	return list, fromEnv
+}
+
+// lastAllow is the Settings list as last read whole. settings.json that
+// can't be read, or doesn't parse with no last good generation, holds a
+// list nobody knows: it is never taken for "no list" (every address let
+// in). The one read last stays in force, and with none read since magpie
+// started, only this computer is let in.
+var lastAllow struct {
+	sync.Mutex
+	list   []string
+	read   bool // list was read from a good settings.json
+	warned bool // the unknown read is logged, once until one reads again
+}
+
+// allowList is AllowIPs, and unknown when settings.json couldn't be read
+// and no list was read before it: then only this computer is let in.
+func allowList() (list []string, fromEnv, unknown bool) {
 	if v := strings.TrimSpace(os.Getenv(AllowIPsEnv)); v != "" {
-		return settings.SplitAllowIPs(v), true
+		return settings.SplitAllowIPs(v), true, false
 	}
-	return settings.Load().AllowIPs, false
+	s, err := settings.LoadChecked()
+	lastAllow.Lock()
+	defer lastAllow.Unlock()
+	if err == nil {
+		lastAllow.list, lastAllow.read, lastAllow.warned = s.AllowIPs, true, false
+		return s.AllowIPs, false, false
+	}
+	if !lastAllow.warned {
+		lastAllow.warned = true
+		if lastAllow.read {
+			log.Printf("allow list: %v; the list read last stays in force", err)
+		} else {
+			log.Printf("allow list: %v; only this computer is let in until it reads", err)
+		}
+	}
+	return lastAllow.list, false, !lastAllow.read
 }
 
 var warnedAllow sync.Map
 
-// allowPrefixes is the list in force, read; on says one is set. An entry
-// that doesn't read (a mistyped MAGPIE_ALLOW_IPS) lets nothing in and is
-// logged once: the list stays on, so a typo never opens magpie to every
-// address.
-func allowPrefixes() (ps []netip.Prefix, on bool) {
-	list, _ := AllowIPs()
+// allowPrefixes is the list in force, read; on says one is set, or that
+// settings.json holds one nobody knows (unknown), which lets in only this
+// computer. An entry that doesn't read (a mistyped MAGPIE_ALLOW_IPS) lets
+// nothing in and is logged once: the list stays on, so a typo never opens
+// magpie to every address.
+func allowPrefixes() (ps []netip.Prefix, on, unknown bool) {
+	list, _, unknown := allowList()
+	if unknown {
+		return nil, true, true
+	}
 	for _, e := range list {
 		p, err := settings.ParseAllowIP(e)
 		if err != nil {
@@ -58,7 +96,7 @@ func allowPrefixes() (ps []netip.Prefix, on bool) {
 		}
 		ps = append(ps, p)
 	}
-	return ps, len(list) > 0
+	return ps, len(list) > 0, false
 }
 
 // peerAddr is the address r's connection came from; false when
@@ -99,7 +137,12 @@ var ownAddr = func(a netip.Addr) bool {
 // AllowedFrom: a request from a may reach magpie under the allow list —
 // there is none, a is this computer's, or a is in it.
 func AllowedFrom(a netip.Addr) bool {
-	ps, on := allowPrefixes()
+	ps, on, _ := allowPrefixes()
+	return allowedIn(ps, on, a)
+}
+
+// allowedIn is AllowedFrom for the list ps (on: there is one).
+func allowedIn(ps []netip.Prefix, on bool, a netip.Addr) bool {
 	if !on || a.IsLoopback() {
 		return true
 	}
@@ -135,21 +178,29 @@ func KeepsOut(list []string, r *http.Request) (string, bool) {
 	return a.String(), !allowedListFrom(list, a)
 }
 
-// allowed: r may reach magpie under the allow list; it names r's address
-// when it may not.
-func allowed(r *http.Request) (string, bool) {
-	if _, on := allowPrefixes(); !on {
-		return "", true
+// allowed: r may reach magpie under the allow list; when it may not, it
+// names r's address and says why.
+func allowed(r *http.Request) (addr, why string, ok bool) {
+	ps, on, unknown := allowPrefixes()
+	if !on {
+		return "", "", true
 	}
 	a, ok := peerAddr(r)
 	if !ok {
-		return r.RemoteAddr, false
+		return r.RemoteAddr, notAllowed(r.RemoteAddr, unknown), false
 	}
-	return a.String(), AllowedFrom(a)
+	if allowedIn(ps, on, a) {
+		return a.String(), "", true
+	}
+	return a.String(), notAllowed(a.String(), unknown), false
 }
 
-// notAllowed says why a request from addr was refused.
-func notAllowed(addr string) string {
+// notAllowed says why a request from addr was refused: it isn't on the
+// list, or (unknown) settings.json, which holds the list, can't be read.
+func notAllowed(addr string, unknown bool) string {
+	if unknown {
+		return "magpie couldn't read its settings.json in " + settings.Dir() + ", which holds its allow list, so it answers only this computer until it can, and this request came from " + addr + ": repair that file, or set the list in " + AllowIPsEnv
+	}
 	return "magpie answers only the addresses on its allow list (" + AllowIPsEnv + ", or Settings → Network and sharing → Allowed addresses), and this request came from " + addr + ": add it there to let it in"
 }
 
@@ -157,9 +208,9 @@ func notAllowed(addr string) string {
 // 403, before anything else looks at it: the page `magpie web` serves.
 func AllowGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if addr, ok := allowed(r); !ok {
+		if addr, why, ok := allowed(r); !ok {
 			log.Printf("refused %s %s from %s: not on the allow list", r.Method, r.URL.Path, addr)
-			http.Error(w, notAllowed(addr), http.StatusForbidden)
+			http.Error(w, why, http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -169,11 +220,11 @@ func AllowGuard(next http.Handler) http.Handler {
 // refuseNotAllowed answers a gateway request from an address the allow
 // list leaves out, in the error shape agents show; true when it did.
 func refuseNotAllowed(w http.ResponseWriter, r *http.Request) bool {
-	addr, ok := allowed(r)
+	addr, why, ok := allowed(r)
 	if ok {
 		return false
 	}
 	log.Printf("refused %s %s from %s: not on the allow list", r.Method, r.URL.Path, addr)
-	writeError(w, provider.Chat, http.StatusForbidden, notAllowed(addr))
+	writeError(w, provider.Chat, http.StatusForbidden, why)
 	return true
 }

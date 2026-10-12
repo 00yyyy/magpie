@@ -1050,8 +1050,14 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			return
 		}
 		// the Settings page sends its own choices; how the agents are
-		// arranged is the Agents page's, and the window's size its own; both stay as they are
-		cur := settings.Load()
+		// arranged is the Agents page's, and the window's size its own; both stay as they are.
+		// Unreadable settings are never carried as the defaults (an empty
+		// allow list, every address let in): Save would refuse them too.
+		cur, err := settings.LoadChecked()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
 		var fields map[string]json.RawMessage
 		_ = json.Unmarshal(body, &fields)
 		// Older pages do not send fonts. An explicit null restores the
@@ -1696,7 +1702,11 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			fail(rw, fmt.Errorf("that allow list would shut out %s, the address this page is open from: add it first", addr))
 			return
 		}
-		s := settings.Load()
+		s, err := settings.LoadChecked()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
 		s.AllowIPs = list
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)

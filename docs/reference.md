@@ -599,8 +599,10 @@ enabled gateway key, and the refusal names the address it came from. This
 computer is always let in. The address is the connection's own, never a
 forwarding header, so behind a proxy or tunnel every client has the proxy's
 address: limit them at the proxy. A mistyped entry in `MAGPIE_ALLOW_IPS`
-lets nothing in rather than everything. `magpie web`'s page honours the same
-list.
+lets nothing in rather than everything. When settings.json can't be read, or
+doesn't parse and has no good backup, the list read last stays in force; if
+none was read since magpie started, only this computer is let in until the
+file is repaired. `magpie web`'s page honours the same list.
 
 **Usage → Overview → Gateway keys** groups calls by the client's key, never
 the provider's credential. **Usage → Requests** offers the same filter;

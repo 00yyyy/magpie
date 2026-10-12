@@ -5,10 +5,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -153,4 +155,85 @@ func TestKeepsOut(t *testing.T) {
 	if _, out := KeepsOut([]string{"10.0.0.0/8"}, r); out {
 		t.Error("loopback")
 	}
+}
+
+// settings.json that can't be read, or doesn't parse with no last good
+// generation, holds a list nobody knows, and is never taken for no list:
+// the list read last stays in force, and with none read since magpie
+// started, only this computer is let in, told why. No file is no list.
+func TestAllowListUnreadableSettings(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "0.0.0.0:3499")
+	t.Setenv(AllowIPsEnv, "")
+	forgetAllow := func() {
+		lastAllow.Lock()
+		lastAllow.list, lastAllow.read, lastAllow.warned = nil, false, false
+		lastAllow.Unlock()
+	}
+	forgetAllow()
+	t.Cleanup(forgetAllow)
+	secret, err := access.Update("add-key", access.Change{Name: "Laptop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := lanGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	check := func(name, from string, want int, says string) {
+		t.Helper()
+		r := httptest.NewRequest("POST", "/v1/messages", nil)
+		r.RemoteAddr = from
+		r.Header.Set("x-api-key", secret)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != want || !strings.Contains(w.Body.String(), says) {
+			t.Errorf("%s: from %s: %d %s, want %d saying %q", name, from, w.Code, w.Body.String(), want, says)
+		}
+	}
+	garble := func() {
+		t.Helper()
+		os.Remove(lastgood.Bak(settings.Path()))
+		if err := os.WriteFile(settings.Path(), []byte(`{"allowIPs": ["198.51.100.7"`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := settings.LoadChecked(); err == nil {
+			t.Fatal("the garbled settings.json read as good")
+		}
+	}
+
+	os.Remove(settings.Path())
+	check("no file", "203.0.113.9:5000", 200, "")
+
+	s := settings.Load()
+	s.AllowIPs = []string{"198.51.100.7"}
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	check("read", "203.0.113.9:5000", 403, "allow list")
+	check("read", "198.51.100.7:5000", 200, "")
+
+	// read once, then garbled: the list read stays
+	garble()
+	check("garbled after a read", "203.0.113.9:5000", 403, "allow list")
+	check("garbled after a read", "198.51.100.7:5000", 200, "")
+	check("garbled after a read", "127.0.0.1:5000", 200, "")
+	if l, _ := AllowIPs(); len(l) != 1 || l[0] != "198.51.100.7" {
+		t.Errorf("AllowIPs with the file garbled = %v, want the list read last", l)
+	}
+
+	// garbled before any read: only this computer
+	forgetAllow()
+	check("garbled, never read", "203.0.113.9:5000", 403, "settings.json")
+	check("garbled, never read", "198.51.100.7:5000", 403, "settings.json")
+	check("garbled, never read", "[2001:db8::9]:5000", 403, "settings.json")
+	check("garbled, never read", "127.0.0.1:5000", 200, "")
+	check("garbled, never read", "[::1]:5000", 200, "")
+
+	// the environment's list is judged as before
+	t.Setenv(AllowIPsEnv, "203.0.113.0/24")
+	check("env", "203.0.113.9:5000", 200, "")
+	check("env", "198.51.100.7:5000", 403, AllowIPsEnv)
+	t.Setenv(AllowIPsEnv, "")
+
+	// gone: no list, every address
+	os.Remove(settings.Path())
+	check("removed", "203.0.113.9:5000", 200, "")
 }

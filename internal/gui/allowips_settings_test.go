@@ -3,6 +3,7 @@ package gui
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -61,5 +62,40 @@ func TestAllowIPsSetting(t *testing.T) {
 	t.Setenv(gateway.AllowIPsEnv, "")
 	if rec := post("/api/settings/allowips", `{"ips":[]}`, here); rec.Code != http.StatusOK || len(settings.Load().AllowIPs) != 0 {
 		t.Fatalf("emptied: %d %v", rec.Code, settings.Load().AllowIPs)
+	}
+}
+
+// settings.json that doesn't parse, with no last good generation, holds an
+// allow list nobody knows: neither the Settings page's save nor the allow
+// list's own writes the defaults (no list, every address let in) over it.
+func TestAllowIPsUnreadableSettingsNotSavedOver(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	t.Setenv(gateway.AllowIPsEnv, "")
+	srv := Handler(nil, nil)
+	if err := os.MkdirAll(settings.Dir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	garbled := []byte(`{"allowIPs": ["203.0.113.7"`)
+	if err := os.WriteFile(settings.Path(), garbled, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ path, body string }{
+		{"/api/settings", `{"theme":"dark","lang":"en"}`},
+		{"/api/settings/allowips", `{"ips":["10.0.0.0/8"]}`},
+	} {
+		rec := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", c.path, strings.NewReader(c.body))
+		r.RemoteAddr = "127.0.0.1:50000"
+		srv.ServeHTTP(rec, r)
+		if rec.Code == http.StatusOK || !strings.Contains(rec.Body.String(), "could not read settings") {
+			t.Errorf("%s: %d %s, want refused", c.path, rec.Code, rec.Body)
+		}
+		if b, _ := os.ReadFile(settings.Path()); string(b) != string(garbled) {
+			t.Fatalf("%s wrote over the unreadable settings: %q", c.path, b)
+		}
 	}
 }
