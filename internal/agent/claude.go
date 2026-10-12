@@ -679,8 +679,12 @@ func claudeIn(at place) *Agent {
 			n = s.Compact()
 			// magpie's default gives way to an autoCompactWindow the user
 			// set in Claude Code (/autocompact, its settings), which the env
-			// would take precedence over; one typed in magpie doesn't (#876)
-			if s.CompactAt == 0 && claudeOwnCompact(path, main) {
+			// would take precedence over; one typed in magpie doesn't (#876).
+			// So does it to a window the user typed for the main model, on
+			// its group or its provider: Claude Code then runs to the window
+			// it is told (claudeContextEnv), as Codex is (provider.CompactFor,
+			// #1809)
+			if s.CompactAt == 0 && (claudeOwnCompact(path, main) || provider.WindowTyped(main)) {
 				n = 0
 			}
 		}

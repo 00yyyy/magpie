@@ -56,9 +56,10 @@ type Model struct {
 	// Output is the most tokens a reply may hold, when known.
 	Output int `json:",omitempty"`
 	// Compact is where the user has Codex compact a conversation on this
-	// model (#876), its own or its provider's (settings.ModelCompacts): the
-	// window it is told when Context is longer. 0 is none set, for the
-	// one for every model (settings.Compact).
+	// model (#876), its own or its provider's (settings.ModelCompacts), or
+	// Context itself when that is a window the user typed (#1809,
+	// provider.CompactFor): the window it is told when Context is longer.
+	// 0 is none set, for the one for every model (settings.Compact).
 	Compact int `json:",omitempty"`
 	// Plain, on a model of another magpie's list, is its name there alone
 	// (display_name), when Name is its label there, with that magpie's

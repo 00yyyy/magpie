@@ -833,7 +833,7 @@ func groupEntries(entries []Entry) []Entry {
 		}
 		ruledEntry(&e, g.Live(), ms, entries)
 		if g.Context > 0 {
-			e.Context = g.Context
+			e.Context, e.WindowSet = g.Context, true
 		} else if g.Context == ContextSmallest && smallest > 0 {
 			e.Context = smallest
 		}

@@ -581,7 +581,7 @@ func codexListed(shown []Entry, members func(id string) []Member, own bool) []ca
 			continue
 		}
 		m := catalog.Model{ID: e.ID, Name: labels[i], Efforts: e.Efforts, Images: e.Images || seen, Context: e.Context, AgentsV2: e.AgentsV2}
-		m.Compact = compactSet(s, e.ID, find)
+		m.Compact = CompactFor(s, e, find)
 		CodexTiers(&m, e, members)
 		ms = append(ms, m)
 	}
