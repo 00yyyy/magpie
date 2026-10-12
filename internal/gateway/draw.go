@@ -737,6 +737,8 @@ func (s *Server) sendWith(ctx context.Context, p provider.Provider, method, url,
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
+	// magpie's, or the agent's own where the provider passes it on (#1851)
+	stampUA(ctx, p, req.Header)
 	if p.IsRemoteMagpie() {
 		req.Header.Set("User-Agent", "magpie/"+Version)
 		passOnCaller(ctx, req)

@@ -3210,7 +3210,11 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
-	req.Header.Set("User-Agent", "magpie/"+Version)
+	// magpie's, or the agent's own where the provider is set to pass it
+	// on (#1851); a signed-in account's signing, a client the vendor
+	// serves (OpenCode's, Cline's, Kilo's) and the user's own header put
+	// theirs on after
+	req.Header.Set("User-Agent", userAgentFor(p, in.Get("User-Agent")))
 	if to == provider.Anthropic {
 		req.Header.Set("anthropic-version", "2023-06-01")
 		for _, h := range []string{"anthropic-version", "anthropic-beta"} {

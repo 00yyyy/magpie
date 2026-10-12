@@ -928,6 +928,8 @@ func (s *Server) remoteVideoContent(ctx context.Context, w http.ResponseWriter, 
 		writeError(w, provider.Chat, 502, err.Error())
 		return
 	}
+	// magpie's, or the agent's own where the provider passes it on (#1851)
+	stampUA(ctx, p, req.Header)
 	if p.IsRemoteMagpie() {
 		// vendors are told no caller
 		req.Header.Set("User-Agent", "magpie/"+Version)

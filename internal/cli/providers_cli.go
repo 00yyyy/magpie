@@ -31,11 +31,14 @@ const providerUsage = `usage:
   magpie provider <id>                    show one provider and its models
   magpie provider add <preset> <key>      add a preset vendor   e.g. magpie provider add deepseek sk-…
                                           again, it adds another (deepseek-2); k=v pairs too: id, name, header.X-Foo
-  magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, gemini, decide, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.token, models.url, search,
+  magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, gemini, decide, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.token, models.url, search, user-agent,
                                           access.key, access.secret (a Volcengine access key, or a Tencent Cloud SecretId and SecretKey, for its plan's windows)
   magpie provider set <id> k=v…           change a provider's settings, with the same k=v pairs as add;
                                           codex=as-sent sends Codex's Responses requests as Codex sent them
-                                          (a relay that checks they are Codex's own), codex=default fits them
+                                          (a relay that checks they are Codex's own), codex=default fits them;
+                                          user-agent=agent sends the User-Agent the agent gave (pi, opencode…)
+                                          in place of magpie's, for a plan that serves only agents it names;
+                                          user-agent=magpie, the default, sends magpie's
   magpie provider key <id> <key>          change the API key
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
   magpie provider fallback <id> <provider/model>…   where requests go when it's out of quota or down (none clears)
@@ -747,6 +750,13 @@ func showProvider(p provider.Provider) error {
 	if p.Searches {
 		kv("search", "by itself"+muted.Render("  a client's web search goes to it as sent"))
 	}
+	if p.PassUserAgent {
+		why := "  the User-Agent the agent gave, not magpie's"
+		if !p.PassesUserAgent() {
+			why = "  but magpie's: it goes as a client of " + p.Name + "'s own"
+		}
+		kv("user-agent", "agent's"+muted.Render(why))
+	}
 	if p.Unredacted {
 		why := "  local: Settings' redaction leaves its requests as written"
 		if !p.SkipsRedaction() {
@@ -964,6 +974,23 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			default:
 				return fmt.Errorf("codex=as-sent|default, not %q", v)
 			}
+		case "user-agent", "ua":
+			// agent: a request goes with the User-Agent the agent that
+			// sent it gave, for a coding plan that serves only agents it
+			// names (#1851); magpie: magpie's own, as by default. A
+			// header.User-Agent the user set stands over both
+			var on bool
+			switch strings.ToLower(v) {
+			case "agent", "pass", "yes", "on":
+				on = true
+			case "magpie", "default", "no", "off":
+			default:
+				return fmt.Errorf("user-agent=agent|magpie, not %q", v)
+			}
+			if on && p.Account != nil {
+				return fmt.Errorf("%s signs in as its own client, which sends the User-Agent it does; user-agent= is for a provider with an API key", p.Name)
+			}
+			p.PassUserAgent = on
 		case "search":
 			// yes: the vendor searches the web by itself, a web search a
 			// client offers going to it as it was sent (a relay in front of

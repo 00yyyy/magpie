@@ -207,6 +207,16 @@ type Provider struct {
 	// fitting, which a backend that isn't OpenAI's needs (#350).
 	CodexAsSent bool `json:"codexAsSent,omitempty"`
 
+	// PassUserAgent has a request go to the vendor with the User-Agent the
+	// agent that sent it gave (pi, opencode, Claude Code…), in place of
+	// magpie's own (#1851): a coding plan that serves only agents it names
+	// knows them by it. One the agent didn't give, or magpie's own
+	// requests, go as magpie. Off, the default, every request goes as
+	// magpie. Only a key+URL provider takes it: a signed-in account, a
+	// plugin's and one that goes as a client of its vendor's own keep the
+	// identity their signing gives (see PassesUserAgent).
+	PassUserAgent bool `json:"passUserAgent,omitempty"`
+
 	// PinUpstream, on the Cline API, has its DeepSeek models answered only
 	// by DeepSeek's own API (White Immortal on Discord): Cline routes a
 	// model through an AI gateway that may serve it from any host, and
@@ -833,6 +843,7 @@ func AddCopy(p Provider, from string) (string, error) {
 	p.Unlisted = p.Unlisted || src.Unlisted
 	p.Searches = p.Searches || src.Searches
 	p.Unredacted = p.Unredacted || src.Unredacted
+	p.PassUserAgent = p.PassUserAgent || src.PassUserAgent
 	if p.Website == "" {
 		p.Website = src.Website
 	}

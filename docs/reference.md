@@ -263,6 +263,19 @@ agent's; any other of yours is always sent. The beta of the agent's own
 sign-in (`oauth-2025-04-20`, which Claude Code signed in to claude.ai asks)
 never goes, as the sign-in never does; one you set yourself does.
 
+Requests go to a vendor with magpie's own User-Agent (`magpie/<version>`).
+A coding plan that serves only the agents it names knows them by theirs:
+`magpie provider set <id> user-agent=agent` (the editor's "Send the
+agent's own User-Agent") sends a key+URL provider the User-Agent the agent
+sent magpie, as it sent it, on every API (chat, Anthropic, Responses,
+Gemini, count_tokens, embeddings, images, videos). A request the agent
+sent without one, and magpie's own (its classifier's, the image tool's),
+still go as magpie. A `header.User-Agent` you set wins over both.
+`user-agent=magpie` turns it off again; off is the default. A signed-in
+account, a plugin's and a vendor whose own client magpie goes as
+(OpenCode, Cline, Kilo, another magpie) keep the User-Agent their sign-in
+sends, and don't take it.
+
 `magpie usage` also lists **upstream provider keys** to help check upstream bills.
 Each request records the fingerprint and saved name of the key that actually
 served it, including image calls and account/key failover. The CSV adds
