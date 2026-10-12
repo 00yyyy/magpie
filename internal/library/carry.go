@@ -235,6 +235,12 @@ func (b *Bundle) WithoutSecrets(secret func(string) bool) {
 	for i, s := range b.MCP {
 		c := *s
 		c.Env, c.Headers = blank(s.Env, secret), blank(s.Headers, secret)
+		// an OAuth app's secret is a key too; its client ID isn't
+		if s.OAuth != nil && s.OAuth.ClientSecret != "" {
+			a := *s.OAuth
+			a.ClientSecret = ""
+			c.OAuth = &a
+		}
 		b.MCP[i] = &c
 	}
 }
@@ -267,6 +273,12 @@ func (b *Bundle) WithSecrets(have *Bundle, secret func(string) bool) *Bundle {
 		i := slices.IndexFunc(have.MCP, func(h *Server) bool { return h.Name == s.Name })
 		if i >= 0 {
 			c.Env, c.Headers = filled(s.Env, have.MCP[i].Env, secret), filled(s.Headers, have.MCP[i].Headers, secret)
+			// the same app's secret, kept here
+			if h := have.MCP[i].OAuth; s.OAuth != nil && s.OAuth.ClientSecret == "" && h != nil && h.ClientID == s.OAuth.ClientID {
+				a := *s.OAuth
+				a.ClientSecret = h.ClientSecret
+				c.OAuth = &a
+			}
 		}
 		out.MCP = append(out.MCP, &c)
 	}

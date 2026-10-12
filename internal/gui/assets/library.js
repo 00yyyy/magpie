@@ -1665,6 +1665,7 @@
         // magpie's words in the reader's language, where it has them
         mcpSigning = { name, state: "failed", error: t(e.message) };
         draw();
+        ready?.failed?.(e.message);
       }
     }
     // followed with the dialog closed too, for the row to say it's signed in
@@ -1829,6 +1830,11 @@
   // refHint: how a value is read from a variable (#1250)
   const refHint = () => t("A value can name a variable, as {ref}: each agent is given it in its own way, so the token stays out of its settings", { ref: "${NAME}" });
 
+  // the start of mcpauth.ErrNoRegistration
+  const NO_REGISTRATION = "the server's sign-in doesn't let an app register itself";
+  // a server's own OAuth app, to tell a changed one: "" for none
+  const appOf = (x) => (x?.transport === "http" && x.oauth?.clientId ? JSON.stringify([x.oauth.clientId, x.oauth.clientSecret || "", x.oauth.callbackPort || 0]) : "");
+
   function editServer(s, prefill) {
     const all = mcpAgents();
     const d = prefill || (s ? structuredClone(s) : { name: "", transport: "stdio", command: "", args: [], env: {}, url: "", headers: {}, agents: all.map((a) => a.id) });
@@ -1844,7 +1850,46 @@
     let signBox = null; // the sign-in's, for its button to say it saves
     // a sign-in saves the form first only to sign in to another server than
     // the saved one; see ready
-    ready.saves = () => !s || d.name !== s.name || d.transport !== s.transport || d.url !== (s.url || "");
+    ready.saves = () => !s || d.name !== s.name || d.transport !== s.transport || d.url !== (s.url || "") || appOf(d) !== appOf(s);
+    // a server whose sign-in doesn't let magpie register itself (GitHub's,
+    // 新v学员 on Discord): the fields for the user's own app open
+    ready.failed = (msg) => {
+      if (!msg.startsWith(NO_REGISTRATION) || !appBox) return;
+      appOpen = true;
+      drawApp();
+      appBox.querySelector("input")?.focus();
+    };
+    let appOpen = !!d.oauth?.clientId, appBox = null, appHint = null;
+    // the user's own OAuth app, by Claude Code's names (--client-id,
+    // --client-secret, --callback-port)
+    function drawApp() {
+      appBox.replaceChildren();
+      const hint = appHint;
+      if (!appOpen) {
+        appBox.append(button(t("Use your own OAuth app"), "lib-addpair", () => { appOpen = true; drawApp(); appBox.querySelector("input")?.focus(); }));
+        if (hint) hint.textContent = t("For a server whose sign-in doesn't let magpie register itself, as GitHub's");
+        return;
+      }
+      const a = () => (d.oauth ||= { clientId: "", clientSecret: "", callbackPort: 0 });
+      const id = field2(d.oauth?.clientId, t("Client ID"), (v) => { a().clientId = v.trim(); signBox?.redraw(); });
+      const secret = field2(d.oauth?.clientSecret, t("Client secret"), (v) => { a().clientSecret = v.trim(); signBox?.redraw(); });
+      secret.type = "password";
+      const port = field2(d.oauth?.callbackPort || "", t("Callback port"), (v) => {
+        port.value = v.replace(/\D/g, "").slice(0, 5);
+        a().callbackPort = Number(port.value) || 0;
+        signBox?.redraw();
+        if (hint) hint.textContent = callback();
+      });
+      port.inputMode = "numeric";
+      port.classList.add("port");
+      for (const [i, l] of [[id, t("Client ID")], [secret, t("Client secret")], [port, t("Callback port")]]) i.setAttribute("aria-label", l);
+      const x = button("", "lib-x", () => { d.oauth = s?.oauth ? null : undefined; appOpen = false; drawApp(); signBox?.redraw(); });
+      x.append(svg("M4.5 4.5l7 7M11.5 4.5l-7 7", 11, 1.6));
+      x.title = t("Remove");
+      appBox.append(id, secret, port, x);
+      if (hint) hint.textContent = callback();
+    }
+    const callback = () => t("Made with its vendor (GitHub's under Settings › Developer settings › OAuth Apps), with {url} as its callback URL", { url: "http://127.0.0.1" + (d.oauth?.callbackPort ? ":" + d.oauth.callbackPort : "") + "/callback" });
     const name = field2(d.name, t("e.g. github"), (v) => { d.name = v.trim(); signBox?.redraw(); });
     ed.append(...field(t("Name"), name, t("Letters, digits, - and _ — what the agents call it")));
     const kindOf = () => segs([["stdio", t("Command")], ["http", "HTTP"], ["sse", "SSE"]], d.transport, (v) => { d.transport = v; draw(); });
@@ -1877,9 +1922,16 @@
         // the saved one, so a URL just changed (or a server just added) is
         // the one signed in to
         signBox = d.transport === "http" ? signInBox(s ? s.name : "", ready) : null;
-        if (signBox) g.append(...field(t("Sign-in"), signBox, t("For a server that asks you to sign in (OAuth): magpie signs in once, and every agent given it uses that sign-in")));
+        if (signBox) {
+          appBox = el("div", "lib-app");
+          const f = field(t("OAuth app"), appBox, " ");
+          appHint = f[1].querySelector(".hint");
+          g.append(...f);
+          g.append(...field(t("Sign-in"), signBox, t("For a server that asks you to sign in (OAuth): magpie signs in once, and every agent given it uses that sign-in")));
+        } else appBox = null;
       }
       slot.append(g);
+      if (appBox) drawApp();
       // its own icon while it runs as it did; another way of running is another server
       head.firstChild.replaceWith(mark(s && d.transport === s.transport ? s.icon : "", d.transport === "stdio" ? GLYPH.cmd : GLYPH.web));
       drawAgents();
@@ -1898,7 +1950,7 @@
     const send = async () => {
       const body = { old: s ? s.name : "", server: { name: d.name, transport: d.transport, agents: d.agents } };
       if (d.transport === "stdio") Object.assign(body.server, { command: d.command, args: d.args, env: d.env });
-      else Object.assign(body.server, { url: d.url, headers: d.headers });
+      else Object.assign(body.server, { url: d.url, headers: d.headers, oauth: d.transport === "http" && d.oauth?.clientId ? d.oauth : null });
       take(await api("library/servers/save", body));
       const was = s;
       s = lib.servers.find((x) => x.name === d.name) || s;

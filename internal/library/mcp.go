@@ -41,6 +41,22 @@ type Server struct {
 	// names the server gives them, written in each agent's own way where
 	// it has one (mcp_tools_off.go)
 	DisabledTools []string `json:"disabledTools,omitempty"`
+	// OAuth is an OAuth app of the user's own that magpie signs in to the
+	// server as, for one whose sign-in doesn't let magpie register itself
+	// (GitHub's, 新v学员 on Discord). It is magpie's alone: the agents are
+	// given the server as before.
+	OAuth *OAuthApp `json:"oauth,omitempty"`
+}
+
+// OAuthApp is an OAuth app made with a server's vendor, by the names
+// Claude Code gives one (--client-id, --client-secret, --callback-port;
+// "oauth": {"clientId", "callbackPort"}).
+type OAuthApp struct {
+	ClientID     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret,omitempty"`
+	// CallbackPort is the port of the callback URL the app was made with;
+	// 0 for one made with http://127.0.0.1/callback, which takes any
+	CallbackPort int `json:"callbackPort,omitempty"`
 }
 
 // Remote reports whether the server is reached by URL.
@@ -82,6 +98,23 @@ func (s *Server) check() error {
 		s.Command, s.Args, s.Env = "", nil, nil
 	default:
 		return fmt.Errorf("%s: unknown transport %q", s.Name, s.Transport)
+	}
+	// magpie signs in only to a streamable HTTP server
+	if s.Transport != "http" {
+		s.OAuth = nil
+	} else if s.OAuth != nil {
+		a := *s.OAuth
+		a.ClientID, a.ClientSecret = strings.TrimSpace(a.ClientID), strings.TrimSpace(a.ClientSecret)
+		if a.CallbackPort < 0 || a.CallbackPort > 65535 {
+			return fmt.Errorf("%s: the callback port has to be from 1 to 65535", s.Name)
+		}
+		s.OAuth = &a
+		if a.ClientID == "" {
+			if a.ClientSecret != "" || a.CallbackPort != 0 {
+				return fmt.Errorf("%s: the OAuth app needs its client ID", s.Name)
+			}
+			s.OAuth = nil
+		}
 	}
 	for k := range s.Env {
 		if strings.TrimSpace(k) == "" {

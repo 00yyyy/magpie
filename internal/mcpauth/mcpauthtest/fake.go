@@ -57,6 +57,9 @@ type Fake struct {
 	// authorization server does a client it doesn't list: 403, a JSON
 	// content type and the bare body "Forbidden" (#1619)
 	RefuseRegistration bool
+	// NoRegistration leaves the registration endpoint out of the metadata,
+	// as GitHub's does: only an app made beforehand (AddApp) signs in
+	NoRegistration bool
 
 	refuse  bool // RefuseTokens
 	codes   map[string]codeGrant
@@ -100,6 +103,9 @@ func New(t *testing.T) *Fake {
 			"issuer": issuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token",
 			"registration_endpoint": issuer + "/register", "code_challenge_methods_supported": []string{"S256"},
 			"token_endpoint_auth_methods_supported": methods(),
+		}
+		if f.NoRegistration {
+			delete(m, "registration_endpoint")
 		}
 		if f.OpenID {
 			m["scopes_supported"] = []string{"openid", "email", "offline_access", "profile"}
@@ -332,6 +338,18 @@ func (f *Fake) RefuseTokens() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.refuse = true
+}
+
+// AddApp makes an OAuth app the user signs in as, made with the server's
+// vendor rather than registered by magpie: with a secret, it gives it in
+// the token request's form.
+func (f *Fake) AddApp(id, secret string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.methods[id] = "none"
+	if secret != "" {
+		f.methods[id], f.secrets[id] = "client_secret_post", secret
+	}
 }
 
 // ForgetRefresh makes every refresh token given out so far unusable.
