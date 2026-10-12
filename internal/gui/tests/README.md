@@ -999,6 +999,13 @@ the count and the sum stay whole and the page never scrolls sideways; in
 Chromium and WebKit, in every language. `MAGPIE_ASSETS` pointed at older
 assets shows it failing.
 
+`usage-loops.test.cjs` checks that Usage says, per model, how many of its
+replies magpie ended stuck in a loop (#1858): "2 looped" beside the model's
+failures in the Overview's row and the Requests ranking, the ranking's
+"Other" adding up those it holds, and nothing for a model with none. At 360
+and 1100 wide the page never scrolls sideways; in Chromium and WebKit, in
+every language. `MAGPIE_ASSETS` pointed at older assets shows it failing.
+
 `usage-keys-fold.test.cjs` checks the Usage page's card of a provider with
 many keys, each its balance (361 on Discord: an OpenRouter card listed every
 key's): the first three are in sight, the rest behind "Show N more keys" at

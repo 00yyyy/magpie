@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // usageHalfLife is how fast the tokens a key served stop counting against
@@ -209,7 +210,7 @@ const (
 
 // loopErrType is the usage log's ErrType for a reply ended for looping
 // (#1359), told apart from what vendors call their errors.
-const loopErrType = "reply_loop"
+const loopErrType = usage.LoopErrType
 
 // proxyDown is the error Go gives when the proxy itself can't be reached,
 // over HTTP (proxyconnect) or SOCKS (socks connect).

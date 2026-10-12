@@ -338,9 +338,12 @@ type Totals struct {
 	// Calls are the requests, Errors those the agent got an error for, and
 	// Retried those answered after a try that failed first (Record.Tries):
 	// a try handed on is in neither count, but its tokens are in the sums
-	Calls      int `json:"calls"`
-	Errors     int `json:"errors"`
-	Retried    int `json:"retried,omitempty"`
+	Calls   int `json:"calls"`
+	Errors  int `json:"errors"`
+	Retried int `json:"retried,omitempty"`
+	// Loops are those of Errors magpie ended for looping (LoopErrType):
+	// a model's count of them says how often it got stuck (#1858)
+	Loops      int `json:"loops,omitempty"`
 	Input      int `json:"input"`
 	Output     int `json:"output"`
 	CacheRead  int `json:"cache_read"`
@@ -546,6 +549,11 @@ func (t *Totals) add(r Record, price *catalog.Price) {
 	t.Cost += r.CostAt(*price)
 }
 
+// LoopErrType is a record's ErrType for a reply magpie ended because the
+// model was stuck in a loop (#1359), told apart from what vendors call
+// their errors.
+const LoopErrType = "reply_loop"
+
 // count counts r as the request it ends: failed, answered on a retry, or
 // answered; a try handed on to another is no request of its own.
 func (t *Totals) count(r Record) {
@@ -556,6 +564,9 @@ func (t *Totals) count(r Record) {
 	switch {
 	case r.Failed():
 		t.Errors++
+		if r.ErrType == LoopErrType {
+			t.Loops++
+		}
 	case r.Tries > 1:
 		t.Retried++
 	}

@@ -17025,6 +17025,8 @@ function renderUsage() {
       if (id === "usageAgents" && g.id === "magpie") who.firstChild.append(ownBadge());
       else if (g.own?.calls) sub.push(ownCalls(g.own.calls));
       if (g.errors) sub.push(t("{n} failed", { n: g.errors }));
+      // of those, the replies magpie ended stuck in a loop (#1858)
+      if (g.loops) sub.push(t("{n} looped", { n: g.loops }));
       if (g.retried) sub.push(t("{n} answered on a retry", { n: g.retried }));
       // how long the streamed replies took to begin, and how fast they
       // wrote after (#196)
@@ -17826,6 +17828,8 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
     const l2 = el("div", "rk-b");
     more.forEach((m, i) => l2.append(...(i ? [" · ", m] : [m])));
     if (x.errors) l2.append(" · ", Object.assign(el("span", "rk-bad"), { textContent: t("{n} failed", { n: x.errors }) }));
+    // of those, the replies magpie ended stuck in a loop (#1858)
+    if (x.loops) l2.append(" · ", Object.assign(el("span", "rk-bad rk-loop"), { textContent: t("{n} looped", { n: ledNum(x.loops) }), title: t("Replies magpie ended because the model kept repeating itself") }));
     b.append(l1, bar, l2);
     if (!plain) b.onclick = () => choose(x);
     b.onpointerenter = () => box.chart?.emphasize?.(x.id);
@@ -17835,7 +17839,7 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
   for (const x of top) box.append(one(x, x.color));
   if (rest.length) {
     const tot = rest.reduce((acc, x) => {
-      for (const k of ["calls", "errors", "input", "output", "cache_read", "cache_write", "cost", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n", "floor_out", "floor_ms", "floor_n"]) acc[k] = (acc[k] || 0) + (x[k] || 0);
+      for (const k of ["calls", "errors", "loops", "input", "output", "cache_read", "cache_write", "cost", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n", "floor_out", "floor_ms", "floor_n"]) acc[k] = (acc[k] || 0) + (x[k] || 0);
       return acc;
     }, { id: "\0other", name: t("Other ({n})", { n: rest.length }) });
     box.append(one(tot, "var(--faint)", true));
