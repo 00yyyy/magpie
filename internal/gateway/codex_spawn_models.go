@@ -27,8 +27,11 @@ import (
 // subagents' tasks for a ChatGPT account alone (#619).
 
 // spawnMore heads the models spawnAgentModels adds to spawn_agent's
-// description; one that has it already is left as it is.
-const spawnMore = "More models that may be set as `model` (Codex names only five above; magpie serves these too):"
+// description; one that has it already is left as it is. It goes upstream
+// with the rest of the prompt, to OpenAI too when the lead is a ChatGPT
+// account, so it stays neutral: it names neither magpie nor Codex's limit,
+// and says nothing of who the agent is.
+const spawnMore = "More models that may be set as `model`:"
 
 // spawnMost is the most models spawnAgentModels adds, to keep the tool's
 // description in bounds.

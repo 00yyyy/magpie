@@ -93,6 +93,14 @@ func TestSpawnAgentNamesEveryModel(t *testing.T) {
 		// Codex's own five kept, and its text after the list
 		head, tail, _ := strings.Cut(desc, spawnMore)
 		list, rest, ok := strings.Cut(tail, "\n        Spawn a sub-agent")
+		// what magpie adds goes upstream in the prompt, to OpenAI too:
+		// it names neither magpie nor Codex and its limit
+		added := desc[len(head) : len(desc)-len(rest)]
+		for _, w := range []string{"magpie", "Magpie", "Codex", "five"} {
+			if strings.Contains(added, w) {
+				t.Fatalf("the added text names %q:\n%s", w, added)
+			}
+		}
 		if !ok || !strings.Contains(head, "- `gpt-6.1-sol`") || !strings.Contains(head, "- `gpt-5.6-sol`") ||
 			!strings.HasPrefix(rest, " for a well-scoped task.") {
 			t.Fatalf("description:\n%s", desc)
