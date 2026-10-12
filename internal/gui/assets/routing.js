@@ -3070,6 +3070,16 @@
         } else {
           if (cur && routes.has(cur.id) && !rp) cur = routes.get(cur.id);
           if (pinned && routes.has(pinned.id)) pinned = routes.get(pinned.id);
+          // a request picked (in the list, or the tray panel's row that
+          // opened the window) goes back to live once it has left the list,
+          // as a filter that leaves it out does: the stage stayed on one
+          // provider's request for hours while every request since went to
+          // another (#1389, Creat55)
+          else if (pinned && !day) {
+            pinned = null;
+            cur = newest();
+            if (cur) { sync(true); say(affWhy(cur, true) || ruleWhy(cur, true) || firstWhy(cur)); }
+          }
           if (!pinned && !rp) {
             cur = newest();
             if (cur) sync();
@@ -4806,11 +4816,15 @@
 
   // ---- the stage: agents → magpie → providers ----
   // Three a side at most, each kept where it is while it stays: one that
-  // comes takes the place of the one heard of longest ago. A request plays
-  // as a dot in its agent's colour: to magpie, on to the account it was
-  // routed to, waiting there while that answers; a try that failed turns
-  // red and comes back for the next, and the answer flies home green (red
-  // when nobody could answer). Still, with reduced motion or the tab hidden.
+  // comes takes the place of the one heard of longest ago. On the right a
+  // place is a provider, naming the account its latest try went to: a place
+  // an account let one provider, its requests trying account after account,
+  // fill all three, and the providers other sessions used were left off
+  // (#1389, Creat55). A request plays as a dot in its agent's colour: to
+  // magpie, on to the provider it was routed to, waiting there while that
+  // answers; a try that failed turns red and comes back for the next, and
+  // the answer flies home green (red when nobody could answer). Still,
+  // with reduced motion or the tab hidden.
   const P_SIDE = 3;
   const pStage = el("div", "pr-stage");
   const pWires = document.createElementNS(NS, "svg"), pSky = document.createElementNS(NS, "svg");
@@ -4821,15 +4835,16 @@
   pStage.append(pWires, pFrom, pHub, pTo, pSky);
   pStage.setAttribute("aria-hidden", "true");
   let pAg = [], pDst = [];          // the keys on the stage, in their places
-  const pNodes = new Map();         // "a:<agent>" / "d:<seat>" → { node, wire }
+  const pNodes = new Map();         // "a:<agent>" / "d:<provider>" → { node, wire }
   const pPlays = new Set();         // the requests flying
   let pTrips = [], pWait = [], pRaf = 0;
-  // pSeat is where a try went: a provider, and the account or key there
+  // pSeat is where a try went: its place, the provider, and the account
+  // or key there
   function pSeat(r, tr) {
     const w = tr && tried(r, tr);
     if (!w) return { key: r.provider || "?", name: r.provider || "?", sub: "" };
     const sub = w.kind === "provider" ? "" : w.who || "";
-    return { key: `${w.provider}|${sub}`, name: w.name || w.provider, sub };
+    return { key: w.provider || r.provider || "?", name: w.name || w.provider, sub };
   }
   // pPlace keeps those on the stage that are still wanted where they are,
   // the newcomers taking the free places
@@ -4852,11 +4867,12 @@
       const tr = r.tries[r.tries.length - 1];
       if (tr) { const s = pSeat(r, tr); if (!dst.has(s.key) && dst.size < P_SIDE) dst.set(s.key, s); }
     }
-    // each account on the stage says how its latest try there went
+    // each provider on the stage names the account its latest try went
+    // to, and says how that went
     for (const r of recent) {
       for (const x of r.tries.slice().reverse()) {
-        const d = dst.get(pSeat(r, x).key);
-        if (d && !d.how) d.how = !x.done ? "wait" : tryOk(x) ? "ok" : "bad";
+        const s = pSeat(r, x), d = dst.get(s.key);
+        if (d && !d.how) { d.how = !x.done ? "wait" : tryOk(x) ? "ok" : "bad"; d.sub = s.sub; }
       }
     }
     pAg = pPlace(pAg, ags.slice(0, P_SIDE));
@@ -4964,10 +4980,15 @@
     dot.style.setProperty("--agent", hueOf(r.agent));
     pSky.appendChild(dot);
     const home = () => pNodes.get("a:" + r.agent);
+    // rt: the route as the gateway has it now — or, dropped from the 60
+    // kept while it flew, over: its dot goes, as nothing more will be heard
+    // of it. Waiting on it held the dot and its place for three minutes
+    const rt = () => routes.get(id) || { ...r, done: true, gone: true };
     try {
       await pFly(dot, home(), false, 420);
       for (let i = 0; ; i++) {
-        await pUntil(() => { r = routes.get(id) || r; return r.tries.length > i || r.done; });
+        await pUntil(() => { r = rt(); return r.tries.length > i || r.done; });
+        if (r.gone) break;
         const tr = r.tries[i];
         if (!tr) break;
         const k = "d:" + pSeat(r, tr).key;
@@ -4977,15 +4998,17 @@
         // it waits at the account while that answers
         if (n) n.lit++;
         dot.classList.add("wait");
-        await pUntil(() => { r = routes.get(id) || r; return r.tries[i]?.done || r.done; });
+        await pUntil(() => { r = rt(); return r.tries[i]?.done || r.done; });
         dot.classList.remove("wait");
         if (n && !--n.lit) n.wire.classList.remove("on");
+        if (r.gone) break;
         const t2 = r.tries[i];
         if (t2 && !tryOk(t2)) {
           dot.classList.add("bad");
           await pRest(260);
           await pFly(dot, n, true, 360);
-          await pUntil(() => { r = routes.get(id) || r; return r.tries.length > i + 1 || r.done; });
+          await pUntil(() => { r = rt(); return r.tries.length > i + 1 || r.done; });
+          if (r.gone) break;
           if (r.tries.length > i + 1) { dot.classList.remove("bad"); continue; }
           await pFly(dot, home(), true, 420); // nobody left: the error goes home
           break;
