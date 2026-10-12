@@ -734,11 +734,11 @@ func (h *host) togglePanelNow() {
 // click, the way Omarchy's own drop-downs sit: a Wayland window can't place
 // itself, so Hyprland is given a rule for it (see omarchy.PlacePanel).
 func (h *host) placePanel() {
-	x, y, room, ok := omarchy.PanelAt(h.panelW())
+	mon, x, y, room, ok := omarchy.PanelAt(h.panelW())
 	if !ok {
 		return
 	}
-	if err := omarchy.PlacePanel(panelTitle, x, y); err != nil {
+	if err := omarchy.PlacePanel(panelTitle, mon, x, y); err != nil {
 		log.Println("hyprland:", err)
 		return
 	}
