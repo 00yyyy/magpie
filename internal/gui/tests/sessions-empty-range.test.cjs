@@ -10,11 +10,11 @@ const old = "2026-01-01T12:00:00Z";
 const session = { agent: "opencode", id: "old-chat", name: "OpenCode", title: "Historical conversation", cwd: "/work", start: old, last: old, models: [], input: 0, output: 0, cost: 0, resume: "", path: "/test/opencode.db#old-chat" };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const lang of ["en", "zh"]) {
-    test(`${engine} ${lang}: empty Today offers existing history without changing the agent`, async (t) => {
+  for (const [lang, all, width] of [["en", "All", 900], ["zh", "全部", 900], ["zh-TW", "全部", 900], ["ja", "すべて", 900], ["de", "Alle", 420]]) {
+    test(`${engine} ${lang} ${width}px: empty Today offers existing history without changing the agent`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
-      const page = await browser.newPage();
+      const page = await browser.newPage({ viewport: { width, height: 760 } });
       page.setDefaultTimeout(8000);
       await page.route("**/*", async (route) => {
         const url = new URL(route.request().url());
@@ -38,7 +38,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#sessStats .sess-show-history").click();
       await page.getByText("Historical conversation", { exact: true }).waitFor();
       assert.equal(await page.locator('#sessAgent [data-agent="opencode"]').getAttribute("aria-pressed"), "true");
-      assert.equal(await page.locator("#sessRange .opt.on").innerText(), lang === "zh" ? "全部" : "All");
+      assert.equal(await page.locator("#sessRange .opt.on").innerText(), all);
     });
   }
 }

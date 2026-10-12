@@ -227,7 +227,7 @@ func SearchSession(ctx context.Context, s Session, needle string) (Hit, bool, er
 		return Hit{}, false, ErrNoTranscript
 	}
 	raw := rawNeedle(needle)
-	if !mayHold(ctx, s.Path, raw) {
+	if linesFile(s) && !mayHold(ctx, s.Path, raw) {
 		return Hit{}, false, nil
 	}
 	var keep func([]byte) bool
@@ -255,6 +255,20 @@ func SearchSession(ctx context.Context, s Session, needle string) (Hit, bool, er
 		err = ctx.Err()
 	}
 	return m.hit, m.found, err
+}
+
+// linesFile says whether s.Path is the file its conversation is written in,
+// so that one without the needle's bytes can be passed over unread. An
+// OpenCode session's is its info (the messages are elsewhere) or a database,
+// and a Cursor chat's a database too, whose newest pages are in its -wal.
+func linesFile(s Session) bool {
+	switch s.Agent {
+	case "opencode":
+		return false
+	case "cursor":
+		return strings.HasSuffix(s.Path, ".jsonl")
+	}
+	return true
 }
 
 // SearchGateway finds needle in what magpie recorded of a gateway session,

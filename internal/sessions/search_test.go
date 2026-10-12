@@ -69,7 +69,7 @@ func TestSearchSessionCutsALongPart(t *testing.T) {
 }
 
 func TestSearchSessionWithoutATranscript(t *testing.T) {
-	if _, _, err := SearchSession(context.Background(), Session{Agent: "cursor", Path: "x"}, "a"); err != ErrNoTranscript {
+	if _, _, err := SearchSession(context.Background(), Session{Agent: "gemini", Path: "x"}, "a"); err != ErrNoTranscript {
 		t.Fatalf("err = %v", err)
 	}
 }

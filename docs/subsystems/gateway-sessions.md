@@ -158,7 +158,10 @@ made one (`sessions.NeedleOf`); under 2 runes it searches nothing. Native
 sessions of an agent whose files are read (`HasTranscript`) are read from their
 own file (`SearchSession`), first through a byte prefilter (`mayHold`: the
 query's longest word, ASCII case folded without a copy, in 1 MiB chunks;
-skipped for zstd files and for queries JSON may escape), then decoded only to
+skipped for zstd files, for queries JSON may escape, and for a session whose
+path isn't the file its conversation is in, `linesFile`: an OpenCode session's
+info file or database, a Cursor chat's SQLite store, whose newest pages sit in
+its `-wal`; `search_db_test.go`), then decoded only to
 the first match in what the user or the model said. Of a Claude or Codex file
 only the lines holding every word of the query are decoded (`readTranscriptOf`,
 a part being one line's); Pi's tree is read whole. Without that, one 1.3 GB

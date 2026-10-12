@@ -266,6 +266,10 @@ func cursorTranscript(path string, add func(bool, Part) bool) error {
 		return ErrNoTranscript
 	}
 	for _, m := range cursorMessages(db, meta.Root) {
+		if m.Role == "system" {
+			// the agent's own prompt, not said in the conversation
+			continue
+		}
 		if m.Role == "user" {
 			typed, _ := cursorTyped(cursorParts(m.Content))
 			if !emit(m.Role, typed, time.Time{}) {
