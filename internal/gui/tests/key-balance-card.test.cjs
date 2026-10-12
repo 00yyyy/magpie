@@ -120,9 +120,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(cc.bal, (await balanceWord(page)) + "$63.78");
           assert.equal(cc.of, c.focus);
           assert.equal(await page.evaluate(() => [...document.querySelectorAll("#panelQuota .pq-gn")].filter((x) => /command code/i.test(x.textContent)).length), 1, "Command Code is named once");
-          // a menu bar cell for the balance opens the plan's card
+          // a menu bar cell for the balance opens the plan's card. Watched
+          // as it happens, not polled for: under reduced motion the flash
+          // lasts .01ms, its class gone at the next frame, and a poll on a
+          // busy WebKit missed it (a timeout, most runs at --test-concurrency=4)
+          await page.evaluate(() => {
+            window.flashed = false;
+            new MutationObserver(() => {
+              if (document.querySelector('#panelQuota .pq-card[data-card="commandcode"]')?.classList.contains("flash")) window.flashed = true;
+            }).observe(document.querySelector("#panelQuota"), { subtree: true, attributes: true, attributeFilter: ["class"] });
+          });
           await page.evaluate((id) => panelQuotaFocus(id), c.focus);
-          await page.waitForFunction(() => document.querySelector('#panelQuota .pq-card[data-card="commandcode"]')?.classList.contains("flash"));
+          await page.waitForFunction(() => window.flashed);
           assert.deepEqual(await page.evaluate(sideways), [], "nothing runs off sideways at 380px");
           await page.close();
         }
