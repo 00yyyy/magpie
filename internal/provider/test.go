@@ -310,7 +310,7 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 		// by is not one magpie sends them as
 		url, body := tinyDrawing(q, model)
 		r := probe(ctx, q, proto, url, []byte(body), model, drawWait)
-		if !r.OK && (r.Status == 404 || r.Status == 405) {
+		if !r.OK && (r.Status == 404 || r.Status == 405 || r.Status == 400 && catalog.PointsToChat(r.Error)) {
 			url, body := tiny(q, proto, model)
 			if c := probe(ctx, q, proto, url, q.tested(body), model, testWait); c.OK {
 				return c
@@ -322,7 +322,18 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 	if client != "" {
 		body = asClient(client, proto, body)
 	}
-	return probe(ctx, q, proto, url, q.tested(body), model, testWait)
+	r := probe(ctx, q, proto, url, q.tested(body), model, testWait)
+	if !r.OK && client == "" && proto == Chat && r.Status == 400 && catalog.DrawsID(model) && catalog.PointsToImagesAPI(r.Error) {
+		// an image model its name doesn't place on the images API
+		// (agnes-image-2.5-flash, #1837), which the vendor turns away in
+		// chat naming that API: the gateway draws with it there, so it is
+		// tested there
+		url, body := tinyDrawing(q, model)
+		if d := probe(ctx, q, proto, url, []byte(body), model, drawWait); d.OK {
+			return d
+		}
+	}
+	return r
 }
 
 // keyFor is p using the first key on that works with proto: one made for

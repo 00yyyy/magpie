@@ -574,3 +574,68 @@ func TestGrokVendorFailuresAreSaid(t *testing.T) {
 		}
 	}
 }
+
+// #1837: Agnes answers its image model on chat completions with 400 "is an
+// image model. Use /v1/images/generations" (the reporter's words, as omp
+// showed them). Its name reads like gemini's -flash image models, which
+// chat, so magpie asks chat first; the vendor's refusal sends it to the
+// images API, where it draws. The other way round, a refusal on the images
+// API naming chat completions sends it to chat.
+func TestDrawGoesWhereTheVendorPointsIt(t *testing.T) {
+	fresh(t)
+	b64 := base64.StdEncoding.EncodeToString(pngBytes)
+	var mu sync.Mutex
+	var paths []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		chatOnly := strings.Contains(string(body), "chat-drawer")
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			if !chatOnly {
+				w.WriteHeader(400)
+				io.WriteString(w, `{"error":{"message":"Model agnes-image-2.5-flash is an image model. Use /v1/images/generations","type":"invalid_request_error"}}`)
+				return
+			}
+			io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok","images":[{"type":"image_url","image_url":{"url":"data:image/png;base64,`+b64+`"}}]}}]}`)
+		case "/v1/images/generations":
+			if chatOnly {
+				w.WriteHeader(400)
+				io.WriteString(w, `{"error":{"message":"seedream-chat-drawer draws on /v1/chat/completions"}}`)
+				return
+			}
+			io.WriteString(w, `{"created":1,"data":[{"b64_json":"`+b64+`"}]}`)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(up.Close)
+	if err := provider.Save(provider.Provider{ID: "agnes", Name: "Agnes", Chat: up.URL + "/v1", Key: "key", Models: []string{"agnes-image-2.5-flash", "seedream-chat-drawer"}}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	for _, tc := range []struct {
+		model string
+		want  []string
+	}{
+		{"agnes/agnes-image-2.5-flash", []string{"/v1/chat/completions", "/v1/images/generations"}},
+		{"agnes/seedream-chat-drawer", []string{"/v1/images/generations", "/v1/chat/completions"}},
+	} {
+		mu.Lock()
+		paths = nil
+		mu.Unlock()
+		code, a, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"`+tc.model+`","prompt":"a magpie"}`)
+		if code != 200 || len(a.Data) != 1 {
+			t.Fatalf("%s: %d %s", tc.model, code, raw)
+		}
+		mu.Lock()
+		got := slices.Clone(paths)
+		mu.Unlock()
+		if !slices.Equal(got, tc.want) {
+			t.Fatalf("%s asked %v, want %v", tc.model, got, tc.want)
+		}
+	}
+}

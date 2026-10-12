@@ -677,16 +677,33 @@ func (s *Server) draw(ctx context.Context, p provider.Provider, model string, d 
 	}
 	via := viaFor(p, model)
 	out, code, err := s.drawOn(ctx, p, model, d, via)
-	if err != nil && (code == 404 || code == 405) && via != viaGemini {
+	if err != nil && via != viaGemini && (code == 404 || code == 405 || pointsAway(via, code, err)) {
 		other := viaChat
 		if via == viaChat {
 			other = viaImages
 		}
-		if o, c, e := s.drawOn(ctx, p, model, d, other); e == nil {
-			return o, c, nil
+		// the vendor named the other API: its answer there is the one to
+		// tell, not the refusal that sent the request on
+		if o, c, e := s.drawOn(ctx, p, model, d, other); e == nil || pointsAway(via, code, err) {
+			return o, c, e
 		}
 	}
 	return out, code, err
+}
+
+// pointsAway is whether a vendor turned a drawing away on one API with
+// words that send it to the other: a 400 on chat completions saying "Use
+// /v1/images/generations" (Agnes, #1837), or one on the images API naming
+// chat completions. The model is then asked there, as when the API it was
+// asked on isn't served at all (404, 405).
+func pointsAway(via drawVia, code int, err error) bool {
+	if code != http.StatusBadRequest && code != http.StatusUnprocessableEntity {
+		return false
+	}
+	if via == viaChat {
+		return catalog.PointsToImagesAPI(err.Error())
+	}
+	return catalog.PointsToChat(err.Error())
 }
 
 func (s *Server) drawOn(ctx context.Context, p provider.Provider, model string, d drawing, via drawVia) (drawn, int, error) {
