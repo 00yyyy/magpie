@@ -478,3 +478,48 @@ func RenameKey(id, keyRef, name string) error {
 	}
 	return Save(*p)
 }
+
+// ReplaceKey puts a new value in place of one of a provider's keys (#1869:
+// a key rotated at the vendor or the relay). The key keeps its name, its
+// place, its protocol and weight, whether it is on, and what was set for
+// it by its fingerprint: the models it serves, its proxy, its concurrency.
+// It returns the key's fingerprint before and after; the same value pasted
+// again changes nothing and returns the same one twice.
+func ReplaceKey(id, keyRef, key string) (was, now string, err error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", "", errors.New("paste the key's new value")
+	}
+	p, err := Find(id)
+	if err != nil {
+		return "", "", err
+	}
+	i, ok := findKey(p, keyRef)
+	if !ok {
+		return "", "", fmt.Errorf("%s has no such key", p.Name)
+	}
+	now = keyID(key)
+	if now == keyRef {
+		return keyRef, now, nil
+	}
+	if p.HasKey(key) {
+		return "", "", fmt.Errorf("%s already has this key", p.Name)
+	}
+	if i < 0 {
+		p.Key = key
+	} else {
+		p.Keys[i].Key = key
+	}
+	moveKeyed(p.AccountModels, keyRef, now)
+	moveKeyed(p.AccountProxies, keyRef, now)
+	moveKeyed(p.AccountConcurrency, keyRef, now)
+	return keyRef, now, Save(*p)
+}
+
+// moveKeyed moves m's entry for the key was, if it has one, to now.
+func moveKeyed[V any](m map[string]V, was, now string) {
+	if v, ok := m[was]; ok {
+		delete(m, was)
+		m[now] = v
+	}
+}

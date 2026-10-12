@@ -188,6 +188,7 @@ const CROSS = "M4.5 4.5l7 7M11.5 4.5l-7 7";
 const PLUS = "M8 3.5v9M3.5 8h9";
 const OUT = "M6.5 3.5h-3v9h9v-3M9 3.5h3.5V7M12.5 3.5 7.5 8.5";
 const COPY_ICON = "M5.5 5.5V3.5h7v7h-2M3.5 5.5h7v7h-7z";
+const PENCIL = "M3.5 12.5l.5-2.5 6.8-6.8a1.2 1.2 0 0 1 1.7 0l.3.3a1.2 1.2 0 0 1 0 1.7L6 12z M9.8 4.2l2 2";
 const PUZZLE = "M6.2 2.8h2.3a1.3 1.3 0 1 1 2.5 0h2.2V5a1.3 1.3 0 1 0 0 2.6v5.6H3V7.6a1.3 1.3 0 1 1 0-2.6V2.8z";
 
 // A brand icon: colour logos are images, mono logos take the text colour.
@@ -13550,6 +13551,33 @@ function renderKeyAccounts(p) {
     };
     row.append(dot, name);
     if (k.name) row.append(el("span", "plan mono", k.masked));
+    // a key rotated at the vendor (#1869): its new value pasted in place,
+    // keeping its name, place and settings; a rest it had is lifted
+    const edit = el("button", "key-edit");
+    edit.title = t("Paste a new value for this key; its name, place and settings stay");
+    edit.setAttribute("aria-label", t("Change key"));
+    edit.append(svg(PENCIL, 12, 1.4));
+    edit.onclick = (e) => {
+      e.stopPropagation();
+      if (row.querySelector(".key-value-in")) return;
+      const i = input("", t("Paste the key's new value"), "password");
+      i.className = "rename-in key-value-in";
+      let over = false;
+      const done = (save) => {
+        if (over) return;
+        over = true;
+        if (save && i.value.trim()) accountAction("keys/replace", { id: p.id, ref: k.id, key: i.value }, t("{key} now uses its new value", { key: k.name || k.masked }));
+        else renderProviders();
+      };
+      i.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === "Enter") done(true); else if (ev.key === "Escape") done(false); };
+      i.onblur = () => done(!!i.value.trim());
+      const shown = row.querySelector(".plan.mono");
+      if (shown) shown.replaceWith(i);
+      else name.after(i);
+      i.focus({ preventScroll: true });
+    };
+    // a double-click on the row is the shortcut, away from its controls
+    row.ondblclick = (e) => { if (!e.target.closest("button, input, textarea, .acct-models")) edit.onclick(e); };
     // each key copies its own (#1480): with several, the editor has no
     // API key field to show one in
     const cp = el("button", "copy");
@@ -13559,7 +13587,7 @@ function renderKeyAccounts(p) {
       e.stopPropagation();
       try { copy((await api("provider/key", { id: p.id, account: k.id })).key, k.name || k.masked, cp); } catch (err) { status(err.message, "err"); }
     };
-    row.append(cp);
+    row.append(cp, edit);
     // one the gateway passes over after a failure: why, and until when, on
     // a line of its own under the key's, so the row's controls stay in reach
     let restLine = null;

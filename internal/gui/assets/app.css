@@ -2081,8 +2081,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 @media (max-width: 520px) {
   .connect { grid-template-columns: 48px minmax(0, 1fr); column-gap: 8px; padding-left: 10px; padding-right: 10px; }
 }
-.copy { width: 22px; height: 22px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); flex: none; transition: background .12s, color .12s; }
-.copy:hover { background: var(--pill-hover); color: var(--fg); }
+/* Change key (#1869) looks like the copy button beside it, but isn't one */
+.copy, .key-edit { width: 22px; height: 22px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); flex: none; transition: background .12s, color .12s; }
+.copy:hover, .key-edit:hover { background: var(--pill-hover); color: var(--fg); }
 .copy.done { color: var(--green); background: var(--green-soft); animation: copy-pop .36s var(--ease); }
 @keyframes copy-pop { 0% { transform: scale(.55); } 55% { transform: scale(1.16); } 100% { transform: scale(1); } }
 /* the snippet's language, and beside it the shell it is for (#1514);

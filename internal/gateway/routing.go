@@ -434,6 +434,23 @@ func (s *Server) Unrest(key string) bool {
 	return ok
 }
 
+// UnrestAll lifts every rest of what rests by key: its own and each of its
+// models' (restID, key/model). A key whose value was replaced (#1869) is
+// asked again for all of them. It returns how many it lifted.
+func (s *Server) UnrestAll(key string) int {
+	restingUntil.Lock()
+	defer restingUntil.Unlock()
+	n := 0
+	for k := range restingUntil.m {
+		if k == key || strings.HasPrefix(k, key+"/") {
+			delete(restingUntil.m, k)
+			delete(restingUntil.note, k)
+			n++
+		}
+	}
+	return n
+}
+
 // verifyHeld is the error to give again, without asking, for a candidate
 // its vendor refused a moment ago until the account is verified.
 func verifyHeld(key string) (string, bool) {

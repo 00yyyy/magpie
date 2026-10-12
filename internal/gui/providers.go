@@ -1900,6 +1900,8 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			moved, err = agent.Reseat(func() (err error) { removed, err = provider.RemoveKeys(in.ID, in.Refs); return err })
 		case "rename":
 			err = provider.RenameKey(in.ID, in.Ref, in.Name)
+		case "replace":
+			err = replaceKey(in.ID, in.Ref, in.Key)
 		case "on", "off":
 			moved, err = agent.Reseat(func() error { return provider.SetKeyOn(in.ID, in.Ref, r.PathValue("action") == "on") })
 		default:
