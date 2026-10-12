@@ -21,6 +21,7 @@ type aBlockProbe struct {
 	ToolUseID string          `json:"tool_use_id"`
 	Text      string          `json:"text"`
 	Content   json.RawMessage `json:"content"`
+	IsError   bool            `json:"is_error"`
 }
 
 // aMessageProbe is one message of it.
@@ -161,7 +162,7 @@ func TestMessagesUnansweredCallGetsSyntheticResult(t *testing.T) {
 	if !anthropicValid(msgs) {
 		t.Fatal("sequence fails Anthropic's tool exchange validation")
 	}
-	if got := msgs[2].Content[0]; got.Type != "tool_result" || got.ToolUseID != "A" || string(got.Content) != `"`+wantInterrupted+`"` {
+	if got := msgs[2].Content[0]; got.Type != "tool_result" || got.ToolUseID != "A" || string(got.Content) != `"`+wantInterrupted+`"` || !got.IsError {
 		t.Fatalf("the synthetic result is not what the other paths make: %+v %s", got, got.Content)
 	}
 	if got := msgs[2].Content[1]; got.Type != "text" || got.Text != "go on" {
@@ -323,5 +324,22 @@ func TestMessagesUpstreamAnswersABrokenToolExchange(t *testing.T) {
 	}
 	if strings.Contains(string(f.got), `"tool_use_id":"call_gone"`) {
 		t.Fatalf("the orphan result reached the upstream as one: %s", f.got)
+	}
+}
+
+// A call answered twice keeps its first answer, and only that one goes
+// out: Anthropic takes one tool_result per tool_use.
+func TestMessagesSecondAnswerDropped(t *testing.T) {
+	r := &Request{Messages: []Message{
+		{Role: "user", Parts: []Part{{Kind: Text, Text: "run it"}}},
+		{Role: "assistant", Parts: []Part{call("A")}},
+		{Role: "user", Parts: []Part{result("A", "first"), result("A", "again")}},
+	}}
+	trace, msgs := messagesTrace(t, r)
+	if want := "user assistant(A) user[A]"; trace != want {
+		t.Fatalf("trace = %q, want %q", trace, want)
+	}
+	if got := string(msgs[2].Content[0].Content); got != `"first"` {
+		t.Fatalf("the first answer didn't stand: %s", got)
 	}
 }

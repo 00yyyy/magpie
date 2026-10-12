@@ -218,8 +218,13 @@ func TestZedRequestShapes(t *testing.T) {
 func TestZedToolResultSaysIsError(t *testing.T) {
 	req := &Request{Model: "m", MaxTokens: 10, Messages: []Message{
 		{Role: "user", Parts: []Part{{Kind: Text, Text: "run echo hi"}}},
-		{Role: "assistant", Parts: []Part{{Kind: ToolCall, ID: "toolu_1", Name: "bash", Args: json.RawMessage(`{"command":"echo hi","n":12345678901234567890}`)}}},
-		{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: "toolu_1", Text: "hi"}, {Kind: ToolResult, CallID: "toolu_2", Text: "no", IsError: true}}},
+		{Role: "assistant", Parts: []Part{
+			{Kind: ToolCall, ID: "toolu_1", Name: "bash", Args: json.RawMessage(`{"command":"echo hi","n":12345678901234567890}`)},
+			{Kind: ToolCall, ID: "toolu_2", Name: "bash", Args: json.RawMessage(`{"command":"false"}`)},
+		}},
+		// toolu_9 answers no call the request has: it goes as the text it
+		// said (pairToolBlocks), as the cloud refuses it as Anthropic does
+		{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: "toolu_1", Text: "hi"}, {Kind: ToolResult, CallID: "toolu_2", Text: "no", IsError: true}, {Kind: ToolResult, CallID: "toolu_9", Text: "late"}}},
 	}}
 	raw, _, err := zedRequest(req, "anthropic", "claude-sonnet-5-5")
 	if err != nil {
@@ -254,13 +259,10 @@ func TestZedToolResultSaysIsError(t *testing.T) {
 	if !bytes.Contains(raw, []byte(`12345678901234567890`)) {
 		t.Errorf("a tool input number changed: %s", raw)
 	}
-	// toolu_2's result answers no call in the request, so it goes out as
-	// the text it said (pairToolBlocks), where the cloud refuses a result
-	// with no call as Anthropic does; the one real result keeps is_error
-	if len(errs) != 1 || errs[0] != false {
+	if len(errs) != 2 || errs[0] != false || errs[1] != true {
 		t.Errorf("is_error: %v in %s", errs, raw)
 	}
-	if !slices.Contains(texts, "no") {
+	if !slices.Contains(texts, "late") {
 		t.Errorf("what the lost result said is not kept: %v in %s", texts, raw)
 	}
 }
