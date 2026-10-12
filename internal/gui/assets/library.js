@@ -41,6 +41,8 @@
     person: "M8 3a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z M3.5 13.5c.6-2.4 2.3-3.6 4.5-3.6s3.9 1.2 4.5 3.6",
     back: "m9.5 4.5-3 3.5 3 3.5",
     hook: "M10.5 2.5v6.5a3 3 0 0 1-6 0V7.5 M3 9l1.5-1.5L6 9",
+    // a clock with an arrow going back round it, as macOS draws backups
+    backup: "M3.2 8a4.8 4.8 0 1 0 1.4-3.4 M2.8 2.6v2.4h2.4 M8 5.3V8l1.9 1.2",
   };
 
   const tilde = (p) => (lib?.home && p?.startsWith(lib.home) ? "~" + p.slice(lib.home.length) : p || "");
@@ -695,7 +697,13 @@
     more.append(glyph(GLYPH.folder, "lib-mini"), el("span", "", t("Library folder")));
     if (lib) more.title = tilde(lib.dir);
     else more.disabled = true;
-    acts.append(more);
+    // magpie's backups beside it, on every tab: at the foot of a long
+    // page they were hard to find (Dade on Discord: 备份在最底部)
+    const back = button("", "lib-backups", () => lib && reveal(lib.backups));
+    back.append(glyph(GLYPH.backup, "lib-mini"), el("span", "", t("Backups")));
+    if (lib) back.title = t("magpie keeps a copy of every file before it writes it.") + "\n" + tilde(lib.backups);
+    else back.disabled = true;
+    acts.append(more, back);
     head.append(acts);
     return head;
   }
@@ -729,12 +737,6 @@
     else renderSkills(body);
     page.append(body);
     for (const n of body.querySelectorAll(".row-head .note")) n.title = n.textContent;
-    const foot = el("p", "lib-foot");
-    foot.append(el("span", "", t("magpie keeps a copy of every file before it writes it.") + " "));
-    const b = el("button", "lib-link", t("Backups"));
-    b.onclick = () => reveal(lib.backups);
-    foot.append(b);
-    page.append(foot);
     for (const f of fits.splice(0)) f();
     page.scrollTop = top;
     syncLists(); // a long list's rows where the view is, before it's painted
@@ -3665,7 +3667,7 @@
     const linked = skills.filter((s) => s.kind === "folder").length, kept = n - linked;
     const projects = (lib.projects || []).filter((p) => names.some((x) => p.skills?.[x]?.length)).length;
     const where = [];
-    if (kept) where.push(t("{n} folders are moved to magpie's backups (Backups, at the foot of the Library), not deleted.", { n: kept }));
+    if (kept) where.push(t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept }));
     if (linked) where.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
     confirmRemoveEvery("skills", names, t("Remove all {n} skills?", { n }), [
       takenFrom(skills),
@@ -3975,7 +3977,7 @@
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.up), el("b", "", t("Replace your changes to {name}?", { name: s.name })));
     ed.append(head);
-    ed.append(el("p", "lib-confirm", t("You changed {name} here since it was fetched from GitHub. Updating puts GitHub's version in its place. Yours is kept in magpie's backups (Backups, at the foot of the Library).", { name: s.name })));
+    ed.append(el("p", "lib-confirm", t("You changed {name} here since it was fetched from GitHub. Updating puts GitHub's version in its place. Yours is kept in magpie's backups (Backups, at the top of the Library).", { name: s.name })));
     const bar = el("div", "bar");
     const go = button(t("Update"), "primary", async () => {
       go.disabled = true;
