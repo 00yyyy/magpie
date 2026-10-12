@@ -21438,7 +21438,13 @@ function renderTrayUsage(s, keep) {
     pill.classList.remove("busy");
     paint();
     if (!pill.isConnected) return;
-    const cards = (quotas || []).filter((q) => !q.error && (q.windows?.length || q.balance));
+    // the Usage page's cards (keyCards): a key's plan and its balance are
+    // one, not two rows of one name ticked together (#1658, MizuIro-H). A
+    // balance left a card of its own (a stale stand-in) whose id another
+    // row has already is left out: the menu bar shows the first card of an
+    // id, so its row could only tick the other.
+    const cards = keyCards((quotas || []).filter((q) => !q.error && (q.windows?.length || q.balance)))
+      .filter((q, i, all) => all.findIndex((c) => trayCardID(c) === trayCardID(q)) === i);
     const opts = [{ v: "", name: "Off", note: "" }];
     for (const q of cards) {
       // a subscription with several accounts: the one in use, whichever
