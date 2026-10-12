@@ -69,7 +69,7 @@ const labelLayout = (scope) => [...document.querySelectorAll(scope + " .ag-kv")]
   const label = r.querySelector(".ag-k"), value = r.querySelector(".ag-v"), range = document.createRange();
   range.selectNodeContents(label);
   const lb = label.getBoundingClientRect(), vb = value.getBoundingClientRect();
-  return { label: label.textContent, lines: range.getClientRects().length, labelWidth: lb.width, labelBottom: lb.bottom, valueLeft: vb.left, valueTop: vb.top };
+  return { label: label.textContent, lines: range.getClientRects().length, labelWidth: lb.width, labelRight: lb.right, labelBottom: lb.bottom, valueLeft: vb.left, valueTop: vb.top };
 });
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -147,6 +147,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.ok(wide.every((r) => r.lines === 1), `a wide label wrapped: ${JSON.stringify(wide)}`);
       assert.ok(wide.every((r) => Math.abs(r.labelWidth - wide[0].labelWidth) < 1), `label columns differ: ${JSON.stringify(wide)}`);
       assert.ok(wide.every((r) => Math.abs(r.valueLeft - wide[0].valueLeft) < 1), `value columns differ: ${JSON.stringify(wide)}`);
+      // the line over each row runs on from the label to the value, unbroken
+      assert.ok(wide.every((r) => Math.abs(r.valueLeft - r.labelRight) < 1), `a gap between a label and its value: ${JSON.stringify(wide)}`);
       assert.ok(wide[0].labelWidth > 112, `the label column stayed fixed: ${JSON.stringify(wide)}`);
 
       await page.setViewportSize({ width: 560, height: 720 });
