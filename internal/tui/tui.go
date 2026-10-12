@@ -448,8 +448,13 @@ func (m *model) openProfiles() {
 		return
 	}
 	var items []agent.Option
+	detected := agent.Detected()
 	for _, n := range profile.Names(ps) {
-		items = append(items, agent.Option{Value: n, Note: profile.LongSummary(ps[n])})
+		note := profile.LongSummary(ps[n])
+		if profile.InUse(ps[n], detected, nil) {
+			note = strings.TrimSuffix("in use · "+note, " · ")
+		}
+		items = append(items, agent.Option{Value: n, Note: note})
 	}
 	m.pk = picker{
 		crumbs: []string{"profiles"},

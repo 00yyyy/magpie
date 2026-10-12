@@ -584,8 +584,14 @@ func profiles(args []string) error {
 			fmt.Println(muted.Render("no profiles yet · magpie save <name>"))
 			return nil
 		}
+		detected := agent.Detected()
 		for _, n := range profile.Names(ps) {
-			fmt.Printf("  %s  %s\n", bold.Render(n), muted.Render(profile.LongSummary(ps[n])))
+			// ✓ the one the setup is now (superhtoooth on X)
+			mark := " "
+			if profile.InUse(ps[n], detected, nil) {
+				mark = green.Render("✓")
+			}
+			fmt.Printf("%s %s  %s\n", mark, bold.Render(n), muted.Render(profile.LongSummary(ps[n])))
 		}
 		return nil
 	case "save":

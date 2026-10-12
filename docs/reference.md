@@ -76,7 +76,9 @@ line; agents connected to magpie lose it when it quits.
   (`magpie visible <agent> --only-picked`, back with `--show-new`). A
   model asked for by name still works either way.
 - **Profiles.** Snapshot every agent's settings under a name and switch all of
-  them back in one move.
+  them back in one move. The profile in use, the one applying would change
+  nothing, is ticked, the tray panel's Profiles button shows its name, and
+  `magpie profiles` marks it ✓.
 - **Real logos, no framework.** Plain HTML over the system webview; brand
   icons from [lobehub/icons](https://github.com/lobehub/lobe-icons).
 

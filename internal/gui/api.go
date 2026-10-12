@@ -235,6 +235,10 @@ type profileJSON struct {
 	// Agents is what it holds, by agent, to be read before it is applied
 	// (#467); a value that reads as a key or a token is left out
 	Agents []profile.Group `json:"agents"`
+	// InUse: the setup is this profile now, applying it would change
+	// nothing (profile.InUse); the page marks it so (superhtoooth on X:
+	// nothing said which profile was in use)
+	InUse bool `json:"inUse,omitempty"`
 }
 
 type profileLibraryJSON struct {
@@ -1860,11 +1864,14 @@ func state() stateJSON {
 	for _, a := range agent.Clients() {
 		s.Clients = append(s.Clients, clientJSON{ID: a.ID, Name: a.Name, Icon: a.Icon})
 	}
-	for _, a := range agent.Detected() {
+	detected := agent.Detected()
+	now := make(map[string]map[string]string, len(detected))
+	for _, a := range detected {
 		if a.Follow != nil {
 			_ = a.Follow()
 		}
 		vals := a.Values()
+		now[a.ID] = vals
 		aj := agentJSON{ID: a.ID, Name: a.Name, Icon: a.Icon, Path: tilde(a.Path), Fields: agentFields(a, vals)}
 		aj.Models = agentModelCount(a, aj.Fields)
 		aj.Menu = a.ListsModels
@@ -1893,7 +1900,7 @@ func state() stateJSON {
 	}
 	if ps, err := profile.Load(); err == nil {
 		for _, n := range profile.Names(ps) {
-			pj := profileJSON{Name: n, Summary: profile.Summary(ps[n]), Agents: profile.Details(ps[n])}
+			pj := profileJSON{Name: n, Summary: profile.Summary(ps[n]), Agents: profile.Details(ps[n]), InUse: profile.InUse(ps[n], detected, now)}
 			if l := ps[n].Library; l != nil {
 				servers, skills := l.On()
 				pj.Library = &profileLibraryJSON{Servers: servers, Skills: skills, Instructions: l.GivesInstructions()}

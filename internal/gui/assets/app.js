@@ -626,14 +626,28 @@ function renderProfiles() {
   $(".profiles > .chip-input")?.remove(); // a name field open goes with the list it was for
   $(".profiles").classList.remove("naming", "detailed");
   $("#save").textContent = t("＋ Save current");
-  $("#profN").textContent = state.profiles.length || "";
+  // the panel's button names the profile in use, as a pop-up button shows
+  // what is picked, else how many there are (superhtoooth on X: it read
+  // 方案 1, 方案 2, a count taken for the name the profile was saved under,
+  // and nothing said which one was in use)
+  const cur = state.profiles.find((p) => p.inUse);
+  const n = $("#profN");
+  n.textContent = cur ? cur.name : state.profiles.length || "";
+  n.classList.toggle("cur", !!cur);
+  n.title = cur ? t("In use") : "";
   if (!state.profiles.length) chips.append(el("span", "hint", t("none yet · save the setup to switch back in one click")));
   for (const p of state.profiles) {
     const c = el("button", "chip");
     c._profile = p.name;
     if (profilePending.has(p.name)) c.classList.add("pending");
     const lib = profileLibrary(p.library);
-    c.title = [p.summary, lib].filter(Boolean).join("\n");
+    c.title = [p.inUse && t("In use"), p.summary, lib].filter(Boolean).join("\n");
+    // the one the setup is now, ticked as a menu ticks the item in effect
+    if (p.inUse) {
+      c.classList.add("cur");
+      c.setAttribute("aria-current", "true");
+      c.append(el("span", "cur-tick", "✓"));
+    }
     c.append(el("span", "", p.name));
     if (lib) c.append(el("span", "lib"));
     // the setup as it is now, saved over this profile; it, and ×, on a
@@ -774,7 +788,9 @@ function profileDetail(p, footed) {
     closeProfileDetail();
     chip?.focus({ preventScroll: true });
   };
-  head.append(el("span", "pd-name", p.name), apply, close);
+  head.append(el("span", "pd-name", p.name));
+  if (p.inUse) head.append(el("span", "pd-cur", t("In use")));
+  head.append(apply, close);
   if (!footed) d.append(head);
   const groups = p.agents || [];
   if (!groups.length) d.append(el("div", "pd-none", t("No agent settings saved")));

@@ -1566,6 +1566,7 @@ body.panel .agent-more { justify-content: flex-start; gap: 6px; padding: 9px 14p
    them over the list, upward from it ------------------------------------------ */
 .prof-btn { display: inline-flex; align-items: center; gap: 4px; margin-left: -7px; }
 .prof-btn em { font-style: normal; color: var(--faint); font-variant-numeric: tabular-nums; }
+.prof-btn em.cur { color: var(--fg); max-width: 14em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .prof-btn[aria-expanded="true"] { color: var(--fg); background: var(--pill-hover); }
 body.panel:not([data-ptab="agents"]) .prof-btn { display: none; }
 body.panel .foot .status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1752,6 +1753,8 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
   transition: border-color .12s, background .12s, color .12s;
 }
 .chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.chip .cur-tick { margin: 0 4px 0 -2px; font-size: 11px; font-weight: 600; color: var(--accent); flex: none; }
+.pd-cur { flex: none; font-size: 11.5px; color: var(--accent); }
 .chip .lib { width: 5px; height: 5px; margin: 0 2px 0 4px; border-radius: 50%; background: var(--accent); opacity: .7; flex: none; }
 .chip .x { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1; opacity: 0; transition: opacity .12s; }
 .chip:hover .x { opacity: .6; }
