@@ -1198,6 +1198,10 @@ type responsesEncoder struct {
 	output   []any
 	col      collector
 	named    map[string]nsTool // the request's namespaced tools
+	// call is the open function_call item's id and name, kept here: the
+	// collector's last part isn't it once a hidden thinking block (signed
+	// with no text, or redacted) has come after the call (#1786)
+	call Part
 }
 
 // callTo names the tool a function_call item is to as the client knows it:
@@ -1317,7 +1321,7 @@ func (e *responsesEncoder) closeAs(sealed json.RawMessage) {
 		if args == "" {
 			args = "{}"
 		}
-		p := e.col.last(ToolCall)
+		p := e.call
 		if q := e.named[p.Name]; !q.Search && !q.Custom {
 			e.send("response.function_call_arguments.done", callTo(map[string]any{"item_id": e.itemID, "output_index": e.item, "call_id": p.ID, "arguments": args}, p.Name, e.named))
 		}
@@ -1397,9 +1401,10 @@ func (e *responsesEncoder) event(ev Event) {
 			ev.ID = "call_" + newID()
 		}
 		// Open (and so close the previous item) before recording this call:
-		// closeItem reads the call ID from e.col.last(ToolCall).
+		// closeItem reads the previous call's id and name from e.call.
 		item := callTo(map[string]any{"type": "function_call", "call_id": ev.ID, "arguments": ""}, ev.Name, e.named)
 		e.openItem(ToolCall, itemPrefix(item), item)
+		e.call = Part{Kind: ToolCall, ID: ev.ID, Name: ev.Name}
 		e.col.add(ev)
 		return
 	case KToolArgs:
@@ -1407,7 +1412,7 @@ func (e *responsesEncoder) event(ev Event) {
 			e.text.WriteString(ev.Text)
 			// a custom tool's input is whole only once its arguments are:
 			// it goes in the item when that is done
-			if !e.named[e.col.last(ToolCall).Name].Custom {
+			if !e.named[e.call.Name].Custom {
 				e.send("response.function_call_arguments.delta", map[string]any{"item_id": e.itemID, "output_index": e.item, "delta": ev.Text})
 			}
 		}
