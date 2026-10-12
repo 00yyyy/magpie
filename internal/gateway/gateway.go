@@ -1920,6 +1920,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			i--
 			continue
 		}
+		if i < len(cands)-1 {
+			if _, _, ok := quotaHeld(cands[i:]); ok {
+				// every key left is out of its allowance, resting until it
+				// is back: none is asked, and the agent is told so at once
+				// (#1772)
+				cands = cands[:i+1]
+			}
+		}
 		last := i == len(cands)-1
 		// the last one's failure is held too when an earlier one failed,
 		// for its allowance running out to be told as that one's error
@@ -2100,10 +2108,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			t.imageProvider = c.p.ID
 			t.Tries = append(t.Tries, Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Fixed: fixed, Fast: fast, Start: began})
 		})
-		held := false     // answered as its vendor did a moment ago, without asking
-		var queued int64  // ms it waited for a slot of its key's or account's
-		var laneErr error // turned away by its key's or account's queue
-		at := &wireAt{}   // the level a translated request was built at
+		held := false          // answered as its vendor did a moment ago, without asking
+		var heldBack time.Time // when the first of those held out of their allowance is back
+		var queued int64       // ms it waited for a slot of its key's or account's
+		var laneErr error      // turned away by its key's or account's queue
+		at := &wireAt{}        // the level a translated request was built at
 		// the models Copilot's Auto picked for it, where from, and which
 		// were refused (#256)
 		autoPicked := func() []provider.AutoPick { return nil }
@@ -2113,6 +2122,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// just refused it
 			held, call.Status, call.Error = true, http.StatusForbidden, said
 			writeError(hw, from, call.Status, said)
+		} else if rested, back, ok := quotaHeld(cands[i:]); ok && last {
+			// it rests out of its allowance, and so does every key that
+			// was left (#1772: four Ollama Cloud keys out for the week,
+			// each asked again, and refused, on every request): its
+			// refusal is given again without asking, with when the first
+			// of them is back as Retry-After, for an agent that waits as
+			// told to ask then rather than at once
+			msg := fmt.Sprintf("%s (out of its allowance: not asked again before %s)", rested.said, back.Local().Format("15:04"))
+			held, heldBack, call.Status, call.Error = true, back, rested.Status, c.p.Name+": "+msg
+			writeError(hw, from, call.Status, msg)
 		} else {
 			// a stream that fails before anything is said is let go at
 			// once (hw.stop), not read on until the vendor hangs up
@@ -2665,6 +2684,23 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				skipped = append(skipped, c.label()+": "+call.Error, pick.label()+": used one of its resets by itself ("+out.Text()+")")
 				cands = append(cands[:len(cands):len(cands)], pick)
 				continue
+			}
+		}
+		if last && !held && !hw.passing && hw.failed() && c.p.Account == nil && quotaStatus(hw.code()) && (try.Fail == failQuota || try.Fail == failCredit || failure(hw.code(), hw.errBody()) == failQuota || failure(hw.code(), hw.errBody()) == failCredit) {
+			// the last key left is out of its allowance: it rests as the
+			// ones before it did, for the next request to be answered
+			// from the rests until the first of them is back (#1772)
+			rest := s.restAfterMarked(c, hw.code(), hw.header, hw.errBody(), hw.sharedPool)
+			try.Fail, try.Rest = rest.Why, &rest
+		}
+		if !hw.passing && hw.code() == http.StatusTooManyRequests && hw.header.Get("Retry-After") == "" {
+			// the vendor said nothing of when: the agent is told when
+			// magpie asks again, the first of those it rested back
+			if heldBack.IsZero() {
+				heldBack, _ = soonestBack(cands[:i+1])
+			}
+			if wait := time.Until(heldBack); wait > 0 {
+				w.Header().Set("Retry-After", strconv.Itoa(int((wait+time.Second-1)/time.Second)))
 			}
 		}
 		if hw.refused && !hw.passing {

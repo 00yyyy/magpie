@@ -56,6 +56,9 @@ const providerUsage = `usage:
                                           past either a request is turned away with a 429 (0: no bound)
   magpie provider rpm <id> [n|off]        how many requests each account or key sends the vendor in any minute;
                                           one more waits for room, up to 2 minutes, then is turned away with a 429
+  magpie provider quota-rest <id> [30m|6h|7d|default]
+                                          how long a key sits out once the vendor says it is out of its allowance
+                                          without saying when it is back (default: 15 minutes; at most 8 days)
   magpie provider listed <id> yes|no      no: its models serve only through routing groups, not in the list
   magpie provider off|on <id>             switch it off (kept, but no agent or request uses it), or on again
   magpie provider test <id> [--as codex|claude-code] [model…]
@@ -540,6 +543,8 @@ func providerCmd(args []string) error {
 		return queueCmd(rest)
 	case "rpm":
 		return rpmCmd(rest)
+	case "quota-rest":
+		return quotaRestCmd(rest)
 	case "listed":
 		// no: the provider's models leave the list agents see and serve
 		// only through the routing groups they are in
@@ -1513,6 +1518,71 @@ func rpmCmd(rest []string) error {
 		fmt.Printf("%s · each account or key: no limit on requests a minute\n", p.Name)
 	}
 	return nil
+}
+
+// quotaRestCmd shows, or sets, how long a provider's keys sit out once the
+// vendor says one is out of its allowance without saying when it is back
+// (#1772: Ollama Cloud's weekly limit, asked again every 15 minutes).
+func quotaRestCmd(rest []string) error {
+	if len(rest) < 1 || len(rest) > 2 {
+		return fmt.Errorf("magpie provider quota-rest <id> [30m|6h|7d|default]")
+	}
+	p, err := provider.Find(rest[0])
+	if err != nil {
+		return err
+	}
+	if len(rest) > 1 {
+		minutes, err := restMinutes(rest[1])
+		if err != nil {
+			return err
+		}
+		if err := provider.SetQuotaRest(p.ID, minutes); err != nil {
+			return err
+		}
+		if p, err = provider.Find(p.ID); err != nil {
+			return err
+		}
+	}
+	if d := p.QuotaRestFor(); d > 0 {
+		fmt.Printf("%s · a key out of its allowance, with no word of when it is back, sits out %s\n", p.Name, restWords(d))
+	} else {
+		fmt.Printf("%s · a key out of its allowance, with no word of when it is back, sits out 15 minutes (magpie's own)\n", p.Name)
+	}
+	return nil
+}
+
+// restMinutes reads a rest as quotaRestCmd takes it: default (0), a
+// number of minutes, a Go duration (90m, 6h) or a number of days (7d).
+func restMinutes(s string) (int, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "default", "off", "none", "-", "0":
+		return 0, nil
+	}
+	if n, err := strconv.Atoi(s); err == nil {
+		return n, nil
+	}
+	if days, ok := strings.CutSuffix(s, "d"); ok {
+		if n, err := strconv.Atoi(days); err == nil {
+			return n * 24 * 60, nil
+		}
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d < time.Minute {
+		return 0, fmt.Errorf("a rest is minutes, or as 30m, 6h or 7d, or default, not %q", s)
+	}
+	return int(d / time.Minute), nil
+}
+
+// restWords is a rest as a person says it: 7 days, 6 hours, 90 minutes.
+func restWords(d time.Duration) string {
+	switch {
+	case d%(24*time.Hour) == 0:
+		return plural(int(d/(24*time.Hour)), "day")
+	case d%time.Hour == 0:
+		return plural(int(d/time.Hour), "hour")
+	}
+	return plural(int(d/time.Minute), "minute")
 }
 
 // printMoved says which agents a change moved off models it stopped

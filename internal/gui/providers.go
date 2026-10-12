@@ -1313,6 +1313,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if keepRate && old != nil {
 					in.PriceRate = old.PriceRate
 				}
+				// how long its keys rest out of quota is set in
+				// providers.json or with `magpie provider quota-rest`,
+				// which the form doesn't show: kept as it was (#1772)
+				if in.QuotaRest == 0 && old != nil {
+					in.QuotaRest = old.QuotaRest
+				}
 				// each account's own proxy likewise: {} clears them
 				if in.AccountProxies == nil && old != nil {
 					in.AccountProxies = old.AccountProxies

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Concurrency is how many requests the gateway lets be out at the vendor
@@ -204,6 +205,30 @@ func CheckRPM(n int) error {
 		return fmt.Errorf("a limit on requests a minute is from 0 (none) to %d, not %d", MaxRPMLimit, n)
 	}
 	return nil
+}
+
+// MaxQuotaRest bounds QuotaRest, in minutes: eight days, a week's window
+// and a day over, the longest the gateway rests anyone out of quota.
+const MaxQuotaRest = 8 * 24 * 60
+
+// QuotaRestFor is how long one of p's keys sits out of quota when the
+// vendor doesn't say when it is back, 0 for the gateway's own.
+func (p Provider) QuotaRestFor() time.Duration {
+	return time.Duration(min(max(p.QuotaRest, 0), MaxQuotaRest)) * time.Minute
+}
+
+// SetQuotaRest sets how many minutes the provider's keys sit out of quota
+// when the vendor doesn't say when they are back, 0 for the gateway's own.
+func SetQuotaRest(id string, minutes int) error {
+	if minutes < 0 || minutes > MaxQuotaRest {
+		return fmt.Errorf("a rest out of quota is from 0 (magpie's own) to %d minutes (8 days), not %d", MaxQuotaRest, minutes)
+	}
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.QuotaRest = minutes
+	return Save(*p)
 }
 
 // SetRPM sets how many requests a minute each of the provider's keys or

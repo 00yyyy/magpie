@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -85,14 +86,15 @@ func (p Provider) KeyList() []KeyInfo {
 }
 
 // KeysOn is the keys in use, first to last: the first key, then every
-// saved one that's on.
+// saved one that's on. A key listed twice — providers.json's "keys"
+// naming the first key again, as #1772's did — is one key, asked once.
 func (p Provider) KeysOn() []KeyAccount {
 	if p.Key == "" {
 		return nil
 	}
 	out := []KeyAccount{p.first()}
 	for _, k := range p.Keys {
-		if !k.Off && k.Key != "" {
+		if !k.Off && k.Key != "" && !slices.ContainsFunc(out, func(o KeyAccount) bool { return o.Key == k.Key }) {
 			out = append(out, k)
 		}
 	}

@@ -487,6 +487,10 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// the account is as good as it was; the proxy is the user's to start
 		return r
 	}
+	if why == failCredit || why == failQuota {
+		// the vendor's words, for quotaHeld to give again
+		r.said = provider.APIError(body, http.StatusText(status))
+	}
 	switch why {
 	case failCredit:
 		d, r.By = creditRest, "credit"
@@ -500,6 +504,11 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// "in 59 minutes", the resets_at turned Retry-After and cut to an
 		// hour, then was tried, refused and benched again)
 		d, r.By = quotaRest, "quota"
+		if own := c.p.QuotaRestFor(); own > 0 {
+			// as long as the user set for this provider (#1772: Ollama
+			// Cloud's weekly limit says nothing of when it renews)
+			d = own
+		}
 		if w := resetsAt(body, now); w > 0 {
 			d, r.By = w, "resets"
 		} else if w := resetsNoted(header, now); w > 0 {
