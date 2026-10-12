@@ -88,7 +88,7 @@ var ErrClientRefused = errors.New("this server's sign-in admits only the apps it
 // OAuth app of the user's own, made with the server's vendor, as Claude
 // Code does with --client-id. The page opens the server's fields for one
 // on it.
-var ErrNoRegistration = errors.New("the server's sign-in doesn't let an app register itself (no dynamic client registration), so magpie signs in to it only as an OAuth app of your own: make one with the server's vendor (GitHub's under Settings › Developer settings › OAuth Apps), with http://127.0.0.1/callback as its callback URL, then give its client ID and secret under \"OAuth app\" in the server's editor")
+var ErrNoRegistration = errors.New("the server's sign-in doesn't let an app register itself (no dynamic client registration), so magpie signs in to it only as an OAuth app of your own: make one with the server's vendor (GitHub's under Settings › Developer settings › OAuth Apps), with http://localhost/callback as its callback URL, then give its client ID and secret under \"OAuth app\" in the server's editor")
 
 // Record is magpie's sign-in to one server.
 type Record struct {
@@ -778,9 +778,12 @@ func randomToken(n int) string {
 
 // App is an OAuth app of the user's own, for a server whose sign-in
 // doesn't let magpie register itself: Claude Code's --client-id,
-// --client-secret and --callback-port. Without a CallbackPort the
-// callback comes to any free port of 127.0.0.1, which a loopback callback
-// URL registered without one takes (GitHub's, RFC 8252).
+// --client-secret and --callback-port. Its callback is Claude Code's,
+// http://localhost:<port>/callback, so an app made for Claude Code signs
+// magpie in as it is; the callback is still listened for on 127.0.0.1
+// alone, as Claude Code does. Without a CallbackPort the port is any free
+// one, which a loopback callback URL registered without one takes
+// (GitHub's, RFC 8252).
 type App struct {
 	ClientID     string
 	ClientSecret string
@@ -814,7 +817,15 @@ func StartWith(ctx context.Context, name, serverURL string, app *App) (State, er
 		}
 		return State{}, err
 	}
-	redirect := fmt.Sprintf("http://127.0.0.1:%d/callback", ln.Addr().(*net.TCPAddr).Port)
+	// magpie's own registration names 127.0.0.1, as RFC 8252 asks; an
+	// app of the user's own is called back as Claude Code calls it back,
+	// at localhost (its v2.1.231 went back to localhost because servers
+	// that match the registered URL exactly refused 127.0.0.1).
+	host := "127.0.0.1"
+	if app != nil {
+		host = "localhost"
+	}
+	redirect := fmt.Sprintf("http://%s:%d/callback", host, ln.Addr().(*net.TCPAddr).Port)
 	var id, secret, method string
 	if app != nil {
 		id, secret, method = app.ClientID, app.ClientSecret, appMethod(m, app.ClientSecret)

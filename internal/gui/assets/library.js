@@ -1889,7 +1889,7 @@
       appBox.append(id, secret, port, x);
       if (hint) hint.textContent = callback();
     }
-    const callback = () => t("Made with its vendor (GitHub's under Settings › Developer settings › OAuth Apps), with {url} as its callback URL", { url: "http://127.0.0.1" + (d.oauth?.callbackPort ? ":" + d.oauth.callbackPort : "") + "/callback" });
+    const callback = () => t("Made with its vendor (GitHub's under Settings › Developer settings › OAuth Apps), with {url} as its callback URL", { url: "http://localhost" + (d.oauth?.callbackPort ? ":" + d.oauth.callbackPort : "") + "/callback" });
     const name = field2(d.name, t("e.g. github"), (v) => { d.name = v.trim(); signBox?.redraw(); });
     ed.append(...field(t("Name"), name, t("Letters, digits, - and _ — what the agents call it")));
     const kindOf = () => segs([["stdio", t("Command")], ["http", "HTTP"], ["sse", "SSE"]], d.transport, (v) => { d.transport = v; draw(); });

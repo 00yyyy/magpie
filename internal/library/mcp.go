@@ -55,7 +55,7 @@ type OAuthApp struct {
 	ClientID     string `json:"clientId"`
 	ClientSecret string `json:"clientSecret,omitempty"`
 	// CallbackPort is the port of the callback URL the app was made with;
-	// 0 for one made with http://127.0.0.1/callback, which takes any
+	// 0 for one made with http://localhost/callback, which takes any
 	CallbackPort int `json:"callbackPort,omitempty"`
 }
 

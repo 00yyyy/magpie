@@ -23,7 +23,7 @@ const agent = (id, name) => ({ id, name, icon: "", skills: `${HOME}/.${id}/skill
 const GH = "https://api.githubcopilot.com/mcp/";
 const ID = "Ov23liAbCdEfGhIjKlMn", SECRET = "0123456789abcdef0123456789abcdef01234567";
 // mcpauth.ErrNoRegistration, as the backend says it
-const NO_REG = "the server's sign-in doesn't let an app register itself (no dynamic client registration), so magpie signs in to it only as an OAuth app of your own: make one with the server's vendor (GitHub's under Settings › Developer settings › OAuth Apps), with http://127.0.0.1/callback as its callback URL, then give its client ID and secret under \"OAuth app\" in the server's editor";
+const NO_REG = "the server's sign-in doesn't let an app register itself (no dynamic client registration), so magpie signs in to it only as an OAuth app of your own: make one with the server's vendor (GitHub's under Settings › Developer settings › OAuth Apps), with http://localhost/callback as its callback URL, then give its client ID and secret under \"OAuth app\" in the server's editor";
 
 function server(lang, calls) {
   const lib = {
@@ -113,7 +113,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await box.locator(".lib-signin-err", { hasText: w(NO_REG) }).waitFor();
           await input("Client ID").waitFor();
           assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), w("Client ID"));
-          await hint("http://127.0.0.1/callback").waitFor();
+          await hint("http://localhost/callback").waitFor();
 
           // typed but not saved: Cancel asks, and nothing is saved
           await input("Client ID").fill(ID);
@@ -129,7 +129,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(await input("Client secret").getAttribute("type"), "password");
           await input("Callback port").pressSequentially("31a18");
           assert.equal(await input("Callback port").inputValue(), "3118");
-          await hint("http://127.0.0.1:3118/callback").waitFor();
+          await hint("http://localhost:3118/callback").waitFor();
           await box.getByRole("button", { name: w("Save and sign in"), exact: true }).click();
           await box.getByRole("button", { name: w("Cancel"), exact: true }).click();
           await box.getByRole("button", { name: w("Sign in"), exact: true }).waitFor();

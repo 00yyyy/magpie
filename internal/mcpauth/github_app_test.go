@@ -30,6 +30,10 @@ type gitHub struct {
 
 	id, secret string // the user's OAuth app
 	refresh    bool   // tokens that run out, with a refresh token (a GitHub App's)
+	// exact is the app's one callback URL when the server matches it
+	// exactly, port and host too, as many do; empty, a loopback callback
+	// takes any port, as GitHub's does
+	exact string
 
 	mu        sync.Mutex
 	codes     map[string]string // code → its PKCE challenge
@@ -72,9 +76,13 @@ func newGitHub(t *testing.T, id, secret string) *gitHub {
 	mux.HandleFunc("/login/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		back, err := url.Parse(q.Get("redirect_uri"))
-		// a loopback callback URL registered as http://127.0.0.1/callback
-		// takes any port
-		if q.Get("client_id") != g.id || err != nil || back.Hostname() != "127.0.0.1" || back.Path != "/callback" || q.Get("code_challenge_method") != "S256" {
+		// a loopback callback URL registered as http://localhost/callback
+		// takes any port; an exact one takes only itself
+		loopback := err == nil && (back.Hostname() == "localhost" || back.Hostname() == "127.0.0.1") && back.Path == "/callback"
+		if g.exact != "" {
+			loopback = q.Get("redirect_uri") == g.exact
+		}
+		if q.Get("client_id") != g.id || !loopback || q.Get("code_challenge_method") != "S256" {
 			http.Error(w, "The redirect_uri is not associated with this application.", http.StatusBadRequest)
 			return
 		}
@@ -114,7 +122,7 @@ func newGitHub(t *testing.T, id, secret string) *gitHub {
 			challenge, ok := g.codes[r.PostForm.Get("code")]
 			delete(g.codes, r.PostForm.Get("code"))
 			sum := sha256.Sum256([]byte(r.PostForm.Get("code_verifier")))
-			if !ok || base64.RawURLEncoding.EncodeToString(sum[:]) != challenge {
+			if !ok || base64.RawURLEncoding.EncodeToString(sum[:]) != challenge || (g.exact != "" && r.PostForm.Get("redirect_uri") != g.exact) {
 				io.WriteString(w, `{"error":"bad_verification_code","error_description":"The code passed is incorrect or expired.","error_uri":"https://docs.github.com/apps/managing-oauth-apps/troubleshooting-oauth-app-access-token-request-errors/#bad-verification-code"}`)
 				return
 			}
@@ -170,7 +178,7 @@ func TestGitHubWithoutAnApp(t *testing.T) {
 	if !errors.Is(err, mcpauth.ErrNoRegistration) {
 		t.Fatalf("err = %v", err)
 	}
-	for _, s := range []string{"OAuth app of your own", "http://127.0.0.1/callback", "client ID"} {
+	for _, s := range []string{"OAuth app of your own", "http://localhost/callback", "client ID"} {
 		if !strings.Contains(err.Error(), s) {
 			t.Errorf("the error doesn't say %q: %v", s, err)
 		}
@@ -178,7 +186,7 @@ func TestGitHubWithoutAnApp(t *testing.T) {
 }
 
 // With the user's app, magpie registers nothing: it signs in as that app,
-// called back at 127.0.0.1's /callback, and gives the secret in the form,
+// called back at localhost's /callback as Claude Code is, and gives the secret in the form,
 // as GitHub's token endpoint takes it. The record keeps the app, to renew
 // as it.
 func TestGitHubSignInAsTheUsersApp(t *testing.T) {
@@ -199,7 +207,7 @@ func TestGitHubSignInAsTheUsersApp(t *testing.T) {
 	if f.Get("client_id") != id || f.Get("client_secret") != secret || f.Get("grant_type") != "authorization_code" {
 		t.Errorf("token request = %v", f)
 	}
-	if u, _ := url.Parse(g.redirect()); u.Hostname() != "127.0.0.1" || u.Path != "/callback" || u.Port() == "" {
+	if u, _ := url.Parse(g.redirect()); u.Hostname() != "localhost" || u.Path != "/callback" || u.Port() == "" {
 		t.Errorf("redirect_uri = %s", g.redirect())
 	}
 }
@@ -238,8 +246,34 @@ func TestGitHubCallbackPort(t *testing.T) {
 	if st := signInAs(t, "github", g.URL, &mcpauth.App{ClientID: id, ClientSecret: secret, CallbackPort: port}); st.State != "done" {
 		t.Fatalf("sign-in %s: %s", st.State, st.Error)
 	}
-	if want := fmt.Sprintf("http://127.0.0.1:%d/callback", port); g.redirect() != want {
+	if want := fmt.Sprintf("http://localhost:%d/callback", port); g.redirect() != want {
 		t.Errorf("redirect_uri = %s, want %s", g.redirect(), want)
+	}
+}
+
+// An app made for Claude Code signs magpie in as it is. Claude Code calls
+// a pre-configured client back at http://localhost:<callbackPort>/callback
+// (code.claude.com/docs/en/mcp, "Use pre-configured OAuth credentials";
+// its 2.1.296 builds it as `http://localhost:${port}/callback` and listens
+// on 127.0.0.1), and a server that matches the registered URL exactly
+// refuses any other host: Claude Code's own 2.1.229 sent 127.0.0.1 and was
+// refused, until 2.1.231 went back to localhost.
+func TestAppMadeForClaudeCode(t *testing.T) {
+	home(t)
+	id, secret := "Ov23liAbCdEfGhIjKlMn", "0123456789abcdef0123456789abcdef01234567"
+	g := newGitHub(t, id, secret)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	g.exact = fmt.Sprintf("http://localhost:%d/callback", port)
+	if st := signInAs(t, "github", g.URL, &mcpauth.App{ClientID: id, ClientSecret: secret, CallbackPort: port}); st.State != "done" {
+		t.Fatalf("sign-in %s: %s (registered %s)", st.State, st.Error, g.exact)
+	}
+	if f := g.lastForm(); f.Get("redirect_uri") != g.exact {
+		t.Errorf("token request's redirect_uri = %s", f.Get("redirect_uri"))
 	}
 }
 
