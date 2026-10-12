@@ -277,9 +277,16 @@ func codexIn(at place) *Agent {
 		dropList()
 		return nil
 	}
+	// mirrorsTaken are the mirrors takeMirrors pointed at magpie (#1796)
+	mirrorsTaken := func() []string {
+		var ids []string
+		json.Unmarshal([]byte(stashLoad()[at.key("codex.mirrors")]), &ids)
+		return ids
+	}
 	// isCCSwitchMirror reports whether a model_providers table is CC Switch's
 	// official OpenAI mirror: name = "OpenAI", requires_openai_auth = true, and no
-	// base_url (or magpie's codexURL while failing over).
+	// base_url (or magpie's codexURL while failing over, or while
+	// takeMirrors has it).
 	isCCSwitchMirror := func(p string) bool {
 		if p == "" || p == "openai" || p == magpieID {
 			return false
@@ -289,7 +296,20 @@ func codexIn(at place) *Agent {
 			return false
 		}
 		u := t["base_url"]
-		return u == "" || (u == at.codexURL() && stashLoad()[at.key("codex.mirror_failover")] == p)
+		return u == "" || (u == at.codexURL() && (stashLoad()[at.key("codex.mirror_failover")] == p || slices.Contains(mirrorsTaken(), p)))
+	}
+	// profileNamed are the provider tables a profile of config.toml names:
+	// the user's to pick, each left as it is
+	profileNamed := func(names []string) map[string]bool {
+		named := map[string]bool{}
+		for _, n := range names {
+			if strings.HasPrefix(n, "profiles.") {
+				if t, _ := edit.GetTOMLTable(path, n); t["model_provider"] != "" {
+					named[t["model_provider"]] = true
+				}
+			}
+		}
+		return named
 	}
 	// CC Switch's provider tables in Codex's config, each one's base URL
 	// by its id. A thread keeps the provider it was
@@ -300,14 +320,7 @@ func codexIn(at place) *Agent {
 	// a profile names is the user's to pick, and stays as it is.
 	ccSwitchTables := func() map[string]string {
 		names, _ := edit.TOMLTables(path)
-		named := map[string]bool{}
-		for _, n := range names {
-			if strings.HasPrefix(n, "profiles.") {
-				if t, _ := edit.GetTOMLTable(path, n); t["model_provider"] != "" {
-					named[t["model_provider"]] = true
-				}
-			}
-		}
+		named := profileNamed(names)
 		out := map[string]string{}
 		for _, n := range names {
 			id, ok := strings.CutPrefix(n, "model_providers.")
@@ -356,12 +369,75 @@ func codexIn(at place) *Agent {
 		}
 		return nil
 	}
+	// takeMirrors points CC Switch's OpenAI mirrors (the official OpenAI on
+	// the ChatGPT sign-in, under an id of its own and with no base_url) at
+	// magpie's ChatGPT backend while Codex's built-in provider goes there
+	// by openai_base_url, which a table of another id doesn't follow. A
+	// thread started on one ("custom") and reopened went straight to
+	// ChatGPT, which refused the magpie model picked in it ("The
+	// 'group/intent-auto' model is not supported when using Codex with a
+	// ChatGPT account"), and magpie never saw the request (#1796). Through
+	// magpie it is answered as the built-in provider's threads are: a
+	// magpie model by magpie, Codex's own on the ChatGPT accounts. A table
+	// a profile names stays as it is.
+	takeMirrors := func() error {
+		if !viaBase() {
+			return nil
+		}
+		names, _ := edit.TOMLTables(path)
+		named := profileNamed(names)
+		taken := mirrorsTaken()
+		for _, n := range names {
+			id, ok := strings.CutPrefix(n, "model_providers.")
+			if !ok || named[id] || !isCCSwitchMirror(id) {
+				continue
+			}
+			if t, _ := edit.GetTOMLTable(path, n); t["base_url"] != "" {
+				continue
+			}
+			if err := edit.SetTOMLKey(path, n, "base_url", at.codexURL()); err != nil {
+				return err
+			}
+			if !slices.Contains(taken, id) {
+				taken = append(taken, id)
+			}
+		}
+		if len(taken) == 0 {
+			return nil
+		}
+		b, _ := json.Marshal(taken)
+		stash(map[string]string{at.key("codex.mirrors"): string(b)})
+		return nil
+	}
+	// giveMirrors takes the base URL takeMirrors wrote off again; one
+	// changed since is left as it is now
+	giveMirrors := func() error {
+		taken := mirrorsTaken()
+		if len(taken) == 0 {
+			return nil
+		}
+		for _, id := range taken {
+			t, err := edit.GetTOMLTable(path, "model_providers."+id)
+			if err != nil || t["base_url"] != at.codexURL() || stashLoad()[at.key("codex.mirror_failover")] == id {
+				continue
+			}
+			if err := edit.DelTOMLKey(path, "model_providers."+id, "base_url"); err != nil {
+				return err
+			}
+		}
+		forget(at.key("codex.mirrors"))
+		return nil
+	}
 	// takeTables points CC Switch's tables at magpie, each one's own base
 	// URL kept in the stash for giveTables (a table already on magpie's
 	// keeps the one kept for it), and writes the tables threads name that
-	// are gone (putThreadTables)
+	// are gone (putThreadTables), and takes CC Switch's OpenAI mirrors
+	// (takeMirrors)
 	takeTables := func() error {
 		if err := putThreadTables(); err != nil {
+			return err
+		}
+		if err := takeMirrors(); err != nil {
 			return err
 		}
 		was := map[string]string{}
@@ -385,6 +461,9 @@ func codexIn(at place) *Agent {
 	// giveTables puts the base URLs back, on the tables still pointed at
 	// magpie; one changed since is left as it is now
 	giveTables := func() error {
+		if err := giveMirrors(); err != nil {
+			return err
+		}
 		var was map[string]string
 		json.Unmarshal([]byte(stashLoad()[at.key("codex.tables")]), &was)
 		now := ccSwitchTables()
