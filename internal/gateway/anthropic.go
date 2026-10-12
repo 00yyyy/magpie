@@ -1010,6 +1010,7 @@ func decodeAnthropic(data string, emit func(Event)) error {
 			StopReason  string `json:"stop_reason"`
 			// auto mode's review of the reply's calls (automode.go)
 			SafeguardResults json.RawMessage `json:"safeguard_results"`
+			StopDetails      json.RawMessage `json:"stop_details"`
 		} `json:"delta"`
 		Usage aUsage `json:"usage"`
 		Error struct {
@@ -1069,7 +1070,7 @@ func decodeAnthropic(data string, emit func(Event)) error {
 		if r := ev.Delta.SafeguardResults; len(r) > 0 && string(r) != "null" {
 			review = r
 		}
-		emit(Event{Kind: KUsage, Usage: ev.Usage.usage(), SafeguardResults: review})
+		emit(Event{Kind: KUsage, Usage: ev.Usage.usage(), SafeguardResults: review, StopDetails: stopDetails(ev.Delta.StopDetails)})
 	case "error":
 		emit(Event{Kind: KError, Text: ev.Error.Message, Code: refusedCode(data)})
 	}
@@ -1363,6 +1364,9 @@ func (e *anthropicEncoder) finish() {
 	if len(res.SafeguardResults) > 0 {
 		delta["safeguard_results"] = res.SafeguardResults
 	}
+	if len(res.StopDetails) > 0 {
+		delta["stop_details"] = res.StopDetails
+	}
 	e.w.event("message_delta", map[string]any{"type": "message_delta",
 		"delta": delta,
 		"usage": res.Usage.anthropic()})
@@ -1409,6 +1413,9 @@ func renderAnthropic(res Result, model string) []byte {
 		"content": content, "stop_reason": stopToAnthropic(res.Stop), "stop_sequence": nil, "usage": res.Usage.anthropic()}
 	if len(res.SafeguardResults) > 0 {
 		reply["safeguard_results"] = res.SafeguardResults
+	}
+	if len(res.StopDetails) > 0 {
+		reply["stop_details"] = res.StopDetails
 	}
 	b, _ := json.Marshal(reply)
 	return b
@@ -1463,4 +1470,12 @@ func objectSchema(schema json.RawMessage) json.RawMessage {
 		return schema
 	}
 	return b
+}
+
+// stopDetails is a reply's stop_details, or nil when it had none.
+func stopDetails(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	return raw
 }

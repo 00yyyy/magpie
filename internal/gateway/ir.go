@@ -283,6 +283,9 @@ type Event struct {
 	Usage            Usage
 	Hits             []Hit
 	SafeguardResults json.RawMessage
+	// StopDetails: Anthropic's stop_details, what its classifier said of
+	// a refusal (#1768), carried to the client as it came
+	StopDetails json.RawMessage
 }
 
 // Usage counts tokens.
@@ -370,6 +373,7 @@ type Result struct {
 	Stop             string
 	Usage            Usage
 	SafeguardResults json.RawMessage
+	StopDetails      json.RawMessage
 }
 
 // collector assembles a Result from events. Encoders use the same logic to
@@ -418,6 +422,9 @@ func (c *collector) closeTool() {
 func (c *collector) add(ev Event) {
 	if len(ev.SafeguardResults) > 0 {
 		c.res.SafeguardResults = ev.SafeguardResults
+	}
+	if len(ev.StopDetails) > 0 {
+		c.res.StopDetails = ev.StopDetails
 	}
 	switch ev.Kind {
 	case KStart:

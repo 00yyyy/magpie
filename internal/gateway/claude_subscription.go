@@ -2137,6 +2137,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 					PartialJSON      string          `json:"partial_json"`
 					StopReason       string          `json:"stop_reason"`
 					SafeguardResults json.RawMessage `json:"safeguard_results"`
+					StopDetails      json.RawMessage `json:"stop_details"`
 				} `json:"delta"`
 				Usage cliUsage `json:"usage"`
 			} `json:"event"`
@@ -2150,6 +2151,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			StopReason       string          `json:"stop_reason"`
 			Usage            cliUsage        `json:"usage"`
 			SafeguardResults json.RawMessage `json:"safeguard_results"`
+			StopDetails      json.RawMessage `json:"stop_details"`
 			Content          []struct {
 				Type      string          `json:"type"`
 				Text      string          `json:"text"`
@@ -2282,7 +2284,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 					}
 				}
 			}
-			r.emit(Event{Kind: KUsage, Usage: usage(whole.Usage), RequestID: reqID, SafeguardResults: whole.SafeguardResults})
+			r.emit(Event{Kind: KUsage, Usage: usage(whole.Usage), RequestID: reqID, SafeguardResults: whole.SafeguardResults, StopDetails: stopDetails(whole.StopDetails)})
 			if quiet != nil {
 				quiet.Stop()
 			}
@@ -2353,7 +2355,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 				}
 			}
 		case "message_delta":
-			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage), RequestID: reqID, SafeguardResults: e.Delta.SafeguardResults})
+			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage), RequestID: reqID, SafeguardResults: e.Delta.SafeguardResults, StopDetails: stopDetails(e.Delta.StopDetails)})
 			if e.Delta.StopReason != "" {
 				stopped = true
 			}

@@ -2077,6 +2077,38 @@ func refusedNote(reason string) string {
 	return "safety filter: " + reason
 }
 
+// refusedDetail is a refusal's note with what Anthropic's classifier said
+// of it in stop_details, when it said anything (#1768: which of cyber,
+// bio, frontier_llm… it was, for a user to tell one refusal from
+// another): its category as given, unknown ones too, and its
+// explanation, the vendor's own words, kept to a line. None is made up
+// when it gave none.
+func refusedDetail(reason string, details json.RawMessage) string {
+	var d struct {
+		Category    *string `json:"category"`
+		Explanation *string `json:"explanation"`
+	}
+	note := refusedNote(reason)
+	if len(details) == 0 || json.Unmarshal(details, &d) != nil {
+		return note
+	}
+	var said []string
+	if d.Category != nil && strings.TrimSpace(*d.Category) != "" {
+		said = append(said, "category "+strings.TrimSpace(*d.Category))
+	}
+	if d.Explanation != nil && strings.TrimSpace(*d.Explanation) != "" {
+		e := strings.Join(strings.Fields(*d.Explanation), " ")
+		if r := []rune(e); len(r) > 200 {
+			e = string(r[:200]) + "…"
+		}
+		said = append(said, e)
+	}
+	if len(said) == 0 {
+		return note
+	}
+	return note + " (" + strings.Join(said, ": ") + ")"
+}
+
 // streamPart is what one event of a reply carries of its content, in any
 // protocol, to tell a reply begun from its empty frame (#248).
 type streamPart struct {
@@ -2250,10 +2282,11 @@ func streamEvent(ev []byte) (kind, status int, msg string) {
 		return eventLead, 0, ""
 	case typ == "message_delta":
 		var d struct {
-			StopReason string `json:"stop_reason"`
+			StopReason  string          `json:"stop_reason"`
+			StopDetails json.RawMessage `json:"stop_details"`
 		}
 		if json.Unmarshal(v.Delta, &d) == nil && d.StopReason == "refusal" {
-			return refusal(d.StopReason)
+			return eventRefusal, refusedStatus, refusedDetail(d.StopReason, d.StopDetails)
 		}
 	case typ == "response.incomplete" || typ == "response.completed" && v.Response.Status == "incomplete":
 		if d := v.Response.IncompleteDetails; d != nil {
@@ -2484,8 +2517,9 @@ func refusedCode(data string) string {
 func refusedReply(b []byte) (string, bool) {
 	var v struct {
 		// Anthropic's
-		StopReason string       `json:"stop_reason"`
-		Content    []streamPart `json:"content"`
+		StopReason  string          `json:"stop_reason"`
+		StopDetails json.RawMessage `json:"stop_details"`
+		Content     []streamPart    `json:"content"`
 		// Chat's
 		Choices []struct {
 			FinishReason string `json:"finish_reason"`
@@ -2518,7 +2552,7 @@ func refusedReply(b []byte) (string, bool) {
 		return !slices.ContainsFunc(ps, streamPart.said)
 	}
 	if r, ok := filterReasons[v.StopReason]; ok && r == "refusal" && none(v.Content) {
-		return refusedNote(r), true
+		return refusedDetail(r, v.StopDetails), true
 	}
 	for _, c := range v.Choices {
 		if r, ok := filterReasons[c.FinishReason]; ok && (c.Message.Content == nil || c.Message.Content == "") && len(c.Message.ToolCalls) == 0 {
