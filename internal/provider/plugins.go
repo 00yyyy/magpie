@@ -181,20 +181,22 @@ func pluginCatalog(pp plugin.Provider) []catalog.Model {
 		c := catalog.Model{
 			ID: m.ID, Name: m.Name, Provider: pp.ID, Released: m.Released,
 			APIs: []string{string(pluginProtocol(pp.ID, m))}, Images: m.Image,
-			Context: m.Input, Output: m.Output, Free: m.Free,
+			Context: catalog.Window(m.Input), Output: m.Output, Free: m.Free,
 			Rate: m.Rate, RateWas: m.RateWas,
 			// a decision model the plugin marked counts only where it
 			// serves a decision API (pp.Decide)
 			Decides: pp.Decide && m.Decides,
 		}
-		if c.Context == 0 {
-			c.Context = m.Context
-		} else if m.Context > 0 && m.Context < c.Context {
+		// a limit under catalog.LeastWindow (512, H20 on Discord) is none:
+		// the other one, or models.dev, answers (ListedWindow)
+		if window := catalog.Window(m.Context); c.Context == 0 {
+			c.Context = window
+		} else if window > 0 && window < c.Context {
 			// the prompt cap a plugin names wins, but never above the
 			// window it also names: a row with input over context
 			// (opencode/hy3-free's 192K over 190K) was served past its
 			// window (#1286)
-			c.Context = m.Context
+			c.Context = window
 		}
 		// Cursor's own ids no catalog knows: one not named a 1M model
 		// holds what the catalog knows its base to, as the built-in's did

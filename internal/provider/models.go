@@ -610,7 +610,7 @@ func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 		if m.Free {
 			id = m.ID[strings.LastIndex(m.ID, "/")+1:]
 		}
-		if m.Context == 0 {
+		if catalog.Window(m.Context) == 0 {
 			out[i].Context = catalog.ContextOf(id)
 		}
 		if m.Output == 0 {
@@ -1726,9 +1726,11 @@ func IDs() []string {
 // A vendor models.dev doesn't list (a custom provider, a proxy, a plugin
 // whose list says none, as Cline's) serves models it knows from others, under
 // the vendor's prefix too: cline-free/mimo-v2.6-flash is mimo-v2.6-flash.
+// A window the vendor lists under catalog.LeastWindow (512, H20 on Discord)
+// is no window: models.dev's answers, else none, and the agent's default.
 func ListedWindow(m catalog.Model) int {
-	if m.Context > 0 {
-		return m.Context
+	if n := catalog.Window(m.Context); n > 0 {
+		return n
 	}
 	return catalog.ContextOf(m.ID)
 }

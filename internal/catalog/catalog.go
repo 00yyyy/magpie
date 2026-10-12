@@ -361,14 +361,36 @@ func (p mdProvider) levels(m mdModel) []string {
 // models.dev gives one (gpt-5's 272K of its 400K), else the whole context.
 // A row whose input limit sits above its window (Cloudflare AI Gateway's
 // gpt-5 at 272K over 128K) holds the window: the cap never exceeds it.
+//
+// Either limit under LeastWindow says nothing (Window), so the other one
+// answers, or none does.
 func (m mdModel) window() int {
-	if m.Limit.Input > 0 {
-		if m.Limit.Context > 0 && m.Limit.Context < m.Limit.Input {
-			return m.Limit.Context
+	in, ctx := Window(m.Limit.Input), Window(m.Limit.Context)
+	if in > 0 {
+		if ctx > 0 && ctx < in {
+			return ctx
 		}
-		return m.Limit.Input
+		return in
 	}
-	return m.Limit.Context
+	return ctx
+}
+
+// LeastWindow is the smallest context window a list is taken at its word
+// for. Less can't hold an agent's system prompt, let alone a turn, and an
+// agent told it compacts at once or won't send at all (H20 on Discord: hy3
+// and Cline's free models listed at 512, which Claude Code and Codex took
+// as the model's window). The smallest real chat models' windows are
+// about 4096 (gpt-3.5-turbo-instruct's 4095, mythomax's 4096): those stand.
+const LeastWindow = 2048
+
+// Window is n as a model's context window: n, or 0 — not known, for
+// models.dev, a family's window or the agent's default to answer — when n
+// is under LeastWindow.
+func Window(n int) int {
+	if n < LeastWindow {
+		return 0
+	}
+	return n
 }
 
 var modelsDevURL = "https://models.dev/api.json" // a var for tests
