@@ -96,6 +96,8 @@ func TestBunDefaultSums(t *testing.T) {
 		"bun-darwin-x64",
 		"bun-linux-aarch64",
 		"bun-linux-x64-baseline",
+		"bun-linux-aarch64-musl",
+		"bun-linux-x64-musl-baseline",
 		"bun-windows-x64-baseline",
 		"bun-linux-aarch64-android",
 		"bun-linux-x64-android-baseline",

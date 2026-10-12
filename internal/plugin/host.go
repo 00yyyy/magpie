@@ -748,8 +748,14 @@ func start(ctx context.Context) (*host, error) {
 		return nil, err
 	}
 	h, crashed, err := startOn(ctx, bun)
+	if crashed {
+		err = whyDied(ctx, bun, err)
+	}
 	if err == nil || !crashed || os.Getenv("MAGPIE_BUN") != "" {
-		return h, err
+		// a Bun that can't be started at all isn't fallen back from: the
+		// one before is the same build for this system, and setting this
+		// one aside would mark a good version bad (#1877)
+		return h, cantStart(bun, err)
 	}
 	// the Bun magpie last took died starting the host: the one before it,
 	// and the new one set aside when that one starts it

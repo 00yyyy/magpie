@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/claudecode"
+	"github.com/yetone/magpie/internal/libc"
 )
 
 // claudeCodeOut runs `magpie claude-code args…` and gives what it printed.
@@ -47,10 +48,8 @@ func TestClaudeCodeInstallDownloadsTheRelease(t *testing.T) {
 	if err != nil {
 		t.Skip(err)
 	}
-	if runtime.GOOS == "linux" {
-		if _, err := os.Stat("/lib/libc.musl-x86_64.so.1"); err == nil {
-			t.Skip("a musl Linux asks for the -musl build")
-		}
+	if libc.Musl() {
+		t.Skip("a musl Linux asks for the -musl build")
 	}
 	const body = "#!/bin/sh\necho '2.1.296 (Claude Code)'\n"
 	sum := sha256.Sum256([]byte(body))
