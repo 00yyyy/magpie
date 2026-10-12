@@ -429,6 +429,28 @@ func CodexNativeHidden() map[string]bool {
 	return out
 }
 
+// CodexNativeUnlisted is the ChatGPT account's own models kept out of the
+// lists agents see, which the backend lists to Codex all the same: every
+// one (all) when the codex provider serves only through routing groups
+// (Provider.Unlisted), and by slug those a routing group keeps out of the
+// lists (Group.Unlists). The gateway drops them from its /models answer as
+// it does the ones hidden; Codex then reaches them only through its groups
+// (#1602). A provider switched off keeps none out: it serves nothing, and
+// its setting is kept for when it is switched on again.
+func CodexNativeUnlisted() (all bool, slugs map[string]bool) {
+	p, ok := find(All(), "codex")
+	all = ok && !p.Off && p.Unlisted
+	for _, e := range Unlisted() {
+		if CodexOwn(e) {
+			if slugs == nil {
+				slugs = map[string]bool{}
+			}
+			slugs[e.Model] = true
+		}
+	}
+	return all, slugs
+}
+
 // CodexOrder is where each model of Codex's list goes when the user put
 // them in an order of their own on the Agents page (#855), by the slug
 // Codex knows it by — a ChatGPT account's own by its bare one, as the
@@ -477,6 +499,14 @@ func codexListTag(kind string) string {
 	off := slices.Sorted(maps.Keys(CodexNativeHidden()))
 	for _, slug := range off {
 		ms = append(ms, catalog.Model{ID: "-" + slug})
+	}
+	// and those kept out of the lists for routing groups (#1602)
+	all, unlisted := CodexNativeUnlisted()
+	if all {
+		ms = append(ms, catalog.Model{ID: "~unlisted"})
+	}
+	for _, slug := range slices.Sorted(maps.Keys(unlisted)) {
+		ms = append(ms, catalog.Model{ID: "~unlisted:" + slug})
 	}
 	// and the order the user put them in, the account's own among them
 	for _, id := range ModelOrder("codex") {

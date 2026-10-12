@@ -201,13 +201,18 @@ func spawnChoices(r *http.Request, lead string, codexPath bool) []spawnChoice {
 		// Codex's own, as its backend lists them to it, less the ones
 		// taken out of its list on the Agents page
 		hidden := provider.CodexNativeHidden()
+		// and the ones kept for routing groups (#1602)
+		all, unlisted := provider.CodexNativeUnlisted()
+		if codexOwnOnly() {
+			all, unlisted = false, nil
+		}
 		type own struct {
 			spawnChoice
 			at int
 		}
 		var owns []own
 		for slug, e := range codexcat.CacheEntries() {
-			if v, _ := e["visibility"].(string); v != "list" || hidden[slug] {
+			if v, _ := e["visibility"].(string); v != "list" || hidden[slug] || all || unlisted[slug] {
 				continue
 			}
 			name, _ := e["display_name"].(string)

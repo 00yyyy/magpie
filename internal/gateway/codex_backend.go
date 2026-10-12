@@ -1221,6 +1221,22 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 		}
 		own = kept
 	}
+	// and the ones kept for routing groups, every one when the codex
+	// provider serves only through them (#1602): a hidden one stays, as it
+	// does through the picks. A Codex here for account failover alone is
+	// handed no groups, so it keeps its own.
+	if all, off := provider.CodexNativeUnlisted(); (all || len(off) > 0) && !codexOwnOnly() {
+		kept := own[:0]
+		for _, m := range own {
+			o, _ := m.(map[string]any)
+			slug, _ := o["slug"].(string)
+			if v, _ := o["visibility"].(string); v != "hide" && (all || off[slug]) {
+				continue
+			}
+			kept = append(kept, m)
+		}
+		own = kept
+	}
 	// multi-agent V1 when the user asked for it (#141): the version is all
 	// that changes
 	if codexcat.V1() {
