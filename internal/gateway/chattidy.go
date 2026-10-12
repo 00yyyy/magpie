@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strings"
 )
 
@@ -370,6 +371,39 @@ func withReasoningOnToolTurns(body []byte) []byte {
 		m["reasoning_content"], _ = marshalPlain(think)
 		return true
 	})
+}
+
+// reasoningDetailsAsContent leaves reasoning_details out of every message
+// of a Chat request, its thinking kept in reasoning_content when the
+// message has none: Kimi's API turns reasoning_details away in whatever
+// shape it comes, OpenRouter's reasoning.text with a stream's index in it
+// (as another vendor's turn has it) or without ("the reasoning_details at
+// position 2 entry 0 must not contain streaming index", "… has an invalid
+// type", #1765), and takes reasoning_content.
+func reasoningDetailsAsContent(body []byte) []byte {
+	return editMessages(body, []string{"reasoning_details"}, func(m map[string]json.RawMessage) bool {
+		if _, ok := m["reasoning_details"]; !ok {
+			return false
+		}
+		var own string
+		if decodeJSON(m["reasoning_content"], &own) != nil || own == "" {
+			if think := reasoningText(m); think != "" {
+				m["reasoning_content"], _ = marshalPlain(think)
+			}
+		}
+		delete(m, "reasoning_details")
+		return true
+	})
+}
+
+// withoutMessageReasoning leaves the thinking fields an upstream refused
+// out of every message of a Chat request; reasoning_details' thinking
+// stays in reasoning_content unless that was refused too.
+func withoutMessageReasoning(body []byte, fields []string) []byte {
+	if slices.Contains(fields, "reasoning_details") && !slices.Contains(fields, "reasoning_content") {
+		body = reasoningDetailsAsContent(body)
+	}
+	return withoutMessageFields(body, fields...)
 }
 
 // editMessages hands each message of a Chat request whose JSON names any

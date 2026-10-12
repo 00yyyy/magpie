@@ -3407,6 +3407,12 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// away, as the thinking part it takes (#494)
 			body = mistralThinking(body)
 		}
+		if isKimi(p, proto) {
+			// another vendor's reasoning_details (MiMo's, with a stream's
+			// index in each entry), which Kimi turns away in any shape:
+			// its thinking as the reasoning_content Kimi takes (#1765)
+			body = reasoningDetailsAsContent(body)
+		}
 		if strings.HasSuffix(p.Host(), "openai.com") || p.IsAzure() {
 			// Qwen's switch and Kimi Code's (thinking: {type: …}), which
 			// OpenAI turns away as arguments it doesn't know, and Azure
@@ -3615,7 +3621,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		for _, f := range ms {
 			refused = append(refused, messageField(f))
 		}
-		body = withoutMessageFields(body, ms...)
+		body = withoutMessageReasoning(body, ms)
 		if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
 			return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 		}
@@ -4477,7 +4483,7 @@ func (s *Server) withoutRefused(providerID string, proto provider.Protocol, body
 			ms = append(ms, f)
 		}
 	}
-	return withoutMessageFields(body, ms...)
+	return withoutMessageReasoning(body, ms)
 }
 
 // messageField is the name a field of a request's messages is remembered
@@ -4487,10 +4493,18 @@ func messageField(f string) string { return "messages[]." + f }
 // refusedInMessages lists the thinking fields (messageReasoning) an
 // upstream turned a Chat request away for where its messages carry them:
 // extra_forbidden located in the messages, as Mistral's loc ["body",
-// "messages",2,"assistant","reasoning_content"] (#494).
+// "messages",2,"assistant","reasoning_content"] (#494), or one named at a
+// message's position, as Kimi's validator (and a relay in front of it)
+// names it: "the reasoning_details at position 2 entry 0 must not contain
+// streaming index" (#1765).
 func refusedInMessages(status int, msg, body []byte) []string {
 	if !badRequest(status) {
 		return nil
+	}
+	if m := fieldAtPosition.FindSubmatch(msg); m != nil {
+		if f := string(m[1]); bytes.Contains(body, []byte(`"`+f+`"`)) {
+			return []string{f}
+		}
 	}
 	var fault any
 	if i := bytes.IndexByte(msg, '{'); i < 0 || decodeJSON(msg[i:], &fault) != nil {
@@ -4524,6 +4538,9 @@ func refusedInMessages(status int, msg, body []byte) []string {
 	walk(fault)
 	return out
 }
+
+// fieldAtPosition is Kimi's refusal of a thinking field in a message.
+var fieldAtPosition = regexp.MustCompile(`\bthe (reasoning_details|reasoning_content|reasoning) at position \d+\b`)
 
 // badRequest is a status an upstream refuses a request's contents with.
 func badRequest(status int) bool {
