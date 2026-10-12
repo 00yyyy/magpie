@@ -4126,6 +4126,14 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r := *req
 			r.Tier, req = "priority", &r
 		}
+		// Anthropic's API needs a reply limit: one the client didn't name
+		// is the model's own, not a flat 16384 (#1792, askedOutput)
+		if to == provider.Anthropic && req.MaxTokens <= 0 {
+			if n := askedOutput(p, model); n > 0 {
+				r := *req
+				r.MaxTokens, req = n, &r
+			}
+		}
 		wire := provider.UpstreamNameIn(wires, p.ID, model)
 		sent := req
 		if dropsBillingLine(p, to, model, wire) && billingHeader.MatchString(req.System) {

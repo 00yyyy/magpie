@@ -824,7 +824,7 @@ func anthropicBody(r *Request, model string, replay bool) []byte {
 	}
 	maxTokens := r.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = 16384
+		maxTokens = defaultMaxTokens // the model's own is filled in before (askedOutput)
 	}
 	// a client that turned reasoning off — Codex's or a Chat client's
 	// effort none, which Effort reads as low — is sent thinking off, not a

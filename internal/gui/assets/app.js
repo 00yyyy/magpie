@@ -9584,7 +9584,7 @@ function outputField() {
   light();
   const wrap = el("div", "cxfield");
   wrap.append(ox, row);
-  return field(t("Max output"), wrap, t("The most a reply may hold, told to the agents as their max tokens; empty leaves it to the vendor and models.dev"));
+  return field(t("Max output"), wrap, t("The most a reply may hold, told to the agents as their max tokens and sent as max_tokens on Anthropic's API when the agent names none; empty leaves it to the vendor and models.dev"));
 }
 
 // compactField is the editor's Compact at (#876): where Codex and Claude

@@ -1001,8 +1001,13 @@ numbers are kept, and are what its models take once it is serving again.
 A window is a number agents are shown **and a routing input**: at 95% of the
 window a request held on a routing-group member moves to one that takes more,
 so overstating a window makes that move happen too late. A reply limit is
-advertised in `/models` and is what a group advertises the smallest of; the
-gateway does not itself cap a reply by it.
+advertised in `/models` and is what a group advertises the smallest of. The
+gateway doesn't lower a limit an agent sends by it. A request that names none
+and goes to Anthropic's Messages API, which needs one (Codex's Responses turns,
+a Chat client's), is sent it as `max_tokens`, within the window as agents are
+told it. Only a model whose limit nobody knows goes at 16384. A reply that
+runs into it ends with `stop_reason: max_tokens`, which a Responses client
+reads as `incomplete_details.reason: "max_output_tokens"` (#1792).
 
 Saving a window or a reply limit writes that number into the model lists magpie
 keeps in the agents' own files — Pi's `contextWindow` and `maxTokens`, OpenCode's
