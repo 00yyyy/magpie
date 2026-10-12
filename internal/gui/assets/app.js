@@ -203,6 +203,44 @@ function keepIcons(...roots) {
     keptIcons.get(e.dataset.icon).push(e);
   }
 }
+// A mono logo is a CSS mask, and a mask is not an <img>: a row drawn again
+// makes its span afresh, and nothing but the spans on the page keeps the
+// picture, so between the old row going and the new one painting the
+// engine may let it go and paint the new one empty until it has loaded it
+// again: the logo blinks, where an <img> beside it doesn't (#1847). Every
+// mask picture that has loaded is kept by a span of its own on a hidden
+// shelf for as long as the page is open, so a logo drawn again paints at
+// once on any page. Each picture is tried once, not once per logo: a
+// probe made for every logo asked for the file again on a redraw.
+const maskLoads = new Map();
+let maskShelf = null;
+function maskSpan(src, failed) {
+  const m = el("span", "mask");
+  m.style.setProperty("--i", `url(${src})`);
+  let load = maskLoads.get(src);
+  if (!load) {
+    load = new Promise((done) => {
+      const probe = new Image();
+      probe.onload = () => done(true);
+      probe.onerror = () => done(false);
+      probe.src = src;
+    });
+    load.then((ok) => {
+      if (!ok) return;
+      if (!maskShelf) {
+        maskShelf = el("div", "mask-shelf");
+        maskShelf.setAttribute("aria-hidden", "true");
+        document.body.append(maskShelf);
+      }
+      const k = el("span", "mask");
+      k.style.setProperty("--i", `url(${src})`);
+      maskShelf.append(k);
+    });
+    maskLoads.set(src, load);
+  }
+  if (failed) load.then((ok) => ok || failed());
+  return m;
+}
 const pngIcons = new Set(["crush", "zcode", "alma", "hanako", "cindy", "typesafe", "atomcode", "snow", "mlx-serve"]);
 
 function icon(name) {
@@ -233,16 +271,11 @@ function icon(name) {
       img.draggable = false;
       e.append(img);
     } else {
-      const m = el("span", "mask");
-      m.style.setProperty("--i", `url(icons/${name}.svg)`);
-      e.append(m);
       // a mask that fails to load draws nothing, and says nothing
-      const probe = new Image();
-      probe.onerror = () => {
+      e.append(maskSpan(`icons/${name}.svg`, () => {
         e.classList.add("generic");
         e.replaceChildren(...icon("generic").childNodes);
-      };
-      probe.src = `icons/${name}.svg`;
+      }));
     }
     return e;
   }

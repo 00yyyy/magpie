@@ -144,6 +144,9 @@ code { font: var(--code-style, normal) var(--code-weight, 400) 11.5px var(--code
 .ic img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .ic .mask { width: 100%; height: 100%; background: currentColor; -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; }
 .ic.generic { color: var(--muted); }
+/* maskSpan's shelf: a hidden user of every mask picture loaded, so a logo drawn again paints at once (#1847) */
+.mask-shelf { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
+.mask-shelf .mask { display: block; width: 16px; height: 16px; -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; }
 /* a routing group's providers, overlapping discs with the first on top */
 .ic-stack { display: inline-flex; flex: none; align-items: center; }
 .ic-stack .disc { position: relative; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--card); box-shadow: 0 0 0 1px var(--line); }

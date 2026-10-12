@@ -786,9 +786,7 @@
     const ttl = el("div", "lib-cardhead");
     // RTK's own mark (rtk-ai.app), drawn in the text's colour
     const logo = el("span", "lib-glyph lib-rtk-logo");
-    const m = el("span", "mask");
-    m.style.setProperty("--i", "url(icons/rtk.png)");
-    logo.append(m);
+    logo.append(maskSpan("icons/rtk.png"));
     ttl.append(logo, el("b", "", "RTK"), el("span", "grow"));
     if (rtk.path) {
       ttl.append(el("span", "note mono", rtk.version ? "v" + rtk.version : tilde(rtk.path)));
