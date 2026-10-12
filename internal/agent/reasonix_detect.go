@@ -4,7 +4,6 @@ import (
 	"context"
 	"debug/buildinfo"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -31,7 +30,7 @@ func reasonixDetected(home string) bool {
 		}
 	case "linux":
 		for _, bin := range []string{"reasonix-studio", "reasonix-studio-electron"} {
-			if path, err := exec.LookPath(bin); err == nil {
+			if path, err := proc.Look(bin); err == nil {
 				if resolved, err := filepath.EvalSymlinks(path); err == nil {
 					path = resolved
 				}
@@ -41,7 +40,7 @@ func reasonixDetected(home string) bool {
 			}
 		}
 	}
-	path, err := exec.LookPath("reasonix")
+	path, err := proc.Look("reasonix")
 	return err == nil && reasonixCLI(path)
 }
 

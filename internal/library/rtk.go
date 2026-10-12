@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -271,7 +270,7 @@ var openCodeVersion = func() string {
 	if runtime.GOOS == "windows" {
 		name = "opencode.exe"
 	}
-	bin, err := exec.LookPath("opencode")
+	bin, err := proc.Look("opencode")
 	if err != nil {
 		bin = filepath.Join(home(), ".opencode", "bin", name)
 		if !exists(bin) {
@@ -547,7 +546,7 @@ var rtkMu sync.Mutex
 // winget could make the link. Found there, it may not be on the PATH the
 // agents get: see rtkReached.
 func rtkPath() string {
-	if p, err := exec.LookPath("rtk"); err == nil {
+	if p, err := proc.Look("rtk"); err == nil {
 		return p
 	}
 	name, dirs := "rtk", []string{filepath.Join(home(), ".local", "bin"), filepath.Join(home(), ".cargo", "bin")}
@@ -856,15 +855,15 @@ const rtkScript = "https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/maste
 // one, winget on Windows, else rtk's own script; nil when there's no way.
 func rtkInstaller() []string {
 	if runtime.GOOS == "windows" {
-		if _, err := exec.LookPath("winget"); err == nil {
+		if _, err := proc.Look("winget"); err == nil {
 			return []string{"winget", "install", "--id", "rtk-ai.rtk", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"}
 		}
 		return nil
 	}
-	if _, err := exec.LookPath("brew"); err == nil {
+	if _, err := proc.Look("brew"); err == nil {
 		return []string{"brew", "install", "rtk"}
 	}
-	if _, err := exec.LookPath("curl"); err == nil {
+	if _, err := proc.Look("curl"); err == nil {
 		return []string{"sh", "-c", "curl -fsSL " + rtkScript + " | sh"}
 	}
 	return nil

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -19,6 +18,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
@@ -1088,7 +1088,7 @@ func gooseIn(at place, cfg string) *Agent {
 			if agentDir(filepath.Dir(path)) {
 				return true
 			}
-			bin, err := exec.LookPath("goose")
+			bin, err := proc.Look("goose")
 			return err == nil && !goProgram(bin)
 		},
 		Fields: []Field{{

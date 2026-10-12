@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -89,7 +88,7 @@ func executablePath(name string) (string, error) {
 		}
 		return name, nil
 	}
-	return exec.LookPath(name)
+	return proc.Look(name)
 }
 
 const secretService = "org.freedesktop.Secret.Service"

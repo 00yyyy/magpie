@@ -16,7 +16,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -206,7 +205,7 @@ func howInstalled(spec cliSpec, bin string) *updater {
 		prefix := slash[:strings.Index(slash, m[0])]
 		brew := filepath.FromSlash(prefix + "/bin/brew")
 		if !isFile(brew) {
-			if brew, err = exec.LookPath("brew"); err != nil {
+			if brew, err = proc.Look("brew"); err != nil {
 				return nil
 			}
 		}
@@ -242,13 +241,13 @@ func fromNodeModules(pkg, bin, real string) *updater {
 		bun := filepath.Join(filepath.Dir(bin), exe("bun"))
 		if !isFile(bun) {
 			var err error
-			if bun, err = exec.LookPath("bun"); err != nil {
+			if bun, err = proc.Look("bun"); err != nil {
 				return nil
 			}
 		}
 		return &updater{via: "bun", pkg: pkg, cmd: []string{bun, "add", "-g", pkg + "@latest"}}
 	case strings.Contains(lower, "/pnpm/") || strings.Contains(lower, "/.pnpm/"):
-		pnpm, err := exec.LookPath("pnpm")
+		pnpm, err := proc.Look("pnpm")
 		if err != nil {
 			return nil
 		}
@@ -284,7 +283,7 @@ func fromNodeModules(pkg, bin, real string) *updater {
 		u.path = filepath.Dir(npm) // its own node, not another on PATH
 	} else {
 		var err error
-		if npm, err = exec.LookPath("npm"); err != nil {
+		if npm, err = proc.Look("npm"); err != nil {
 			return nil
 		}
 	}

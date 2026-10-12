@@ -21,16 +21,6 @@ import (
 	"time"
 )
 
-// LookPath is exec.LookPath, with a version manager's wrapper script found
-// there given as the program it runs (Unwrap).
-func LookPath(name string) (string, error) {
-	p, err := exec.LookPath(name)
-	if err != nil {
-		return p, err
-	}
-	return Unwrap(name, p), nil
-}
-
 // Unwrap is the program path stands for when it is a small script that
 // runs name through mise (`mise x … -- name`, `mise exec`, rtx's old
 // name): what `mise which name` says. path itself otherwise, and when mise

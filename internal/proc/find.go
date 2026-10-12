@@ -15,16 +15,16 @@ import (
 // Claude sign-in said Claude Code wasn't installed, its installer having
 // put claude.exe in ~/.local/bin after magpie started). A version
 // manager's wrapper script found there is given as the program it runs
-// (Unwrap). "" when none.
+// (Unwrap). "" when none. Where it is on PATH is kept while those folders
+// are unchanged (LookPath); Unwrap keeps its own answer by the script's
+// size and time.
 func FindTool(name string) string {
-	if p, err := exec.LookPath(name); err == nil {
-		return Unwrap(name, p)
-	}
-	dirs := UserBinDirs()
-	if runtime.GOOS == "windows" {
-		dirs = append(dirs, SystemDirs(LoginPath()...)...)
-	}
-	return Unwrap(name, toolIn(name, runtime.GOOS, dirs))
+	return Unwrap(name, looked("find\x00"+name, func() lookAnswer {
+		if p, err := exec.LookPath(name); err == nil {
+			return lookAnswer{path: p}
+		}
+		return lookAnswer{path: toolIn(name, runtime.GOOS, findDirs())}
+	}).path)
 }
 
 // sandboxVar is testenv.Marker, which proc can't import: the home a test
