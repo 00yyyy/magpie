@@ -40,7 +40,9 @@ shift
 exec "$@"
 `, which, d))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+miseBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	claudeExecutable = claudecode.Find // fakeClaudeLogin's cleanup puts it back
+	old := claudeExecutable
+	claudeExecutable = claudecode.Find
+	t.Cleanup(func() { claudeExecutable = old })
 	return wrapper
 }
 
@@ -50,10 +52,10 @@ func TestClaudeSignInThroughMiseWrapper(t *testing.T) {
 	claudeHome(t)
 	noAnthropic(t)
 	exe := fakeClaudeLogin(t, fakeClaudeAccount{email: "mise@example.com", plan: "max", refresh: "sk-ant-ort01-mise"}, "", false)
+	// linkWait stays the sign-in's own 30s: the link comes as soon as
+	// Claude Code prints it, so the wait only costs time on a busy machine,
+	// where sh, the fake mise and sh again can take seconds to start (#1802)
 	miseWrapped(t, exe, true)
-	was := linkWait
-	linkWait = 5 * time.Second
-	t.Cleanup(func() { linkWait = was })
 
 	st, err := StartSignIn("claude")
 	if err != nil {
@@ -87,8 +89,10 @@ func TestClaudeSignInWrapperThatNeverStarts(t *testing.T) {
 	if err == nil {
 		t.Fatal("signed in through a wrapper that never starts Claude Code")
 	}
-	if d := time.Since(start); d > 20*time.Second {
-		t.Fatalf("took %s", d)
+	// it gives up when linkWait is over, not before, and not long after:
+	// the upper bound is for a busy machine, the point is it isn't for ever
+	if d := time.Since(start); d < linkWait || d > linkWait+time.Minute {
+		t.Fatalf("gave up after %s, linkWait %s", d, linkWait)
 	}
 	if !strings.Contains(err.Error(), wrapper) || !strings.Contains(err.Error(), "printed nothing") || !strings.Contains(err.Error(), "in a terminal") {
 		t.Fatalf("error %q doesn't name %s and what to do", err, wrapper)

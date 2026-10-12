@@ -189,7 +189,9 @@ func startClaudeSignIn(s *signInFlow) error {
 	printed := make(chan string, 1)
 	exited := make(chan string, 1)
 	var said lastSaid
+	claudeLogins.Add(1)
 	go func() {
+		defer claudeLogins.Done()
 		sc := bufio.NewScanner(out)
 		var tail []string
 		for sc.Scan() {
@@ -265,6 +267,12 @@ func startClaudeSignIn(s *signInFlow) error {
 		}
 	}
 }
+
+// claudeLogins counts the runs of `claude auth login` still going on,
+// to the end of what each does after the CLI exits (the account added, its
+// folder removed). A sign-in that gave up has killed its run, but the run
+// may still be letting go; tests wait for it before the next one starts.
+var claudeLogins sync.WaitGroup
 
 // lastSaid is the last line a login command printed, which says why
 // there's no link.
