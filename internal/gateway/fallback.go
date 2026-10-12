@@ -807,6 +807,42 @@ func spentAfter(cs []candidate) bool {
 	return len(cs) > 0
 }
 
+// spentModel says whether every account or key routing would try for
+// p's model is out of its allowance as last known: held at its usage cap,
+// resting after the vendor said it is out of quota or credit (the
+// account's, or its model's own pool), or with a window that counts the
+// model used up. back is when the first of them is, zero when none says.
+// A model magpie picks for a call of its own (AutoVision, autoSearcher)
+// is one routing would still try: a turn's own model goes to the one
+// candidate it has all the same, but the describer or searcher picked in
+// its place can be another (#1801). Unknown allowance, or a rest for a
+// rate limit or an error, is not spent.
+func spentModel(p provider.Provider, model string, from provider.Protocol, now time.Time) (back time.Time, spent bool) {
+	out, aside, _, barred := perKeyBarred(p, model, from)
+	soonest := func(t time.Time) {
+		if !t.IsZero() && (back.IsZero() || t.Before(back)) {
+			back = t
+		}
+	}
+	for _, c := range barred {
+		if c.capped != nil {
+			soonest(c.capped.back)
+		}
+	}
+	for _, c := range append(out, aside...) {
+		if r, ok := restingOf(c); ok && (r.Why == failQuota || r.Why == failCredit) {
+			soonest(r.Until)
+			continue
+		}
+		if t := c.full(now); !t.IsZero() {
+			soonest(t)
+			continue
+		}
+		return time.Time{}, false
+	}
+	return back, true
+}
+
 var restingUntil = struct {
 	sync.Mutex
 	m    map[string]time.Time

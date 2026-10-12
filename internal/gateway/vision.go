@@ -167,8 +167,19 @@ func autoSeerNote(see string) string {
 // Settings name none: a small model that sees, of the models the user
 // enabled on the providers switched on (smallModel) — a
 // Claude account's, a Codex account's, the cheapest of an API key's,
-// another account's. "" when no model sees.
+// another account's. One with allowance left goes before one whose every
+// account or key is out of it (smallReady), whatever their order: the
+// one out is picked only when every model that sees is, so that agents
+// are still told images are described (provider.Described), and
+// askVisionWith says when it is back instead of asking (#1801). "" when
+// no model sees.
 func AutoVision() string {
+	m, _ := autoVision()
+	return m
+}
+
+// autoVision is AutoVision's pick, and whether it has allowance left.
+func autoVision() (string, bool) {
 	tier := func(p provider.Provider) int {
 		switch {
 		case p.Account != nil && p.Account.Agent == "claude":
@@ -180,24 +191,59 @@ func AutoVision() string {
 		}
 		return 3
 	}
-	best, bestTier, bestCost := "", 0, 0.0
+	best, bestTier, bestCost, bestReady := "", 0, 0.0, false
 	for _, p := range provider.All() {
 		if !p.On() || p.DecideOnly() {
 			continue
 		}
 		t := tier(p)
-		if best != "" && t > bestTier {
+		if bestReady && t > bestTier {
 			continue
 		}
-		m, cost := smallModelWhere(p, sees)
+		m, cost, ready := smallModelWhere(p, sees)
 		if m == "" {
 			continue
 		}
-		if best == "" || t < bestTier || cost < bestCost {
-			best, bestTier, bestCost = p.ID+"/"+m, t, cost
+		switch {
+		case best == "", ready && !bestReady:
+		case ready != bestReady, t > bestTier:
+			continue
+		case t == bestTier && cost >= bestCost:
+			continue
 		}
+		best, bestTier, bestCost, bestReady = p.ID+"/"+m, t, cost, ready
 	}
-	return best
+	return best, bestReady
+}
+
+// autoSpent is why AutoVision's model isn't asked to describe an image:
+// it is out of its allowance, as every model that sees is (spentModel),
+// and would only be refused again. nil when it has allowance, or when
+// the Settings name the model, which is asked as the user picked it.
+func autoSpent(model string) error {
+	if !autoDescribes() {
+		return nil
+	}
+	p, m, ok := provider.Resolve(model)
+	if !ok {
+		return nil
+	}
+	back, spent := spentModel(p, m, provider.Chat, time.Now())
+	if !spent {
+		return nil
+	}
+	when := ""
+	if !back.IsZero() {
+		when = " until " + back.Local().Format("Jan 2 15:04")
+	}
+	return fmt.Errorf("%s is out of its allowance%s, as is every other model magpie could describe it with, and none is asked until one is back", model, when)
+}
+
+// autoDescribes is whether the model that describes images is
+// AutoVision's: the Settings name none, or one that is missing.
+func autoDescribes() bool {
+	v := provider.HeldSettings().Vision
+	return v == "" || pickedMissing(v) != ""
 }
 
 // sees is whether a model takes images.
@@ -261,6 +307,9 @@ func (s *Server) askVision(ctx context.Context, model, src string) (string, erro
 // askVisionWith asks model about the image at src: system, and the user's
 // text beside the image.
 func (s *Server) askVisionWith(ctx context.Context, model, src, system, text string) (string, error) {
+	if err := autoSpent(model); err != nil {
+		return "", err
+	}
 	ctx, cancel := context.WithTimeout(context.WithValue(ctx, describingKey{}, true), visionTimeout)
 	defer cancel()
 	req := map[string]any{
@@ -376,16 +425,17 @@ func (s *Server) seenBody(ctx context.Context, proto provider.Protocol, body []b
 }
 
 // smallModelWhere is smallModel among the provider's models that keep
-// holds, and what it costs; "" when there is none.
-func smallModelWhere(p provider.Provider, keep func(catalog.Model) bool) (string, float64) {
-	id := smallModel(p, keep)
+// holds, what it costs, and whether it has allowance left (smallReady);
+// "" when there is none.
+func smallModelWhere(p provider.Provider, keep func(catalog.Model) bool) (string, float64, bool) {
+	id, ready := smallReady(p, keep, provider.Chat)
 	if id == "" {
-		return "", 0
+		return "", 0, false
 	}
 	for _, m := range p.Exposed() {
 		if m.ID == id && m.Price != nil {
-			return id, m.Price.Input + m.Price.Output
+			return id, m.Price.Input + m.Price.Output, ready
 		}
 	}
-	return id, 1e9
+	return id, 1e9, ready
 }

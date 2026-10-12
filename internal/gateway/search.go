@@ -257,21 +257,33 @@ func namedSearcherRank(p provider.Provider) (int, bool) {
 }
 
 // autoSearcher is the searcher magpie picks by itself: the first by
-// searchRank that is on, with its small model.
+// searchRank that is on, with its small model. One with allowance left
+// goes before one whose every account or key is out of it (smallReady),
+// which is picked only when every searcher is, so that magpie still
+// offers its search (canSearch) (#1801).
 func autoSearcher() (provider.Provider, string, bool) {
+	p, m, _, ok := autoSearcherReady()
+	return p, m, ok
+}
+
+// autoSearcherReady is autoSearcher, and whether its pick has allowance
+// left.
+func autoSearcherReady() (provider.Provider, string, bool, bool) {
 	var best provider.Provider
 	var model string
-	top := -1
+	top, bestReady := -1, false
 	for _, p := range provider.All() {
 		r := searchRank(p)
-		if r < 0 || !p.On() || (top >= 0 && r >= top) {
+		if r < 0 || !p.On() || (bestReady && r >= top) {
 			continue
 		}
-		if m := searcherModel(p); m != "" {
-			best, model, top = p, m, r
+		m, ready := searcherReady(p)
+		if m == "" || top >= 0 && (bestReady && !ready || ready == bestReady && r >= top) {
+			continue
 		}
+		best, model, top, bestReady = p, m, r, ready
 	}
-	return best, model, top >= 0
+	return best, model, bestReady, top >= 0
 }
 
 // Why the searcher Settings names isn't used, and magpie picks one itself.
@@ -384,6 +396,17 @@ func RelaysSaidToSearch() []provider.Provider {
 // list: OpenRouter turned away an unpicked anthropic/claude-haiku-5.5 for
 // the user's region (JonahFu on X).
 func smallModel(p provider.Provider, keep func(catalog.Model) bool) string {
+	id, _ := smallReady(p, keep, provider.Chat)
+	return id
+}
+
+// smallReady is smallModel of the models routing would still find an
+// account or key with allowance for, asked on from (spentModel), and
+// ready true; else smallModel of them all, and ready false. A model out
+// of its allowance is only picked when every other is (#1801: Image
+// recognition kept describing with an account out of its allowance, each
+// image refused 429).
+func smallReady(p provider.Provider, keep func(catalog.Model) bool, from provider.Protocol) (string, bool) {
 	var ms []catalog.Model
 	for _, m := range p.Exposed() {
 		if keep != nil && !keep(m) {
@@ -397,6 +420,19 @@ func smallModel(p provider.Provider, keep func(catalog.Model) bool) string {
 		}
 		ms = append(ms, m)
 	}
+	now := time.Now()
+	ready := slices.DeleteFunc(slices.Clone(ms), func(m catalog.Model) bool {
+		_, spent := spentModel(p, m.ID, from, now)
+		return spent
+	})
+	if id := pickSmall(ready); id != "" {
+		return id, true
+	}
+	return pickSmall(ms), false
+}
+
+// pickSmall is smallModel's pick of ms.
+func pickSmall(ms []catalog.Model) string {
 	// on a router, a model of the big vendors
 	if big := slices.DeleteFunc(slices.Clone(ms), func(m catalog.Model) bool {
 		v, _, ok := strings.Cut(m.ID, "/")
@@ -431,10 +467,17 @@ func smallModel(p provider.Provider, keep func(catalog.Model) bool) string {
 // searcherModel is the model p searches with when none is named: its
 // small model, of those it can search with.
 func searcherModel(p provider.Provider) string {
+	m, _ := searcherReady(p)
+	return m
+}
+
+// searcherReady is searcherModel, and whether it has allowance left
+// (smallReady).
+func searcherReady(p provider.Provider) (string, bool) {
 	if googleAccount(p) || p.IsRemoteMagpie() {
-		return smallModel(p, func(m catalog.Model) bool { return searchableModel(p, m.ID) })
+		return smallReady(p, func(m catalog.Model) bool { return searchableModel(p, m.ID) }, provider.Anthropic)
 	}
-	return smallModel(p, nil)
+	return smallReady(p, nil, provider.Anthropic)
 }
 
 // searchTool is the tool a model that can't search is given, under a name
@@ -523,26 +566,66 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 	defer cancel()
 	type pick struct{ id, model string }
 	tried := []pick{{p.ID, model}}
-	said, hits, err := s.searchBy(ctx, p, model, query)
+	var said string
+	var hits []Hit
+	// one magpie picked that is out of its allowance isn't asked: it
+	// would only be refused again (#1801); one the Settings name is
+	err := searcherSpent(p, model)
+	if cp, _, why := chosenSearcher(); why == "" && cp != nil && cp.ID == p.ID {
+		err = nil
+	}
+	if err == nil {
+		said, hits, err = s.searchBy(ctx, p, model, query)
+	}
+	// the others in turn, those with allowance left first
+	var turn, spent []SearcherChoice
 	for _, c := range Searchers() {
-		if c.ManualOnly {
+		if c.ManualOnly || c.Small == "" {
 			continue
 		}
+		if searcherSpent(c.Provider, c.Small) != nil {
+			spent = append(spent, c)
+		} else {
+			turn = append(turn, c)
+		}
+	}
+	for _, c := range append(turn, spent...) {
 		if err == nil || ctx.Err() != nil || len(tried) >= searchersInTurn {
 			break
 		}
-		if c.Small == "" || slices.ContainsFunc(tried, func(t pick) bool { return t.id == c.Provider.ID }) {
+		if slices.ContainsFunc(tried, func(t pick) bool { return t.id == c.Provider.ID }) {
 			continue
 		}
 		tried = append(tried, pick{c.Provider.ID, c.Small})
-		var next error
-		if said, hits, next = s.searchWith(ctx, c.Provider, c.Small, query); next != nil {
+		next := searcherSpent(c.Provider, c.Small)
+		if next == nil {
+			said, hits, next = s.searchWith(ctx, c.Provider, c.Small, query)
+		}
+		if next != nil {
 			err = errors.Join(err, next)
 		} else {
 			err = nil
 		}
 	}
 	return said, hits, err
+}
+
+// searcherSpent is why a searcher's model isn't asked: every account or
+// key of it is out of its allowance (spentModel). nil when it has
+// allowance, or searches with no model (a Kimi Code plan's service).
+func searcherSpent(p provider.Provider, model string) error {
+	if model == "" || provider.KimiCodeSearch(p) != "" {
+		return nil
+	}
+	back, spent := spentModel(p, model, provider.Anthropic, time.Now())
+	if !spent {
+		return nil
+	}
+	when := ""
+	if !back.IsZero() {
+		when = " until " + back.Local().Format("Jan 2 15:04")
+	}
+	return fmt.Errorf("%s/%s: out of its allowance%s, not asked", p.ID, model, when)
 }
 
 // searchWith asks one searcher's model to search: what it said, with the

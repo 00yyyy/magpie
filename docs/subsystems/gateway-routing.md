@@ -268,6 +268,30 @@ Covered by `TestVisionMCPAnalyzesImage`, `TestVisionMCPWithNoSeer`,
 `TestVisionMCPGuarded`, `TestVisionMCPHeldToKeyLimit` and
 `vision-mcp.test.cjs`.
 
+## Side models magpie picks: allowance first
+
+When magpie picks the model itself (`AutoVision` for image recognition,
+`autoSearcher` and the turn in `modelSearch` for web search), it picks
+before routing runs, so routing has one provider to try and would try it
+"all the same" while every account of it rests. Each request would then be
+refused upstream again (#1801). `spentModel` (fallback.go) says a model is
+out of its allowance when every candidate routing would try for it is
+barred at a usage cap, resting for quota or credit (not for rate), or has
+a full window (`candidate.full`), and when it is back. `smallModel`
+(`smallReady`) prefers models that aren't spent, and the pickers rank a
+provider with allowance above any tier or searchRank. With every one spent
+they still name a pick, so `seer`/`Described` and `canSearch`, which tell
+agents what magpie offers, don't flip with a window. Such a pick isn't
+asked: `askVisionWith` (`autoSpent`) answers with the reason and when it is
+back, and `modelSearch` (`searcherSpent`) skips it, puts spent searchers
+after the others and joins the reason into its error. A model named in
+Settings is asked as before. Image and video generation (`AutoDrawer`,
+`AutoVideomaker`) are not held this way.
+
+Covered by `TestAutoVisionPassesOverOneOut`,
+`TestAutoVisionTierAmongThoseWithAllowance`, `TestSpentModelAcrossAccounts`,
+`TestVisionDoesNotAskSpentDescriber` and `TestSearcherPassesOverOneOut`.
+
 ## Verification
 
 ```sh
@@ -277,7 +301,7 @@ go test -tags nogui ./internal/gateway -run 'TestAutoMode|TestClaudeBridgeSafegu
 go test -tags nogui ./internal/gateway -run 'TestCreditsExhaustedIsOutOfCredit|TestOutOfCreditLeavesFreeModels'
 go test -tags nogui ./internal/gateway ./internal/usage -run 'TestRetriedRequestCountsOnce|TestRequestsCountedOnceWithTheirRetries'
 go test -tags nogui ./internal/gateway -run 'TestRemoteMagpie|TestRedactedKinds|TestKeyLimitTellsOnlyTheCaller'
-go test -tags nogui ./internal/gateway -run 'TestSearchMCP|TestVisionMCP'
+go test -tags nogui ./internal/gateway -run 'TestSearchMCP|TestVisionMCP|TestAutoVisionPassesOverOneOut|TestAutoVisionTierAmongThoseWithAllowance|TestSpentModelAcrossAccounts|TestVisionDoesNotAskSpentDescriber|TestSearcherPassesOverOneOut'
 go test -tags nogui ./internal/gateway ./internal/gui . -run 'TestSearchAPIAtItsOwnBaseURL|TestSearchKeyStaysAtItsBaseURL|TestSearchAPIBaseURLFromSettings|TestSearchCLI'
 go test -tags nogui ./internal/redact ./internal/gui -run 'TestMoreKinds|TestCategoryDefaults|TestRedactKindsAreRedacts|TestRedactRuleEdit'
 go test -tags nogui ./internal/gateway -run 'TestCodexModelList|TestCodexModelsEtag'
