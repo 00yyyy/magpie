@@ -75,9 +75,10 @@ func readSkillLock(path string) map[string]string {
 	}
 	var f struct {
 		Skills map[string]struct {
-			Source     string `json:"source"`
-			SourceType string `json:"sourceType"`
-			SourceURL  string `json:"sourceUrl"`
+			Source        string `json:"source"`
+			SourceType    string `json:"sourceType"`
+			SourceURL     string `json:"sourceUrl"`
+			SourceBaseURL string `json:"sourceBaseUrl"`
 		} `json:"skills"`
 	}
 	if json.Unmarshal(b, &f) != nil {
@@ -88,6 +89,8 @@ func readSkillLock(path string) map[string]string {
 		r := ""
 		if e.SourceType == "github" && repoRe.MatchString(e.Source) {
 			r = strings.TrimSuffix(e.Source, ".git")
+		} else if e.SourceType == "well-known" {
+			r = wellKnownBase(e.SourceBaseURL, e.SourceURL)
 		} else if e.SourceURL != "" {
 			r = remoteRepo(e.SourceURL)
 		}
@@ -96,6 +99,47 @@ func readSkillLock(path string) map[string]string {
 		}
 	}
 	return out
+}
+
+// wellKnownBase is where a kit of skills a site serves at its
+// /.well-known/agent-skills/ came from (#1862, WardLu): the lock's
+// sourceBaseUrl, as host/path, so Feishu's lark-base, lark-doc and
+// lark-sheets are one group and Fish Audio's two another, while two kits
+// under one host with different base URLs stay apart. Each skill's
+// sourceUrl is its own file there, so it isn't the group. A lock written
+// before sourceBaseUrl has the base in the sourceUrl, before its
+// /.well-known/; one with neither is grouped by its sourceUrl as before.
+func wellKnownBase(base, src string) string {
+	if b := siteOf(base); b != "" {
+		return b
+	}
+	if i := strings.Index(src, "/.well-known/"); i > 0 {
+		if b := siteOf(src[:i]); b != "" {
+			return b
+		}
+	}
+	return remoteRepo(src)
+}
+
+// siteOf reads a web address as host/path, or the host alone, with no
+// user, query or trailing slash: "" when it isn't an http(s) address.
+func siteOf(s string) string {
+	u, err := url.Parse(strings.TrimSpace(s))
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" {
+		return ""
+	}
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	p := strings.Trim(u.Path, "/")
+	if before, _, ok := strings.Cut("/"+p+"/", "/.well-known/"); ok {
+		p = strings.Trim(before, "/")
+	}
+	if strings.Contains(p, "..") {
+		return ""
+	}
+	if p == "" {
+		return host
+	}
+	return host + "/" + p
 }
 
 // gitRepoOf is the repository of the git checkout a skill's folder is, or
@@ -266,7 +310,9 @@ func RegroupSkills() (int, error) {
 	seen := map[string]bool{}
 	for _, s := range l.Skills {
 		r := tr.repoOf(s)
-		if !repoRe.MatchString(r) || seen[strings.ToLower(r)] {
+		// a site's kit (docs.example.com/kit) reads like owner/repo, but
+		// a GitHub owner has no dot
+		if !repoRe.MatchString(r) || strings.Contains(strings.Split(r, "/")[0], ".") || seen[strings.ToLower(r)] {
 			continue
 		}
 		seen[strings.ToLower(r)] = true

@@ -73,6 +73,90 @@ func TestSkillRepoTraced(t *testing.T) {
 	}
 }
 
+// A site's kit of skills (npx skills add from a /.well-known/agent-skills/
+// index) is one group, by the lock's sourceBaseUrl (#1862, WardLu): the
+// reporter's three Feishu skills and two Fish Audio ones, each with a
+// sourceUrl of its own, were five groups. Another kit under the same host
+// with another base URL stays apart. A lock with no sourceBaseUrl is
+// grouped by the base in its sourceUrl, before /.well-known/.
+func TestWellKnownKitGrouped(t *testing.T) {
+	h := sandbox(t)
+	const feishu = "https://open.feishu.cn/lark-cli/skills/regular"
+	lock := map[string][2]string{ // name: sourceBaseUrl, sourceUrl
+		"lark-base":      {feishu, feishu + "/.well-known/agent-skills/lark-base.tar.gz"},
+		"lark-doc":       {feishu, feishu + "/.well-known/agent-skills/lark-doc.tar.gz"},
+		"lark-sheets":    {feishu, feishu + "/.well-known/agent-skills/lark-sheets.tar.gz"},
+		"fish-audio-api": {"https://docs.fish.audio", "https://docs.fish.audio/.well-known/agent-skills/fish-audio-api/skill.md"},
+		"fish-audio-sdk": {"https://docs.fish.audio/", "https://docs.fish.audio/.well-known/agent-skills/fish-audio-sdk/skill.md"},
+		// the same host, another kit
+		"lark-admin": {"https://open.feishu.cn/lark-cli/skills/admin", "https://open.feishu.cn/lark-cli/skills/admin/.well-known/agent-skills/lark-admin.tar.gz"},
+		// a lock from before sourceBaseUrl
+		"lark-old": {"", feishu + "/.well-known/agent-skills/lark-old.tar.gz"},
+		// a kit one folder down a site, which reads like owner/repo
+		"kit-one": {"https://docs.example.com/kit", "https://docs.example.com/kit/.well-known/agent-skills/kit-one/SKILL.md"},
+	}
+	var entries []string
+	os.MkdirAll(filepath.Join(h, ".claude/skills"), 0o755)
+	var names []string
+	for n, u := range lock {
+		skill(t, filepath.Join(h, ".agents/skills", n), n, "D")
+		dirLink(filepath.Join(h, ".agents/skills", n), filepath.Join(h, ".claude/skills", n))
+		base := ""
+		if u[0] != "" {
+			base = `,"sourceBaseUrl":"` + u[0] + `"`
+		}
+		entries = append(entries, `"`+n+`":{"sourceType":"well-known","sourceUrl":"`+u[1]+`"`+base+`}`)
+		names = append(names, n)
+	}
+	write(t, filepath.Join(h, ".agents/.skill-lock.json"), `{"version":3,"skills":{`+strings.Join(entries, ",")+`}}`)
+	ok(t)(ImportSkills(names))
+
+	got := repoIn(t)
+	for n, want := range map[string]string{
+		"lark-base": "open.feishu.cn/lark-cli/skills/regular", "lark-doc": "open.feishu.cn/lark-cli/skills/regular",
+		"lark-sheets": "open.feishu.cn/lark-cli/skills/regular", "lark-old": "open.feishu.cn/lark-cli/skills/regular",
+		"fish-audio-api": "docs.fish.audio", "fish-audio-sdk": "docs.fish.audio",
+		"lark-admin": "open.feishu.cn/lark-cli/skills/admin", "kit-one": "docs.example.com/kit",
+	} {
+		if got[n] != want {
+			t.Errorf("%s: repo %q, want %q", n, got[n], want)
+		}
+	}
+
+	// Group again fetches GitHub repositories only: none of these is one
+	var asked []string
+	oldT := tarballURL
+	tarballURL = func(repo, ref string) string { asked = append(asked, repo); return "http://127.0.0.1:1/" }
+	t.Cleanup(func() { tarballURL = oldT })
+	if _, err := RegroupSkills(); err != nil {
+		t.Fatal(err)
+	}
+	if len(asked) != 0 {
+		t.Errorf("fetched from GitHub: %v", asked)
+	}
+}
+
+// A well-known kit's base, from the lock's sourceBaseUrl or else its
+// sourceUrl; neither an http(s) address, its sourceUrl as a remote.
+func TestWellKnownBase(t *testing.T) {
+	for _, c := range []struct{ base, src, want string }{
+		{"https://open.feishu.cn/lark-cli/skills/regular", "", "open.feishu.cn/lark-cli/skills/regular"},
+		{"https://Docs.Fish.Audio/", "", "docs.fish.audio"},
+		{"https://www.example.com/kit/?v=2", "", "example.com/kit"},
+		{"https://me:tok@example.com/kit", "", "example.com/kit"},
+		{"https://example.com/kit/.well-known/agent-skills/index.json", "", "example.com/kit"},
+		{"", "https://docs.fish.audio/.well-known/agent-skills/fish-audio-api/skill.md", "docs.fish.audio"},
+		{"not a url", "https://example.com/a/.well-known/agent-skills/x.tar.gz", "example.com/a"},
+		{"", "https://example.com/team/kit.git", "example.com/team/kit"},
+		{"file:///etc/kit", "", ""},
+		{"https://example.com/../etc", "", ""},
+	} {
+		if got := wellKnownBase(c.base, c.src); got != c.want {
+			t.Errorf("%q %q: %q, want %q", c.base, c.src, got, c.want)
+		}
+	}
+}
+
 // The remote forms git takes, each read as the repository.
 func TestRemoteRepo(t *testing.T) {
 	for in, want := range map[string]string{
