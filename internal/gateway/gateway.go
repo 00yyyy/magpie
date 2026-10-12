@@ -367,7 +367,7 @@ func New() *Server {
 	return &Server{
 		// a request counted against a MaxRPM waits for room in its minute
 		// first (rpm.go); the ChatGPT backend is spoken to over HTTP/1.1
-		// (codex_http1.go)
+		// (netproxy.HTTP1, which provider/codex_http1.go sets)
 		client:       &http.Client{Transport: rpmTransport{upstreamTransport()}},
 		unfit:        make(map[string]bool),
 		subscription: newSubscriptionBridge(),
