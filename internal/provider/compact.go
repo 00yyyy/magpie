@@ -70,6 +70,30 @@ func WindowTyped(id string) bool {
 	return err == nil && p.ContextOf(model) > 0
 }
 
+// ClaudeGroup says a model id (as CompactSet takes it) is a routing
+// group whose every member is one of Anthropic's Claude models, by the
+// name it is listed under or the one the vendor is asked for. Claude Code
+// runs such a group as it runs a Claude model, to its own window, so it
+// isn't handed magpie's default compaction window (#1741: a group of
+// Claude [1m] models was told 272000, its id's last part not starting
+// with "claude"). A group with any other member, or none, isn't.
+func ClaudeGroup(id string) bool {
+	id = catalogID(id)
+	if !strings.HasPrefix(id, GroupPrefix) {
+		return false
+	}
+	_, ms, ok := GroupFinder()(id)
+	if !ok || len(ms) == 0 {
+		return false
+	}
+	for _, m := range ms {
+		if !claudeModel(entryModel(m)) && !claudeModel(m.Model) {
+			return false
+		}
+	}
+	return true
+}
+
 // catalogID is an agent's model id as the catalog has it: magpie/ and
 // Claude Code's [1m] mark taken off.
 func catalogID(id string) string {
