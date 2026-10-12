@@ -3,9 +3,11 @@
 package proc
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +33,13 @@ type wrapperFixture struct {
 func newWrapperFixture(t *testing.T, wrapper, mise string) wrapperFixture {
 	t.Helper()
 	resetUnwrapped(t)
+	// a fake mise that answers is given a minute, not miseWait: a shell
+	// started on a loaded machine can take seconds to run its first line
+	was := miseAsk
+	miseAsk = func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(context.Background(), time.Minute)
+	}
+	t.Cleanup(func() { miseAsk = was })
 	d := t.TempDir()
 	f := wrapperFixture{
 		dir:     d,
@@ -125,23 +134,44 @@ func TestFindToolKeepsWrapperWhenMiseDoesntSay(t *testing.T) {
 		})
 	}
 	t.Run("hangs", func(t *testing.T) {
-		was := miseWait
-		miseWait = 300 * time.Millisecond
-		t.Cleanup(func() { miseWait = was })
 		f := newWrapperFixture(t, miseWrapperScript, "#!/bin/sh\necho $$ > '{asked}'\nexec sleep 60\n")
-		start := time.Now()
+		// mise is given up on once the fake has written its pid, as
+		// miseWait's end does to a mise that doesn't answer; not at a
+		// time a loaded machine passes before the fake's first line runs
+		// (#1838: 300ms killed it unasked)
+		var wg sync.WaitGroup
+		t.Cleanup(wg.Wait)
+		gaveUp := make(chan time.Time, 1)
+		miseAsk = func() (context.Context, context.CancelFunc) {
+			ctx, cancel := context.WithCancel(context.Background())
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				deadline := time.Now().Add(time.Minute)
+				for strings.TrimSpace(f.asks(t)) == "" && ctx.Err() == nil && time.Now().Before(deadline) {
+					time.Sleep(10 * time.Millisecond)
+				}
+				select {
+				case gaveUp <- time.Now():
+				default:
+				}
+				cancel()
+			}()
+			return ctx, cancel
+		}
 		if got := FindTool("claude"); got != f.wrapper {
 			t.Fatalf("FindTool(claude) = %q, want the wrapper %q", got, f.wrapper)
 		}
-		if d := time.Since(start); d > 30*time.Second {
-			t.Fatalf("waited %s for a mise that doesn't answer", d)
+		// given up on, FindTool doesn't wait out the fake's 60s sleep
+		if d := time.Since(<-gaveUp); d > 30*time.Second {
+			t.Fatalf("FindTool returned %s after mise was given up on", d)
 		}
 		pid := strings.TrimSpace(f.asks(t))
 		if pid == "" {
 			t.Fatal("mise wasn't asked")
 		}
 		// the ask was killed with its group: nothing of it outlives the test
-		deadline := time.Now().Add(10 * time.Second)
+		deadline := time.Now().Add(time.Minute)
 		for alive(pid) {
 			if time.Now().After(deadline) {
 				t.Fatalf("mise %s still running", pid)
