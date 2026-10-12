@@ -66,8 +66,9 @@ type CallFor struct {
 	// model that described is the one magpie picks in its place
 	// (VisionMissing), and the Routing view names both.
 	Missing string `json:"missing,omitempty"`
-	// MCP, on a web search, is that the agent called magpie's web search
-	// MCP server (SearchMCPPath) itself, for no model of magpie's.
+	// MCP, on a web search or an image's description, is that the agent
+	// called magpie's MCP server (SearchMCPPath, VisionMCPPath) itself, for
+	// no model of magpie's.
 	MCP bool `json:"mcp,omitempty"`
 }
 

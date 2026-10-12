@@ -255,15 +255,21 @@ func (s *Server) describe(ctx context.Context, model, src string) (string, error
 // askVision asks model through the gateway itself, as a client would, what
 // the image at src shows.
 func (s *Server) askVision(ctx context.Context, model, src string) (string, error) {
+	return s.askVisionWith(ctx, model, src, visionSystem, "Describe this image.")
+}
+
+// askVisionWith asks model about the image at src: system, and the user's
+// text beside the image.
+func (s *Server) askVisionWith(ctx context.Context, model, src, system, text string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.WithValue(ctx, describingKey{}, true), visionTimeout)
 	defer cancel()
 	req := map[string]any{
 		"model":  model,
 		"stream": false,
 		"messages": []map[string]any{
-			{"role": "system", "content": visionSystem},
+			{"role": "system", "content": system},
 			{"role": "user", "content": []map[string]any{
-				{"type": "text", "text": "Describe this image."},
+				{"type": "text", "text": text},
 				{"type": "image_url", "image_url": map[string]string{"url": src}},
 			}},
 		},

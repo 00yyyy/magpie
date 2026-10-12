@@ -44,15 +44,22 @@ type mcpMessage struct {
 }
 
 func (s *Server) searchMCP(w http.ResponseWriter, r *http.Request) {
+	serveMCP(w, r, "magpie's web search", 1<<20, s.searchMCPCall)
+}
+
+// serveMCP answers the JSON-RPC messages POSTed to one of magpie's own MCP
+// servers (what names it in a refusal) with call, a body up to limit bytes
+// long: guarded as a gateway route, and a web page turned away.
+func serveMCP(w http.ResponseWriter, r *http.Request, what string, limit int64, call func(*http.Request, mcpMessage) (any, map[string]any)) {
 	if !local(r) && !sharedWith(r) {
-		http.Error(w, "magpie's web search is served to another machine only when magpie is shared on the local network and the request carries a gateway key (Authorization: Bearer <key>)", http.StatusForbidden)
+		http.Error(w, what+" is served to another machine only when magpie is shared on the local network and the request carries a gateway key (Authorization: Bearer <key>)", http.StatusForbidden)
 		return
 	}
 	// a page on this computer (localhost) gets past corsGuard; only one the
 	// user listed in Settings, which corsGuard held to a gateway key, may
 	// call this
 	if o := r.Header.Get("Origin"); o != "" && !corsAllowed(o) {
-		http.Error(w, "magpie's web search MCP server answers agents, not web pages", http.StatusForbidden)
+		http.Error(w, what+" MCP server answers agents, not web pages", http.StatusForbidden)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -61,7 +68,7 @@ func (s *Server) searchMCP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST JSON-RPC messages here (MCP Streamable HTTP)", http.StatusMethodNotAllowed)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(r.Body, limit))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -87,7 +94,7 @@ func (s *Server) searchMCP(w http.ResponseWriter, r *http.Request) {
 		if len(m.ID) == 0 || bytes.Equal(m.ID, []byte("null")) || m.Method == "" {
 			continue
 		}
-		result, rpcErr := s.searchMCPCall(r, m)
+		result, rpcErr := call(r, m)
 		reply := map[string]any{"jsonrpc": "2.0", "id": m.ID}
 		if rpcErr != nil {
 			reply["error"] = rpcErr
@@ -111,16 +118,8 @@ func (s *Server) searchMCP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) searchMCPCall(r *http.Request, m mcpMessage) (any, map[string]any) {
 	switch m.Method {
 	case "initialize":
-		var p struct {
-			ProtocolVersion string `json:"protocolVersion"`
-		}
-		json.Unmarshal(m.Params, &p)
-		v := searchMCPVersions[0]
-		if slices.Contains(searchMCPVersions, p.ProtocolVersion) {
-			v = p.ProtocolVersion
-		}
 		return map[string]any{
-			"protocolVersion": v,
+			"protocolVersion": mcpVersion(m),
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "magpie-web-search", "title": "Magpie Web Search", "version": Version},
 			"instructions":    "web_search searches the web with the search magpie gives its models: a provider that can search, or the search APIs set up in magpie (Settings → Models → Web search).",
@@ -156,6 +155,19 @@ func (s *Server) searchMCPCall(r *http.Request, m mcpMessage) (any, map[string]a
 		return toolResult(said, false), nil
 	}
 	return nil, map[string]any{"code": -32601, "message": "method not found: " + m.Method}
+}
+
+// mcpVersion is the MCP version an initialize is answered in: the one it
+// asks for when the server speaks it, else the newest.
+func mcpVersion(m mcpMessage) string {
+	var p struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	json.Unmarshal(m.Params, &p)
+	if slices.Contains(searchMCPVersions, p.ProtocolVersion) {
+		return p.ProtocolVersion
+	}
+	return searchMCPVersions[0]
 }
 
 func toolResult(text string, isError bool) map[string]any {
