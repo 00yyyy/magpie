@@ -248,3 +248,85 @@ func TestCompactingMinis(t *testing.T) {
 		}
 	}
 }
+
+// A system prompt that only quotes a compaction prompt, behind the agent's
+// own, isn't a compaction: Minis puts its memory (GLOBAL.md, the daily log)
+// after its own prompt in every request, so one memory holding Minis's
+// compaction line took every turn of that conversation for one (#1635,
+// jueda12: 28 requests in a row, one with 4 tokens of chat, went to the
+// compaction rule's model). The prompts that lead the system prompt, alone
+// or behind a short lead, still are.
+func TestCompactingIgnoresQuotedPromptInSystem(t *testing.T) {
+	user := func(text string) Message { return Message{Role: "user", Parts: []Part{{Kind: Text, Text: text}}} }
+	// Minis's own prompt runs to thousands of tokens (19k-23k with its
+	// tools, in the report) before the memory it adds
+	own := "You are an on-device AI assistant running on iOS.\n\n" +
+		strings.Repeat("- Use the tools to read and change the user's files, notes and reminders; ask before deleting anything.\n", 60)
+	notes := "以下是先前的筆記：\n\n" +
+		"「You are a context compaction engine. Your summary will REPLACE the original messages in the conversation context window.」\n\n" +
+		"其餘是一般對話內容……"
+	for name, req := range map[string]*Request{
+		"memory":      {System: own + "\n\n" + notes, Messages: []Message{user("hello there")}},
+		"claude code": {System: own + "\n\nYou are a helpful AI assistant tasked with summarizing conversations.", Messages: []Message{user("hello there")}},
+	} {
+		if compacting(req) {
+			t.Errorf("%s: a system prompt that merely quotes a compaction prompt was taken for a compaction", name)
+		}
+	}
+	conversation := "[user]: 幫我整理桌面的檔案\n[assistant]: 已整理完成"
+	for name, req := range map[string]*Request{
+		"alone":       {System: minisCompactSystem, Messages: []Message{user(conversation)}},
+		"short lead":  {System: "You are an on-device AI assistant.\n\n" + minisCompactSystem, Messages: []Message{user(conversation)}},
+		"claude code": {System: "x-anthropic-billing-header: cc_version=2.1.296; cc_entrypoint=cli;You are Claude Code, Anthropic's official CLI for Claude.You are a helpful AI assistant tasked with summarizing conversations.", Messages: []Message{user("fix it")}},
+		"kimi (1.52)": {System: "You are a helpful assistant that compacts conversation context.", Messages: []Message{user("## Message 1\nRole: user\nContent:\nfix it")}},
+		"gemini cli":  {System: "You are a specialized system component responsible for distilling chat history into a structured XML <state_snapshot>.", Messages: []Message{user("fix it")}},
+	} {
+		if !compacting(req) {
+			t.Errorf("%s: not taken for compacting", name)
+		}
+	}
+}
+
+// The last user message counts as a compaction's ask only where the agent
+// puts its ask: at the start of a text part (Claude Code 2.1.296's behind
+// its TEXT ONLY preamble; Kimi's in a part of its own after the
+// conversation), or, for Minis, anywhere in a part that opens with Minis's
+// own first line. A user writing about one of them, as on #1635, isn't
+// compacting.
+func TestCompactingAsksWhereTheAgentPutsThem(t *testing.T) {
+	user := func(parts ...string) Message {
+		m := Message{Role: "user"}
+		for _, p := range parts {
+			m.Parts = append(m.Parts, Part{Kind: Text, Text: p})
+		}
+		return m
+	}
+	said := Message{Role: "assistant", Parts: []Part{{Kind: Text, Text: "done"}}}
+	// Claude Code 2.1.296's compaction ask: its preamble (hnn), then the
+	// instructions
+	ccAsk := "CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.\n\n" +
+		"- Do NOT use Read, Bash, Grep, Glob, Edit, Write, or ANY other tool.\n" +
+		"- You already have all the context you need in the conversation above.\n" +
+		"- Tool calls will be REJECTED and will waste your only turn — you will fail the task.\n" +
+		"- Your entire response must be plain text: an <analysis> block followed by a <summary> block.\n\n" +
+		"Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions."
+	history := strings.Repeat("[user]: 幫我整理桌面的檔案\n[assistant]: 已整理完成\n", 200) // well past compactLead
+	for name, req := range map[string]*Request{
+		"claude code": {Messages: []Message{user("fix it"), said, user(ccAsk)}},
+		"kimi": {Messages: []Message{user("## Message 1\nRole: user\nContent:\n", history,
+			"\n---\n\nThe above is a list of messages in an agent conversation. You are now given a task to compact this conversation context according to specific priorities and rules.")}},
+		"minis": {Messages: []Message{user(minisCompactAsk(history))}},
+	} {
+		if !compacting(req) {
+			t.Errorf("%s: not taken for compacting", name)
+		}
+	}
+	for name, req := range map[string]*Request{
+		"minis marker quoted": {Messages: []Message{user("Minis 壓縮時，會把整段對話包成一則以 \"END OF CONVERSATION TO COMPACT.\" 結尾的 user 訊息，這樣對嗎？")}},
+		"ask deep in a paste": {Messages: []Message{user(history + "\nYour task is to create a detailed summary of the conversation so far — what does this line in my log mean?")}},
+	} {
+		if compacting(req) {
+			t.Errorf("%s: taken for compacting", name)
+		}
+	}
+}
