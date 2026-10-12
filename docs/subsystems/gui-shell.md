@@ -57,16 +57,22 @@ to an unobserved reasoning-token count.
 `Call`, `Route` and `Try` field (`firstReasoning`) record this evidence with
 the same origin as their duration. Historical records have no evidence and
 keep their previous speed. Request-page caches and compressed snapshots
-preserve the optional field. `ReasoningHidden` (`reasoning_hidden` in the
+preserve the optional field; the packed row keeps `ReasoningHidden` in
+its own `Flags` bit (`rowReasoningHidden`), apart from pricing's
+`swapKnown`, which every priced row carries. `ReasoningHidden` (`reasoning_hidden` in the
 ledger, `reasoningHidden` in traces) suppresses a no-text speed even when
 redacted/encrypted thinking has no reported reasoning-token count. A
-Responses summary is marked this way on its own-login path too. Optional
+Responses summary is marked this way on its own-login path too, and after
+an endpoint fallback, where the try's protocol still names the first
+endpoint, by the upstream that answered (`summaryUpstream` in
+[`continuation.go`](../../internal/gateway/continuation.go)). Optional
 OTel attributes carry the evidence without response text. The existing burst and held-content limits in
 `DecodeOf` still apply, and hidden reasoning does not enter average speed.
 
 `TestVisibleReasoningSpeed`, `TestReasoningSpeedEvidence`,
 `TestReasoningSpeedThroughGateway`, `TestMixedRedactedReasoning`,
-`TestHiddenReasoningThroughTranslation`, `TestSlowReleasedReasoningIsUntimed` and
+`TestHiddenReasoningThroughTranslation`, `TestSlowReleasedReasoningIsUntimed`,
+`TestPricedRowKeepsReasoningEvidence`, `TestSummaryAfterEndpointFallbackStaysHidden` and
 [`reasoning-speed.test.cjs`](../../internal/gui/tests/reasoning-speed.test.cjs)
 cover the calculation, cache round trip, translated streams and both pages.
 

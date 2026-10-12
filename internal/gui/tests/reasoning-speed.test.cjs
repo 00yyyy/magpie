@@ -24,14 +24,14 @@ const timing = [
   [2200, 2000, 0, 15500, 14000, 14000], // the turn: 200 in 1.5 s, 133 tok/s
   [1300, 0, 1000, 9000, 6000, 6000],    // an older route: 300 in 3 s, 100 tok/s
   [1500, 1400, 0, 9000, 8000, 0],       // reasoning, then tool calls only: none
-  [500, 0, 0, 7000, 2000, 2000],
-  [1500, 1400, 0, 15000, 1000, 0], // paced visible reasoning: 107 tok/s
-  [1500, 1400, 0, 9000, 8000, 0], // a late summary stays untimed
-  [120, 0, 0, 9000, 1000, 0], // mixed redacted thinking without a reasoning count        // no reasoning: 500 in 5 s, 100 tok/s
+  [500, 0, 0, 7000, 2000, 2000],         // no reasoning: 500 in 5 s, 100 tok/s
+  [1500, 1400, 0, 15000, 1000, 0],      // paced visible reasoning: 107 tok/s
+  [1500, 1400, 0, 9000, 8000, 0],       // a late summary stays untimed
+  [120, 0, 0, 9000, 1000, 0],           // mixed redacted thinking without a reasoning count
 ];
 const routes = timing.map(([out, reasoning, usageReasoning, ms, ttft, firstText], i) => ({
   ...(i === 4 ? { firstReasoning: 1000, flow: 12000 } : {}),
- ...(i === 6 ? { reasoningHidden: true, flow: 7000 } : {}),
+  ...(i === 6 ? { reasoningHidden: true, flow: 7000 } : {}),
   id: 100 - i, seq: 100 - i, time: at(i), agent: "codex", session: "think-chat", model: "codex/gpt-6.1-sol", provider: "codex",
   order: [seat], tries: [{ id: seat.id, model: seat.model, start: at(i), done: true, status: 200, ms, ttft, firstText }],
   done: true, status: 200, ms, ttft, firstText, tokens: out + 9000, out, ...(reasoning ? { reasoning } : {}),

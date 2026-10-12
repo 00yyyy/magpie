@@ -3,6 +3,8 @@ package usage
 import (
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 func TestVisibleReasoningSpeed(t *testing.T) {
@@ -68,5 +70,45 @@ func TestVisibleReasoningSpeed(t *testing.T) {
 	sum.addRow(Row{Record: hidden})
 	if sum.DecodeOut != 1500 || sum.DecodeMs != 14000 {
 		t.Fatalf("hidden reasoning lifted aggregate: %+v", sum)
+	}
+}
+
+// A row the Requests page reads back has been priced, and pricing sets
+// swapKnown on it: that bit is not ReasoningHidden's, or every priced reply
+// with no answer text would lose its speed (#1463).
+func TestPricedRowKeepsReasoningEvidence(t *testing.T) {
+	visible := Record{Time: time.Now(), Provider: "deepseek", Model: "deepseek-chat", Output: 1500, Reasoning: 1400, Millis: 15000, TTFT: 1000, FirstReasoning: 1000, Flow: 12000, Status: 200}
+	toolOnly := Record{Time: time.Now(), Provider: "deepseek", Model: "deepseek-chat", Output: 120, Millis: 9000, TTFT: 1000, Flow: 7000, Status: 200}
+	sealed := visible
+	sealed.ReasoningHidden = true
+	for _, c := range []struct {
+		name   string
+		r      Record
+		hidden bool
+		n      int
+		w      int64
+	}{
+		{"visible reasoning", visible, false, 1500, 14000},
+		{"tool call without reasoning", toolOnly, false, 120, 8000},
+		{"hidden reasoning", sealed, true, 0, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var chunk rowChunk
+			for i := 0; i < 80; i++ {
+				chunk.add(Row{Record: c.r}, "", int64(i), false)
+			}
+			b := newBlockPricer(nil, nil, func(Record) *catalog.Price { return nil })
+			defer b.release()
+			for _, from := range []*rowChunk{&chunk, chunk.pack()} {
+				priced := b.block(from)
+				if priced.Rows[0].Flags&swapKnown == 0 {
+					t.Fatal("the row wasn't priced")
+				}
+				row := priced.row(0)
+				if n, w := row.Decode(); row.ReasoningHidden != c.hidden || n != c.n || w != c.w {
+					t.Fatalf("priced row: hidden %v, %d tokens/%d ms; want %v, %d/%d", row.ReasoningHidden, n, w, c.hidden, c.n, c.w)
+				}
+			}
+		})
 	}
 }
