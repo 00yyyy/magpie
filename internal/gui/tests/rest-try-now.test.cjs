@@ -72,11 +72,11 @@ function serve(lang, lifted) {
 }
 
 const want = {
-  en: { go: "Try now", note: "Team is asked again from the next request" },
-  zh: { go: "立即重试", note: "Team 从下一个请求起重新使用" },
-  "zh-TW": { go: "立即重試", note: "Team 從下一個請求起重新使用" },
-  ja: { go: "今すぐ試す", note: "Team は次のリクエストから再び使われます" },
-  de: { go: "Jetzt versuchen", note: "Team wird ab der nächsten Anfrage wieder gefragt" },
+  en: { go: "Try now", note: "Team is asked again from the next request", remove: "Remove", first: "Make first" },
+  zh: { go: "立即重试", note: "Team 从下一个请求起重新使用", remove: "移除", first: "设为首选" },
+  "zh-TW": { go: "立即重試", note: "Team 從下一個請求起重新使用", remove: "移除", first: "設為首選" },
+  ja: { go: "今すぐ試す", note: "Team は次のリクエストから再び使われます", remove: "削除", first: "最初にする" },
+  de: { go: "Jetzt versuchen", note: "Team wird ab der nächsten Anfrage wieder gefragt", remove: "Entfernen", first: "An erste Stelle setzen" },
 };
 
 const posted = async (lifted) => {
@@ -147,6 +147,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await go.waitFor();
         assert(!(await sideways(page)), "the page scrolls sideways");
         await reach(page, go);
+        // the note and Try now don't push the row's own buttons out of
+        // reach (they did in German at 1100px before they took a line)
+        await row.hover();
+        for (const b of [want[lang].remove, want[lang].first]) {
+          const btn = row.getByRole("button", { name: b, exact: true });
+          assert(await btn.evaluate((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), `${b} can't be reached`);
+        }
         const sc = await scrolled(page);
         await go.click();
         assert.deepEqual(await posted(lifted), [{ key: "relay#bbbbbbbbbb" }]);

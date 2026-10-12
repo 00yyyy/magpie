@@ -13560,7 +13560,9 @@ function renderKeyAccounts(p) {
       try { copy((await api("provider/key", { id: p.id, account: k.id })).key, k.name || k.masked, cp); } catch (err) { status(err.message, "err"); }
     };
     row.append(cp);
-    // one the gateway passes over after a failure: why, and until when
+    // one the gateway passes over after a failure: why, and until when, on
+    // a line of its own under the key's, so the row's controls stay in reach
+    let restLine = null;
     if (k.rest && new Date(k.rest.until) > Date.now()) {
       const r = el("span", "key-rest", t("Resting · {why} · back at {time}", { why: (k.rest.status ? k.rest.status + " " : "") + t(KEY_FAIL[k.rest.why] || "failed"), time: new Date(k.rest.until).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) }));
       r.title = t("The gateway passes this key over until then, and tries the next one");
@@ -13578,7 +13580,9 @@ function renderKeyAccounts(p) {
           status(t("{key} is asked again from the next request", { key: k.name || k.masked }), "ok");
         } catch (err) { go.classList.remove("busy"); status(err.message, "err"); }
       };
-      row.append(r, go);
+      restLine = el("div", "key-rest-line");
+      restLine.append(r, go);
+      row.classList.add("resting");
     }
     if (k.on && several) row.append(keyWeight(p, k, weightOf(k), weights));
     const proto = protoPicker(p, k.protocol, (v) => accountAction("keys/protocol", { id: p.id, ref: k.id, protocol: v }));
@@ -13609,6 +13613,7 @@ function renderKeyAccounts(p) {
       first.onclick = () => { first.classList.add("busy"); accountAction("keys/use", { id: p.id, ref: k.id }, t("{name} tries {key} first", { name: p.name, key: k.name || k.masked })); };
       row.append(first);
     }
+    if (restLine) row.append(restLine);
     if (amBox) row.append(amBox), row.classList.add("with-am");
     list.append(row);
   }
