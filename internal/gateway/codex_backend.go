@@ -705,6 +705,8 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			s.trace.update(tr, func(t *Route) {
 				t.Tries[0].Done, t.Tries[0].Status, t.Tries[0].Millis, t.Tries[0].Error = true, status, ms, msg
 				t.Tries[0].TTFT, t.Tries[0].FirstText = ttft, text
+				t.ReasoningHidden = first.hidesReasoning(provider.Responses)
+				t.Tries[0].ReasoningHidden = t.ReasoningHidden
 				t.Done, t.Status, t.Error, t.Millis, t.Tokens = true, status, msg, ms, tokens
 				if t.TitleLink != nil && isTitleKind(kind) && status < 400 && msg == "" && !titleReply.truncated {
 					link := *t.TitleLink
@@ -917,6 +919,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		Provider: "openai", Agent: agentOf(r), Kind: kind, Status: res.StatusCode,
 		Millis: time.Since(start).Milliseconds(), Fallback: resetNote}
 	call.TTFT, call.FirstText = first.ms()
+	call.ReasoningHidden = first.hidesReasoning(provider.Responses)
 	uu.add(sniff.usage())
 	call.Flow = first.flowFor(uu.Reasoning)
 	call.Usage, served = uu, uu.Served
@@ -932,7 +935,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	rec := usage.Record{RouteID: tr.ID, Time: start, Agent: call.Agent, Provider: call.Provider, Host: provider.HostOf(base), Model: call.Model,
 		Requested: call.Model, Served: served,
 		Input: uu.Input, Output: uu.Output, CacheRead: uu.CacheRead, CacheWrite: uu.CacheWrite,
-		Reasoning: uu.Reasoning, Effort: effort, Millis: call.Millis, TTFT: call.TTFT, FirstText: call.FirstText, Flow: call.Flow, Status: call.Status, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
+		Reasoning: uu.Reasoning, Effort: effort, Millis: call.Millis, TTFT: call.TTFT, FirstText: call.FirstText, ReasoningHidden: call.ReasoningHidden, Flow: call.Flow, Status: call.Status, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 		RequestID: requestID(res.Header), ResponseID: uu.ResponseID, Endpoint: r.URL.Path}
 	failedWith(&rec, call.Status, call.Error, errType)
 	appendUsage(r, rec)

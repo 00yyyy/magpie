@@ -31,6 +31,45 @@ three.
 
 ## Constraints and failure behavior
 
+### Streamed output speed
+
+Usage rows and aggregates use `Record.Decode` and `DecodeOf` in
+[`internal/usage/usage.go`](../../internal/usage/usage.go). Routing uses
+`decodeOf` in [`routing.js`](../../internal/gui/assets/routing.js); Usage
+rows use `ledDecode` in [`app.js`](../../internal/gui/assets/app.js).
+
+When an answer follows reasoning, only answer tokens are timed from the
+first answer text. Without answer text, all output tokens are timed only
+when the gateway records paced visible reasoning and a usable content flow.
+`firstToken.reasoningMs` in
+[`ttft.go`](../../internal/gateway/ttft.go) requires reasoning at the first
+content and subsequent reasoning deltas at least 100 ms later. It excludes
+native Responses and Gemini, whose summaries do not measure their reported
+reasoning tokens, and redacted thinking, including translated sealed blocks.
+The upstream protocol is retained when the client receives a translation.
+These are receive-side timing checks, not access to the vendor's generation
+clock: a relay that releases a buffered reply evenly can still look paced.
+Without an upstream guarantee, this is an observed output-rate estimate.
+Summaries stay excluded rather than extending their visible portion's time
+to an unobserved reasoning-token count.
+
+`Record.FirstReasoning` (`first_reasoning_ms`) and the corresponding
+`Call`, `Route` and `Try` field (`firstReasoning`) record this evidence with
+the same origin as their duration. Historical records have no evidence and
+keep their previous speed. Request-page caches and compressed snapshots
+preserve the optional field. `ReasoningHidden` (`reasoning_hidden` in the
+ledger, `reasoningHidden` in traces) suppresses a no-text speed even when
+redacted/encrypted thinking has no reported reasoning-token count. A
+Responses summary is marked this way on its own-login path too. Optional
+OTel attributes carry the evidence without response text. The existing burst and held-content limits in
+`DecodeOf` still apply, and hidden reasoning does not enter average speed.
+
+`TestVisibleReasoningSpeed`, `TestReasoningSpeedEvidence`,
+`TestReasoningSpeedThroughGateway`, `TestMixedRedactedReasoning`,
+`TestHiddenReasoningThroughTranslation`, `TestSlowReleasedReasoningIsUntimed` and
+[`reasoning-speed.test.cjs`](../../internal/gui/tests/reasoning-speed.test.cjs)
+cover the calculation, cache round trip, translated streams and both pages.
+
 ### Routing purpose filter
 
 The request heading's purpose menu in [`routing.js`](../../internal/gui/assets/routing.js)

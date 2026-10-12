@@ -65,7 +65,7 @@ type packedRow struct {
 	Text                           [30]uint32
 	Tokens                         [6]int64
 	Millis, TTFT, FirstText, Order int64
-	Sent, Flow                     int64
+	Sent, Flow, FirstReasoning     int64
 	Own, Retried, Queued           int64
 	RouteID                        int64
 	Cost                           float64
@@ -73,8 +73,13 @@ type packedRow struct {
 	Flags                          uint16
 }
 
-// rowHandedOn is the Flags bit of Record.HandedOn
-const rowHandedOn = 128
+// rowHandedOn is the Flags bit of Record.HandedOn, rowReasoningHidden
+// Record.ReasoningHidden's: 64 is block_price.go's swapKnown, 256
+// rowOwnCost
+const (
+	rowHandedOn        = 128
+	rowReasoningHidden = 512
+)
 
 // rowOwnCost marks a reported call that said what it cost (#1874): Cost is
 // that, which the block pricer keeps, and reading the row back gives
@@ -121,7 +126,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 		c.Bytes += int64(len(s) + 48)
 		return id
 	}
-	p := packedRow{Time: r.Time, Tokens: [6]int64{int64(r.Input), int64(r.Output), int64(r.CacheRead), int64(r.CacheWrite), int64(r.Reasoning), int64(r.CacheWrite1h)}, Millis: r.Millis, TTFT: r.TTFT, FirstText: r.FirstText, Sent: r.Sent, Flow: r.Flow, Own: r.Own, Retried: r.Retried, Queued: r.Queued, Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: int32(r.Status), Tries: int32(r.Tries)}
+	p := packedRow{Time: r.Time, Tokens: [6]int64{int64(r.Input), int64(r.Output), int64(r.CacheRead), int64(r.CacheWrite), int64(r.Reasoning), int64(r.CacheWrite1h)}, Millis: r.Millis, TTFT: r.TTFT, FirstText: r.FirstText, FirstReasoning: r.FirstReasoning, Sent: r.Sent, Flow: r.Flow, Own: r.Own, Retried: r.Retried, Queued: r.Queued, Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: int32(r.Status), Tries: int32(r.Tries)}
 	for i, s := range rowText(&r) {
 		p.Text[i] = intern(*s)
 	}
@@ -137,6 +142,9 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	}
 	if r.SessionOfficialLogin {
 		p.Flags |= 8
+	}
+	if r.ReasoningHidden {
+		p.Flags |= rowReasoningHidden
 	}
 	if r.Routed {
 		p.Flags |= 32
@@ -160,7 +168,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 }
 func (c *rowChunk) row(i int) Row {
 	p := &c.Rows[i]
-	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time, Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: p.Millis, TTFT: p.TTFT, FirstText: p.FirstText, Sent: p.Sent, Flow: p.Flow, Own: p.Own, Retried: p.Retried, Queued: p.Queued, Status: int(p.Status), Tries: int(p.Tries), HandedOn: p.Flags&rowHandedOn != 0, Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
+	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time, Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: p.Millis, TTFT: p.TTFT, FirstText: p.FirstText, FirstReasoning: p.FirstReasoning, ReasoningHidden: p.Flags&rowReasoningHidden != 0, Sent: p.Sent, Flow: p.Flow, Own: p.Own, Retried: p.Retried, Queued: p.Queued, Status: int(p.Status), Tries: int(p.Tries), HandedOn: p.Flags&rowHandedOn != 0, Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
 	for i, s := range rowText(&r) {
 		*s = c.Strings[p.Text[i]]
 	}
