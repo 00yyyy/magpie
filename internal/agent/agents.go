@@ -1170,6 +1170,11 @@ func copilot(home string) *Agent {
 		ID: "copilot", Name: "Copilot CLI", Icon: "githubcopilot", Aliases: []string{"gh-copilot"},
 		UA:  []string{"copilot", "github-copilot"},
 		Bin: "copilot", Dir: dir, Path: path,
+		// GitHub Copilot's JetBrains and VS Code plugins write ~/.copilot
+		// too (agents, skills, hooks, instructions, prompts, ide), so the
+		// folder says nothing of the CLI: its settings.json or the copilot
+		// command does (#1495)
+		dirShared: true,
 		Fields: []Field{{
 			Key: "model", Label: "model",
 			Get: jsonGet(path, "model"),

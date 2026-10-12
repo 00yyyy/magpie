@@ -253,6 +253,10 @@ type Agent struct {
 	// (omp's, when PI_CODING_AGENT_DIR points it at Pi's): that it is there
 	// says nothing of this agent.
 	dirShared bool
+	// pathOwn, when set, says whether the file at Path is this agent's,
+	// not one another tool wrote there first: a JetBrains plugin's
+	// settings.json in Qoder CN's folder (#1495).
+	pathOwn func() bool
 }
 
 // Running reports whether a process whose command line matches any pattern
@@ -285,7 +289,7 @@ func (a *Agent) Detected() bool {
 	if a.Dir != "" && Taken(a.Dir) {
 		return false
 	}
-	if _, err := os.Stat(a.Path); err == nil {
+	if _, err := os.Stat(a.Path); err == nil && (a.pathOwn == nil || a.pathOwn()) {
 		return true
 	}
 	if a.Dir != "" && !a.dirShared && agentDir(a.Dir) {
