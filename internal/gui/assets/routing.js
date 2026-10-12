@@ -1499,6 +1499,12 @@
       else if (w.speaks) s = t("{api} only", { api: API[w.speaks] || w.speaks });
       else s = w.kind === "key" ? t("API key") : t("one key");
       if (row.st.textContent !== s) row.st.textContent = s;
+      // an account's windows each, with when they reset, in its tooltip
+      // (#1835): the row says the fullest one while idle and what it is
+      // doing while it answers, and a second line on every seat would
+      // crowd the stage. Live only, as the list's are (winsOf).
+      const tip = [w.id, ...(day ? [] : winsOf(w))].join("\n");
+      if (row.li.title !== tip) row.li.title = tip;
       const bar = w.known;
       row.li.classList.toggle("nobar", !bar);
       row.bi.style.width = bar ? fill(w) : "0";

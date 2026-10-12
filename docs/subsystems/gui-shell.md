@@ -113,6 +113,11 @@ and a click then asks nothing more. Nothing on the page reads again by
 itself. It shows only live, with a subscription account listed. See
 `routing-read-allowances.test.cjs`.
 
+On the stage, an account's seat tells the same windows in its tooltip,
+under its id (`render`, #1835). The row itself keeps one line: the
+fullest window while idle, what it is doing while it answers. See
+`routing-seat-windows.test.cjs`.
+
 ### Desktop fonts
 
 Settings → General offers independent interface and code fonts, each with
