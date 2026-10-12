@@ -187,6 +187,12 @@ shared helper; a control under what it unrolls (`data-unrolls`) going down
 with it; a click that asks to go somewhere with `scrollOnPurpose(e)`;
 the room kept at the foot going as the reader scrolls back; and the wheel.
 
+`sidebar-tab-top.test.cjs` checks that a tab picked in the sidebar opens at
+its top: Settings › General scrolled to its foot and Allowances picked,
+Library › MCP servers scrolled to its foot and Skills picked, and back. The
+tab already open, picked again, leaves the page where it is. Chromium and
+WebKit, English and Chinese.
+
 `routing-days-fit.test.cjs` checks Routing › Requests' day bar with the 30
 days the gateway keeps (#961): at 1100px, 733px (1100 at 150% text size) and
 440px no pill is cut off at its edge and the days that don't fit are under its

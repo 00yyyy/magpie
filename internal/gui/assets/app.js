@@ -20279,6 +20279,7 @@ function tabKeys(tabs, sel) {
 // A part with no row to show here (every one hidden on this system) has no
 // tab. A click on a tab, like every click, leaves the page where it is: the
 // tabs at the top stay where they were and the part comes in under them.
+// Picked in the sidebar, a part opens at its top (navSubs).
 const SET_TABS = ["general", "usage", "network", "models", "privacy", "otel", "sync", "about"];
 let setTab = "general";
 try { const k = localStorage.getItem("magpie.settingsTab"); if (SET_TABS.includes(k)) setTab = k; } catch {}
@@ -23754,11 +23755,17 @@ function navSubs() {
       s.onpointerleave = (e) => { if (e.buttons & 1) navSubGlide(box, box.querySelector(".nav-s.cur")); };
       // the page draws its strip again as it likes: the one there now is
       // clicked at once, so what is typed next goes to the tab picked (the
-      // press has set the selection off already)
-      s.onclick = () => {
+      // press has set the selection off already). Another tab opens at its
+      // top: the page's tabs share its one scroll, which would otherwise keep
+      // the place reached in the tab before.
+      s.onclick = (e) => {
         navSubGlide(box, s);
         for (const o of box.querySelectorAll(".nav-s")) o.classList.toggle("cur", o === s);
-        navSubItems(view)[i]?.click();
+        const b = navSubItems(view)[i];
+        if (!b) return;
+        const other = !b.classList.contains("on");
+        b.click();
+        if (other && scrollOnPurpose(e)) $("#view-" + view).scrollTop = 0;
       };
       box.append(s);
     });
