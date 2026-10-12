@@ -168,7 +168,9 @@ Search API, [`canSearchFor`](../../internal/gateway/search_kimi.go) does not off
 `ownSearcher` and the model list another magpie reads (`webSearchOf`, which then says no search) follow it too.
 A provider's native search on the client's protocol remains unchanged.
 An empty `searcher` still selects a provider automatically; an unavailable
-named provider still falls back to that selection.
+named provider (gone, off, can't search) still falls back to that selection.
+One that is available but fails a search is not replaced by another
+provider (below).
 
 [`webSearch`](../../internal/gateway/search.go) enforces the API-only path.
 Covered by `TestSearchProviderOff`, `TestSearchProviderOffForwarding`, `TestSearchProviderOffTellsRemoteMagpie`,
@@ -194,18 +196,35 @@ literal WebSearch request, the real service's reply bytes) and
 ## A searcher that fails or finds nothing
 
 `modelSearch` asks the searcher picked in Settings (or the one magpie picks)
-first. When it fails, or its reply names no page it found
-(`errFoundNothing`), the next of `Searchers()` searches in its place, up to
-three in all (#669). That fallback is not silent: `searchingInstead` puts
-on the search's `CallFor` the searcher asked first (`instead`), whether the
-user picked it (`picked`), and why it didn't search (`why`, or
-`nothingFound`). The Routing row of the search that answered says which
-searcher was asked first, for whom, why it didn't search, and which one
-searched in its place (`kindWhy`). Gearclickist on Discord had Grok picked
-and saw Codex's model search, with nothing saying why.
+first. `searchWith` tells three outcomes apart: an error, a reply that
+searched and named no page (`errFoundNothing`), and a reply with no search
+in it at all, no `server_tool_use` or `web_search_tool_result`
+(`errNotSearched`, which is found nothing too). The last is a vendor that
+ran no search: the tool dropped or left unused, and the model answered
+from what it knew.
 
-Covered by `TestSearchInPlaceOfPickedSaysWhy` and
-`search-instead.test.cjs`.
+A searcher magpie picked by itself gives way to the next of `Searchers()`,
+up to three in all (#669). That fallback is not silent: `searchingInstead`
+puts on the search's `CallFor` the searcher asked first (`instead`), and
+why it didn't search (`why`, `nothingFound` or `notSearched`). The Routing
+row of the search that answered says which searcher was asked first, for
+whom, why it didn't search, and which one searched in its place
+(`kindWhy`).
+
+A searcher named in Settings gives way to no other provider. Its error goes
+back to the model, and `webSearch` then asks the search APIs, when any are
+set up. `namedFailed` keeps the last search it didn't make, cleared when it
+next searches. Settings › Web search shows that (`SearcherFailed`,
+`searchFailed`) at the start of the row's help, ahead of its ellipsis.
+Gearclickist on Discord picked Grok. Their grok-4.7 rows were about 1.3k
+tokens, the size of a request Grok ran no search for (one that searched
+took 6k-66k on our account). Every search then went on to Codex's
+gpt-6-astra, a pricier model they hadn't picked. Rows recorded
+before this, with `picked` set, still read as before.
+
+Covered by `TestPickedSearcherIsNotHandedOn`,
+`TestSearchInPlaceOfAutoSaysWhy`, `TestSearcherFindingNothingGivesWay`,
+`search-instead.test.cjs` and `searcher-pick.test.cjs`.
 
 ## A search API's base URL
 
@@ -324,7 +343,9 @@ agents what magpie offers, don't flip with a window. Such a pick isn't
 asked: `askVisionWith` (`autoSpent`) answers with the reason and when it is
 back, and `modelSearch` (`searcherSpent`) skips it, puts spent searchers
 after the others and joins the reason into its error. A model named in
-Settings is asked as before. Image and video generation (`AutoDrawer`,
+Settings is asked as before, and a searcher named there is not handed on
+to another provider when it fails (see "A searcher that fails or finds
+nothing"). Image and video generation (`AutoDrawer`,
 `AutoVideomaker`) are not held this way.
 
 Covered by `TestAutoVisionPassesOverOneOut`,

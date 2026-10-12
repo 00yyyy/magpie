@@ -76,9 +76,12 @@ type CallFor struct {
 	// says so. Picked is that the first was the one picked in Settings.
 	// A fallback that said nothing read as magpie ignoring the pick
 	// (Gearclickist on Discord: Grok picked, Codex's model searched).
+	// NotSearched is that the first answered without searching at all
+	// (errNotSearched), apart from searching and naming no page.
 	Instead      string `json:"instead,omitempty"`
 	Why          string `json:"why,omitempty"`
 	NothingFound bool   `json:"nothingFound,omitempty"`
+	NotSearched  bool   `json:"notSearched,omitempty"`
 	Picked       bool   `json:"picked,omitempty"`
 }
 
@@ -564,9 +567,13 @@ var errNoSearcher = errors.New("no provider that can search the web, nor a searc
 // before it goes to the search APIs.
 const searchersInTurn = 3
 
-// modelSearch searches the web with the searcher's model; one that fails
-// or finds nothing gives way to the next searcher magpie would pick, all
-// of them within searchTimeout.
+// modelSearch searches the web with the searcher's model; one magpie
+// picked that fails or finds nothing gives way to the next searcher magpie
+// would pick, all of them within searchTimeout. One Settings names gives
+// way to none: the search APIs, when set up, search in its place
+// (webSearch), and Settings says it didn't search (SearcherFailed). Handed
+// on, a search for Grok, picked, went to Codex's gpt-6-astra, a pricier
+// model the user hadn't picked, on every search (Gearclickist on Discord).
 func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, error) {
 	p, model, ok := searcher()
 	if !ok {
@@ -581,11 +588,23 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 	// one magpie picked that is out of its allowance isn't asked: it
 	// would only be refused again (#1801); one the Settings name is
 	err := searcherSpent(p, model)
-	if cp, _, why := chosenSearcher(); why == "" && cp != nil && cp.ID == p.ID {
+	cp, _, why := chosenSearcher()
+	named := why == "" && cp != nil && cp.ID == p.ID
+	if named {
 		err = nil
 	}
 	if err == nil {
 		said, hits, err = s.searchBy(ctx, p, model, query)
+	}
+	if named {
+		// a search the agent stopped waiting for is no failure of its
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			namedFailed(p, model, err)
+		}
+		if err != nil {
+			return "", nil, fmt.Errorf("%w (the searcher picked in Settings › Web search: no other provider searches in its place)", err)
+		}
+		return said, hits, nil
 	}
 	// the others in turn, those with allowance left first
 	var turn, spent []SearcherChoice
@@ -623,6 +642,61 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 	return said, hits, err
 }
 
+// lastNamedFail is the last search the searcher Settings names didn't
+// make, for Settings to say (SearcherFailed); cleared when it searches.
+var lastNamedFail struct {
+	sync.Mutex
+	f SearchFailure
+}
+
+// SearchFailure is a search the searcher Settings names didn't make: why,
+// and when.
+type SearchFailure struct {
+	Searcher     string // "<provider>/<model>", or "<provider>"
+	Why          string // the error, when it neither found nothing nor didn't search
+	NothingFound bool   // it searched and named no page
+	NotSearched  bool   // it answered without searching (errNotSearched)
+	At           time.Time
+}
+
+func namedFailed(p provider.Provider, model string, err error) {
+	name := p.ID
+	if model != "" {
+		name += "/" + model
+	}
+	lastNamedFail.Lock()
+	defer lastNamedFail.Unlock()
+	if err == nil {
+		if lastNamedFail.f.Searcher == name {
+			lastNamedFail.f = SearchFailure{}
+		}
+		return
+	}
+	f := SearchFailure{Searcher: name, At: time.Now(), NotSearched: errors.Is(err, errNotSearched)}
+	f.NothingFound = !f.NotSearched && errors.Is(err, errFoundNothing)
+	if !f.NothingFound && !f.NotSearched {
+		f.Why = strings.TrimPrefix(err.Error(), name+": ")
+	}
+	lastNamedFail.f = f
+}
+
+// SearcherFailed is the last search the searcher Settings names now didn't
+// make, since it last searched; ok false when there is none.
+func SearcherFailed() (SearchFailure, bool) {
+	p, m, why := chosenSearcher()
+	if p == nil || why != "" {
+		return SearchFailure{}, false
+	}
+	name := p.ID
+	if m != "" {
+		name += "/" + m
+	}
+	lastNamedFail.Lock()
+	defer lastNamedFail.Unlock()
+	f := lastNamedFail.f
+	return f, f.Searcher != "" && f.Searcher == name
+}
+
 // searcherSpent is why a searcher's model isn't asked: every account or
 // key of it is out of its allowance (spentModel). nil when it has
 // allowance, or searches with no model (a Kimi Code plan's service).
@@ -658,9 +732,10 @@ func searchingInstead(ctx context.Context, p provider.Provider, model string, er
 	if c, _, why := chosenSearcher(); why == "" && c != nil && c.ID == p.ID {
 		g.Picked = true
 	}
-	g.NothingFound = errors.Is(err, errFoundNothing)
+	g.NotSearched = errors.Is(err, errNotSearched)
+	g.NothingFound = !g.NotSearched && errors.Is(err, errFoundNothing)
 	g.Why = ""
-	if !g.NothingFound {
+	if !g.NothingFound && !g.NotSearched {
 		g.Why = strings.TrimPrefix(err.Error(), g.Instead+": ")
 	}
 	return context.WithValue(ctx, searchForKey{}, &g)
@@ -668,6 +743,13 @@ func searchingInstead(ctx context.Context, p provider.Provider, model string, er
 
 // errFoundNothing is a searcher's reply that names no page it found.
 var errFoundNothing = errors.New("found nothing")
+
+// errNotSearched is a searcher's reply with no search in it at all: the
+// vendor ran no search, the tool dropped or left unused, and the model
+// answered from what it knew (Gearclickist on Discord: grok-4.7 answered
+// in 1.4k tokens, the size of a request with no search tool, where one
+// that searched took 6k-66k). It is found nothing too.
+var errNotSearched = fmt.Errorf("answered without searching the web: %w", errFoundNothing)
 
 // searchWith asks one searcher's model to search: what it said, with the
 // pages its searches found. A reply with no page found and no address in
@@ -711,11 +793,15 @@ func (s *Server) searchWith(ctx context.Context, p provider.Provider, model, que
 	var text strings.Builder
 	var sources []string
 	var found []Hit
+	searched := false
 	for _, b := range out.Content {
 		switch b.Type {
 		case "text":
 			text.WriteString(b.Text)
+		case "server_tool_use":
+			searched = true
 		case "web_search_tool_result":
+			searched = true
 			// each result read on its own, its title, address and age
 			// only: a vendor's encrypted_content is for that vendor, and
 			// an error ({"type":"web_search_tool_result_error"}) has none
@@ -738,6 +824,9 @@ func (s *Server) searchWith(ctx context.Context, p provider.Provider, model, que
 	}
 	said := strings.TrimSpace(text.String())
 	if said == "" || (len(found) == 0 && !strings.Contains(said, "://")) {
+		if !searched {
+			return "", nil, fmt.Errorf("%s/%s %w", p.ID, model, errNotSearched)
+		}
 		return "", nil, fmt.Errorf("%s/%s %w", p.ID, model, errFoundNothing)
 	}
 	if len(sources) > 0 && len(sources) <= 20 {

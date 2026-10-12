@@ -406,6 +406,10 @@ type settingsJSON struct {
 	SearchAuto    string             `json:"searchAuto,omitempty"`
 	SearchUnused  string             `json:"searchUnused,omitempty"`
 	SearchRelays  []string           `json:"searchRelays,omitempty"`
+	// the last search the one it names didn't make, since it last
+	// searched: no other provider searched in its place (Gearclickist on
+	// Discord)
+	SearchFailed *searchFailedJSON `json:"searchFailed,omitempty"`
 	// the providers on that aren't offered, as they can't search the web
 	// by themselves (#825)
 	SearchLeftOut []string `json:"searchLeftOut,omitempty"`
@@ -502,6 +506,9 @@ func searchState(s *settingsJSON) {
 	}
 	s.SearchProvider = gateway.Searcher()
 	s.SearchAuto, s.SearchUnused = gateway.AutoSearcher(), gateway.SearcherUnused()
+	if f, ok := gateway.SearcherFailed(); ok {
+		s.SearchFailed = &searchFailedJSON{Searcher: f.Searcher, Why: f.Why, NothingFound: f.NothingFound, NotSearched: f.NotSearched, At: f.At}
+	}
 	s.SearchChoices = []searchChoiceJSON{}
 	for _, c := range gateway.Searchers() {
 		p := c.Provider
@@ -520,6 +527,15 @@ func searchState(s *settingsJSON) {
 			s.SearchLeftOut = append(s.SearchLeftOut, p.Name)
 		}
 	}
+}
+
+// searchFailedJSON is gateway.SearchFailure as Settings shows it.
+type searchFailedJSON struct {
+	Searcher     string    `json:"searcher"`
+	Why          string    `json:"why,omitempty"`
+	NothingFound bool      `json:"nothingFound,omitempty"`
+	NotSearched  bool      `json:"notSearched,omitempty"`
+	At           time.Time `json:"at"`
 }
 
 func settingsState() settingsJSON {
