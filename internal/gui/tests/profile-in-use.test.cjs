@@ -16,6 +16,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { reach } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const models = ["model-a", "model-b"].map((m) => ({ value: m, label: m }));
@@ -126,7 +127,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await t.test(lang + ": window", async () => {
         const page = await open(lang, "window", 1100);
+        // under the Get started card (3e88fc09d) the chips are past the
+        // window's foot: the reader scrolls down to them
+        await reach(page, chip(page, "游戏"));
         await chip(page, "游戏").click();
+        await reach(page, page.locator(".prof-detail .pd-apply"));
         await page.locator(".prof-detail .pd-apply").click();
         await page.waitForFunction(() => document.querySelector("#profiles .chip.cur"));
         assert.deepEqual(await ticked(page), ["游戏"]);
