@@ -2274,6 +2274,7 @@
       const fresh = lib.skills.filter((s) => s.kind === "github" || s.origin);
       rh.append(el("span", "grow"));
       if (lib.skills.length > 1) rh.append(sortBy("libSkills", SKILL_SORTS(), () => { if (box.isConnected) drawSkills(box, all); }));
+      if (lib.skills.length > 1) rh.append(foldAllButton(box, all));
       // the groups traced again: a pack added a while ago is mostly older
       // copies its repository has edited since (White Immortal on Discord)
       if (lib.skills.length > 1 && lib.skills.some((s) => skillRepo(s))) {
@@ -2610,6 +2611,47 @@
     return f;
   }
 
+  // What a group shows: its skills the filter matches, and whether it's
+  // folded. While filtering a group is open unless folded since the filter
+  // changed; else as the user last left it, or folded when there are many.
+  const skillHits = (g, q) => (q ? g.skills.filter((s) => g.text.get(s).includes(q)) : g.skills);
+  const groupFolded = (g, q) => (q ? unfiltered.has(g.key) : folds[g.key] ?? lib.skills.length > MANY);
+
+  // Collapse all / Expand all (#1862, WardLu): every group the list shows
+  // folded, or opened, at once. Only how the list looks changes, never what
+  // an agent has. Not filtering, it is the groups' kept folds, as a click
+  // on each heading would leave them; while filtering, it folds or opens
+  // the groups the filter shows, till the filter changes, as a heading's
+  // click does then. A part inside a group keeps its own fold.
+  let foldAllBtn = null;
+  function foldAllButton(box, all) {
+    const b = button("", "lib-updall lib-foldall", () => {
+      const q = skillQuery.trim().toLowerCase();
+      const shown = skillGroups().filter((g) => skillHits(g, q).length);
+      if (shown.length < 2) return;
+      const fold = shown.some((g) => !groupFolded(g, q));
+      for (const g of shown) {
+        if (q) { if (fold) unfiltered.add(g.key); else unfiltered.delete(g.key); }
+        else folds[g.key] = fold;
+      }
+      if (!q) saveFolds();
+      if (box.isConnected) drawSkills(box, all);
+    });
+    b.hidden = true; // till the list is drawn, which says
+    foldAllBtn = b;
+    return b;
+  }
+  // the button as the groups drawn are: hidden with one group or none
+  function paintFoldAll(shown, q) {
+    const b = foldAllBtn;
+    if (!b) return;
+    b.hidden = shown.length < 2;
+    const fold = shown.some((g) => !groupFolded(g, q));
+    b.textContent = fold ? t("Collapse all") : t("Expand all");
+    b.title = q ? (fold ? t("Fold every group that matches the filter") : t("Open every group that matches the filter"))
+      : fold ? t("Fold every group") : t("Open every group");
+  }
+
   // The skills' lists as last drawn into a box: a group's list keeps its
   // rows through a filter or a fold, and draws only those it hasn't.
   let drawn = null; // { box, lists: Map group → window }
@@ -2617,15 +2659,16 @@
     const groups = skillGroups();
     const q = skillQuery.trim().toLowerCase();
     if (drawn?.box !== box) drawn = { box, lists: new Map() };
-    const hitsOf = (g) => (q ? g.skills.filter((s) => g.text.get(s).includes(q)) : g.skills);
+    const hitsOf = (g) => skillHits(g, q);
     const cards = [];
     const single = groups.length === 1;
-    const many = lib.skills.length > MANY;
     const redraw = () => { drawSkills(box, all); };
+    const shown = [];
     for (const g of groups) {
       const hits = hitsOf(g);
       if (!hits.length) continue;
-      const folded = !single && (q ? unfiltered.has(g.key) : folds[g.key] ?? many);
+      if (!single) shown.push(g);
+      const folded = !single && groupFolded(g, q);
       let w = drawn.lists.get(g.key);
       if (!folded) {
         if (!w) drawn.lists.set(g.key, (w = windowed()));
@@ -2641,6 +2684,7 @@
     }
     if (!cards.length) cards.push(el("div", "list lib-none", t("No skill matches “{q}”.", { q: skillQuery.trim() })));
     box.replaceChildren(...cards);
+    paintFoldAll(shown, q);
     if (box.isConnected) { syncLists(); if (picking) syncPicks(); } // the bar's All counts what the filter shows
   }
 
