@@ -1,7 +1,8 @@
 package agent
 
 // Hermes Agent (Nous Research) keeps its settings in $HERMES_HOME/config.yaml,
-// ~/.hermes/config.yaml by default: the model under model.default, served by
+// by default %LOCALAPPDATA%\hermes\config.yaml on Windows and
+// ~/.hermes/config.yaml elsewhere (place.hermesHome): the model under model.default, served by
 // model.provider, which may name an entry of providers. magpie adds itself
 // there as the provider "magpie" (the gateway, spoken to as chat completions,
 // with the catalog as its models) and points model.provider at it; a model
@@ -37,10 +38,7 @@ func hermes(home string) *Agent { return hermesIn(here(home)) }
 // (see wsl.go), where HERMES_HOME isn't read and its provider names the
 // gateway as the distro reaches it.
 func hermesIn(at place) *Agent {
-	dir := at.getenv("HERMES_HOME")
-	if dir == "" {
-		dir = filepath.Join(at.home, ".hermes")
-	}
+	dir := at.hermesHome()
 	path := filepath.Join(dir, "config.yaml")
 	hermesProvider := func() hermesProviderEntry { return hermesProviderAt(at.gw()) }
 	// spread puts magpie's provider, as it is now, into every other
@@ -191,12 +189,13 @@ var hermesProfileID = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 // bots), as Hermes lists them (hermes_cli/profiles.py): the root's own, and
 // <root>/profiles/<name>'s for each name Hermes allows that holds a file
 // only a profile has and isn't deleted (a tombstone at
-// profiles/.deleted/<name>). The root is ~/.hermes, which HERMES_HOME under
-// it is a profile of; a HERMES_HOME elsewhere is the root itself, or, as
+// profiles/.deleted/<name>). The root is Hermes's default folder
+// (%LOCALAPPDATA%\hermes on Windows, ~/.hermes elsewhere), which a
+// HERMES_HOME under it is a profile of; a HERMES_HOME elsewhere is the root itself, or, as
 // <root>/profiles/<name>, a profile of <root> (get_default_hermes_root).
 // A profile with no config.yaml yet is left out: magpie doesn't make one.
 func hermesProfiles(at place) []string {
-	root := filepath.Join(at.home, ".hermes")
+	root := at.hermesDefault()
 	if env := at.getenv("HERMES_HOME"); env != "" {
 		if rel, err := filepath.Rel(root, env); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			root = env

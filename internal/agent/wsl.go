@@ -87,6 +87,26 @@ func (p place) claudeDir() string {
 	return appdir.ClaudeDirIn(p.home)
 }
 
+// hermesHome is Hermes Agent's folder at the place: $HERMES_HOME, else
+// %LOCALAPPDATA%\hermes on Windows and ~/.hermes elsewhere, on this machine
+// (appdir.HermesHome); ~/.hermes in a distro, which is Linux and whose
+// variables magpie can't read.
+func (p place) hermesHome() string {
+	if p.spell != nil {
+		return filepath.Join(p.home, ".hermes")
+	}
+	return appdir.HermesHomeIn(p.home)
+}
+
+// hermesDefault is Hermes's default folder at the place, whatever
+// HERMES_HOME says: the root of its profiles.
+func (p place) hermesDefault() string {
+	if p.spell != nil {
+		return filepath.Join(p.home, ".hermes")
+	}
+	return appdir.HermesDefaultIn(p.home)
+}
+
 // exists is whether there is a file or folder at path, as an agent looks
 // for the one it reads; false at a cold place.
 func (p place) exists(path string) bool {

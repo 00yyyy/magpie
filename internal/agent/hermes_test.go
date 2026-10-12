@@ -3,9 +3,11 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 	"gopkg.in/yaml.v3"
@@ -21,7 +23,7 @@ func TestHermes(t *testing.T) {
 	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Join(home, ".hermes")
+	dir := appdir.HermesHomeIn(home)
 	path := filepath.Join(dir, "config.yaml")
 	read := func() (map[string]any, map[string]any, string) {
 		var c map[string]any
@@ -136,7 +138,7 @@ func TestHermesProfiles(t *testing.T) {
 	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro"}}); err != nil {
 		t.Fatal(err)
 	}
-	root := filepath.Join(home, ".hermes")
+	root := appdir.HermesHomeIn(home)
 	write := func(rel, s string) string {
 		p := filepath.Join(root, rel)
 		os.MkdirAll(filepath.Dir(p), 0o755)
@@ -240,5 +242,33 @@ func TestHermesProfilesOfCustomRoot(t *testing.T) {
 	}
 	if v, _ := edit.GetYAML(filepath.Join(root, "config.yaml"), "model.default"); v != "x" {
 		t.Fatalf("root model: %q", v)
+	}
+}
+
+// TestHermesFolder (新v学员 on Discord): on this machine Hermes's folder is
+// its own default, %LOCALAPPDATA%\hermes on native Windows, not ~/.hermes
+// there, and its profiles are under it; in a WSL distro, which is Linux and
+// whose variables magpie can't read, it is ~/.hermes.
+func TestHermesFolder(t *testing.T) {
+	home := t.TempDir()
+	local := filepath.Join(home, "AppData", "Local")
+	t.Setenv("LOCALAPPDATA", local)
+	t.Setenv("HERMES_HOME", "")
+	want := filepath.Join(home, ".hermes")
+	if runtime.GOOS == "windows" {
+		want = filepath.Join(local, "hermes")
+	}
+	if a := hermes(home); a.Dir != want || a.Path != filepath.Join(want, "config.yaml") {
+		t.Fatalf("Hermes at %s (%s), want %s", a.Dir, a.Path, want)
+	}
+	os.MkdirAll(filepath.Join(want, "profiles", "bot"), 0o755)
+	os.WriteFile(filepath.Join(want, "profiles", "bot", "config.yaml"), []byte("model: {}\n"), 0o644)
+	if got := hermesProfiles(here(home)); len(got) != 2 || got[0] != filepath.Join(want, "config.yaml") {
+		t.Fatalf("profiles %v, want under %s", got, want)
+	}
+	t.Setenv("HERMES_HOME", filepath.Join(home, "custom"))
+	wsl := place{home: home, spell: func(s string) string { return s }}
+	if a := hermesIn(wsl); a.Dir != filepath.Join(home, ".hermes") {
+		t.Fatalf("Hermes in WSL at %s, want ~/.hermes", a.Dir)
 	}
 }

@@ -57,6 +57,9 @@ type rtkSpec struct {
 	// withClaude: the installer gives it to Claude Code too, which is
 	// pointed at a folder thrown away after
 	withClaude bool
+	// env is what the installer is run with besides magpie's own
+	// environment, so it writes where the agent reads
+	env func(a *agent.Agent) []string
 	// blocked says why rtk's installer mustn't be run for the agent as it
 	// is on this machine, "" when it can be
 	blocked func() string
@@ -171,16 +174,22 @@ var rtkSpecs = map[string]rtkSpec{
 	},
 	"pi":  extensionSpec("pi"),
 	"omp": extensionSpec("omp"),
+	// Hermes's folder is the agent's (appdir.HermesHome): $HERMES_HOME,
+	// else %LOCALAPPDATA%\hermes on Windows and ~/.hermes elsewhere. rtk
+	// (0.51, src/hooks/init/hermes.rs) knows only $HERMES_HOME and
+	// ~/.hermes, so it is told the folder: on Windows it otherwise writes
+	// its plugin where Hermes doesn't look (新v学员 on Discord).
 	"hermes": {
 		flags: []string{"--agent", "hermes"}, patch: true,
-		has: func(*agent.Agent) bool { return exists(filepath.Join(hermesPlugin(), "plugin.yaml")) },
-		files: func(*agent.Agent) []string {
-			return []string{filepath.Join(home(), ".hermes", "config.yaml"), filepath.Join(hermesPlugin(), "plugin.yaml"), filepath.Join(hermesPlugin(), "__init__.py")}
+		has: func(a *agent.Agent) bool { return exists(filepath.Join(hermesPlugin(a), "plugin.yaml")) },
+		files: func(a *agent.Agent) []string {
+			return []string{filepath.Join(a.Dir, "config.yaml"), filepath.Join(hermesPlugin(a), "plugin.yaml"), filepath.Join(hermesPlugin(a), "__init__.py")}
 		},
-		remove: func(*agent.Agent) error {
-			return errors.Join(os.RemoveAll(hermesPlugin()), dropHermesPlugin(filepath.Join(home(), ".hermes", "config.yaml")))
+		remove: func(a *agent.Agent) error {
+			return errors.Join(os.RemoveAll(hermesPlugin(a)), dropHermesPlugin(filepath.Join(a.Dir, "config.yaml")))
 		},
-		dir: func(*agent.Agent) string { return filepath.Join(home(), ".hermes") },
+		dir: func(a *agent.Agent) string { return a.Dir },
+		env: func(a *agent.Agent) []string { return []string{"HERMES_HOME=" + a.Dir} },
 	},
 }
 
@@ -291,7 +300,7 @@ var openCodeVersion = func() string {
 	return ""
 }
 
-func hermesPlugin() string { return filepath.Join(home(), ".hermes", "plugins", "rtk-rewrite") }
+func hermesPlugin(a *agent.Agent) string { return filepath.Join(a.Dir, "plugins", "rtk-rewrite") }
 
 // extensionSpec is pi's and omp's: an extension of rtk's own, and nothing else.
 func extensionSpec(id string) rtkSpec {
@@ -837,6 +846,9 @@ func rtkInstall(bin string, a *agent.Agent) error {
 		}
 		defer os.RemoveAll(tmp)
 		env = []string{"CLAUDE_CONFIG_DIR=" + tmp}
+	}
+	if sp.env != nil {
+		env = append(env, sp.env(a)...)
 	}
 	out, err := rtkRunEnv(bin, env, args...)
 	if err != nil {
