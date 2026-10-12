@@ -2174,12 +2174,12 @@
     if (!h) requestAnimationFrame(() => name.focus());
   }
 
-  function confirmRemoveEveryHook() {
-    const hooks = (lib.hooks || []).slice(), names = hooks.map((x) => x.name);
-    confirmRemoveEvery("hooks", names, t("Remove all {n} hooks?", { n: names.length }), [
+  function confirmRemoveEveryHook(some) {
+    const hooks = (some || lib.hooks || []).slice(), names = hooks.map((x) => x.name), n = names.length;
+    confirmRemoveEvery("hooks", names, !some ? t("Remove all {n} hooks?", { n }) : n === 1 ? t("Remove {name}?", { name: names[0] }) : t("Remove {n} hooks?", { n }), [
       takenFrom(hooks),
       t("Hooks your agents have that aren't in the library stay as they are, and so does one you changed in an agent's file."),
-    ]);
+    ], !!some);
   }
 
   // ---------- skills ----------
@@ -2364,6 +2364,7 @@
   let picking = "";            // "skills" or "servers": that page's rows have a box each, to pick some (#791, #1027)
   let naming = false;          // the pick bar asks the name of a group to put them in
   const picked = new Set();    // the names picked
+  const pickErrs = new Map();  // name → why Remove left it, as the bar's Remove said (#1852)
   let skillQuery = "";         // what the filter over the skills holds
   let skillTimer = 0;          // the filter's redraw, waiting for typing to pause
   const unfiltered = new Set(); // groups folded while filtering, till the filter changes
@@ -2751,6 +2752,7 @@
     const b = button(picking ? t("Done") : t("Select"), "action lib-updall lib-select", () => {
       picking = picking ? "" : kind;
       picked.clear();
+      pickErrs.clear();
       render();
     });
     const skills = kind === "skills", hooks = kind === "hooks";
@@ -2762,8 +2764,9 @@
   // what's picked is a page's own: another page, or a list too short to
   // pick from, ends it, and a name no longer in the list isn't picked
   function pickingFor(kind, items) {
-    if (picking && (picking !== kind || items.length < 2)) { picking = ""; picked.clear(); }
+    if (picking && (picking !== kind || items.length < 2)) { picking = ""; picked.clear(); pickErrs.clear(); }
     for (const n of picked) if (!items.some((x) => x.name === n)) picked.delete(n);
+    for (const n of pickErrs.keys()) if (!items.some((x) => x.name === n)) pickErrs.delete(n);
   }
 
   // a row with a box, which its click ticks rather than opening it
@@ -2773,6 +2776,14 @@
     row.classList.toggle("picked", picked.has(name));
     row.onclick = () => box.click();
     row.title = t("Select {name}", { name });
+    // one the bar's Remove couldn't take out says why, under its name, in
+    // place of its line (a row's height is held, so it takes no more room)
+    const why = pickErrs.get(name), sub = why && row.querySelector(":scope > .who > .sub");
+    if (sub) {
+      row.classList.add("lib-pickfailed");
+      sub.className = "sub lib-pickerr";
+      sub.textContent = sub.title = t("Not removed: {error}", { error: why });
+    }
     return row;
   }
 
@@ -2844,11 +2855,18 @@
         }
       }
       if (servers && projectMCPAgents().length) bar.append(copyConfigButton(skills.map((x) => x.name)));
+      // the ones picked out of the library (#1852): asked first, as Remove
+      // all asks, and each taken out as its own row's Remove would. Its
+      // label holds still as the count changes (the count is beside it, and
+      // in the sheet), so a pick never rewraps the bar under the pointer
+      const rm = button(t("Remove…"), "action danger lib-updall lib-pickrm", () => servers ? confirmRemoveEveryServer(skills) : hooks ? confirmRemoveEveryHook(skills) : confirmRemoveEverySkill(skills));
+      rm.title = servers ? t("Take the servers picked out of the library") : hooks ? t("Take the hooks picked out of the library") : t("Take the skills picked out of the library");
+      bar.append(rm);
       const c = button(t("Clear"), "lib-updall lib-pickclear", () => { picked.clear(); syncPicks(); });
       c.title = t("Unpick them all");
       bar.append(c);
     }
-    bar.append(button(t("Done"), "action lib-updall lib-pickdone", () => { picking = ""; picked.clear(); render(); }));
+    bar.append(button(t("Done"), "action lib-updall lib-pickdone", () => { picking = ""; picked.clear(); pickErrs.clear(); render(); }));
     return bar;
   }
 
@@ -3641,15 +3659,17 @@
     return b;
   }
 
-  // the sheet asking first: its head and what it says, then Remove all n
-  function confirmRemoveEvery(kind, names, title, lines) {
+  // the sheet asking first: its head and what it says, then Remove all n,
+  // or Remove n when they are the ones picked (some)
+  function confirmRemoveEvery(kind, names, title, lines, some) {
     const ed = el("div", "editor lib-editor");
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.trash), el("b", "", title));
     ed.append(head);
     for (const l of lines) if (l) ed.append(el("p", "lib-confirm", l));
     const bar = el("div", "bar");
-    const go = button(t("Remove all {n}", { n: names.length }), "primary danger-fill", async () => { go.disabled = true; if (await removeEvery(kind, names)) closeLibModal(true); else go.disabled = false; });
+    const label = !some ? t("Remove all {n}", { n: names.length }) : names.length === 1 ? t("Remove") : t("Remove {n}", { n: names.length });
+    const go = button(label, "primary danger-fill", async () => { go.disabled = true; if (await removeEvery(kind, names, some)) closeLibModal(true); else go.disabled = false; });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
     modal = { save: () => go.click() };
@@ -3662,45 +3682,70 @@
       : t("They are taken out of the library; no agent has any of them.");
   };
 
-  function confirmRemoveEverySkill() {
-    const skills = lib.skills.slice(), names = skills.map((s) => s.name), n = names.length;
+  // every skill, or those picked (#1852)
+  function confirmRemoveEverySkill(some) {
+    const skills = (some || lib.skills).slice(), names = skills.map((s) => s.name), n = names.length;
     const linked = skills.filter((s) => s.kind === "folder").length, kept = n - linked;
     const projects = (lib.projects || []).filter((p) => names.some((x) => p.skills?.[x]?.length)).length;
     const where = [];
     if (kept) where.push(t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept }));
     if (linked) where.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
-    confirmRemoveEvery("skills", names, t("Remove all {n} skills?", { n }), [
+    confirmRemoveEvery("skills", names, !some ? t("Remove all {n} skills?", { n }) : n === 1 ? t("Remove {name}?", { name: names[0] }) : t("Remove {n} skills?", { n }), [
       takenFrom(skills),
       projects && t("The skills magpie placed in {n} projects are taken away too.", { n: projects }),
       where.join(" "),
-    ]);
+    ], !!some);
   }
 
-  function confirmRemoveEveryServer() {
-    const servers = lib.servers.slice(), names = servers.map((s) => s.name), n = names.length;
+  function confirmRemoveEveryServer(some) {
+    const servers = (some || lib.servers).slice(), names = servers.map((s) => s.name), n = names.length;
     const projects = (lib.projects || []).filter((p) => names.some((x) => p.servers?.[x]?.length)).length;
     const signed = servers.filter((s) => s.signIn?.signedIn).length;
-    confirmRemoveEvery("servers", names, t("Remove all {n} servers?", { n }), [
+    confirmRemoveEvery("servers", names, !some ? t("Remove all {n} servers?", { n }) : n === 1 ? t("Remove {name}?", { name: names[0] }) : t("Remove {n} servers?", { n }), [
       takenFrom(servers),
       projects && t("The servers magpie placed in {n} projects are taken away too.", { n: projects }),
       signed && t("magpie's sign-in to {n} of them is forgotten too.", { n: signed }),
       t("Servers your agents have that aren't in the library stay as they are."),
-    ]);
+    ], !!some);
   }
 
-  async function removeEvery(kind, names) {
+  // Those picked (some, #1852): the ones taken out leave the list and the
+  // picks; one that couldn't be stays picked and says why on its row, and
+  // only those gone are counted as removed. Nothing removed at all (the
+  // change refused) leaves every one picked, the sheet open with why.
+  async function removeEvery(kind, names, some) {
+    const what = (p) => p.what.replace(/^(skill|mcp|hook):/, "");
     try {
       const v = await api("library/" + kind + "/remove-all", { names });
       take(v);
       const res = v.result || {}, no = res.unremoved || [];
+      if (some) {
+        pickErrs.clear();
+        for (const p of no) pickErrs.set(what(p), p.error);
+        const gone = names.filter((x) => !pickErrs.has(x));
+        for (const x of gone) picked.delete(x);
+        const done = gone.length === 1 ? t("{name} removed", { name: gone[0] })
+          : kind === "skills" ? t("{n} skills removed", { n: gone.length }) : kind === "hooks" ? t("{n} hooks removed", { n: gone.length }) : t("{n} servers removed", { n: gone.length });
+        if (no.length) status((gone.length ? done + " · " : "") + t("{name} wasn't removed: {error}", { name: what(no[0]), error: no[0].error }) + (no.length > 1 ? " " + t("(and {n} more)", { n: no.length - 1 }) : ""), "warn", 10000);
+        else report(res, done);
+        render();
+        return true;
+      }
       if (no.length) {
         const p = no[0];
-        status(t("{name} wasn't removed: {error}", { name: p.what.replace(/^(skill|mcp|hook):/, ""), error: p.error }) + (no.length > 1 ? " " + t("(and {n} more)", { n: no.length - 1 }) : ""), "warn", 8000);
+        status(t("{name} wasn't removed: {error}", { name: what(p), error: p.error }) + (no.length > 1 ? " " + t("(and {n} more)", { n: no.length - 1 }) : ""), "warn", 8000);
       } else report(res, kind === "skills" ? t("{n} skills removed", { n: names.length }) : kind === "hooks" ? t("{n} hooks removed", { n: names.length }) : t("{n} servers removed", { n: names.length }));
       render();
       return true;
     } catch (e) {
       status(e.message, "err", 6000);
+      // none went: every one stays picked, and one alone says why on its
+      // row too (the change names only the first reason of several)
+      if (some) {
+        pickErrs.clear();
+        if (names.length === 1) pickErrs.set(names[0], e.message);
+        render();
+      }
       return false;
     }
   }
