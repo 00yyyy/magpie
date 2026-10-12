@@ -379,9 +379,6 @@ func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessi
 		if !f.keeps(r) {
 			return
 		}
-		if !r.IsRejected() {
-			sum.add(r, pr)
-		}
 		sent := r.Model
 		if source == "" {
 			sent = provider.SentNameIn(wires, r.Provider, r.Model, r.Effort)
@@ -391,6 +388,9 @@ func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessi
 			row.Cost, row.Priced = r.CostAt(*pr), true
 		}
 		row.Agent = AgentOf(r.Agent)
+		if !r.IsRejected() {
+			sum.addFrom(row, pr)
+		}
 		rows = append(rows, row)
 	}
 	for i := len(recs) - 1; i >= 0; i-- {
@@ -654,6 +654,36 @@ func (t *Totals) addRow(r Row) {
 // app.js's LED_FLOOR_AGENTS has the same.
 var FloorAgents = map[string]bool{"claude": true, "claude-desktop": true, "codex": true}
 
+// A Codex turn of one call read from its session file is timed by the
+// turn's time_to_first_token_ms and its end, and that window can be one
+// network push, not the writing: Fallmonkey on Discord had a reply whose
+// first token came at 6.8 s, the model working, and the rest 0.2 s later
+// in one go, read as thousands of tok/s. Such a row's window after the first
+// token tells a speed only when it is CodexWindowMs or more and its tokens
+// (its answer, for one that reasoned) CodexBodyTokens or more; else it tells
+// the least it wrote at over the whole turn (Row.Floor). app.js's ledDecode
+// and ledFloor_ have the same.
+const (
+	CodexWindowMs   = 1000
+	CodexBodyTokens = 100
+)
+
+// codexTurn is whether r is a Codex turn of one call read from its session
+// file, the turn's first token known.
+func (r Row) codexTurn() bool {
+	return r.Source == "log" && r.Agent == "codex" && r.TTFT > 0
+}
+
+// Decode is the row's DecodeOf, a Codex turn of one call from its session
+// file held to CodexWindowMs and CodexBodyTokens.
+func (r Row) Decode() (tokens int, w int64) {
+	n, w := r.Record.Decode()
+	if w > 0 && r.codexTurn() && (w < CodexWindowMs || n < CodexBodyTokens) {
+		return 0, 0
+	}
+	return n, w
+}
+
 // Floor is the tokens and ms a row read from a session file tells the least
 // its reply wrote at by, when its speed wasn't measured. 0, 0 when it tells
 // none. app.js's ledFloorSpeed is the same rule for one row.
@@ -674,7 +704,14 @@ var FloorAgents = map[string]bool{"claude": true, "claude-desktop": true, "codex
 // its time. Its output over that time, as Fallmonkey asked, would count the
 // reasoning written before the first token too and read high: a gateway
 // reply of 496 tokens, 224 of them reasoning, 827 ms after a 10.2 s first
-// token, reads 600 tok/s so, its measured answer 415, and this 329.
+// token, reads 600 tok/s so, its measured answer 415, and this 329. That
+// window is held to what a measured one is (CodexWindowMs, CodexBodyTokens):
+// 827 ms can be one push as well.
+//
+// A Codex turn of one call that tells neither, its window after the first
+// token too short or its body too small, tells its output over the whole
+// turn, the wait for the first token in it: everything it wrote, reasoning
+// too, was written in that time, so it is a true floor of any size.
 func (r Row) Floor() (tokens int, ms int64) {
 	if r.Source != "log" || !FloorAgents[r.Agent] || r.Failed() {
 		return 0, 0
@@ -682,15 +719,16 @@ func (r Row) Floor() (tokens int, ms int64) {
 	if _, w := r.Decode(); w > 0 {
 		return 0, 0
 	}
-	if r.Agent == "codex" && r.TTFT > 0 {
-		if r.Reasoning <= 0 {
+	if r.codexTurn() {
+		if n := r.Output - r.Reasoning; r.Reasoning > 0 && n >= CodexBodyTokens {
+			if w := DecodeWindow(n, r.Millis, r.TTFT); w >= CodexWindowMs {
+				return n, w
+			}
+		}
+		if r.Output <= 0 || r.Millis < MinDecodeMs || int64(r.Output)*1000 > MaxDecodeSpeed*r.Millis {
 			return 0, 0
 		}
-		n := r.Output - r.Reasoning
-		if w := DecodeWindow(n, r.Millis, r.TTFT); w > 0 {
-			return n, w
-		}
-		return 0, 0
+		return r.Output, r.Millis
 	}
 	if r.Output < 1000 || r.Millis < 1000 || int64(r.Output)*1000 > MaxDecodeSpeed*r.Millis {
 		return 0, 0
