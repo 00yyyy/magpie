@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+	"time"
 )
 
 // The APIs are close cousins; everything below is the shape they have
@@ -286,6 +287,10 @@ type Event struct {
 	// StopDetails: Anthropic's stop_details, what its classifier said of
 	// a refusal (#1768), carried to the client as it came
 	StopDetails json.RawMessage
+
+	// Wait: for KError, how long the vendor said to wait before asking
+	// again, when it said; sent on as Retry-After
+	Wait time.Duration
 }
 
 // Usage counts tokens.
