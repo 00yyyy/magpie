@@ -54,6 +54,7 @@ try { discoveryIgnored = new Set(JSON.parse(localStorage.getItem("magpie.discove
 // the gateway tab's choices, kept per machine
 let flavor = params.get("flavor") || localStorage.getItem("magpie.flavor") || "openai"; // which API the snippets speak
 let lang = params.get("lang") || localStorage.getItem("magpie.lang") || "shell";        // which snippet
+let snipOS = localStorage.getItem("magpie.snipOS") || "";                               // the shell the Shell and curl snippets are for (#1514)
 let exampleModel = localStorage.getItem("magpie.model") || "";  // the model in the snippets
 let decideModel = localStorage.getItem("magpie.decideModel") || ""; // the System One snippets' decision model
 let connectFolded = false; // Connect folded away under its heading
@@ -6255,20 +6256,49 @@ const a = (await r.json()).answers.team;
 console.log(a.choice, a.confidence);`,
   },
 };
-// Windows gets PowerShell: $env: in place of export, and the curl.exe that
-// ships with it (plain curl there is Invoke-WebRequest). The body goes in
-// on stdin, since Windows PowerShell drops the quotes inside an argument.
+// The Shell and curl snippets are written for one shell: PowerShell on
+// Windows ($env: in place of export, and the curl.exe that ships with it,
+// as plain curl there is Invoke-WebRequest; the body goes in on stdin,
+// since Windows PowerShell drops the quotes inside an argument), or a POSIX
+// shell (bash, zsh) on macOS and Linux. They start as the shell of the
+// machine magpie runs on, and can be switched to the other: a Windows
+// desktop's user often runs them on a Linux server over ssh (FourLeafTec,
+// #1514). The choice is kept with the snippet language.
 const WIN = /^Win/.test(navigator.platform);
-const LANGS = [["shell", WIN ? "PowerShell" : "Shell"], ["curl", "curl"], ["python", "Python"], ["node", "Node"]];
+const SNIP_OSES = [["windows", "Windows"], ["unix", "macOS · Linux"]];
+const snipWin = () => (SNIP_OSES.some(([id]) => id === snipOS) ? snipOS : WIN ? "windows" : "unix") === "windows";
+const langs4 = () => [["shell", snipWin() ? "PowerShell" : "Shell"], ["curl", "curl"], ["python", "Python"], ["node", "Node"]];
+
+// A word each shell takes as it is, quoted only where it has to be: a key
+// of the user's own can hold any ASCII symbol (", $, `, ', !), and a model
+// id brackets ([1m]) that zsh would glob; a comma would make PowerShell
+// pass a list.
+const plainWord = /^[\w%+=:./-]+$/;
+const shQuote = (s) => (plainWord.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`);
+// in "…" for a header's spaces, unless it holds what bash expands there
+const shHeader = (s) => (/[$`"\\!]/.test(s) ? `'${s.replaceAll("'", `'\\''`)}'` : `"${s}"`);
+const psQuote = (s) => (plainWord.test(s) ? s : `'${s.replace(/['‘’‚‛]/g, "$&$&")}'`);
+// "…" as the C runtime splits a command line: \" for a quote, and the
+// backslashes before one doubled
+const winArg = (s) => (plainWord.test(s) ? s : `"${s.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`);
+const psHeader = (s) => (/[$`"“”„]/.test(s) ? `'${s.replace(/['‘’‚‛]/g, "$&$&")}'` : `"${s}"`);
 
 function curlSnippet({ url, headers, body }) {
   headers = [...headers, "Content-Type: application/json"];
-  if (WIN) return `@'\n${body}\n'@ | curl.exe ${url} \`\n${headers.map((h) => `  -H "${h}" \``).join("\n")}\n  --data-binary "@-"`;
-  return `curl ${url} \\\n${headers.map((h) => `  -H "${h}" \\`).join("\n")}\n  -d '${body.replaceAll("\n", "\n      ")}'`;
+  // curl reads [ ] { } in a URL as a range unless told not to
+  const g = /[[\]{}]/.test(url) ? " -g" : "";
+  // A " inside an argument reaches curl.exe differently from Windows
+  // PowerShell 5.1 and from PowerShell 7, and whole from neither as
+  // written; after --% the line goes to curl.exe as it stands, on one line,
+  // quoted as the C runtime reads a command line. (A %NAME% of a variable
+  // the shell has is still put in there; a key would have to hold both.)
+  if (snipWin() && headers.some((h) => h.includes('"'))) return `@'\n${body}\n'@ | curl.exe --%${g} ${winArg(url)} ${headers.map((h) => `-H ${winArg(h)}`).join(" ")} --data-binary "@-"`;
+  if (snipWin()) return `@'\n${body}\n'@ | curl.exe${g} ${psQuote(url)} \`\n${headers.map((h) => `  -H ${psHeader(h)} \``).join("\n")}\n  --data-binary "@-"`;
+  return `curl${g} ${shQuote(url)} \\\n${headers.map((h) => `  -H ${shHeader(h)} \\`).join("\n")}\n  -d '${body.replaceAll("'", `'\\''`).replaceAll("\n", "\n      ")}'`;
 }
 
 function envSnippet(vars) {
-  return vars.map(([k, v]) => (WIN ? `$env:${k}="${v}"` : `export ${k}=${v}`)).join("\n");
+  return vars.map(([k, v]) => (snipWin() ? `$env:${k}=${psHeader(v)}` : `export ${k}=${shQuote(v)}`)).join("\n");
 }
 
 // a decision model on the list: one only System One asks, never an agent
@@ -6424,7 +6454,7 @@ function renderConnect() {
     model = exampleModel || "provider/model";
   }
   // no SDK speaks System One, so it has no shell variables to set
-  const langs = f.baseEnv ? LANGS : LANGS.filter(([id]) => id !== "shell");
+  const langs = f.baseEnv ? langs4() : langs4().filter(([id]) => id !== "shell");
   const snipLang = langs.some(([id]) => id === lang) ? lang : "curl";
   const urls = [g.url, ...(g.lanURLs || [])];
   // the address picked is kept (coeo91): an address not offered right now
@@ -6493,7 +6523,22 @@ function renderConnect() {
     : t(models.length ? "provider/model, as listed below. Click a model there to put it in the snippets." : "No models yet. Add a provider, or sign in to Codex or Copilot.")));
 
   const ex = el("div", "stack");
-  ex.append(segs(langs, snipLang, (id) => { lang = id; localStorage.setItem("magpie.lang", id); renderConnect(); }));
+  const tabs = el("div", "snip-tabs");
+  tabs.append(segs(langs, snipLang, (id) => { lang = id; localStorage.setItem("magpie.lang", id); renderConnect(); }));
+  // the shell the Shell and curl snippets are for; Python and Node read the same everywhere
+  if (snipLang === "shell" || snipLang === "curl") {
+    const os = segs(SNIP_OSES.map(([id, name]) => [id, t(name)]), snipWin() ? "windows" : "unix", (id) => {
+      snipOS = id;
+      try { localStorage.setItem("magpie.snipOS", id); } catch {}
+      renderConnect();
+    });
+    os.classList.add("snip-os");
+    os.setAttribute("role", "group");
+    os.setAttribute("aria-label", t("Where the snippet runs"));
+    os.title = t("Where the snippet runs");
+    tabs.append(os);
+  }
+  ex.append(tabs);
   const code = !secret ? t(key ? "Loading gateway key…" : "Create a gateway key above to connect")
     : snipLang === "shell" ? envSnippet([[f.baseEnv, base], [f.keyEnv, secret]])
     : snipLang === "curl" ? curlSnippet(f.curl(base, model, secret))

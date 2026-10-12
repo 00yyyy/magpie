@@ -2083,6 +2083,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .copy:hover { background: var(--pill-hover); color: var(--fg); }
 .copy.done { color: var(--green); background: var(--green-soft); animation: copy-pop .36s var(--ease); }
 @keyframes copy-pop { 0% { transform: scale(.55); } 55% { transform: scale(1.16); } 100% { transform: scale(1); } }
+/* the snippet's language, and beside it the shell it is for (#1514);
+   a narrow window puts the shell on a row of its own */
+.snip-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .snip-wrap { position: relative; min-width: 0; }
 .snip { margin: 0; padding: 10px 40px 10px 12px; border-radius: 9px; background: var(--card); border: 1px solid var(--line); overflow-x: auto; line-height: 1.55; }
 .snip code { font-size: 11.5px; color: var(--fg); white-space: pre; user-select: text; -webkit-user-select: text; }
