@@ -21,3 +21,25 @@ func TestStatsMemoKeepsAFewDays(t *testing.T) {
 		t.Fatal("the value asked last was let go")
 	}
 }
+
+// The range the page keeps asking for (the one it shows) is the one kept: a
+// range asked again is newer than one asked once before it, so a run of new
+// numbers lets go of the others first.
+func TestStatsMemoKeepsTheRangeAskedAgain(t *testing.T) {
+	forgetStats()
+	t.Cleanup(forgetStats)
+	for d := 1; d <= statsMemoMost; d++ {
+		statsFor(d)
+	}
+	statsFor(1)
+	statsFor(100)
+	statsMemo.Lock()
+	kept1, kept2 := statsMemo.m[1] != nil, statsMemo.m[2] != nil
+	statsMemo.Unlock()
+	if !kept1 {
+		t.Fatal("the range asked again was let go before one asked once")
+	}
+	if kept2 {
+		t.Fatal("the least recently asked range is still kept past the cap")
+	}
+}

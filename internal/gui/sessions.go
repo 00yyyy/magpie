@@ -345,14 +345,17 @@ func wslName(name string, s sessions.Session) string {
 // than a few seconds old it is read again behind, for the next ask.
 var statsMemo struct {
 	sync.Mutex
-	m map[int]*statsKept
+	m    map[int]*statsKept
+	asks uint64
 }
 
 type statsKept struct {
 	at   time.Time
 	st   sessions.Stats
 	busy bool
-	used time.Time
+	// used is the memo's ask count when this range was last asked: a count,
+	// not a clock, since Windows' clock can give two asks the same time.
+	used uint64
 }
 
 // statsMemoMost is how many distinct ?days values the memo keeps: each one is
@@ -364,7 +367,8 @@ func statsFor(days int) sessions.Stats {
 	days = max(0, days)
 	statsMemo.Lock()
 	if k := statsMemo.m[days]; k != nil {
-		k.used = time.Now()
+		statsMemo.asks++
+		k.used = statsMemo.asks
 		if !k.busy && time.Since(k.at) > 10*time.Second {
 			k.busy = true
 			go func() {
@@ -388,14 +392,14 @@ func statsFor(days int) sessions.Stats {
 		if len(statsMemo.m) >= statsMemoMost {
 			oldest := -1
 			for d, k := range statsMemo.m {
-				if oldest == -1 || k.used.Before(statsMemo.m[oldest].used) {
+				if oldest == -1 || k.used < statsMemo.m[oldest].used {
 					oldest = d
 				}
 			}
 			delete(statsMemo.m, oldest)
 		}
-		now := time.Now()
-		statsMemo.m[days] = &statsKept{at: now, st: st, used: now}
+		statsMemo.asks++
+		statsMemo.m[days] = &statsKept{at: time.Now(), st: st, used: statsMemo.asks}
 	}
 	statsMemo.Unlock()
 	return st
