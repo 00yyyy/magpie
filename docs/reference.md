@@ -1117,7 +1117,9 @@ or Z.ai, MiniMax Coding Plan, OpenCode Go, Command Code — is weighed by its
 plan's windows the same way. With one key or account, the Routing page still
 shows what it has left. `stays=` is how long a conversation
 stays with the key or account that answered it: `auto` (the default, while
-the vendor's cache of it is worth keeping), `session`, `turn` or `off`.
+the vendor's cache of it is worth keeping), `session`, `turn`, `off` or
+`strict` (never moved to another key or account, even past its usage cap:
+its errors go to the agent).
 `models=` replaces the whole list, in order; a bare model id works when only
 one provider serves it.
 
@@ -1218,7 +1220,9 @@ result for every request: who went first, and why.
    across turns while at least 1,024 tokens of the last request were read
    from the vendor's cache and it answered in the last 5 minutes. This
    never brings back an account that is resting, nor one that has used 98%
-   of a window (100% In order).
+   of a window (100% In order). *Stays: Strict* does, and asks no other:
+   the conversation stays on its account, resting, spent or past its cap,
+   and its errors go to the agent.
 
 So routing decides who goes first only for a conversation nobody has
 answered yet. An account that has used 90% goes behind the others for new

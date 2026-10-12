@@ -1693,11 +1693,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		cands, pl, accountHeld = allowedCandidates(who, cands, pl, members)
 	}
+	// a conversation that stays strictly where it is goes on on its
+	// account past the usage cap set on it, and is refused there, not
+	// moved, while the account is held as it won't spend its credits
+	// (#1797)
+	cands, pl, strictHeld := strictKeep(scope, mode, r.Header, body, cands, pl)
 	// a Codex reset spent before any try, on an account held as it won't
 	// spend its credits
 	var resetFirst *AutoReset
 	if len(cands) == 0 && len(pl.held) > 0 && strings.TrimSpace(r.Header.Get(AccountHeader)) == "" &&
-		!slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred && !w.Held && w.Capped == 0 }) {
+		(strictHeld != nil || !slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred && !w.Held && w.Capped == 0 })) {
 		// every account there is is held, and one held only as it won't
 		// spend its credits is out of its allowance at the vendor's own
 		// 100%: one that spends its resets by itself, its week used up,
@@ -1708,15 +1713,23 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			resetFirst = &AutoReset{Who: pick.p.Account.User, Text: out.Text(), Agent: pick.p.Account.Agent}
 		}
 	}
-	if len(cands) == 0 && slices.ContainsFunc(pl.left, func(w Weighed) bool { return w.Capped > 0 }) &&
-		!slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred && !w.Held && w.Capped == 0 }) {
+	if len(cands) == 0 && (strictHeld != nil || slices.ContainsFunc(pl.left, func(w Weighed) bool { return w.Capped > 0 }) &&
+		!slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred && !w.Held && w.Capped == 0 })) {
 		// every account there is is held at its usage cap: used up, as far
-		// as routing goes, until a window renews
-		msg, back := cappedError(call.Model, pl.left, time.Now())
+		// as routing goes, until a window renews — or the one a strict
+		// conversation stays on is
+		held := pl.left
+		if strictHeld != nil {
+			held = strictHeld
+		}
+		msg, back := cappedError(call.Model, held, time.Now())
+		if strictHeld != nil {
+			msg += ". The conversation stays strictly on that account (Stays: Strict), so magpie doesn't move it to another"
+		}
 		if d := time.Until(back); d > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(int(d.Seconds())+1))
 		}
-		call.Status, call.Error = 429, cappedRecord(pl.left)
+		call.Status, call.Error = 429, cappedRecord(held)
 		writeError(w, from, 429, msg)
 		turnedAway()
 		return
@@ -1749,7 +1762,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// key or account added while the conversation runs doesn't take it over
 	// (#63): its reasoning, sealed by the account that wrote it, is refused
 	// by another.
+	before := len(cands)
 	cands, pl, aff, stuck := affine(scope, mode, rotate, r.Header, from, body, cands, pl)
+	// a strict conversation left with its own account of several: its
+	// failure rests the account as it would with the others still there,
+	// for new conversations to go elsewhere meanwhile (#1797)
+	strictAlone := aff.Why == "strict" && len(cands) < before
 	defer opened(stuck)
 	leadAccount := ""
 	if sealedTask && !aff.Kept {
@@ -1853,8 +1871,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	all := cands
 	cands = probeOne(cands)
 	shown := aff
-	if len(cands) == 1 {
-		shown = nil // nobody else to stay away from
+	if len(cands) == 1 && aff.Why != "strict" {
+		shown = nil // nobody else to stay away from; strict left one alone (#1797)
 	}
 	link := s.titlePrompts.observe(r, body, metadata, call.Kind, start)
 	turn, tools := agentTurnOf(r, call.Kind)
@@ -2790,7 +2808,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			try.Fail = failPrompt
 		} else {
 			try.Fail = failureOf(c, call.Status, []byte(call.Error))
-			if try.Fail == failVerify && !held {
+			if try.Fail == failVerify && !held || strictAlone {
 				// the last one left rests too, for the app to show and the
 				// next requests to be held
 				rest := s.restAfter(c, call.Status, hw.header, []byte(call.Error))

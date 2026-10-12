@@ -70,6 +70,8 @@ func staysName(v string) string {
 		return "stays a turn"
 	case provider.AffinityOff:
 		return "never stays"
+	case provider.AffinityStrict:
+		return "stays strictly"
 	}
 	return "stays auto"
 }

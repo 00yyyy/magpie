@@ -229,6 +229,93 @@ func turnIn(req *Request) (turn int, within bool) {
 	return turn, within
 }
 
+// strictKeep is, for a conversation that stays strictly where it is
+// (provider.AffinityStrict, #1797), the account that answered it brought
+// back when the plan left it out at a usage cap: the cap set on it keeps
+// new conversations off it, and one already on it goes on there, up to
+// the vendor's own limit. One left out only as it won't spend its credits
+// isn't brought back, the user's own setting, and the conversation doesn't
+// move either: held is it, for the request to be refused as held. Neither
+// for another mode, nor for a conversation nobody has answered yet.
+func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate, pl planned) ([]candidate, planned, []Weighed) {
+	if mode != provider.AffinityStrict {
+		return cs, pl, nil
+	}
+	sticks.Lock()
+	st, had := stickOf(scope + "|" + conversationID(in, body))
+	sticks.Unlock()
+	if !had || time.Since(st.at) > stickKeep || slices.ContainsFunc(cs, func(c candidate) bool { return c.who() == st.who }) {
+		return cs, pl, nil
+	}
+	// the left's line for c, as it was left out
+	leftAt := func(c candidate) int {
+		return slices.IndexFunc(pl.left, func(w Weighed) bool {
+			return w.ID == c.rest && w.Model == c.model && w.Fixed == c.effort && w.Capped > 0
+		})
+	}
+	var back []candidate
+	var order []Weighed
+	for _, c := range pl.capped {
+		if c.who() != st.who {
+			continue
+		}
+		i := leftAt(c)
+		if i < 0 {
+			continue
+		}
+		w := pl.left[i]
+		w.Unlisted, w.Capped, w.CapBack = false, 0, nil
+		pl.left = slices.Delete(slices.Clone(pl.left), i, i+1)
+		back, order = append(back, c), append(order, w)
+	}
+	if len(back) > 0 {
+		pl.capped = slices.DeleteFunc(slices.Clone(pl.capped), func(c candidate) bool { return c.who() == st.who })
+		return append(back, cs...), planned{order: append(order, pl.order...), left: pl.left, held: pl.held, capped: pl.capped}, nil
+	}
+	var held []Weighed
+	for _, c := range pl.held {
+		if c.who() != st.who {
+			continue
+		}
+		if i := slices.IndexFunc(pl.left, func(w Weighed) bool { return w.ID == c.rest && w.NoCredits }); i >= 0 {
+			held = append(held, pl.left[i])
+		}
+	}
+	if len(held) > 0 {
+		// only its own reset, should it spend one by itself, brings it back
+		pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return c.who() != st.who })
+		return nil, planned{order: nil, left: pl.left, held: pl.held, capped: pl.capped}, held[:1]
+	}
+	return cs, pl, nil
+}
+
+// strictOnly leaves of cs, for a conversation kept strictly, the key or
+// account cs[at] alone: first as it answered, then its other models a
+// group has on it, which a rule may still pick between. Nobody else is
+// asked, nor a reset spent elsewhere: its error is the agent's.
+func strictOnly(cs []candidate, pl planned, at int) ([]candidate, planned) {
+	who := cs[at].who()
+	keep := []int{at}
+	for i, c := range cs {
+		if i != at && c.who() == who {
+			keep = append(keep, i)
+		}
+	}
+	out := make([]candidate, 0, len(keep))
+	order := make([]Weighed, 0, len(keep))
+	for _, i := range keep {
+		out = append(out, cs[i])
+		if i < len(pl.order) {
+			w := pl.order[i]
+			w.Turn = false
+			order = append(order, w)
+		}
+	}
+	pl.order = order
+	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return c.who() != who })
+	return out, pl
+}
+
 // affine puts first whoever answered the conversation last, while its
 // affinity says to keep it there.
 func affine(scope, mode string, rotate bool, in http.Header, from provider.Protocol, body []byte, cs []candidate, pl planned) ([]candidate, planned, *Affinity, string) {
@@ -267,6 +354,10 @@ func affine(scope, mode string, rotate bool, in http.Header, from provider.Proto
 		a.Why = "first"
 	case at < 0:
 		a.Why = "gone"
+	case mode == provider.AffinityStrict:
+		// whatever it is — resting, all but used up, past its cap
+		// (strictKeep) — it is the one asked (#1797)
+		a.Why = "strict"
 	case pl.order[at].Rest != nil:
 		a.Why = "resting"
 	case at > 0 && pl.order[at].Known && pl.order[at].Used >= provider.SpentShareOf(cs[at].p.Routing):
@@ -299,6 +390,12 @@ func affine(scope, mode string, rotate bool, in http.Header, from provider.Proto
 		for j := range pl.order {
 			pl.order[j].Turn = false // kept, whoever's turn it was
 		}
+	case "strict":
+		a.Kept = true
+		if at > 0 {
+			weightedKept(cs[0], cs[at])
+		}
+		cs, pl = strictOnly(cs, pl, at)
 	case "new-turn":
 		if rotate {
 			cs, pl = after(cs, pl, at)

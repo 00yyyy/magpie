@@ -312,6 +312,10 @@ type planned struct {
 	// held: the accounts left out (in left) as they won't spend their
 	// credits, for one that spends its resets by itself to spend one
 	held []candidate
+	// capped: the accounts left out (in left) as they are past the usage
+	// cap set on them, for a conversation that stays strictly on one to
+	// go on there (provider.AffinityStrict, #1797)
+	capped []candidate
 }
 
 func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from provider.Protocol) Weighed {

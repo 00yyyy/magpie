@@ -226,6 +226,7 @@ func (s *Server) sealedReaders(cands []candidate, pl planned, sealers []string) 
 	}
 	cands, pl.order = kept, order
 	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return !s.sealedReader(c.p, c.model, sealers) })
+	pl.capped = slices.DeleteFunc(slices.Clone(pl.capped), func(c candidate) bool { return !s.sealedReader(c.p, c.model, sealers) })
 	return cands, pl
 }
 

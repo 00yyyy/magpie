@@ -91,6 +91,8 @@ const groupUsage = `usage:
            session for the whole session
            turn    within a turn only; routing decides afresh when you speak again
            off     every request routed afresh
+           strict  for the whole session and never moved: resting, used up or past its cap, the
+                   account that answered is still asked and its error goes to the agent
   effort   agent   (default) each request reasons as much as the agent asked, but at a member's own :<effort>
            auto    as a turn begins, the group's classifier — Jev, from a TypeSafe provider
                    (magpie provider add typesafe key=…), or any model, as Jev Router on OpenRouter,
@@ -130,6 +132,7 @@ var staysNames = []struct {
 	{provider.AffinitySession, "session", nil},
 	{provider.AffinityTurn, "turn", []string{"within-a-turn"}},
 	{provider.AffinityOff, "off", []string{"none", "never"}},
+	{provider.AffinityStrict, "strict", []string{"strict-session", "never-move"}},
 }
 
 func parseRouting(v string) (string, error) {

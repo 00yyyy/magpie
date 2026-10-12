@@ -240,10 +240,13 @@ func allowedCandidates(who access.Identity, cs []candidate, pl planned, members 
 		}
 	}
 	pl.order = order
-	// nor is one held for its credits there for a reset to bring back
-	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool {
+	// nor is one held for its credits there for a reset to bring back, or
+	// one past its cap for a conversation kept strictly on it
+	gone := func(c candidate) bool {
 		return !members[c.p.ID+"/"+c.model] && !modelAllowed(who, c.p, c.model) || !accountAllowed(who, c)
-	})
+	}
+	pl.held = slices.DeleteFunc(slices.Clone(pl.held), gone)
+	pl.capped = slices.DeleteFunc(slices.Clone(pl.capped), gone)
 	return out, pl, held && len(out) == 0
 }
 
