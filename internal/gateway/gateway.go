@@ -1156,10 +1156,17 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 			return
 		}
 		var err error
-		body, _, err = requestModel(body)
+		var model string
+		body, model, err = requestModel(body)
 		if err != nil {
 			writeError(w, from, 400, err.Error())
 			return
+		}
+		// Codex with magpie as its provider: spawn_agent names every
+		// model a subagent may be put on, not only Codex's first five
+		// (Gearclickist on Discord)
+		if from == provider.Responses && (fromCodex(r.Header) || agentOf(r) == "codex") {
+			body = spawnAgentModels(r, body, model, false)
 		}
 		if from == provider.Chat {
 			body = thinkingEffort(body)

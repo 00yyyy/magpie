@@ -1179,10 +1179,11 @@ func codexIn(at place) *Agent {
 				Options: func(cur map[string]string) []Option { return codexEfforts(models(), cur["model"]) },
 			},
 			{
-				// Codex lists only the first few models in the spawn_agent
-				// tool it gives the model, its own ahead of magpie's, so a
-				// subagent is put on one of magpie's here, where it can't be
-				// by the model unless asked by name. It is only the model a
+				// Codex lists only the first five models in the spawn_agent
+				// tool it gives the model, its own ahead of magpie's (the
+				// gateway names the rest there, spawnAgentModels), and a
+				// subagent is put on one of magpie's here without the lead
+				// naming it. It is only the model a
 				// spawn that names none starts on: unset, the lead's own,
 				// but a lead naming another in spawn_agent gets that one
 				// (core/src/agent/child_config.rs), so the GUI says the

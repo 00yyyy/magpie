@@ -103,6 +103,9 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 					body, model = withModel(body, pick.To), pick.To
 				}
 			}
+			// spawn_agent names every model a subagent may be put on,
+			// not only Codex's first five (Gearclickist on Discord)
+			body = spawnAgentModels(r, body, model, true)
 		}
 		// The namespace owns the route even if a model is not in the catalog.
 		// Unknown providers/groups must fail locally, never fall through to OpenAI.
