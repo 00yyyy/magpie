@@ -216,6 +216,24 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, v)
 	})
+	// Group again: the skills traced to their repositories once more, the
+	// page as it is then with how many joined a group
+	mux.HandleFunc("POST /api/library/skills/regroup", func(rw http.ResponseWriter, r *http.Request) {
+		n, err := library.RegroupSkills()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		v, err := libraryView(nil)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, struct {
+			libraryJSON
+			Regrouped int `json:"regrouped"`
+		}{v, n})
+	})
 	// RTK:which agents have its hook, switching one on or off, and
 	// installing rtk when the page is asked to
 	mux.HandleFunc("GET /api/library/rtk", func(rw http.ResponseWriter, r *http.Request) {
