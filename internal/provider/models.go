@@ -1352,9 +1352,35 @@ type Entry struct {
 func Catalog() []Entry {
 	entries := providerEntries()
 	out := groupEntries(entries)
+	kept := unlistedByGroups(entries)
 	for _, e := range entries {
-		if !e.Provider.Unlisted {
+		if !e.Provider.Unlisted && !kept[e.ID] {
 			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// unlistedByGroups are the models, by "provider/model", that a group
+// keeps out of the lists (Group.Unlists): those it names, a member fixed
+// at an effort counting as its model, and those its patterns match.
+func unlistedByGroups(entries []Entry) map[string]bool {
+	if !slices.ContainsFunc(heldOf("file", load).Groups, func(g Group) bool { return g.Unlists }) {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, g := range groupsIn(entries) {
+		if !g.Unlists || g.Hidden || g.Disabled {
+			continue
+		}
+		for _, id := range g.Members {
+			if strings.HasPrefix(id, GroupPrefix) {
+				continue
+			}
+			model, _ := memberEffortIn(entries, id)
+			if p, m, ok := resolveIn(entries, model); ok {
+				out[p.ID+"/"+m] = true
+			}
 		}
 	}
 	return out
@@ -1368,12 +1394,14 @@ func Served() []Entry {
 }
 
 // Unlisted are the models Served has and Catalog doesn't: those of the
-// providers kept for routing groups (Provider.Unlisted), which agents
-// aren't offered.
+// providers kept for routing groups (Provider.Unlisted), and those a group
+// keeps out of the lists (Group.Unlists), which agents aren't offered.
 func Unlisted() []Entry {
 	var out []Entry
-	for _, e := range providerEntries() {
-		if e.Provider.Unlisted {
+	entries := providerEntries()
+	kept := unlistedByGroups(entries)
+	for _, e := range entries {
+		if e.Provider.Unlisted || kept[e.ID] {
 			out = append(out, e)
 		}
 	}

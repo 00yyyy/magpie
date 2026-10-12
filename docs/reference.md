@@ -1116,6 +1116,15 @@ the vendor's cache of it is worth keeping), `session`, `turn` or `off`.
 `models=` replaces the whole list, in order; a bare model id works when only
 one provider serves it.
 
+`listed=no` (the group editor's **Model lists: The group alone**) keeps the
+models a group names, and those its patterns match, out of `magpie models`,
+`/v1/models` and every agent's list, so a client offers the group alone.
+They are still served: the group routes over them, and a request naming one
+as `provider/model` is answered. A group in it keeps its own setting, and a
+group switched off keeps nothing out. `listed=yes` lists them again. To keep
+a whole provider for groups, use its **Only through routing groups** switch
+instead.
+
 A group can also be of decision models alone (Jev and the like: TypeSafe's,
 Bailian's `decision-model-preview`, a plugin's marked models) — never mixed
 with models that hold a conversation. It is not offered to agents; it is asked

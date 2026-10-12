@@ -33,7 +33,9 @@ const groupUsage = `usage:
                                           effort=auto (the classifier picks each turn's reasoning; needs classifier=),
                                           effort=agent (the agent's again), classifier=<provider/model>|group/<id>,
                                           pick=<model> (routing=manual, every request to that one of its models),
-                                          fast=<m1>[,m2…] (the models sent in their vendor's fast mode; empty for none)
+                                          fast=<m1>[,m2…] (the models sent in their vendor's fast mode; empty for none),
+                                          listed=no (its models leave the lists agents see, offered through the
+                                          group alone; listed=yes lists them too again)
   magpie group pick <id> <model>          route the group manually, every request to that one of its models
                                           (as clicking it on the group's card in the Routing view does)
   magpie group copy <id> [name]           duplicate a group with its models, routing and rules, listed after it
@@ -434,6 +436,16 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			}
 		case "family", "tag":
 			g.Family = strings.TrimSpace(v)
+		case "listed":
+			// no: the models in it leave the lists agents see (#1783)
+			switch strings.ToLower(strings.TrimSpace(v)) {
+			case "no":
+				g.Unlists = true
+			case "yes":
+				g.Unlists = false
+			default:
+				err = fmt.Errorf("listed=no (its models offered through the group alone) or listed=yes, not %q", v)
+			}
 		case "effort", "reasoning":
 			switch strings.ToLower(strings.TrimSpace(v)) {
 			case "auto", "jev":
@@ -463,7 +475,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			g.Pick, err = pickMember(g.Members, v)
 			g.Routing = provider.Manual
 		default:
-			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier, fast; magpie group help)", k)
+			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier, fast, listed; magpie group help)", k)
 		}
 		if err != nil {
 			return err
@@ -1005,6 +1017,9 @@ func showGroup(g provider.Group) error {
 		kv("routing", routingName(g.Routing))
 	}
 	kv("stays", staysName(g.Affinity))
+	if g.Unlists {
+		kv("listed", "no"+muted.Render("  its models are offered through the group alone; listed=yes lists them too"))
+	}
 	names := catalogByID()
 	for i, id := range g.Members {
 		k := ""

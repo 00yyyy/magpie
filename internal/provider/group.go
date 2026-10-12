@@ -210,6 +210,13 @@ type Group struct {
 	// Family is a tag the group goes by in which agents are shown it
 	// (settings' Visible), with its id.
 	Family string `json:"family,omitempty"`
+	// Unlists keeps the models the group names, or its patterns match,
+	// out of the lists agents and the gateway's model list show (#1783):
+	// they are offered through the group alone, as a provider kept for
+	// routing groups offers its own (Provider.Unlisted), and a request
+	// naming one is still served. A group in it keeps its own, as it
+	// says. Not while the group is switched off.
+	Unlists bool `json:"unlists,omitempty"`
 	// Auto is set on a group magpie found: one model served by several
 	// providers. It is derived, never stored.
 	Auto bool `json:"auto,omitempty"`

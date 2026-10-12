@@ -126,7 +126,14 @@ func TestApplyGroupPairs(t *testing.T) {
 			t.Errorf("context=%s: %d %v", c.v, g.Context, err)
 		}
 	}
-	for _, bad := range [][]string{{"models"}, {"colour=red"}, {"id=x"}, {"models=nope"}, {"routing=fast"}, {"models-=a/m"}, {"context=lots"}} {
+	// listed=no: its models offered through the group alone (#1783)
+	if err := applyGroupPairs(&g, []string{"listed=no"}, resolve, false); err != nil || !g.Unlists {
+		t.Fatalf("listed=no: %v %v", g.Unlists, err)
+	}
+	if err := applyGroupPairs(&g, []string{"listed=YES"}, resolve, false); err != nil || g.Unlists {
+		t.Fatalf("listed=yes: %v %v", g.Unlists, err)
+	}
+	for _, bad := range [][]string{{"models"}, {"colour=red"}, {"id=x"}, {"models=nope"}, {"routing=fast"}, {"models-=a/m"}, {"context=lots"}, {"listed=maybe"}} {
 		h := g
 		if err := applyGroupPairs(&h, bad, resolve, false); err == nil {
 			t.Errorf("%v: no error", bad)

@@ -193,7 +193,10 @@ func memberOptions(skip []string, self string) []agent.Option {
 	g, _ := findGroup(self)
 	decides := self != "" && g.Decides()
 	if !decides {
-		for _, e := range provider.Catalog() {
+		// every model a group can be made of: those kept out of the lists
+		// agents see too (a provider kept for routing groups, a group's
+		// with listed=no, #1783), as the Routing view's picker offers
+		for _, e := range provider.Served() {
 			if slices.Contains(skip, e.ID) || e.ID == provider.GroupPrefix+self {
 				continue
 			}
