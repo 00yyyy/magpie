@@ -1025,6 +1025,14 @@ func switchLogin(agent, user string) error {
 	if err == nil && agent == "codex" && from != "" {
 		noteCodexSwitch(from, user)
 	}
+	if err == nil && agent == "claude" {
+		// the account's own way out goes with it (#1807)
+		if p, perr := SyncClaudeProxyEnv(user); perr != nil {
+			log.Printf("claude: writing %s's proxy to settings.json: %v", user, perr)
+		} else if p != "" {
+			log.Printf("claude: Claude Code sessions started from now on go through %s's proxy %s", user, p)
+		}
+	}
 	return err
 }
 

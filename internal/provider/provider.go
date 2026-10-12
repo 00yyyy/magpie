@@ -693,10 +693,18 @@ func Save(p Provider) error {
 			p.Was = was.Was
 		}
 		f.Providers[i] = p
-		return store(f)
+	} else {
+		f.Providers = append(f.Providers, p)
 	}
-	f.Providers = append(f.Providers, p)
-	return store(f)
+	if err := store(f); err != nil {
+		return err
+	}
+	if p.ID == "claude" {
+		// an account's proxy picked in the editor reaches Claude Code at
+		// once, not at the gateway's next look (#1807)
+		syncClaudeProxyEnvNow()
+	}
+	return nil
 }
 
 // listedWith is what p.PickedFrom is saved as: none without picks; what was
