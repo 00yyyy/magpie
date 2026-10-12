@@ -190,8 +190,11 @@ the room kept at the foot going as the reader scrolls back; and the wheel.
 `sidebar-tab-top.test.cjs` checks that a tab picked in the sidebar opens at
 its top: Settings › General scrolled to its foot and Allowances picked,
 Library › MCP servers scrolled to its foot and Skills picked, and back. The
-tab already open, picked again, leaves the page where it is. Chromium and
-WebKit, English and Chinese.
+tab already open, picked again, leaves the page where it is, and another
+page and back finds each where it was left. The page's own strip (the
+sidebar turned off, and a window narrower than `SIDE_AT`) is unchanged: a
+tab clicked there leaves the Library where it was. Chromium and WebKit, in
+every language.
 
 `routing-days-fit.test.cjs` checks Routing › Requests' day bar with the 30
 days the gateway keeps (#961): at 1100px, 733px (1100 at 150% text size) and

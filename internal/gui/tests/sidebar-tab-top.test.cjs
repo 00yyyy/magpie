@@ -3,8 +3,9 @@
 // tabs share its one scroll: scrolled to the foot of Settings › General and
 // Allowances picked, or of Library › MCP servers and Skills picked, the new
 // tab was shown from where the old one had been left, at its foot. The tab
-// already open, picked again, leaves the page where it is. Chromium and
-// WebKit, English and Chinese; no backend, the API is faked here.
+// already open, picked again, leaves the page where it is, and another page
+// and back finds each where it was left. The page's own strip is unchanged.
+// Chromium and WebKit, every language; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -64,6 +65,9 @@ const room = (page, v) => page.locator(v).evaluate((e) => e.scrollHeight - e.cli
 const words = {
   en: { allowances: "Allowances", mcp: "MCP servers", skills: "Skills" },
   zh: { allowances: "额度", mcp: "MCP 服务器", skills: "技能" },
+  "zh-TW": { allowances: "額度", mcp: "MCP 伺服器", skills: "技能" },
+  ja: { allowances: "利用枠", mcp: "MCP サーバー", skills: "スキル" },
+  de: { allowances: "Kontingente", mcp: "MCP-Server", skills: "Skills" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -120,6 +124,50 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await settle(page);
       assert.equal(await top(page, libv), 0, "MCP servers opens at its top");
 
+      // another page and back: each page is where it was left, as before
+      const libAt = await toFoot(page, libv);
+      await page.locator("#prefs").click();
+      await settle(page);
+      const setAt = await top(page, set);
+      assert.ok(setAt > 100, `Settings is where it was left: ${setAt}`);
+      await page.locator('#nav button[data-view="library"]').click();
+      await settle(page);
+      assert.equal(await top(page, libv), libAt, "the Library is where it was left");
+
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+  });
+}
+
+// The page's own strip (the header's tabs: the sidebar turned off, or a window
+// narrower than SIDE_AT) is unchanged: a tab clicked there, like every click,
+// leaves the page where it is (73af4c28, "where the reader is").
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: a tab picked in the page's own strip leaves the page where it is`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    for (const [name, width, layout] of [["sidebar off", 1100, "top"], ["narrow", 900, ""]]) for (const lang of Object.keys(words)) await t.test(`${name}, ${lang}`, async () => {
+      const context = await browser.newContext({ viewport: { width, height: 480 }, reducedMotion: "reduce" });
+      await context.addInitScript((layout) => { try { localStorage.setItem("magpie.settingsTab", "general"); localStorage.setItem("magpie.libTab", "mcp"); if (layout) localStorage.setItem("magpie.navLayout", layout); } catch {} }, layout);
+      const page = await context.newPage();
+      page.setDefaultTimeout(5000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", server(lang));
+      await page.goto("http://magpie.test/");
+      await page.waitForSelector("#nav button.on");
+      assert.ok(!(await page.evaluate(() => document.body.classList.contains("side-nav"))), "no sidebar");
+
+      const libv = "#view-library";
+      await page.locator('#nav button[data-view="library"]').click();
+      await page.locator(`${libv} .lib-row, ${libv} .row`).first().waitFor();
+      const at = await toFoot(page, libv);
+      await page.locator(`${libv} .lib-tabs > button`).nth(1).click();
+      await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-tabs > button")[1]?.classList.contains("on"));
+      await settle(page);
+      const after = await top(page, libv);
+      assert.ok(after > 100, `the strip's click left the Library where it was, not at its top: ${at} then ${after}`);
       assert.deepEqual(errors, []);
       await context.close();
     });
