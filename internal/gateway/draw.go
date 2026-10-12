@@ -635,6 +635,7 @@ func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider
 	if len(cs) == 0 {
 		cs = []candidate{{p: p, model: model, rest: p.ID}}
 	}
+	cs = probeOne(cs) // of those resting, only the one back soonest (#1799)
 	var out drawn
 	var code int
 	var err error

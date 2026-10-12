@@ -113,6 +113,7 @@ func (s *Server) retrieve(path, operation string) http.HandlerFunc {
 				return
 			}
 		}
+		tries = probeOne(tries) // of those resting, only the one back soonest (#1799)
 		var skipped []string
 		// masked once, as the settings say: a document a reranker gives
 		// back has its secrets again

@@ -1073,6 +1073,8 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 		// none now is left out, and where none has room the estimate
 		// below says the count (rpm.go)
 		counts = slices.DeleteFunc(counts, func(c candidate) bool { return !s.rpms.free(c.who(), c.p.RPMLimit()) })
+		// of those resting, only the one back soonest (#1799)
+		counts = probeOne(counts)
 	}
 	// the names in force, read at most once however many candidates are
 	// counted, and not at all where there are none
@@ -1846,6 +1848,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			return
 		}
 	}
+	// of those resting, only the one back soonest is asked (#1799); the
+	// whole list still finds a Codex account to spend a reset on
+	all := cands
+	cands = probeOne(cands)
 	shown := aff
 	if len(cands) == 1 {
 		shown = nil // nobody else to stay away from
@@ -2649,7 +2655,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// the user lets spend its resets by itself, its week used up,
 			// spends one and is asked again
 			autoReset = true
-			if pick, out, ok := s.autoReset(r.Context(), cands, c, pl.held); ok {
+			if pick, out, ok := s.autoReset(r.Context(), all, c, pl.held); ok {
 				try.Fail = failQuota
 				try.Reset = &AutoReset{Who: pick.p.Account.User, Text: out.Text(), Agent: pick.p.Account.Agent}
 				s.trace.update(tr, func(t *Route) {
