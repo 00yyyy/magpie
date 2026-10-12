@@ -178,7 +178,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await tabs(page), ["agents", "sessions", "library", "providers", "routing", "gateway", "usage", "plugins"], where);
         assert.deepEqual(await viewShown(page), ["view-agents"], where);
         await page.locator("#prefs").click();
-        await page.waitForSelector("#langSegs .opt");
+        await page.waitForSelector("#langPick span");
         assert.equal(await page.locator("#gatewayModeRow").isVisible(), web, `${where}: the switch`);
         if (web) assert.match(await page.locator("#gatewayModeSub").textContent(), new RegExp(L[lang].off), where);
         assert.deepEqual(errors, [], where);

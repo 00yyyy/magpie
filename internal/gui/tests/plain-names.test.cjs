@@ -60,8 +60,8 @@ function server(lang, posted) {
 }
 
 const want = {
-  en: { name: "Provider in model names", sub: /provider after its name/, off: "Off", own: "Not on names I set", on: "On" },
-  zh: { name: "模型名带供应商", sub: /可设为自定义名称不带/, off: "关闭", own: "自定义名称不带供应商", on: "开启" },
+  en: { name: "Provider in model names", off: "Off", own: "Not on names I set", on: "On" },
+  zh: { name: "模型名带供应商", off: "关闭", own: "自定义名称不带供应商", on: "开启" },
 };
 const view = (page) => page.locator("#view-settings").evaluate((v) => v.scrollTop);
 
@@ -89,7 +89,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await segs.first().waitFor();
       const row = page.locator(".row.pref", { has: page.locator("#plainNamesSegs") });
       assert.equal((await row.locator(".name").textContent()).trim(), want[lang].name);
-      assert.match(await row.locator(".sub").textContent(), want[lang].sub);
+      assert.equal(await row.locator(".sub").count(), 0, "the name says enough (1ooogle on X)");
       assert.deepEqual((await segs.allTextContents()).map((s) => s.trim()), [want[lang].off, want[lang].own, want[lang].on]);
       assert.equal(await segs.nth(2).evaluate((b) => b.classList.contains("on")), true, "on by default");
 

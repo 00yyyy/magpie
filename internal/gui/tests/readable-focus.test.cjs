@@ -101,7 +101,7 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       await watchSettingsReads(page);
       await page.goto("http://magpie.test/?view=settings");
       await settingsDrawn(page); // rows found are the ones that stay (#1659)
-      const description = page.locator(".row.pref .sub").filter({ hasText: /\S/ }).first();
+      const description = page.locator(".row.pref .sub:visible").filter({ hasText: /\S/ }).first(); // a shown one: Appearance has none now (1ooogle on X)
       await description.waitFor();
       for (const theme of ["light", "dark"]) {
         await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);

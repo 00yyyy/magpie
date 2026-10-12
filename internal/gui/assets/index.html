@@ -279,23 +279,23 @@
   <section class="set-page" id="setPage-general" role="tabpanel" aria-labelledby="setTab-general">
     <div class="list prefs">
       <div class="row pref">
-        <div class="who"><div class="name" data-t>Appearance</div><div class="sub om-hide" data-t>Light or dark, or whatever the system is showing</div><div class="sub om-only" data-t>Follows the Omarchy theme, as picked in Omarchy's menu</div></div>
+        <div class="who"><div class="name" data-t>Appearance</div><div class="sub om-only" data-t>Follows the Omarchy theme, as picked in Omarchy's menu</div></div>
         <div id="themeSegs" class="om-hide"></div><span class="om-only om-theme-name"></span>
       </div>
       <div class="row pref">
-        <div class="who"><div class="name" data-t>Language</div><div class="sub" data-t>Applies at once, no restart</div></div>
-        <div id="langSegs"></div>
+        <div class="who"><div class="name" data-t>Language</div></div>
+        <button type="button" id="langPick" class="sess-pick pref-pick" aria-label="Language" aria-haspopup="menu" aria-expanded="false"></button>
       </div>
       <div class="row pref" id="gatewayModeRow" hidden>
         <div class="who"><div class="name" data-t>Gateway mode</div><div class="sub" id="gatewayModeSub"></div></div>
         <div id="gatewayModeSegs"></div>
       </div>
       <div class="row pref" id="textSizeRow">
-        <div class="who"><div class="name" data-t>Text size</div><div class="sub" id="textSizeSub"></div></div>
+        <div class="who"><div class="name" data-t>Text size</div></div>
         <div id="textSizeSegs"></div>
       </div>
       <div class="row pref font-row" id="uiFontRow" hidden>
-        <div class="who"><div class="name" data-t>Interface font</div><div class="sub font-note"></div></div>
+        <div class="who"><div class="name" data-t>Interface font</div><div class="sub font-note" hidden></div></div>
         <div class="font-controls">
           <button type="button" class="proto pick font-family" aria-haspopup="menu" aria-expanded="false"></button>
           <button type="button" class="proto pick font-style" aria-haspopup="menu" aria-expanded="false"></button>
@@ -303,7 +303,7 @@
         </div>
       </div>
       <div class="row pref font-row" id="codeFontRow" hidden>
-        <div class="who"><div class="name" data-t>Code font</div><div class="sub font-note"></div></div>
+        <div class="who"><div class="name" data-t>Code font</div><div class="sub font-note" hidden></div></div>
         <div class="font-controls">
           <button type="button" class="proto pick font-family" aria-haspopup="menu" aria-expanded="false"></button>
           <button type="button" class="proto pick font-style" aria-haspopup="menu" aria-expanded="false"></button>
@@ -311,7 +311,7 @@
         </div>
       </div>
       <div class="row pref">
-        <div class="who"><div class="name" data-t>Tray icon</div><div class="sub" data-t>What clicking magpie’s icon in the menu bar or tray opens</div></div>
+        <div class="who"><div class="name" data-t>Click the tray icon to</div></div>
         <div id="traySegs"></div>
       </div>
       <div class="row pref" id="barIconRow" hidden>
@@ -319,43 +319,43 @@
         <div id="barIconSegs"></div>
       </div>
       <div class="row pref">
-        <div class="who"><div class="name" data-t>Provider in model names</div><div class="sub wraps" data-t>Agents’ lists put each model’s provider after its name, or not after names you set</div></div>
+        <div class="who"><div class="name" data-t>Provider in model names</div></div>
         <div id="plainNamesSegs"></div>
       </div>
       <div class="row pref">
-        <div class="who"><div class="name" data-t>Codex subagents on any model</div><div class="sub" data-t>Codex’s OpenAI models hand subagents their tasks as text (multi-agent V1), so a GPT lead can spawn them on magpie’s other models. New threads only; Codex’s own multi_agent_v2 setting still wins</div></div>
+        <div class="who"><div class="name" data-t>Codex subagents on any model</div><div class="sub" data-t>A GPT lead spawns subagents on magpie’s other models. New threads only; Codex’s own multi_agent_v2 still wins</div></div>
         <div id="codexAgentsV1Segs"></div>
       </div>
       <div class="row pref">
-        <div class="who"><div class="name" data-t>Long conversations</div><div class="sub" data-t>Codex and Claude Code compact a conversation at 272K tokens, or the size typed here, on a model with a larger window, unless its provider has a Compact at of its own; in Claude Code a Claude model runs to its own window, 1M for a [1m] one, as Anthropic runs it. The model’s full window lets any conversation grow further, with every turn slower and costlier</div></div>
+        <div class="who"><div class="name" data-t>Long conversations</div><div class="sub" data-t>Codex and Claude Code compact at 272K or the size typed; a full window makes turns slower and costlier</div></div>
         <div id="fullContextSegs"></div>
       </div>
       <div class="row pref" id="codexTitlesRow">
-        <div class="who"><div class="name" data-t>Codex thread titles</div><div class="sub" id="codexTitlesSub"></div></div>
+        <div class="who"><div class="name" data-t>Codex thread titles</div></div>
         <div class="val" id="codexTitlesPick"></div>
       </div>
       <div class="row pref" id="codexAutoReviewRow">
-        <div class="who"><div class="name" data-t>Codex auto-review model</div><div class="sub" id="codexAutoReviewSub"></div></div>
+        <div class="who"><div class="name" data-t>Codex auto-review model</div></div>
         <div class="val" id="codexAutoReviewPick"></div>
       </div>
       <div class="row pref" id="codexMemoriesRow" hidden>
-        <div class="who"><div class="name" data-t>Codex memories model</div><div class="sub" id="codexMemoriesSub"></div></div>
+        <div class="who"><div class="name" data-t>Codex memories model</div></div>
         <div class="val" id="codexMemoriesPick"></div>
       </div>
       <div class="row pref">
-        <div class="who"><div class="name" data-t>Open at login</div><div class="sub" data-t>Start magpie in the tray when you log in, so agents find the gateway from the start</div></div>
+        <div class="who"><div class="name" data-t>Open at login</div></div>
         <div id="loginSegs"></div>
       </div>
       <div class="row pref" id="dockRow" hidden>
-        <div class="who"><div class="name" data-t>Dock</div><div class="sub" data-t>Keep magpie in the Dock too, always or while its window is open, for Cmd-Tab and a menu bar too full to show its icon</div></div>
+        <div class="who"><div class="name" data-t>Show in Dock</div></div>
         <div id="dockSegs"></div>
       </div>
       <div class="row pref" id="lightweightRow" hidden>
-        <div class="who"><div class="name" data-t>Lightweight mode</div><div class="sub" data-t>A closed panel or window frees its page after a minute, about 100 MB each, and loads it anew when opened</div></div>
+        <div class="who"><div class="name" data-t>Lightweight mode</div><div class="sub" data-t>A closed panel or window frees about 100 MB after a minute; opening it loads it again</div></div>
         <div id="lightweightSegs"></div>
       </div>
       <div class="row pref" id="keepAwakeRow">
-        <div class="who"><div class="name" data-t>Keep awake while agents work</div><div class="sub" data-t>Keeps this computer from going to sleep by itself while agents work through magpie and for ten minutes after; the display may still turn off</div></div>
+        <div class="who"><div class="name" data-t>Prevent sleep</div><div class="sub" data-t>Keeps this computer awake while magpie runs tasks</div></div>
         <div id="keepAwakeSegs"></div>
       </div>
       <div class="row pref" id="wslAgentsRow" hidden>
@@ -363,7 +363,7 @@
         <div id="wslAgentsSegs"></div>
       </div>
       <div class="row pref" id="sessionTerminalRow" hidden>
-        <div class="who"><div class="name" data-t>Session terminal</div><div class="sub" data-t>Used by the terminal button in Sessions; only apps registered for .command files appear</div></div>
+        <div class="who"><div class="name" data-t>Session terminal</div><div class="sub" data-t>The terminal a session opens in</div></div>
         <button type="button" id="sessionTerminalSelect" class="sess-pick session-terminal-select" aria-label="Session terminal" aria-haspopup="menu" aria-expanded="false" data-ta></button>
       </div>
     </div>

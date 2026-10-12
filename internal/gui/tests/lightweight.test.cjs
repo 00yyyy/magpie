@@ -13,8 +13,8 @@ const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const words = {
-  en: { name: "Lightweight mode", sub: "A closed panel or window frees its page after a minute, about 100 MB each, and loads it anew when opened", on: "On", off: "Off" },
-  zh: { name: "轻量模式", sub: "面板或窗口关闭约一分钟后释放其网页（每个约 100 MB），再次打开时重新加载", on: "开启", off: "关闭" },
+  en: { name: "Lightweight mode", sub: "A closed panel or window frees about 100 MB after a minute; opening it loads it again", on: "On", off: "Off" },
+  zh: { name: "轻量模式", sub: "面板或窗口关闭一分钟后释放约 100 MB，再次打开时重新加载", on: "开启", off: "关闭" },
 };
 
 function serve(lang, web, posted, st) {

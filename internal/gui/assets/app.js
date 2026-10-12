@@ -19880,7 +19880,7 @@ $("#sessQ").onkeydown = (e) => { if (e.key === "Escape" && e.target.value) { e.s
 
 const THEMES = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
 const LOCALES = [["system", "System"], ["en", "English"], ["zh", "简体中文"], ["zh-TW", "繁體中文"], ["ja", "日本語"], ["de", "Deutsch"]];
-const TRAYS = [["panel", "Quick panel"], ["window", "Main window"]];
+const TRAYS = [["panel", "Open the quick panel"], ["window", "Open the main window"]];
 const CURRENCIES = [["usd", "$ USD"], ["cny", "¥ CNY"]];
 // The text size is the windows' own zoom, as a browser's Ctrl/Cmd +: the
 // page is laid out again in larger CSS pixels, so everything it measures is
@@ -20003,7 +20003,9 @@ function renderFonts(s) {
     const missing = chosen && !window.desktopFonts.available(chosen);
     const note = row.querySelector(".font-note");
     note.textContent = fontListError ? t("Couldn't read installed fonts") : fontFlight ? t("Loading…")
-      : missing ? t("Font unavailable; using system default") : fontList?.length === 0 ? t("No installed fonts found") : t("Saved only on this computer");
+      : missing ? t("Font unavailable; using system default") : fontList?.length === 0 ? t("No installed fonts found") : "";
+    // a line only when something is wrong or still coming (1ooogle on X)
+    note.hidden = !note.textContent;
     note.classList.toggle("err", fontListError || !!missing);
     const pill = row.querySelector(".font-family"), style = row.querySelector(".font-style");
     const paint = (button, text, name) => {
@@ -20455,11 +20457,12 @@ function renderSettings() {
   prefsBase = keep;
   renderFonts(s);
   $("#themeSegs").replaceChildren(segs(THEMES.map(([id, name]) => [id, t(name)]), s.theme, (theme) => savePrefs({ ...keep, theme })));
-  $("#langSegs").replaceChildren(segs(LOCALES.map(([id, name]) => [id, t(name)]), s.lang, (lang) => savePrefs({ ...keep, lang })));
+  renderLangPick(s, keep);
   renderGatewayMode(s);
   // a browser tab has its own zoom, and magpie leaves it to it
   $("#textSizeRow").hidden = web;
-  $("#textSizeSub").textContent = t("Everything in magpie's windows, larger; {keys} too", { keys: textSizeKeys() });
+  // the keys that do it too, kept in the choices' tooltip, the row saying no more than its name
+  $("#textSizeSegs").title = t("Everything in magpie's windows, larger; {keys} too", { keys: textSizeKeys() });
   $("#textSizeSegs").replaceChildren(segs(TEXT_SIZES.map((n) => [n, n + "%"]), s.textSize || 100, (n) => setTextSize(n)));
   $("#traySegs").replaceChildren(segs(TRAYS.map(([id, name]) => [id, t(name)]), s.tray || "panel", (tray) => savePrefs({ ...keep, tray })));
   // the Dock is the Mac's; the tray and the login item the app's
@@ -20478,8 +20481,8 @@ function renderSettings() {
   // its line says what the choice does; data-en keeps a language change on it
   const awakeSub = $("#keepAwakeRow .sub");
   awakeSub.dataset.en = s.keepAwake && s.keepAwakeDisplay
-    ? "Keeps this computer from going to sleep and its display on while agents work through magpie and for ten minutes after"
-    : "Keeps this computer from going to sleep by itself while agents work through magpie and for ten minutes after; the display may still turn off";
+    ? "Keeps this computer and its screen awake while magpie runs tasks"
+    : "Keeps this computer awake while magpie runs tasks";
   awakeSub.textContent = t(awakeSub.dataset.en);
   // WSL's distros, looked in on Windows unless turned off (#1264)
   $("#wslAgentsRow").hidden = !s.wsl;
@@ -20651,6 +20654,25 @@ function renderGatewayMode(s) {
     "no-agents": t("Now on: no agents on this computer"),
   }[s.gatewayWhy] || t("Now off: agents found on this computer");
   $("#gatewayModeSub").textContent = [t("Only what a gateway for other computers needs: no Agents or Library, nor this computer's agents' settings"), now].filter(Boolean).join(" · ");
+}
+
+// renderLangPick: Settings' language, one menu button showing the language
+// picked (1ooogle on X), the app's own menu rather than six segments.
+function renderLangPick(s, keep) {
+  const b = $("#langPick");
+  const chosen = LOCALES.some(([id]) => id === s.lang) ? s.lang : "system";
+  const name = (id) => { const n = LOCALES.find((l) => l[0] === id)[1]; return id === "system" ? t(n) : n; };
+  b.dataset.value = chosen;
+  b.setAttribute("aria-label", t("Language"));
+  b.replaceChildren(el("span", "", name(chosen)), svg(CHEV, 11, 1.6));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, LOCALES.map(([id]) => ({ v: id, name: name(id), note: "", literalName: true })), chosen, (v) => {
+      if (v === chosen) return;
+      savePrefs({ ...keep, lang: v });
+    }, "Language", "sess-menu", "right");
+  };
 }
 
 function renderSessionTerminal(s, keep) {
@@ -21549,9 +21571,6 @@ function renderCodexTitles(s) {
     return m ? `${m.name || m.id} · ${m.providerName}` : id;
   };
   const v = s.codexTitles || "";
-  $("#codexTitlesSub").textContent = v === "off" ? t("Codex’s title requests are answered by magpie with no title and sent nowhere; new threads stay unnamed")
-    : v ? t("Codex’s title requests go to this model, not to its ChatGPT sign-in; the Usage and Routing views still show them as titles")
-    : t("Codex asks its own model for each thread’s title through its ChatGPT sign-in, even while the conversation is on magpie’s models");
   const b = el("button", "rt-cond on");
   b.type = "button";
   b.setAttribute("aria-label", t("Codex thread titles"));
@@ -21578,8 +21597,6 @@ function renderCodexAutoReview(s) {
   const models = s.titleModels || [];
   const v = s.codexAutoReview || "";
   const m = models.find((x) => x.id === v);
-  $("#codexAutoReviewSub").textContent = v ? t("Codex’s auto-review decides approvals on this model, whatever model the conversation is on")
-    : t("Codex’s auto-review decides approvals on codex-auto-review when it has it, else on the conversation’s model at low effort");
   const b = el("button", "rt-cond on");
   b.type = "button";
   b.setAttribute("aria-label", t("Codex auto-review model"));
@@ -21610,8 +21627,6 @@ function renderCodexMemories() {
   row.hidden = gatewayMode || !f || (!f.options.length && !f.value);
   if (row.hidden) return;
   const opt = optionFor(f, f.value);
-  $("#codexMemoriesSub").textContent = f.value ? t("Codex sums threads up and folds them into its memories with this model, whatever model the conversation is on")
-    : t("Codex sums threads up and folds them into its memories with its own models, gpt-5.6-luna and gpt-5.6-terra, whatever model the conversation is on");
   const b = el("button", "rt-cond on");
   b.type = "button";
   b.setAttribute("aria-label", t("Codex memories model"));

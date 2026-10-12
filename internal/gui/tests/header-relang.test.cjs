@@ -92,7 +92,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     for (const [id, label] of LANGS) {
       await t.test(id, async () => {
         await page.setViewportSize({ width: 830, height: 600 });
-        await page.locator("button", { hasText: new RegExp("^" + label + "$") }).first().click();
+        // Settings' language is one menu (1ooogle on X): opened, then the name picked
+        await page.locator("#langPick").click();
+        await page.locator(".proto-menu .pm-item", { hasText: new RegExp("^" + label + "$") }).first().click();
         await page.waitForFunction((id) => locale === id, id);
         await settled(page);
         check(await header(page), `830px just switched to ${id}: ${JSON.stringify(await header(page))}`);

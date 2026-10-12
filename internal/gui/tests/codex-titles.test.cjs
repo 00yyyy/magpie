@@ -3,7 +3,8 @@
 // requests go through its own ChatGPT sign-in even on magpie's models): by
 // default Codex's own (ChatGPT); the app's menu (no native select) offers
 // Off and magpie's models; a pick posts settings/codex-titles on its own,
-// the row says what now happens, and no click scrolls the Settings page.
+// its button shows the choice under a name with no line of its own
+// (1ooogle on X), and no click scrolls the Settings page.
 // English and Chinese, Chromium and WebKit; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -65,8 +66,8 @@ function server(lang, posted) {
 }
 
 const want = {
-  en: { name: "Codex thread titles", own: "Codex’s own (ChatGPT)", off: "Off", subOwn: /through its ChatGPT sign-in/, subOff: /sent nowhere/, subModel: /go to this model/ },
-  zh: { name: "Codex 会话标题", own: "Codex 自带（ChatGPT）", off: "关闭", subOwn: /ChatGPT 登录/, subOff: /不外发/, subModel: /改由此模型/ },
+  en: { name: "Codex thread titles", own: "Codex’s own (ChatGPT)", off: "Off" },
+  zh: { name: "Codex 会话标题", own: "Codex 自带（ChatGPT）", off: "关闭" },
 };
 const view = (page) => page.locator("#view-settings").evaluate((v) => v.scrollTop);
 
@@ -96,7 +97,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator("#codexTitlesRow select").count(), 0, "no native select");
       assert.equal((await row.locator(".name").textContent()).trim(), want[lang].name);
       assert.equal((await pick.textContent()).trim(), want[lang].own, "Codex's own by default");
-      assert.match(await row.locator(".sub").textContent(), want[lang].subOwn);
+      assert.equal(await row.locator(".sub").count(), 0, "the row says its name alone, its button the choice (1ooogle on X)");
       // the chip's icon is the chip's size, not the row's 18–22px (duanckham on X)
       assert.deepEqual(await pick.locator(".ic").evaluate((e) => [e.offsetWidth, e.offsetHeight]), [14, 14]);
 
@@ -117,7 +118,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#list li:not(.group)").filter({ hasText: want[lang].off }).first().click();
       await page.locator("#codexTitlesPick button", { hasText: want[lang].off }).waitFor();
       assert.deepEqual(posted, [["codex-titles", { model: "off" }]]);
-      assert.match(await row.locator(".sub").textContent(), want[lang].subOff);
+      assert.equal(await row.locator(".sub").count(), 0);
       await page.waitForTimeout(300);
       assert.equal(await view(page), before, "picking Off scrolled the page");
 
@@ -127,7 +128,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#list li:not(.group)").filter({ hasText: "DeepSeek V4 Flash" }).first().click();
       await page.locator("#codexTitlesPick button", { hasText: "DeepSeek V4 Flash" }).waitFor();
       assert.deepEqual(posted.at(-1), ["codex-titles", { model: "deepseek/deepseek-v4-flash" }]);
-      assert.match(await row.locator(".sub").textContent(), want[lang].subModel);
+      assert.equal(await row.locator(".sub").count(), 0);
 
       // and back to Codex's own
       await pick.click();

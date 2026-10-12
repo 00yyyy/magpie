@@ -17,7 +17,7 @@ import (
 )
 
 // magpie out of the Dock, activated by its quick panel, opens its window
-// and joins the Dock (Settings › Dock › while the window is open): it leads
+// and joins the Dock (Settings › Show in Dock › while the window is open): it leads
 // Command-Tab's order, so one Command-Tab away comes back to it (#1381). It
 // joined while active and stayed last, behind every app, though in front.
 // The order is the Mac's front-to-back list, which `lsappinfo` prints.

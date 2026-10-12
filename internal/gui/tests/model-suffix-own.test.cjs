@@ -54,8 +54,8 @@ function server(lang, posted) {
 }
 
 const want = {
-  en: { labels: ["Off", "Not on names I set", "On"], sub: /^Agents’ lists put each model’s provider after its name, or not after names you set$/ },
-  zh: { labels: ["关闭", "自定义名称不带供应商", "开启"], sub: /^Agent 的模型列表在模型名后带上供应商，可设为自定义名称不带$/ },
+  en: { labels: ["Off", "Not on names I set", "On"] },
+  zh: { labels: ["关闭", "自定义名称不带供应商", "开启"] },
 };
 const view = (page) => page.locator("#view-settings").evaluate((v) => v.scrollTop);
 
@@ -82,8 +82,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const segs = page.locator("#plainNamesSegs .opt");
       await segs.first().waitFor();
       const row = page.locator(".row.pref", { has: page.locator("#plainNamesSegs") });
-      assert.match(await row.locator(".sub").textContent(), want[lang].sub);
-      assert.equal(await row.locator(".sub").evaluate((e) => e.scrollWidth <= e.clientWidth), true, "the hint is cut short");
+      // the name says enough: no line under it (1ooogle on X)
+      assert.equal(await row.locator(".sub").count(), 0);
       assert.deepEqual((await segs.allTextContents()).map((s) => s.trim()), want[lang].labels);
       const own = segs.nth(1);
       assert.equal(await own.evaluate((b) => b.classList.contains("on")), true, "plainOwnNames lights the middle one");
