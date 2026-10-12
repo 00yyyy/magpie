@@ -368,7 +368,7 @@ func New() *Server {
 		// a request counted against a MaxRPM waits for room in its minute
 		// first (rpm.go); the ChatGPT backend is spoken to over HTTP/1.1
 		// (codex_http1.go)
-		client:       &http.Client{Transport: rpmTransport{newCodexHTTP1(upstreamTransport(nil))}},
+		client:       &http.Client{Transport: rpmTransport{upstreamTransport()}},
 		unfit:        make(map[string]bool),
 		subscription: newSubscriptionBridge(),
 		debug:        os.Getenv("MAGPIE_DEBUG") != "",

@@ -112,36 +112,50 @@ func forChoice(c string) (*url.URL, error) {
 	return Parse(c)
 }
 
+// HTTP1 says a request to u goes over HTTP/1.1 only, whatever its
+// transport offers. internal/provider sets it to the ChatGPT backend's
+// host, which Codex itself speaks HTTP/1.1 to; nil leaves every request to
+// its transport.
+var HTTP1 func(u *url.URL) bool
+
 // Dispatch is a RoundTripper sending a request through base, unless its
 // context names a provider's own proxy (With): then through a clone of
 // base kept for that proxy alone. Connections are so reused among the
 // requests going through one proxy and never carried to another — HTTP/2
 // ones, which a transport shares by host whatever proxy they were dialled
-// through, among them. A host whose IPv6 is taken but goes nowhere is
+// through, among them. A request HTTP1 names goes through a clone kept
+// for HTTP/1.1 (http1Only). A host whose IPv6 is taken but goes nowhere is
 // dialed over IPv4 (v4Fallback).
 func Dispatch(base *http.Transport) http.RoundTripper {
 	v4Fallback(base)
-	return &dispatch{base: base, own: map[string]*http.Transport{}}
+	return &dispatch{base: base, own: map[route]*http.Transport{}}
 }
 
 type dispatch struct {
 	base *http.Transport
 	mu   sync.Mutex
-	own  map[string]*http.Transport
+	own  map[route]*http.Transport
+}
+
+// route is what a request needs of its transport other than base: a
+// provider's own proxy, HTTP/1.1 only, or both.
+type route struct {
+	choice string
+	h1     bool
 }
 
 func (d *dispatch) RoundTrip(req *http.Request) (*http.Response, error) {
-	c := choiceOf(req.Context())
-	if c == "" {
+	r := route{choice: choiceOf(req.Context()), h1: HTTP1 != nil && HTTP1(req.URL)}
+	if r == (route{}) {
 		return v4Retry(d.base, req)
 	}
-	return v4Retry(d.transport(c), req)
+	return v4Retry(d.transport(r), req)
 }
 
-func (d *dispatch) transport(c string) *http.Transport {
+func (d *dispatch) transport(r route) *http.Transport {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if t, ok := d.own[c]; ok {
+	if t, ok := d.own[r]; ok {
 		return t
 	}
 	if len(d.own) >= 32 { // choices come and go as they are edited
@@ -151,17 +165,35 @@ func (d *dispatch) transport(c string) *http.Transport {
 		}
 	}
 	t := d.base.Clone()
-	t.Proxy = func(req *http.Request) (*url.URL, error) {
-		if err := Held(req.Context()); err != nil {
-			return nil, err
+	if c := r.choice; c != "" {
+		t.Proxy = func(req *http.Request) (*url.URL, error) {
+			if err := Held(req.Context()); err != nil {
+				return nil, err
+			}
+			if loopback(req.URL.Hostname()) {
+				return nil, nil
+			}
+			return forChoice(c)
 		}
-		if loopback(req.URL.Hostname()) {
-			return nil, nil
-		}
-		return forChoice(c)
 	}
-	d.own[c] = t
+	if r.h1 {
+		http1Only(t)
+	}
+	d.own[r] = t
 	return t
+}
+
+// http1Only has t, a clone, speak HTTP/1.1 only, and its TLS hello offer
+// no protocol (ALPN), as Codex's does. A transport that has spoken HTTP/2
+// carries h2 in its TLS config, which a clone copies, and a server that
+// took it would be sent HTTP/1.1 on an HTTP/2 connection.
+func http1Only(t *http.Transport) {
+	var h1 http.Protocols
+	h1.SetHTTP1(true)
+	t.Protocols, t.ForceAttemptHTTP2 = &h1, false
+	if t.TLSClientConfig != nil {
+		t.TLSClientConfig.NextProtos = nil
+	}
 }
 
 // CloseIdleConnections closes base's and every proxy's own.

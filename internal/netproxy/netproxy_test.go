@@ -2,10 +2,16 @@ package netproxy
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -189,8 +195,8 @@ func TestWith(t *testing.T) {
 	}
 
 	d := Dispatch(&http.Transport{Proxy: Func}).(*dispatch)
-	a, b := d.transport("127.0.0.1:1"), d.transport("direct")
-	if a == b || d.transport("127.0.0.1:1") != a || len(d.own) != 2 {
+	a, b := d.transport(route{choice: "127.0.0.1:1"}), d.transport(route{choice: "direct"})
+	if a == b || d.transport(route{choice: "127.0.0.1:1"}) != a || len(d.own) != 2 {
 		t.Fatalf("transports: %d kept", len(d.own))
 	}
 	if p, _ := a.Proxy(req("")); p == nil || p.Host != "127.0.0.1:1" {
@@ -216,5 +222,53 @@ func TestWith(t *testing.T) {
 	}
 	if env := EnvWith("", []string{"PATH=/bin"}); get(env, "HTTPS_PROXY") != "http://127.0.0.1:6152" {
 		t.Fatalf("follow env: %v", env)
+	}
+}
+
+// A request HTTP1 names goes over HTTP/1.1, its TLS hello offering no h2,
+// though its transport has already spoken HTTP/2 to that server (which
+// leaves h2 in the TLS config a clone copies: a server that took it would
+// be sent HTTP/1.1 on an HTTP/2 connection), and with a provider's own
+// proxy too. Every other request still gets HTTP/2.
+func TestDispatchHTTP1(t *testing.T) {
+	var mu sync.Mutex
+	offered := map[string]bool{} // the client's address → its hello offered h2
+	var got []string
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, r.URL.Path+" "+r.Proto+map[bool]string{true: " (h2 offered)"}[offered[r.RemoteAddr]])
+	}))
+	srv.EnableHTTP2 = true
+	srv.TLS = &tls.Config{GetConfigForClient: func(h *tls.ClientHelloInfo) (*tls.Config, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		offered[h.Conn.RemoteAddr().String()] = slices.Contains(h.SupportedProtos, "h2")
+		return nil, nil
+	}}
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+	pool := x509.NewCertPool()
+	pool.AddCert(srv.Certificate())
+	d := Dispatch(&http.Transport{Proxy: Func, ForceAttemptHTTP2: true, TLSClientConfig: &tls.Config{RootCAs: pool}}).(*dispatch)
+	t.Cleanup(d.CloseIdleConnections)
+	was := HTTP1
+	HTTP1 = func(u *url.URL) bool { return strings.HasPrefix(u.Path, "/h1") }
+	t.Cleanup(func() { HTTP1 = was })
+	for _, c := range []struct {
+		path   string
+		choice string
+	}{{"/h2", ""}, {"/h1", ""}, {"/h1/own", "direct"}, {"/h2/own", "direct"}} {
+		req, _ := http.NewRequestWithContext(With(context.Background(), c.choice), http.MethodGet, srv.URL+c.path, nil)
+		res, err := d.RoundTrip(req)
+		if err != nil {
+			t.Fatalf("%s: %v", c.path, err)
+		}
+		io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+	}
+	want := []string{"/h2 HTTP/2.0 (h2 offered)", "/h1 HTTP/1.1", "/h1/own HTTP/1.1", "/h2/own HTTP/2.0 (h2 offered)"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("asked\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
