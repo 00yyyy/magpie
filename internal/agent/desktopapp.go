@@ -73,6 +73,9 @@ func macAppFolders(home string) []string {
 	return append(proc.SystemDirs("/Applications"), filepath.Join(home, "Applications"))
 }
 
+// windowsStorePackages lists the package full names registered for the
+// current user on Windows, nil elsewhere; a var so tests never read the
+// machine's own registry.
 var windowsStorePackages = installedWindowsStorePackages
 
 var (
@@ -106,9 +109,12 @@ func (a *Agent) AppVersion() string {
 	}
 	return ""
 }
-// storeAppVersion finds the newest version of an app among Microsoft Store
 
-// package full names (name_version_architecture_resourceid_publisher).
+// storeAppVersion finds the newest version of an app among Microsoft Store
+// package full names (name_version_architecture_resourceid_publisher). Only
+// the main package counts, the one with no resource id: the AppX registry
+// keeps a resource package (…_neutral_split.scale-125_…) of a version the
+// main package has moved past, so one is no sign the app is installed.
 func storeAppVersion(packages []string, name, publisher string) string {
 	prefix, suffix := name+"_", "_"+publisher
 	var newest [4]uint64
@@ -118,7 +124,7 @@ func storeAppVersion(packages []string, name, publisher string) string {
 			continue
 		}
 		fields := strings.Split(strings.TrimSuffix(strings.TrimPrefix(pkg, prefix), suffix), "_")
-		if len(fields) < 3 {
+		if len(fields) != 3 || fields[2] != "" {
 			continue
 		}
 		parts := strings.Split(fields[0], ".")

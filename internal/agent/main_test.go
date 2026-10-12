@@ -32,6 +32,9 @@ func TestMain(m *testing.M) {
 	// Pi's and omp's model registries are read from their installs; never
 	// this machine's
 	nodeModulesOf = func(string, []string) []string { return nil }
+	// Microsoft Store apps are read from the current user's AppX registry;
+	// never this machine's (a Windows box with the Codex app installed)
+	windowsStorePackages = func() []string { return nil }
 	// Aside's default is changed through the aside binary, which answers for
 	// the account the developer is actually running: a test that picks a
 	// model would change the real Aside's default, and the running one would
