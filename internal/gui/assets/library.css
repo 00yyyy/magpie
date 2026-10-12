@@ -580,3 +580,8 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
   .lib-row.click:hover > .lib-agents:hover .lib-ag:not(:focus) { outline-color: transparent; }
   .lib-grouphead > .lib-agents .lib-ag:not(:focus) { outline-color: var(--card-2); }
 }
+
+/* Hooks (#1790): the event and the tools it is for are app menus, as wide
+   as the dialog lets them be */
+.lib-hookedit .lib-menu { max-width: 100%; height: 28px; color: var(--fg); }
+.lib-hookedit .lib-hooktimeout { max-width: 140px; }

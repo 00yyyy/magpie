@@ -40,6 +40,7 @@
     key: "M10 2.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4z M7.8 8.2 3 13 M4.5 11.5 6 13",
     person: "M8 3a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z M3.5 13.5c.6-2.4 2.3-3.6 4.5-3.6s3.9 1.2 4.5 3.6",
     back: "m9.5 4.5-3 3.5 3 3.5",
+    hook: "M10.5 2.5v6.5a3 3 0 0 1-6 0V7.5 M3 9l1.5-1.5L6 9",
   };
 
   const tilde = (p) => (lib?.home && p?.startsWith(lib.home) ? "~" + p.slice(lib.home.length) : p || "");
@@ -372,7 +373,7 @@
   // What All did, said of the item: on for how many of the agents it went
   // to, and which of them couldn't be given it, and why.
   function reportAll(v, me) {
-    const what = (me.list === "servers" ? "mcp:" : "skill:") + me.name;
+    const what = ({ servers: "mcp:", hooks: "hook:" }[me.list] || "skill:") + me.name;
     const shown = [...me.box.children].filter((x) => x.dataset.agent && !cannot(x)).map((x) => x.dataset.agent);
     const n = shown.filter((id) => me.want.includes(id)).length;
     const bad = (v.result?.problems || []).filter((p) => p.what === what && shown.includes(p.agent));
@@ -578,6 +579,7 @@
     if (kind === "instructions") return t("Instructions");
     if (kind === "mcp") return name ? t("MCP server {name}", { name }) : t("MCP servers");
     if (kind === "skill") return t("Skill {name}", { name });
+    if (kind === "hook") return t("Hook {name}", { name });
     if (kind === "project") return name ? t("Skill {name}", { name }) : t("The project");
     return what;
   }
@@ -658,6 +660,7 @@
       ["instructions", t("Instructions")],
       ["mcp", t("MCP servers") + n("mcp")],
       ["skills", t("Skills") + n("skills")],
+      ["hooks", t("Hooks") + n("hooks")],
       ["rtk", "RTK"],
     ], tab, (id) => {
       tab = id;
@@ -706,7 +709,7 @@
     const caret = focus ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
     page.replaceChildren();
     fits = [];
-    const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length });
+    const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length });
     page.append(head);
     head.classList.toggle("stuck", top > 0);
     if (!lib.agents.length) {
@@ -722,6 +725,7 @@
     if (tab === "instructions") renderInstructions(body);
     else if (tab === "mcp") renderServers(body);
     else if (tab === "rtk") renderRTK(body);
+    else if (tab === "hooks") renderHooks(body);
     else renderSkills(body);
     page.append(body);
     for (const n of body.querySelectorAll(".row-head .note")) n.title = n.textContent;
@@ -1976,6 +1980,206 @@
     openLib(ed);
   }
 
+  // ---------- hooks ----------
+
+  // A hook (#1790, AllenReder) is a command an agent runs at a point of
+  // its turn: a phone notification when it ends, a formatter after it
+  // edits a file. It is kept once and written into each agent picked, in
+  // that agent's own file and shape (hooks.go). An event is one every
+  // agent has, under its own name, or one agent's own, for it alone.
+  const HOOK_EVENTS = () => [
+    ["turn-end", t("When a turn ends")],
+    ["after-tool", t("After a tool runs")],
+    ["before-tool", t("Before a tool runs")],
+    ["prompt", t("When a prompt is sent")],
+    ["session-start", t("When a session starts")],
+  ];
+  const HOOK_TOOLS = () => [["", t("Any tool")], ["shell", t("Shell commands")], ["edit", t("File edits")]];
+  const toolEvent = (ev) => ev === "after-tool" || ev === "before-tool";
+  const hookAgentOf = (id) => (lib.hookAgents || []).find((x) => x.id === id);
+  // the agents the tab shows a chip for: every one shown, those magpie
+  // can't give a hook greyed, saying why
+  const hookAgents = () => shownAgents().filter((a) => hookAgentOf(a.id));
+  // why a can't be given h, or ""
+  const hookBlocked = (h) => (a) => {
+    const ha = hookAgentOf(a.id);
+    if (!ha || ha.no) return ha?.wsl ? t("magpie gives hooks only to agents on this computer, not yet to {agent} in WSL", { agent: a.name }) : t("{agent} has no hooks magpie can write", { agent: a.name });
+    const own = h.event?.includes(":") && h.event.split(":")[0];
+    if (own && own !== a.id) return t("{event} is {agent}'s own event: only it can run this hook", { event: h.event.slice(own.length + 1), agent: nameOf(own) });
+    return "";
+  };
+  function hookEventLabel(h) {
+    const i = h.event.indexOf(":");
+    if (i > 0) return nameOf(h.event.slice(0, i)) + " · " + h.event.slice(i + 1);
+    return HOOK_EVENTS().find(([v]) => v === h.event)?.[1] || h.event;
+  }
+  function hookLine(h) {
+    let s = hookEventLabel(h);
+    if (h.matcher) s += " · " + (h.event.includes(":") ? h.matcher : HOOK_TOOLS().find(([v]) => v === h.matcher)?.[1] || h.matcher);
+    return s;
+  }
+
+  function renderHooks(body) {
+    body.append(intro(t("A hook is a command an agent runs at a point of its turn — a notification when it ends, a formatter after it edits a file. Add it once and magpie writes it into each agent you pick, in the shape that agent reads.")));
+    const all = hookAgents();
+    const hooks = lib.hooks || [];
+    pickingFor("hooks", hooks);
+    if (!hooks.length) {
+      body.append(empty(t("No hooks in the library yet"), t("Add one, and pick the agents that run it."), button(t("＋ Add a hook"), "action", () => editHook(null))));
+    } else {
+      if (hooks.length > 1) {
+        const rh = el("div", "row-head lib-hookhead");
+        rh.append(el("span", "label", t("In the library")), el("span", "grow"));
+        if (all.length) rh.append(pickButton("hooks"));
+        rh.append(removeEveryButton("hooks"));
+        body.append(rh);
+      }
+      const list = el("div", "list lib-list");
+      list.append(...[...hooks].sort((a, b) => a.name.localeCompare(b.name)).map((h) => hookRow(h, all)));
+      body.append(list);
+      if (picking) body.append(pickBar(all));
+      const after = el("div", "after-list");
+      after.append(button(t("＋ Add hook"), "", () => editHook(null)));
+      body.append(after);
+    }
+    const given = (id) => hooks.some((h) => h.agents?.includes(id));
+    for (const a of all) {
+      const ha = hookAgentOf(a.id);
+      if (ha.off && given(a.id)) body.append(el("p", "lib-aside lib-hooks-off", t("{agent} has hooks turned off in its settings: it runs none of them until they're turned on there.", { agent: a.name })));
+    }
+    // Codex runs a hook only once it is trusted there, again after it
+    // changes (codex-rs/hooks: trusted_hash)
+    if (given("codex")) body.append(el("p", "lib-aside lib-hooks-codex", t("Codex runs a new or changed hook only once you trust it: review it in Codex's /hooks.")));
+    // Cursor runs Claude Code's hooks as well as its own
+    if (hooks.some((h) => h.agents?.includes("cursor") && h.agents?.includes("claude"))) body.append(el("p", "lib-aside lib-hooks-twice", t("Cursor runs Claude Code's hooks too: a hook given to both runs twice in Cursor.")));
+    // the agents greyed: Claude Code, Codex, Gemini CLI and Cursor are the
+    // ones whose hooks files magpie knows
+    const skip = all.filter((a) => hookAgentOf(a.id).no);
+    if (skip.length) body.append(el("p", "lib-aside lib-hooks-no", t("magpie can't give hooks to {agents} yet: their chips are greyed, and say why.", { agents: skip.map((a) => a.name).join(", ") })));
+  }
+
+  function hookRow(h, all) {
+    const row = el("div", "row lib-row click lib-hook");
+    const who = el("div", "who");
+    who.append(el("div", "name mono", h.name), el("div", "sub lib-hookev", hookLine(h)));
+    const cmd = el("div", "sub mono lib-hookcmd", h.command);
+    cmd.title = h.command;
+    who.append(cmd);
+    row.append(glyph(GLYPH.hook), who,
+      agentChips(all, h.agents, chipsChange("hooks/agents", h.name, "hooks", (x) => hookRow(x, all)), { problems: h.problems, blocked: hookBlocked(h), all: true }));
+    if (picking) return pickRow(row, h.name);
+    row.onclick = () => editHook(h);
+    row.title = t("Edit {name}", { name: h.name });
+    return row;
+  }
+
+  function editHook(h) {
+    const all = hookAgents();
+    const d = h ? { name: h.name, event: h.event, matcher: h.matcher || "", command: h.command, timeout: h.timeout || 0, agents: [...(h.agents || [])] }
+      : { name: "", event: "turn-end", matcher: "", command: "", timeout: 0, agents: [] };
+    if (!h) d.agents = all.filter((a) => !hookBlocked(d)(a)).map((a) => a.id);
+    const ed = el("div", "editor lib-editor lib-hookedit");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.hook), el("b", "", h ? h.name : t("New hook")));
+    ed.append(head);
+    const err = el("div", "editor-error");
+    const name = field2(d.name, t("e.g. notify"), (v) => { d.name = v.trim(); });
+    ed.append(...field(t("Name"), name, t("Letters, digits, - and _")));
+
+    // the event and the tools it is narrowed to: menus, never a <select>
+    const evBtn = el("button", "sess-pick lib-menu lib-hookevent");
+    evBtn.type = "button";
+    evBtn.setAttribute("aria-haspopup", "menu");
+    evBtn.setAttribute("aria-expanded", "false");
+    evBtn.onclick = (e) => {
+      e.stopPropagation();
+      const opts = HOOK_EVENTS().map(([v, n]) => ({ v, name: n, literalName: true, note: "every agent, in its own name for it", always: true }));
+      // an agent's own events, for it alone
+      for (const a of all) {
+        const ha = hookAgentOf(a.id);
+        if (ha.no) continue;
+        for (const ev of ha.events || []) opts.push({ v: a.id + ":" + ev, name: a.name + " · " + ev, literalName: true, note: t("{agent}'s own event", { agent: a.name }) });
+      }
+      openProtoMenu(evBtn, opts, d.event, (v) => {
+        d.event = v;
+        if (v.includes(":")) d.agents = [v.split(":")[0]];
+        else if (!toolEvent(v)) d.matcher = "";
+        if (v.includes(":") || !HOOK_TOOLS().some(([m]) => m === d.matcher)) d.matcher = "";
+        draw();
+      }, "When it runs", "", "left", false, "Find an event");
+    };
+    ed.append(...field(t("When it runs"), evBtn));
+    const slot = el("div", "lib-slot");
+    ed.append(slot);
+    const cmd = field2(d.command, "curl -s https://api.day.app/KEY/done", (v) => { d.command = v; });
+    cmd.classList.add("mono");
+    ed.append(...field(t("Command"), cmd, t("Run by the agent's shell, in the session's folder; the agent passes what happened as JSON on its input")));
+    const to = field2(d.timeout ? String(d.timeout) : "", t("the agent's own"), (v) => { d.timeout = Math.max(0, parseInt(v, 10) || 0); });
+    to.inputMode = "numeric";
+    to.classList.add("lib-hooktimeout");
+    ed.append(...field(t("Timeout (seconds)"), to));
+    const agentsBox = el("div");
+    ed.append(...field(t("Agents"), agentsBox));
+    ed.append(err);
+
+    function drawAgents() {
+      agentsBox.replaceChildren(agentChips(all, d.agents, (next) => { d.agents = next; drawAgents(); }, { names: true, blocked: hookBlocked(d), all: true }));
+    }
+    function draw() {
+      evBtn.replaceChildren(el("span", "", hookEventLabel(d)), svg(CHEV, 11, 1.6));
+      slot.replaceChildren();
+      if (d.event.includes(":")) {
+        const m = field2(d.matcher, t("every tool"), (v) => { d.matcher = v.trim(); });
+        m.classList.add("mono", "lib-hookmatcher");
+        slot.append(...field(t("Matcher"), m, t("The agent's own matcher, as its hooks file has it; empty for all")));
+      } else if (toolEvent(d.event)) {
+        const mb = el("button", "sess-pick lib-menu lib-hooktool");
+        mb.type = "button";
+        mb.setAttribute("aria-haspopup", "menu");
+        mb.setAttribute("aria-expanded", "false");
+        mb.append(el("span", "", HOOK_TOOLS().find(([v]) => v === d.matcher)?.[1] || ""), svg(CHEV, 11, 1.6));
+        mb.onclick = (e) => {
+          e.stopPropagation();
+          openProtoMenu(mb, HOOK_TOOLS().map(([v, n]) => ({ v, name: n, literalName: true, note: "" })), d.matcher, (v) => { d.matcher = v; draw(); }, "For which tools");
+        };
+        slot.append(...field(t("For which tools"), mb, t("Each agent's own names for them")));
+      }
+      drawAgents();
+    }
+    draw();
+
+    const bar = el("div", "bar");
+    if (h) bar.append(button(t("Remove from the library"), "danger", async () => {
+      if (!await confirmRemoval(h.name, "It will be removed from the library and the agents it was given to.")) return;
+      if (await change("hooks/remove", { name: h.name }, t("{name} is out of the library and the agents it was given to", { name: h.name }))) closeLibModal(true);
+    }));
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal));
+    const save = async () => {
+      err.textContent = "";
+      try {
+        const hook = { name: d.name, event: d.event, matcher: d.matcher, command: d.command, timeout: d.timeout, agents: d.agents.filter((id) => !hookBlocked(d)(agentOf(id) || { id })) };
+        take(await api("library/hooks/save", { old: h ? h.name : "", hook }));
+        report(lib.result, h ? t("{name} saved", { name: d.name }) : "");
+        closeLibModal(true);
+        render();
+      } catch (e) { err.textContent = e.message; }
+    };
+    bar.append(button(h ? t("Save") : t("Add"), "primary", save));
+    ed.append(bar);
+    const original = JSON.stringify(d);
+    modal = { save, dirty: () => JSON.stringify(d) !== original };
+    openLib(ed);
+    if (!h) requestAnimationFrame(() => name.focus());
+  }
+
+  function confirmRemoveEveryHook() {
+    const hooks = (lib.hooks || []).slice(), names = hooks.map((x) => x.name);
+    confirmRemoveEvery("hooks", names, t("Remove all {n} hooks?", { n: names.length }), [
+      takenFrom(hooks),
+      t("Hooks your agents have that aren't in the library stay as they are, and so does one you changed in an agent's file."),
+    ]);
+  }
+
   // ---------- skills ----------
 
   function renderSkills(body) {
@@ -2482,9 +2686,9 @@
   // reach: one given every server it can reach of them has them all, and
   // one that can reach none of them can't be given them.
   function groupChips(skills, all, repo, kind = "skills") {
-    const servers = kind === "servers";
+    const servers = kind === "servers", hooks = kind === "hooks";
     const n = skills.length, names = skills.map((s) => s.name);
-    const can = (s, a) => !servers || reaches(s)(a);
+    const can = (s, a) => (servers ? !!reaches(s)(a) : hooks ? !hookBlocked(s)(a) : true);
     const reach = (a) => skills.filter((s) => can(s, a)).length;
     const count = (a) => skills.filter((s) => can(s, a) && s.agents?.includes(a.id)).length;
     const full = all.filter((a) => reach(a) && count(a) === reach(a)).map((a) => a.id);
@@ -2502,18 +2706,24 @@
           ? (on.length ? t("{repo}'s skills are on for {agents}", { repo, agents: who(on) }) : t("{repo}'s skills are off for {agents}", { repo, agents: who(off) }))
           : n === 1 ? (on.length ? t("{name} is on for {agents}", { name: names[0], agents: who(on) }) : t("{name} is off for {agents}", { name: names[0], agents: who(off) }))
           : servers ? (on.length ? t("{n} servers are on for {agents}", { n, agents: who(on) }) : t("{n} servers are off for {agents}", { n, agents: who(off) }))
+          : hooks ? (on.length ? t("{n} hooks are on for {agents}", { n, agents: who(on) }) : t("{n} hooks are off for {agents}", { n, agents: who(off) }))
           : on.length ? t("{n} skills are on for {agents}", { n, agents: who(on) }) : t("{n} skills are off for {agents}", { n, agents: who(off) }));
       } catch (e) {
         status(e.message, "err", 6000);
       }
       render();
-    }, { all: true, blocked: servers ? (a) => (reach(a) ? "" : n === 1 ? sseBlocked(skills[0])(a) : t("{agent} can reach none of these servers", { agent: a.name })) : null });
+    }, { all: true, blocked: servers ? (a) => (reach(a) ? "" : n === 1 ? sseBlocked(skills[0])(a) : t("{agent} can reach none of these servers", { agent: a.name }))
+      : hooks ? (a) => (reach(a) ? "" : n === 1 ? hookBlocked(skills[0])(a) : t("{agent} can run none of these hooks", { agent: a.name })) : null });
     box.classList.add("lib-groupchips");
     for (const c of box.querySelectorAll(".lib-ag[data-agent]")) {
       const a = all.find((x) => x.id === c.dataset.agent), k = count(a), m = reach(a);
       if (!m) continue;
       if (k && k < m) c.classList.add("some");
-      c.title = servers
+      c.title = hooks
+        ? (k === m ? t("{agent} has all of these hooks — click to take them away", { agent: a.name })
+          : k ? t("{agent} has {n} of these hooks — click to give it the rest", { agent: a.name, n: k })
+          : t("Give {agent} all of these hooks", { agent: a.name }))
+        : servers
         ? (k === m ? t("{agent} has all of these servers — click to take them away", { agent: a.name })
           : k ? t("{agent} has {n} of these servers — click to give it the rest", { agent: a.name, n: k })
           : t("Give {agent} all of these servers", { agent: a.name }))
@@ -2523,8 +2733,8 @@
     }
     const every = box.querySelector(".lib-ag.all");
     if (every) every.title = every.classList.contains("on")
-      ? (servers ? t("Every agent has all of these servers — click to take them from every one") : t("Every agent has all of them — click to take them from every one"))
-      : servers ? t("Give all of these servers to every agent") : t("Give all of them to every agent");
+      ? (servers ? t("Every agent has all of these servers — click to take them from every one") : hooks ? t("Every agent has all of these hooks — click to take them from every one") : t("Every agent has all of them — click to take them from every one"))
+      : servers ? t("Give all of these servers to every agent") : hooks ? t("Give all of these hooks to every agent") : t("Give all of them to every agent");
     return box;
   }
 
@@ -2541,9 +2751,9 @@
       picked.clear();
       render();
     });
-    const skills = kind === "skills";
-    b.title = picking ? (skills ? t("Stop picking skills") : t("Stop picking servers"))
-      : skills ? t("Pick some skills and turn them on or off together") : t("Pick some servers and turn them on or off together");
+    const skills = kind === "skills", hooks = kind === "hooks";
+    b.title = picking ? (skills ? t("Stop picking skills") : hooks ? t("Stop picking hooks") : t("Stop picking servers"))
+      : skills ? t("Pick some skills and turn them on or off together") : hooks ? t("Pick some hooks and turn them on or off together") : t("Pick some servers and turn them on or off together");
     return b;
   }
 
@@ -2591,33 +2801,34 @@
     box.checked = k > 0 && k === box._names.length;
     box.indeterminate = k > 0 && k < box._names.length;
     const row = box.parentElement;
-    if (row?.classList.contains("lib-skill") || row?.classList.contains("lib-server")) row.classList.toggle("picked", box.checked);
+    if (row?.classList.contains("lib-skill") || row?.classList.contains("lib-server") || row?.classList.contains("lib-hook")) row.classList.toggle("picked", box.checked);
   }
   // every box drawn, and the bar, as the picks are now
   function syncPicks() {
     if (!picked.size) naming = false;
     for (const b of page.querySelectorAll(".lib-pickbox")) paintPick(b);
     const bar = page.querySelector(".lib-pickbar");
-    if (bar) bar.replaceWith(pickBar(picking === "servers" ? mcpAgents() : skillAgents()));
+    if (bar) bar.replaceWith(pickBar(picking === "servers" ? mcpAgents() : picking === "hooks" ? hookAgents() : skillAgents()));
   }
 
   // the servers' bar is the same, with no filter or groups (#1027)
   function pickBar(all) {
     const bar = el("div", "row lib-row lib-pickbar");
-    const servers = picking === "servers";
-    const shown = servers ? lib.servers : shownSkills(), q = servers ? "" : skillQuery.trim();
+    const servers = picking === "servers", hooks = picking === "hooks";
+    const own = servers ? lib.servers : hooks ? lib.hooks || [] : lib.skills;
+    const shown = servers || hooks ? own : shownSkills(), q = servers || hooks ? "" : skillQuery.trim();
     const every = el("label", "lib-pickall");
     every.append(pickAll(shown), el("span", "", q ? t("All {n} that match", { n: shown.length }) : t("All {n}", { n: shown.length })));
     every.onclick = (e) => e.stopPropagation();
-    const skills = (servers ? lib.servers : lib.skills).filter((s) => picked.has(s.name));
+    const skills = own.filter((s) => picked.has(s.name));
     const n = skills.length;
     bar.append(every, el("span", "lib-pickn" + (n ? "" : " none"), n ? t("{n} selected", { n })
-      : servers ? t("Pick servers to turn them on or off together") : t("Pick skills to turn them on or off together")), el("span", "grow"));
+      : servers ? t("Pick servers to turn them on or off together") : hooks ? t("Pick hooks to turn them on or off together") : t("Pick skills to turn them on or off together")), el("span", "grow"));
     if (n && naming) return nameBar(bar, skills);
     if (n) {
-      bar.append(groupChips(skills, all, null, servers ? "servers" : "skills"));
+      bar.append(groupChips(skills, all, null, picking || "skills"));
       // a group of the user's made of them, or the ones in one let go (#791)
-      if (!servers && sortOf("libSkills", SKILL_SORTS()) === "source") {
+      if (!servers && !hooks && sortOf("libSkills", SKILL_SORTS()) === "source") {
         const gb = button(t("Group…"), "lib-updall lib-pickgroup", () => { naming = true; syncPicks(); });
         gb.title = t("Put the skills picked in a group of your own");
         bar.append(gb);
@@ -3420,9 +3631,11 @@
   // project magpie gave it to, its sign-in forgotten; the agents' servers
   // of their own stay. It asks first, in the page, saying who loses what.
   function removeEveryButton(kind) {
-    const skills = kind === "skills";
-    const b = button(t("Remove all"), "action danger lib-updall lib-everyrm", () => skills ? confirmRemoveEverySkill() : confirmRemoveEveryServer());
-    b.title = skills ? t("Take all {n} skills out of the library", { n: lib.skills.length }) : t("Take all {n} servers out of the library", { n: lib.servers.length });
+    const skills = kind === "skills", hooks = kind === "hooks";
+    const b = button(t("Remove all"), "action danger lib-updall lib-everyrm", () => skills ? confirmRemoveEverySkill() : hooks ? confirmRemoveEveryHook() : confirmRemoveEveryServer());
+    b.title = skills ? t("Take all {n} skills out of the library", { n: lib.skills.length })
+      : hooks ? t("Take all {n} hooks out of the library", { n: (lib.hooks || []).length })
+      : t("Take all {n} servers out of the library", { n: lib.servers.length });
     return b;
   }
 
@@ -3480,8 +3693,8 @@
       const res = v.result || {}, no = res.unremoved || [];
       if (no.length) {
         const p = no[0];
-        status(t("{name} wasn't removed: {error}", { name: p.what.replace(/^(skill|mcp):/, ""), error: p.error }) + (no.length > 1 ? " " + t("(and {n} more)", { n: no.length - 1 }) : ""), "warn", 8000);
-      } else report(res, kind === "skills" ? t("{n} skills removed", { n: names.length }) : t("{n} servers removed", { n: names.length }));
+        status(t("{name} wasn't removed: {error}", { name: p.what.replace(/^(skill|mcp|hook):/, ""), error: p.error }) + (no.length > 1 ? " " + t("(and {n} more)", { n: no.length - 1 }) : ""), "warn", 8000);
+      } else report(res, kind === "skills" ? t("{n} skills removed", { n: names.length }) : kind === "hooks" ? t("{n} hooks removed", { n: names.length }) : t("{n} servers removed", { n: names.length }));
       render();
       return true;
     } catch (e) {
