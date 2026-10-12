@@ -1063,8 +1063,8 @@ func normalize(p Provider) Provider {
 	// OpenCode Zen serves its free models (-free) signed out, to the key
 	// OpenCode itself sends then: a Zen provider saved with no key of its
 	// own asks with that one
-	if p.Preset == "opencode-zen" && p.Key == "" {
-		p.Key = OpenCodeAnonymousKey
+	if anon := p.AnonymousKey(); anon != "" && p.Key == "" {
+		p.Key = anon
 	}
 	// a Zen provider saved before its preset had System One for Jev
 	// (01huadalang: its Jev was asked as a chat model, and failed), an

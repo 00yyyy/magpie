@@ -160,6 +160,10 @@ type providerJSON struct {
 		Masked   string `json:"masked"`
 		Optional bool   `json:"optional"`
 	} `json:"key"`
+	// AnonKey is the key Add another key adds when nothing is pasted
+	// (provider.AnonymousKey: OpenCode Zen's public, #1795), while the
+	// provider doesn't have it yet
+	AnonKey  string   `json:"anonKey,omitempty"`
 	Ready    bool     `json:"ready"`
 	Chosen   []string `json:"chosen"`   // the user's explicit picks, if any
 	Fallback []string `json:"fallback"` // where requests go when this one can't take them
@@ -563,6 +567,9 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		if m.State == provider.MoveMoving {
 			out.Move.State = ""
 		}
+	}
+	if anon := p.AnonymousKey(); anon != "" && p.Account == nil && !p.HasKey(anon) {
+		out.AnonKey = anon
 	}
 	out.KeyList = p.KeyList()
 	if out.KeyList == nil {

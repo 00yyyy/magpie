@@ -13533,7 +13533,10 @@ function renderKeyAccounts(p) {
     // the key is what's needed; a name is only for telling keys apart
     const name = input(addingKey.name, t("Name (optional), e.g. Team"));
     name.oninput = () => { addingKey.name = name.value; };
-    const key = input(addingKey.key, t("paste an API key"), "password");
+    // a provider asked with a key of its own when the user has none (Zen's
+    // public, #1795) adds that one when nothing is pasted, and says so
+    const key = input(addingKey.key, p.anonKey ? t("paste an API key, or leave empty for {key}: free models only", { key: p.anonKey }) : t("paste an API key"), "password");
+    if (p.anonKey) key.title = key.placeholder;
     key.oninput = () => { addingKey.key = key.value; };
     // several keys pasted into the one field: the box takes them all
     key.onpaste = (e) => {
@@ -13546,7 +13549,7 @@ function renderKeyAccounts(p) {
     const add = el("button", "text primary", t("Add"));
     const go = async () => {
       add.classList.add("busy");
-      const id = await keyFingerprint(key.value.trim());
+      const id = await keyFingerprint(key.value.trim() || p.anonKey || "");
       if (await accountAction("keys/add", { id: p.id, name: name.value, key: key.value, protocol: addingKey.protocol || "" }, t("Key added — it takes over when the ones before it run out"))) {
         addingKey = null; justAdded = id; renderProviders(); setTimeout(() => { justAdded = ""; }, 2000);
       }
