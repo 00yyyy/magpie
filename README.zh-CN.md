@@ -92,30 +92,10 @@ export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3425 GEMINI_API_KEY=magpie
 
 `127.0.0.1:3425` 上的网关同时支持 OpenAI Chat、OpenAI Responses、Anthropic Messages 和 Gemini，并在它们之间互相转换，流式输出、工具调用和推理都支持。
 
-```mermaid
-flowchart LR
-  subgraph A["你的 Agent"]
-    direction TB
-    a1["Claude Code"]
-    a2["Codex"]
-    a3["Gemini CLI"]
-    a4["OpenCode · Zed · Cursor CLI · 还有 40+"]
-  end
-  subgraph M["magpie · 127.0.0.1:3425"]
-    direction TB
-    g["网关<br/>Chat · Responses · Messages · Gemini"]
-    r["路由组<br/>故障切换 · smart · pace"]
-    p["插件与中间件"]
-    g --> r --> p
-  end
-  subgraph P["你的 provider"]
-    direction TB
-    p1["API key<br/>DeepSeek · Kimi · GLM · OpenRouter …"]
-    p2["订阅<br/>Claude · ChatGPT · Copilot · Gemini · Grok"]
-    p3["本地模型<br/>Ollama · LM Studio"]
-  end
-  A --> M --> P
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="site/public/img/architecture-zh-dark.svg">
+  <img src="site/public/img/architecture-zh.svg" alt="magpie 的整体结构：你的 Agent 把请求发到 127.0.0.1:3425 上的 magpie 网关，经路由组和插件，再发往你的 API key、订阅和本地模型。">
+</picture>
 
 
 ## 功能

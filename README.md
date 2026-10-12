@@ -92,30 +92,10 @@ export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3425 GEMINI_API_KEY=magpie
 
 The gateway at `127.0.0.1:3425` speaks OpenAI Chat, OpenAI Responses, Anthropic Messages and Gemini, and translates between them, streaming, tool calls and reasoning included.
 
-```mermaid
-flowchart LR
-  subgraph A["Your agents"]
-    direction TB
-    a1["Claude Code"]
-    a2["Codex"]
-    a3["Gemini CLI"]
-    a4["OpenCode · Zed · Cursor CLI · 40+ more"]
-  end
-  subgraph M["magpie · 127.0.0.1:3425"]
-    direction TB
-    g["Gateway<br/>Chat · Responses · Messages · Gemini"]
-    r["Routing groups<br/>fail-over · smart · pace"]
-    p["Plugins & middleware"]
-    g --> r --> p
-  end
-  subgraph P["Your providers"]
-    direction TB
-    p1["API keys<br/>DeepSeek · Kimi · GLM · OpenRouter …"]
-    p2["Subscriptions<br/>Claude · ChatGPT · Copilot · Gemini · Grok"]
-    p3["Local models<br/>Ollama · LM Studio"]
-  end
-  A --> M --> P
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="site/public/img/architecture-dark.svg">
+  <img src="site/public/img/architecture.svg" alt="How magpie fits together: your agents send requests to the magpie gateway at 127.0.0.1:3425, which routes them through routing groups and plugins to your API keys, subscriptions and local models.">
+</picture>
 
 
 ## What it does
