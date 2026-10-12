@@ -112,3 +112,49 @@ func TestPricedRowKeepsReasoningEvidence(t *testing.T) {
 		})
 	}
 }
+
+// A row's Flags bits are each its own: a reported call's own cost isn't
+// read back as hidden reasoning, nor hidden reasoning as an own cost
+// (rowOwnCost and rowReasoningHidden both took 256 when #1463 and #1874
+// landed apart).
+func TestRowFlagsApart(t *testing.T) {
+	cost := 0.5
+	own := Record{Time: time.Now(), Source: SourceReported, OwnCost: &cost, Provider: "deepseek", Model: "deepseek-chat", Output: 1500, Reasoning: 1400, Millis: 15000, TTFT: 1000, FirstReasoning: 1000, Flow: 12000, Status: 200}
+	hidden := own
+	hidden.OwnCost, hidden.ReasoningHidden = nil, true
+	for _, c := range []struct {
+		name   string
+		r      Record
+		hidden bool
+		own    bool
+	}{
+		{"own cost", own, false, true},
+		{"hidden reasoning", hidden, true, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			made := func() *rowChunk {
+				var chunk rowChunk
+				for i := 0; i < 80; i++ {
+					chunk.add(Row{Record: c.r, Source: SourceReported}, "", int64(i), false)
+				}
+				return &chunk
+			}
+			b := newBlockPricer(nil, nil, func(Record) *catalog.Price { return nil })
+			defer b.release()
+			raw := made()
+			for _, row := range []Row{raw.row(0), b.block(raw).row(0), b.block(made().pack()).row(0)} {
+				if row.ReasoningHidden != c.hidden || (row.OwnCost != nil) != c.own {
+					t.Fatalf("hidden %v, own cost %v; want %v, %v", row.ReasoningHidden, row.OwnCost, c.hidden, c.own)
+				}
+			}
+		})
+	}
+	bits := []uint16{1, 2, 4, 8, 16, 32, swapKnown, rowHandedOn, rowReasoningHidden, rowOwnCost}
+	var all uint16
+	for _, b := range bits {
+		if all&b != 0 {
+			t.Fatalf("Flags bit %d is taken twice", b)
+		}
+		all |= b
+	}
+}
