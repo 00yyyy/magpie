@@ -129,6 +129,8 @@ Bun takes only http:// and https:// proxies. A SOCKS5 one, such as a Mac's syste
 
 The host reads its proxy once, when it starts. When the proxy magpie would give a new host differs from the one the running host got (the system proxy set after magpie started, as at login before Clash is up, or Settings changed), the next call to the host replaces it (`proxyMoved` in [`host.go`](../../internal/plugin/host.go), looked at no more than every 15s, or every 2s while the host has no proxy: `proxyLookNone`, #1518). A call made for a read nobody asked for, while allowances are read only when asked (`netproxy.Held`), never reaches the host. Before this, a host started without a proxy kept none, so the Grok plugin's `grok models` couldn't renew its token and the account read as signed out after each restart (#1363).
 
+What a plugin writes with `console.log`, `console.warn` and the rest goes to the host's stderr, which magpie logs a line at a time (`drainStderr` in [`host.go`](../../internal/plugin/host.go)). A line over 4 MiB ends the logging: magpie logs that it did, and reads and drops the rest, so the host never blocks on a full pipe. Before, nothing read the pipe after such a line: on Windows the host hung on its next write, and on Linux Bun kept everything written after it in memory.
+
 A plugin's account whose sign-in its vendor refused (`lapsed`, or an allowance read saying so) keeps Sign in again and Remove on its row, whether it is in use or the agent's own (`signedOut` in `renderAccounts`, `app.js`).
 
 The GUI's plugin integration includes `subOf`, `pluginSubs`, and `startPluginSignIn`. A change to sign-in or provider presentation must follow these paths as well as the built-in paths it affects.
@@ -144,6 +146,8 @@ Gateway parity tests in [`plugin_parity_test.go`](../../internal/gateway/plugin_
 [`plugin_checkin_test.go`](../../internal/provider/plugin_checkin_test.go) runs the fake plugin's `auth.checkin` (`FAKE_CHECKIN`) through the schedule: off, each outcome, no second press the same day, failures only after the retry window, the next day, cards and Settings, and the vendor check-in stepping aside. `plugin-checkin.test.cjs` covers the card row and the Settings tab.
 
 [`plugin_cliproxy_test.go`](../../internal/plugin/plugin_cliproxy_test.go)'s `TestPluginHostTakesANewProxy` starts a real host without a proxy, sets one, and checks that a program the plugin starts gets it. [`plugin_lan_test.go`](../../internal/plugin/plugin_lan_test.go)'s `TestPluginLeavesTheUserNetworkDirect` checks with a real host that fetches (http:// and https://) and an HTTP/2 session to this computer's private address reach it directly with a proxy set, and that a public address and an unresolvable name still go through the proxy. `plugin-signed-out-account.test.cjs` covers a moved Grok account signed out while in use and as the agent's own, in Chromium and WebKit, en and zh, 420 and 1100 wide.
+
+[`stderr_drain_test.go`](../../internal/plugin/stderr_drain_test.go)'s `TestDrainStderrKeepsTheChildGoing` checks that a child writing 8 MiB to stderr with no newline finishes, and that the log says its stderr was dropped. [`stderr_e2e_test.go`](../../internal/plugin/stderr_e2e_test.go)'s `TestHostStartsPastAnOverlongStderrLine` starts a real host whose plugin logs one 5 MiB line while it loads, and checks that the host starts; without the fix it fails on Windows only.
 
 These tests cover two plugins on one provider id:
 

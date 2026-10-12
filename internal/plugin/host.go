@@ -820,13 +820,8 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		proxy:    proxy,
 		proxyAt:  time.Now(),
 	}
-	go func() {
-		sc := bufio.NewScanner(stderr)
-		sc.Buffer(make([]byte, 64<<10), 4<<20)
-		for sc.Scan() {
-			log.Printf("plugin: %s", sc.Text())
-		}
-	}()
+	go drainStderr(stderr)
+
 	go h.read(out)
 	go h.writerLoop()
 	go h.ctrlLoop()
@@ -872,6 +867,21 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		}
 	}
 	return h, false, nil
+}
+
+// drainStderr logs the child's stderr a line at a time. A line over 4 MiB
+// stops the scanner; the rest is read and dropped, so the child is never left
+// blocked on a pipe nobody reads, and the log says from where.
+func drainStderr(r io.Reader) {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 64<<10), 4<<20)
+	for sc.Scan() {
+		log.Printf("plugin: %s", sc.Text())
+	}
+	if errors.Is(sc.Err(), bufio.ErrTooLong) {
+		log.Printf("plugin: a stderr line over 4 MiB; the plugin's stderr is dropped from here on")
+	}
+	io.Copy(io.Discard, r)
 }
 
 func (h *host) read(out io.Reader) {
