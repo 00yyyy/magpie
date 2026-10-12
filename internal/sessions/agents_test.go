@@ -29,6 +29,7 @@ func setupAgents(t *testing.T) (home string) {
 	copyTree(t, "testdata/qoder-cn", filepath.Join(home, ".qoder-cn"))
 	copyTree(t, "testdata/grok", filepath.Join(home, ".grok"))
 	copyTree(t, "testdata/workbuddy", filepath.Join(home, ".workbuddy"))
+	copyTree(t, "testdata/codebuddy", filepath.Join(home, ".codebuddy"))
 	copyTree(t, "testdata/omp", filepath.Join(home, ".omp"))
 	zcMakeDB(t, filepath.Join(home, ".zcode", "cli", "db", "db.sqlite"))
 	return

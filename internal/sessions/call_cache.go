@@ -66,7 +66,7 @@ func resetCalls() {
 	zcCallList.stamp, zcCallList.files = "", nil
 	zcCallList.Unlock()
 	wbGateway.Lock()
-	wbGateway.stamp, wbGateway.ids = "", nil
+	wbGateway.byPath = nil
 	wbGateway.Unlock()
 }
 
@@ -175,6 +175,7 @@ var wholeCallReaders = map[string]func(file) (*callFile, bool){
 	"zcode":     readZCodeCalls,
 	"dsh":       readDshCalls,
 	"workbuddy": readWorkBuddyCalls,
+	"codebuddy": readWorkBuddyCalls, // #1779
 	// #1605
 	"minimax-code": readMiniMaxCalls,
 }
