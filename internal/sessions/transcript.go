@@ -63,14 +63,21 @@ func TranscriptOf(s Session) (Transcript, error) {
 // readTranscript tells add each part of a session's conversation, in order,
 // as its agent's file has it.
 func readTranscript(s Session, add func(bool, Part) bool) error {
+	return readTranscriptOf(s, nil, add)
+}
+
+// readTranscriptOf is readTranscript decoding only the lines keep says yes
+// to, where a line stands alone (Claude's, Codex's); Pi's lines are a tree,
+// read whole.
+func readTranscriptOf(s Session, keep func([]byte) bool, add func(bool, Part) bool) error {
 	whole := Call{Agent: s.Agent, File: s.Path, To: math.MaxInt64}
 	switch s.Agent {
 	case "codex":
-		return codexContent(whole, add)
+		return codexContentOf(whole, keep, add)
 	case "pi", "omp":
 		return piTranscript(s.Path, add)
 	default:
-		return claudeContent(whole, add)
+		return claudeContentOf(whole, keep, add)
 	}
 }
 

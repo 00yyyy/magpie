@@ -142,6 +142,47 @@ when turns or a part's end weren't kept). A magpie that others reach as a
 remote magpie has no file of their agents' sessions, so this is the only way
 it can export them. Verification: `TestGatewaySessionExportsMarkdown`.
 
+A gateway session is titled by what it was first asked (YOU on Discord), not
+its `ses_…` id: `sessions.GatewayTitle` reads the first 8 complete turns of
+the oldest recorded file of it in the 7 days kept, takes the first user text
+part that isn't a `<…>` context tag, `# AGENTS.md` or an image, and makes it one
+line (`untagged`). A finished file's answer is cached by path; a growing
+`turns.jsonl` with no title yet is read again. With nothing recorded at all
+(the store's folder missing) it costs one stat. `gatewayListed` applies it in
+every list (`/api/sessions`, `/manage`, `/one`, the stats summaries); a session
+with no recorded text keeps its id as title.
+
+`GET /api/sessions/search?agent=&q=` finds an agent's sessions by what was said
+in them, for the Sessions page's filter. The query is lowered and its spaces
+made one (`sessions.NeedleOf`); under 2 runes it searches nothing. Native
+sessions of an agent whose files are read (`HasTranscript`) are read from their
+own file (`SearchSession`), first through a byte prefilter (`mayHold`: the
+query's longest word, ASCII case folded without a copy, in 1 MiB chunks;
+skipped for zstd files and for queries JSON may escape), then decoded only to
+the first match in what the user or the model said. Of a Claude or Codex file
+only the lines holding every word of the query are decoded (`readTranscriptOf`,
+a part being one line's); Pi's tree is read whole. Without that, one 1.3 GB
+Claude session took the whole 8 seconds; with it, all 58 of the owner's (3 GB)
+are searched in 3–7 s on a loaded machine. Gateway sessions, and the native sessions of an agent whose files aren't
+read (then `unread: true`), are searched in their recorded transcript
+(`SearchGateway`). System prompts, tool definitions (`role: system`, `kind:
+context`) and images are never matched. Sessions are read newest first by 4
+workers at most, stopping at 200 hits or 8 seconds (`cut: true`, with
+`searched` of `total`); the request's context cancels the read, so the page's
+next query ends the last one. Each hit carries the match with up to 36 runes
+before and 120 after, cut ends marked "…". The page waits 300 ms after the
+last keystroke, aborts the request in flight, shows a title, folder, id or
+model match at once, adds the sessions the search found with their snippet
+(the match in a `<mark>`, built as text nodes), and says when it is
+searching, cut short or limited to recorded text.
+Implementation: [`internal/sessions/search.go`](../../internal/sessions/search.go),
+`searchSessions` in [`internal/gui/sessions_manage.go`](../../internal/gui/sessions_manage.go),
+[`internal/gui/assets/sessions.js`](../../internal/gui/assets/sessions.js).
+Verification: `TestSearchSession*` (`TestSearchSessionReadsOnlyLinesWithTheWords`
+for the line filter), `TestContainsFold`, `TestMayHoldSkipsAFileWithoutTheWords`,
+`TestGatewayTitleAndSearch`, `TestSessionsSearch*`; browser
+`sessions-search.test.cjs`.
+
 Verification: `TestGatewayConversation*` (`TestGatewayConversationNeedsTheClientsSession`
 and `TestGatewayConversationClientRequestPrefixedSession` for the two rules above), `TestGatewaySessionHistoryAndCalendar`,
 `TestGatewaySessionsNativeWinsBeforeLimits`,
