@@ -544,3 +544,28 @@ func TestRTKNoHookGrokApp(t *testing.T) {
 		t.Fatalf("magpie library rtk on grok-app: %v", err)
 	}
 }
+
+// Grok Build, which Grok App runs, has no rtk agent either (#1625's
+// sibling): it is listed with the switch off, never switched on.
+func TestRTKNoHookGrokBuild(t *testing.T) {
+	h := sandbox(t)
+	write(t, filepath.Join(h, ".grok", "config.toml"), "")
+	var grok *RTKAgent
+	for _, a := range ReadRTK().Agents {
+		if a.ID == "grok" {
+			grok = &a
+		}
+	}
+	if grok == nil {
+		t.Fatal("Grok Build isn't listed")
+	}
+	if b, _ := json.Marshal(grok); grok.On || !strings.Contains(string(b), `"noHook":true`) || !strings.Contains(grok.Blocked, "no Grok agent") {
+		t.Fatalf("listed as %s", b)
+	}
+	if _, err := SetRTK("grok", true); err == nil || !strings.Contains(err.Error(), "Grok Build") {
+		t.Fatalf("switched on: %v", err)
+	}
+	if _, err := RTKTakes("grok"); err == nil || !strings.Contains(err.Error(), "no Grok agent") {
+		t.Fatalf("magpie library rtk on grok: %v", err)
+	}
+}

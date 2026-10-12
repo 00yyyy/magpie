@@ -31,7 +31,6 @@ package agent
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -47,11 +46,7 @@ import (
 const grokAppChannel = "model." + magpieID
 
 // what Grok App says after a change (notice.go)
-var noticeGrokApp = newNotice("Magpie is a custom provider under Grok App's Accounts. Grok App stays on its current route until you press Use on magpie there.")
-
-// errGrokAppRoute is Set's answer when asked to switch Grok App's route.
-// The route is the App's, from Accounts › Use, not from magpie's model field.
-var errGrokAppRoute = errors.New("Grok App keeps its own route. Magpie is a custom provider under Accounts — press Use on it there to switch")
+var noticeGrokApp = newNotice("Magpie is a custom provider in Grok App's Settings › Account. A chat can pick magpie's models in its model picker, and Grok App stays on its current route until you press Use on magpie there.")
 
 // grokAppReleased marks that this magpie has already put back a route an
 // older one set to magpie. One restore: a Use the user presses after that
@@ -338,24 +333,33 @@ func grokApp(home string) *Agent {
 			return ""
 		},
 		Sync: func() error {
+			// Nothing of magpie's in the App: nothing to keep, nothing
+			// written. A route an older magpie left on itself is still
+			// put back, since the App doesn't run on it.
+			def, ch, err := grokAppRead(path)
+			if err != nil || (ch == nil && def != magpieID) {
+				return err
+			}
 			if err := rememberRoute(); err != nil {
 				return err
 			}
 			if err := releaseRoute(); err != nil {
 				return err
 			}
-			_, ch, err := grokAppRead(path)
-			if err != nil || ch == nil {
-				return err
+			if ch == nil {
+				return nil
 			}
 			return wire("")
 		},
 		Check: func() string {
-			_, ch, err := grokAppRead(path)
+			def, ch, err := grokAppRead(path)
 			if err != nil {
 				return err.Error()
 			}
 			if ch == nil {
+				if def == magpieID {
+					return "Grok App's route is magpie, but its [" + grokAppChannel + "] (config.toml) is gone, so it no longer reaches magpie"
+				}
 				return ""
 			}
 			return wiringOff("Grok App", path, func(k string) (string, bool) { v, ok := ch[k]; return v, ok },
@@ -364,8 +368,10 @@ func grokApp(home string) *Agent {
 		Fields: []Field{{
 			// the model on magpie's custom provider, not the route the App
 			// starts on. One of magpie's models is magpie/<provider>/<model>
-			// written into the channel. The App's own route stays in
-			// [models] default until the user presses Use in Accounts.
+			// written into the channel, and never the route: the App's own
+			// route stays in [models] default until the user presses Use in
+			// Settings › Account. One of the App's own routes picked here
+			// is written as the route, with magpie's channel taken out.
 			Key: "model", Label: "model",
 			Get: get,
 			Set: func(v string) error {
@@ -384,7 +390,26 @@ func grokApp(home string) *Agent {
 				if v == "" {
 					return unwire()
 				}
-				return errGrokAppRoute
+				// one of the App's own routes: magpie's channel goes, the
+				// way picking another provider leaves magpie elsewhere, and
+				// the route is the one picked. Disconnect comes here to put
+				// back the route the App had before.
+				def, ch, err := grokAppRead(path)
+				if err != nil {
+					return err
+				}
+				if ch != nil {
+					if err := unwire(); err != nil {
+						return err
+					}
+					if def, _, err = grokAppRead(path); err != nil {
+						return err
+					}
+				}
+				if def == v {
+					return nil
+				}
+				return setDefault(v)
 			},
 			Options: func(cur map[string]string) []Option {
 				return append(grokAppOwn(path, keyDefault, cur["model"]), viaMagpie("grok-app", magpieID+"/")...)

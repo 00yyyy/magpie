@@ -11,6 +11,7 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -296,20 +297,75 @@ func TestGrokAppOwnRouteStays(t *testing.T) {
 	if err := a.Pick("model", "magpie/kimi/k2"); err != nil {
 		t.Fatal(err)
 	}
-	err := a.Pick("model", "grok")
-	if err == nil || !strings.Contains(err.Error(), "Accounts") {
+	def, _, rerr := grokAppRead(path)
+	if rerr != nil || def != "deepseek" {
+		t.Fatalf("connecting moved the route: %q err %v", def, rerr)
+	}
+	// one of the App's own routes the picker offers is taken: it is the
+	// route, and magpie's channel goes, as picking another provider leaves
+	// magpie on every other agent
+	if err := a.Pick("model", "grok"); err != nil {
 		t.Fatalf("picking the official route: %v", err)
 	}
 	secs := grokAppSections(t, path)
-	if secs["magpie"]["model"] != "kimi/k2" || a.Field("model").Get() != "magpie/kimi/k2" || !a.Wired() {
-		t.Fatalf("the provider went: model %q wired %v\n%v", a.Field("model").Get(), a.Wired(), secs["magpie"])
+	if _, ok := secs["magpie"]; ok || a.Field("model").Get() != "grok" {
+		t.Fatalf("magpie's channel stayed: model %q\n%v", a.Field("model").Get(), secs["magpie"])
 	}
-	def, _, rerr := grokAppRead(path)
-	if rerr != nil || def != "deepseek" {
+	def, _, rerr = grokAppRead(path)
+	if rerr != nil || def != "grok" {
 		t.Fatalf("route %q err %v", def, rerr)
 	}
 	if secs["deepseek"]["api_key"] != "sk-test" {
 		t.Fatalf("the user's channel went: %v", secs["deepseek"])
+	}
+}
+
+// Disconnect puts back the route the App was on before Connect through the
+// model field (connect.was) when unwire left none: a route Use set to
+// magpie with nothing stashed to put back. Set refused an own route, so
+// Disconnect failed half done.
+func TestGrokAppDisconnectPutsTheRouteBack(t *testing.T) {
+	home, path := grokAppHome(t, grokAppConfig)
+	a := grokApp(home)
+	if err := a.Connect(); err != nil {
+		t.Fatal(err)
+	}
+	if err := edit.SetTOMLKey(path, "models", "default", magpieID); err != nil { // Use on magpie
+		t.Fatal(err)
+	}
+	forget("grok-app:" + path + ":default")
+	if err := a.Disconnect(); err != nil {
+		t.Fatalf("disconnect: %v", err)
+	}
+	def, ch, err := grokAppRead(path)
+	if err != nil || def != "deepseek" || ch != nil {
+		t.Fatalf("after disconnect: route %q channel %v err %v", def, ch, err)
+	}
+}
+
+// A sync with nothing of magpie's in the App writes nothing, not even to
+// magpie's own stash; one whose route is magpie with the channel gone is
+// told, since the App reaches nothing.
+func TestGrokAppSyncUnconnected(t *testing.T) {
+	home, path := grokAppHome(t, grokAppConfig)
+	a := grokApp(home)
+	before := mustRead(t, path)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	st := stashLoad()
+	if mustRead(t, path) != before || st["grok-app:"+path+":default"] != "" || st[grokAppReleased] != "" {
+		t.Fatalf("an unconnected sync wrote: %v", st)
+	}
+	if c := a.Check(); c != "" {
+		t.Fatalf("check: %q", c)
+	}
+	stash(map[string]string{grokAppReleased: "1"}) // a Use after the one put back
+	if err := os.WriteFile(path, []byte(strings.Replace(before, `default = "deepseek"`, `default = "magpie"`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if c := a.Check(); !strings.Contains(c, "no longer reaches magpie") {
+		t.Fatalf("route magpie without the channel: check %q", c)
 	}
 }
 
