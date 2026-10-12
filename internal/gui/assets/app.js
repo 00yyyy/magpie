@@ -35,6 +35,7 @@ let view = "agents";
 let showAllAgents = false; // the agents no one has set anything on, folded away
 let period = "today"; // usage window
 let usage = null;   // last usage summary
+let usageHidOpen = false; // the Usage page's hidden agents shown under their line
 let pick = null; // { agent, field, options, items, cursor, anchor }
 let editing = null; // provider id being edited; { preset } or { custom: true } for a new one
 let draft = null; // the editor's working copy
@@ -177,6 +178,8 @@ function svg(d, size = 12, stroke = 1.6) {
   return s;
 }
 const CHEV = "m5.5 6.5 2.5 2.5 2.5-2.5";
+// three dots, a row's actions (drawn with a thick round stroke)
+const DOTS = "M3.5 8h.01M8 8h.01M12.5 8h.01";
 const CHEV_R = "m6.5 4.5 3 3.5-3 3.5";
 const CHECK = "m3.5 8.5 3 3 6-7";
 const CROSS = "M4.5 4.5l7 7M11.5 4.5l-7 7";
@@ -14161,7 +14164,7 @@ function renderUsageLoading() {
     stats.append(tile);
   }
   $("#chart").hidden = true;
-  for (const id of ["usageAgents", "usageModels", "usageKeys"]) $("#" + id).hidden = true;
+  for (const id of ["usageAgents", "usageAgentsHid", "usageModels", "usageKeys"]) $("#" + id).hidden = true;
   // the allowances' head is renderQuotas' alone: the quotas it heads are
   // still there while the period loads (#809, Hu9956: 用量界面红框这行会延迟几秒才会出现)
   for (const h of $$("#view-usage .row-head:not(#quotaHead)")) h.hidden = true;
@@ -16489,6 +16492,7 @@ function renderUsage() {
   const empty = !u.calls;
   $("#chart").hidden = empty;
   for (const id of ["usageAgents", "usageModels"]) $("#" + id).hidden = empty;
+  if (empty) $("#usageAgentsHid").hidden = true;
   for (const h of $$("#view-usage .row-head:not(#quotaHead)")) h.hidden = empty;
   $("#usageKeysHead").hidden = $("#usageKeys").hidden = empty || !u.callerKeys?.length;
   // each subscription account's share, by the account that answered (#557)
@@ -16547,11 +16551,12 @@ function renderUsage() {
   fitChartLabels();
 
   const total = Math.max(1, tokensOf(u));
-  const list = (id, groups) => {
-    const box = $("#" + id);
+  const list = (id, groups, act) => {
+    const box = typeof id === "string" ? $("#" + id) : id;
     box.replaceChildren();
     for (const g of groups) {
       const r = el("div", "row stat");
+      r.dataset.id = g.id || "";
       r.append(icon(g.icon || "generic"));
       const who = el("div", "who");
       who.append(el("div", "name" + (g.name ? "" : " faint"), g.name || t("account not recorded")));
@@ -16583,14 +16588,79 @@ function renderUsage() {
       num.append(el("b", "", fmtN(tokensOf(g))), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "") + hit));
       r.append(num);
       r.append(el("div", "cost", fmtCost(g) ? "≈" + fmtCost(g) : ""));
+      if (act) act(r, g);
       box.append(r);
     }
   };
-  list("usageAgents", u.agents);
+  // a client hidden from the Agents list (ikunbots on X: curl,
+  // Go-http-client, python-httpx beside the agents in use) is left out of
+  // it, and only of it: the totals, the chart and every share above still
+  // count its calls. One line under the list says how many, and opens them.
+  const hid = new Set(state.settings?.usageAgentsHidden || []);
+  const hidden = u.agents.filter((g) => hid.has(g.id));
+  list("usageAgents", u.agents.filter((g) => !hid.has(g.id)), (r, g) => {
+    r.classList.add("acts");
+    const b = el("button", "icon us-more");
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-label", t("Actions for {name}", { name: g.name || g.id }));
+    b.append(svg(DOTS, 14, 2.2));
+    const menu = () => {
+      const again = agentMenu?.anchor === b;
+      closeAgentMenu();
+      if (again) return;
+      openRowMenu(b, [{ name: "Hide from this list", icon: EYE_OFF, run: () => hideUsageAgent(g.id, true) }]);
+    };
+    b.onclick = (e) => { e.stopPropagation(); menu(); };
+    r.oncontextmenu = (e) => { e.preventDefault(); menu(); };
+    r.querySelector(".share").after(b);
+  });
+  const hb = $("#usageAgentsHid");
+  hb.hidden = !hidden.length;
+  if (!hidden.length) usageHidOpen = false;
+  const line = hb.querySelector(".us-hidline"), hl = hb.querySelector(".list");
+  line.replaceChildren(el("span", "", t("{n} hidden", { n: hidden.length })), svg(CHEV, 11, 1.6));
+  line.title = t("Hidden from this list only: their calls still count in the totals and the chart. Click to see them.");
+  line.setAttribute("aria-expanded", String(usageHidOpen));
+  line.onclick = () => { usageHidOpen = !usageHidOpen; renderUsage(); };
+  hl.hidden = !usageHidOpen;
+  list(hl, usageHidOpen ? hidden : [], (r, g) => {
+    r.classList.add("hid", "acts");
+    const b = el("button", "text us-unhide", t("Unhide"));
+    b.type = "button";
+    b.onclick = (e) => { e.stopPropagation(); hideUsageAgent(g.id, false); };
+    r.append(b);
+  });
   list("usageModels", u.models);
   list("usageAccounts", u.accounts || []);
   list("usageKeys", u.callerKeys || []);
   $("#usageNote").textContent = t("Counted from the providers' own usage reports on every call through the gateway · {path}", { path: u.path });
+}
+
+// hideUsageAgent takes a client out of the Usage page's Agents list, or
+// puts it back: drawn at once, put back if the save fails. Its calls stay
+// in the ledger and in every total.
+async function hideUsageAgent(id, hide) {
+  const prev = state.settings || {};
+  const cur = (prev.usageAgentsHidden || []).filter((k) => k !== id);
+  const agentsHidden = hide ? [...cur, id] : cur;
+  state.settings = { ...prev, usageAgentsHidden: agentsHidden };
+  const again = () => {
+    if (!usage) return;
+    renderUsage();
+    // the focus stays on the list: the row put back, else the hidden line
+    const to = hide ? $("#usageAgentsHid .us-hidline") : $(`#usageAgents .row.stat[data-id="${CSS.escape(id)}"] .us-more`);
+    (to && !to.closest("[hidden]") ? to : null)?.focus({ preventScroll: true });
+  };
+  again();
+  try {
+    const s = await api("usage/arrange", { agentsHidden });
+    state.settings = { ...state.settings, usageAgentsHidden: s.usageAgentsHidden || [] };
+  } catch (e) {
+    state.settings = prev;
+    again();
+    status(e.message, "err");
+  }
 }
 
 // ---------- requests ----------
