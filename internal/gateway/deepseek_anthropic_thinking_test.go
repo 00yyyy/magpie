@@ -26,13 +26,19 @@ func deepseekRefuseAnthropic(body []byte) (int, string) {
 	}
 	json.Unmarshal(body, &q)
 	thinking := q.Thinking == nil || q.Thinking.Type != "disabled"
+	// afterTool: the message before is tool results alone, which a reply
+	// with no thinking is refused after too (checked 2026-10-12, #1822)
+	afterTool := false
 	for i, m := range q.Messages {
 		var blocks []struct {
 			Type string `json:"type"`
 		}
 		json.Unmarshal(m.Content, &blocks)
+		after := afterTool
+		afterTool = m.Role == "user" && len(blocks) > 0
 		thought, called := false, false
 		for _, b := range blocks {
+			afterTool = afterTool && b.Type == "tool_result"
 			switch b.Type {
 			case "redacted_thinking":
 				return 422, `{"error":{"message":"Failed to deserialize the JSON body into the target type: messages[` + string(rune('0'+i)) + "].content: unknown variant `redacted_thinking`, expected one of `text`, `image`, `document`, `thinking`, `server_tool_use`, `tool_use`, `tool_result`" + `","type":"invalid_request_error"}}`
@@ -42,7 +48,7 @@ func deepseekRefuseAnthropic(body []byte) (int, string) {
 				called = true
 			}
 		}
-		if thinking && m.Role == "assistant" && called && !thought {
+		if thinking && m.Role == "assistant" && (called || after) && !thought {
 			return 400, `{"error":{"message":"The ` + "`content[].thinking`" + ` in the thinking mode must be passed back to the API. (request_id: e689e65a-f4f1-4efb-a4e0-44b98b5325d4)","type":"invalid_request_error","param":null,"code":"invalid_request_error"}}`
 		}
 	}

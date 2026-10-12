@@ -30,38 +30,72 @@ func (u *deepseekResponses) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	u.mu.Lock()
 	u.inputs = append(u.inputs, q.Input)
 	u.mu.Unlock()
-	// api.deepseek.com's /v1/responses (deepseek-flash, high, checked
-	// 2026-10-11 for #1592) also refuses a tool call whose step has no
-	// reasoning item, as one of the ChatGPT backend's sealed items leaves it
-	thought := false
-	for _, it := range q.Input {
-		ok := true
-		switch {
-		case it["type"] == "reasoning":
-			thought, ok = true, false
-			content, _ := it["content"].([]any)
-			for _, c := range content {
-				if m, _ := c.(map[string]any); m["type"] == "reasoning_text" && m["text"] != "" {
-					ok = true
-				}
-			}
-		case it["type"] == "function_call":
-			ok = thought
-		case it["type"] == "function_call_output", it["role"] == "user":
-			thought = false
-		}
-		if !ok {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			io.WriteString(w, `{"error":{"message":"The `+"`reasoning_text`"+` in the thinking mode must be passed back to the API.","type":"invalid_request_error","param":"input","code":"invalid_request_error"}}`)
-			return
-		}
+	if !deepseekTakesInput(q.Input) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, `{"error":{"message":"The `+"`reasoning_text`"+` in the thinking mode must be passed back to the API.","type":"invalid_request_error","param":"input","code":"invalid_request_error"}}`)
+		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	io.WriteString(w, sse(
 		`data: {"type":"response.created","response":{"id":"resp_ds","status":"in_progress"}}`,
 		`data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"m1","role":"assistant","content":[{"type":"output_text","text":"done"}]}}`,
 		`data: {"type":"response.completed","response":{"id":"resp_ds","status":"completed","output":[],"usage":{"input_tokens":5,"output_tokens":2}}}`))
+}
+
+// deepseekTakesInput is whether api.deepseek.com's /v1/responses
+// (deepseek-flash, high) takes a request's input in thinking mode: every
+// reasoning item has a reasoning_text that isn't empty (#1104), and each
+// step of the turn being continued (the model's reasoning, what it said and
+// its calls, between a user message or a tool output and the next) that
+// makes a call (#1592) or follows a tool output starts with a reasoning
+// item. A step that said something before its reasoning, or with none
+// before its call, is refused (#1822). Checked 2026-10-11 and 2026-10-12:
+// [text, reasoning, call] and [output, text] are refused, [reasoning, text,
+// call] is taken, and a step before the last user message isn't looked at.
+func deepseekTakesInput(input []map[string]any) bool {
+	turn := -1
+	for i, it := range input {
+		if it["role"] == "user" {
+			turn = i
+		}
+	}
+	start, lead, called, afterOut := -1, false, false, false
+	stepOK := func() bool { return start < turn || lead || !called && !afterOut }
+	for i, it := range input {
+		typ, _ := it["type"].(string)
+		role, _ := it["role"].(string)
+		if typ == "reasoning" {
+			ok := false
+			content, _ := it["content"].([]any)
+			for _, c := range content {
+				if m, _ := c.(map[string]any); m["type"] == "reasoning_text" && m["text"] != "" {
+					ok = true
+				}
+			}
+			if !ok {
+				return false
+			}
+		}
+		if typ == "reasoning" || typ == "function_call" || typ == "custom_tool_call" || (typ == "message" || typ == "") && role == "assistant" {
+			if start < 0 {
+				start, lead, called = i, typ == "reasoning", false
+			}
+			called = called || strings.HasSuffix(typ, "_call")
+			continue
+		}
+		if start >= 0 && !stepOK() {
+			return false
+		}
+		start = -1
+		switch {
+		case strings.HasSuffix(typ, "_output"):
+			afterOut = true
+		case role == "user":
+			afterOut = false
+		}
+	}
+	return start < 0 || stepOK()
 }
 
 func (u *deepseekResponses) last() []map[string]any {

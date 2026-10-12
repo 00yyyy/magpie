@@ -279,6 +279,9 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 		}
 	}
 	turns := joinSplitCalls(r.Messages)
+	// afterTool: the last message sent is a tool result, with no message
+	// of the user's after it
+	afterTool := false
 	for i, m := range turns {
 		if m.Role == "assistant" {
 			showSeen()
@@ -344,11 +347,13 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 				}
 			} else if think != "" && replay {
 				am["reasoning_content"] = think
-			} else if replay && len(calls) > 0 {
-				// a tool call with no thinking (another model's turn), which
-				// DeepSeek turns the whole request away for (#1462)
+			} else if replay && (len(calls) > 0 || afterTool) {
+				// a tool call with no thinking (another model's turn), or a
+				// reply to a tool result with none, which DeepSeek turns the
+				// whole request away for (#1462, #1822)
 				am["reasoning_content"] = noReasoning
 			}
+			afterTool = false
 			msgs = append(msgs, am)
 			continue
 		}
@@ -404,6 +409,7 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 			}
 		}
 		msgs = append(msgs, tools...)
+		afterTool = len(tools) > 0 && len(content) == 0 && len(seen) == 0
 		flush()
 	}
 	showSeen()

@@ -347,17 +347,30 @@ func reasoningText(m map[string]json.RawMessage) string {
 const noReasoning = " "
 
 // withReasoningOnToolTurns gives each assistant message of a Chat request
-// that has tool calls and no reasoning_content one: the thinking it sent
-// back in another field (reasoning, reasoning_details), else noReasoning.
-// A message with reasoning_content of its own keeps it, a reply without
-// tool calls is left as it is (DeepSeek doesn't ask for its thinking), and
-// a body with no tool calls comes back byte for byte.
+// that has tool calls, or that follows a tool message of its turn, and no
+// reasoning_content one: the thinking it sent back in another field
+// (reasoning, reasoning_details), else noReasoning. DeepSeek turns away a
+// reply after a tool result with none as it does a call (checked against
+// api.deepseek.com on 2026-10-12, #1822). A message with reasoning_content
+// of its own keeps it, any other reply is left as it is (DeepSeek doesn't
+// ask for its thinking), and a body with no tool calls comes back byte for
+// byte.
 func withReasoningOnToolTurns(body []byte) []byte {
+	afterTool := false
 	return editMessages(body, []string{"tool_calls"}, func(m map[string]json.RawMessage) bool {
 		var role string
 		var calls []json.RawMessage
-		if decodeJSON(m["role"], &role) != nil || role != "assistant" ||
-			decodeJSON(m["tool_calls"], &calls) != nil || len(calls) == 0 {
+		decodeJSON(m["role"], &role)
+		switch role {
+		case "tool":
+			afterTool = true
+		case "user":
+			afterTool = false
+		}
+		if raw, ok := m["tool_calls"]; ok && decodeJSON(raw, &calls) != nil {
+			return false
+		}
+		if role != "assistant" || len(calls) == 0 && !afterTool {
 			return false
 		}
 		var own *string

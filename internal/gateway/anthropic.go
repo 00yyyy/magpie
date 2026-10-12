@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -254,8 +255,9 @@ func anthropicReplaysThinking(host, model string) bool {
 }
 
 // withThinkingOnToolTurns gives each assistant message of a Messages
-// request that has a tool_use and no thinking block one holding
-// noReasoning, and turns a redacted_thinking block (Claude's, sealed, which
+// request that has a tool_use, or that answers tool results alone (DeepSeek
+// refuses that one too, checked 2026-10-12, #1822), and no thinking block
+// one holding noReasoning, and turns a redacted_thinking block (Claude's, sealed, which
 // DeepSeek can't read) into that too, or leaves it out when the message
 // has thinking already, for anthropicReplaysThinking. A Claude Code routing
 // group that falls from Claude to DeepSeek sends both (#1611). Every other
@@ -271,12 +273,29 @@ func withThinkingOnToolTurns(body []byte) []byte {
 	}
 	space, _ := json.Marshal(aBlock{Type: "thinking", Thinking: noReasoning})
 	changed := false
+	// afterTool: the message before is the user's tool results alone
+	afterTool := false
 	for i, raw := range msgs {
 		var m map[string]json.RawMessage
 		var role string
 		var blocks []json.RawMessage
-		if decodeJSON(raw, &m) != nil || decodeJSON(m["role"], &role) != nil || role != "assistant" ||
-			decodeJSON(m["content"], &blocks) != nil {
+		if decodeJSON(raw, &m) != nil || decodeJSON(m["role"], &role) != nil {
+			afterTool = false
+			continue
+		}
+		if role != "assistant" {
+			afterTool = decodeJSON(m["content"], &blocks) == nil && len(blocks) > 0 &&
+				!slices.ContainsFunc(blocks, func(b json.RawMessage) bool {
+					var t struct {
+						Type string `json:"type"`
+					}
+					return decodeJSON(b, &t) != nil || t.Type != "tool_result"
+				})
+			continue
+		}
+		after := afterTool
+		afterTool = false
+		if decodeJSON(m["content"], &blocks) != nil {
 			continue
 		}
 		var out []json.RawMessage
@@ -300,7 +319,7 @@ func withThinkingOnToolTurns(body []byte) []byte {
 			}
 			out = append(out, b)
 		}
-		if called && !thought {
+		if (called || after) && !thought {
 			out = append([]json.RawMessage{space}, out...)
 			edited = true
 		}
