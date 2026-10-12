@@ -1073,6 +1073,36 @@
       go.onclick = () => send("apply", best);
       foot.append(go);
     }
+    // a window of the reader's own (#1860): one who would spend some tokens
+    // for fewer compactions picks it from the same replay the advice comes
+    // from, each value with what it spends past the leanest and how often
+    // it would have compacted in the range, both estimates
+    const pts = (a.compact && a.compact.curve) || [];
+    if (pts.length > 1 && !set.locked) {
+      const other = el("button", "text ctx-tune-pick", t("Other window…"));
+      other.type = "button";
+      other.disabled = tuneBusy === key;
+      other.setAttribute("aria-haspopup", "menu");
+      other.setAttribute("aria-expanded", "false");
+      other.onclick = (e) => {
+        e.stopPropagation();
+        const base = (pts.find((p) => p.value === best) || {}).cost ?? r.low;
+        const now = set.ours && set.value != null ? +set.value : cur;
+        const near = pts.reduce((x, p) => Math.abs(p.value - now) < Math.abs(x.value - now) ? p : x, pts[0]);
+        const opts = pts.map((p) => {
+          const extra = Math.max(0, p.cost - base);
+          const spend = p.value === best ? t("Fewest tokens")
+            : base > 0 && extra / base < 0.005 ? t("As few tokens")
+            : t("+{tokens} tokens (+{pct})", { tokens: fmtK(extra), pct: pct(base > 0 ? extra / base : 0) });
+          const often = p.compacts == null ? "" : p.compacts ? count(p.compacts, "about 1 compaction", "about {n} compactions") : t("no compaction");
+          return { v: String(p.value), name: show(p.value), literalName: true, note: [spend, often].filter(Boolean).join(" · ") };
+        });
+        openProtoMenu(other, opts, String(near.value), (v) => {
+          if (v !== String(now)) send("apply", v);
+        }, "Compact at · estimated from your calls of the range", "ctx-tune-menu");
+      };
+      foot.append(other);
+    }
     row.append(foot);
     return row;
   }
