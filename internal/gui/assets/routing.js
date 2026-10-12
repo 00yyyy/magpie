@@ -2276,6 +2276,26 @@
     return b;
   }
 
+  // cardOf: the Usage page's reading of a subscription account the stage
+  // or the list shows (#1833): its card by the agent it is signed in to
+  // (a plugin's by its provider) and its user, this computer's own; null
+  // when there is none, or it holds no windows. Nothing is read for it:
+  // the readings are app.js's quotas, as the Usage page has them.
+  function cardOf(w) {
+    if (w.kind !== "account" || !Array.isArray(quotas)) return null;
+    const user = (w.who || "").trim().toLowerCase();
+    const mine = quotas.filter((q) => !q.from && q.kind === "subscription" && (q.provider === w.agent || q.provider === w.provider));
+    const q = mine.find((q) => (q.user || "").trim().toLowerCase() === user) || (mine.length === 1 && !mine[0].user ? mine[0] : null);
+    return q && !q.error && q.windows?.length ? q : null;
+  }
+  // winsOf: each of an account's windows, as the Usage page's card names
+  // it: "5 hours 40% used · resets in 2h"
+  function winsOf(w) {
+    const q = cardOf(w);
+    return q ? (familyWindows(q.windows) || []).map((x) => t(x.name) + " " + quotaText(x)
+      + (x.resetsAt ? " · " + resetInText(new Date(x.resetsAt)) : "")) : [];
+  }
+
   // each account or key the kept requests weighed: how often it was
   // tried, answered and failed in them, and how the latest found it
   function renderActs(rs) {
@@ -2361,7 +2381,18 @@
         el("span", "ok", t("answered {n}", { n: a.ok })),
         ...(fails.length ? [el("span", "bad", fails.join(", "))] : []),
         ...(a.last ? [el("span", "", t("last answered {time}", { time: clock(a.last) }))] : []));
-      row.append(name, el("div", "st " + cls, st), tally);
+      row.append(name, el("div", "st " + cls, st));
+      // a subscription account's windows each, with when they reset, as
+      // the Usage page read them (#1833): the figure above is the one
+      // window routing went by. Live only: a kept day's requests were
+      // weighed by readings long gone.
+      const ws = day ? [] : winsOf(w);
+      if (ws.length) {
+        const line = el("div", "wins");
+        line.append(...ws.map((s) => el("span", "", s)));
+        row.append(line);
+      }
+      row.append(tally);
       // the models it answered, on a line of their own, not wrapped in
       // among the numbers; a provider's one model is already its name
       const mdls = [...a.models].filter((m) => !(w.kind === "provider" && m === w.model));

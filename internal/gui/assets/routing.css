@@ -315,6 +315,9 @@ button.rt-session { cursor: pointer; }
 .rt-act .st:empty { display: none; }
 .rt-act .st.rest { color: var(--red); }
 .rt-act .st.left { color: var(--muted); }
+/* a subscription account's windows each (#1833), under its one figure */
+.rt-act .wins { display: flex; flex-wrap: wrap; gap: 2px 12px; min-width: 0; color: var(--fg-2); font-size: 11px; font-variant-numeric: tabular-nums; }
+.rt-act .wins span { min-width: 0; overflow-wrap: anywhere; }
 .rt-act .tally { display: flex; flex-wrap: wrap; gap: 2px 12px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .rt-act .tally .bad { color: var(--red); }
 .rt-act .mdls { display: flex; flex-wrap: wrap; gap: 4px; }

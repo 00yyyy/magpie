@@ -90,6 +90,22 @@ keys and `provider/model@` for accounts on the stage, `provider/*` and
 gateway's order and choice of seat don't change. Two stay two rows. See
 `routing-keys-fold.test.cjs` and `routing-group-fold.test.cjs`.
 
+### Routing account windows
+
+A subscription account's row in Accounts and keys shows each of its
+windows under the one figure routing went by, with when each resets
+("5 hours 40% used · resets in 2h"), as the Usage page reads them (#1833).
+`cardOf` in [`routing.js`](../../internal/gui/assets/routing.js) matches
+the route's account to app.js's `quotas`: a `subscription` card of this
+computer (no `from`) whose provider is the account's `agent` (a plugin's
+provider id) or its provider, and whose user is the account's, ignoring
+case. `winsOf` names them with `familyWindows`, `quotaText` and
+`resetInText`. Nothing new is read: opening Routing asks
+`/api/usage/quotas` in the ordinary way (`show`, when the readings are
+missing or over a minute old), never `?asked=1`. A kept day's list shows
+none, since those requests were weighed by readings long gone. See
+`routing-account-windows.test.cjs`.
+
 ### Desktop fonts
 
 Settings → General offers independent interface and code fonts, each with

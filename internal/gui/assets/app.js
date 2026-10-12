@@ -14320,7 +14320,10 @@ function loadQuotas(asked, again) {
   const p = Promise.resolve(quotasLoading).catch(() => {})
     .then(() => Promise.all([api("usage/quotas" + (asked ? "?asked=1" : ""), undefined, (h) => { reading = h.get("X-Magpie-Reading") === "1"; }), api("usage/quotas/history?days=35").catch(() => null)]))
     .then(([q, h]) => {
-      same = !!again && !!quotas && JSON.stringify(q || []) === JSON.stringify(quotas) && (!h || JSON.stringify(h) === JSON.stringify(quotaHist));
+      // an answer that isn't a list of cards is a read that failed: what
+      // was read before stays, as it does when the read is refused
+      if (q != null && !Array.isArray(q)) { quotas = quotas || []; reading = false; return; }
+      same =!!again && !!quotas && JSON.stringify(q || []) === JSON.stringify(quotas) && (!h || JSON.stringify(h) === JSON.stringify(quotaHist));
       quotas = q || []; quotasAt = Date.now(); if (h) quotaHist = h;
     }, () => { quotas = quotas || []; reading = false; })
     .finally(() => {
@@ -23285,6 +23288,9 @@ async function show(v) {
   if (v !== "providers" && editing !== null) cancelEdit(true);
   if (v === "gateway") loadGatewayKeys();
   if (v === "providers" || v === "gateway" || v === "routing") loadProviders().then(back, (e) => status(e.message, "err"));
+  // Routing's accounts show their windows as the Usage page read them
+  // (#1833): what is kept, read in an ordinary way, never an asked read
+  if (v === "routing" && (!quotas || Date.now() - quotasAt > 60e3)) loadQuotas();
   if (v === "usage") loadUsage(true).then(back, (e) => status(e.message, "err"));
   if (v === "settings") loadSettings().then(back, (e) => status(e.message, "err"));
   if (v === "library") window.loadLibrary?.()?.then(back);
