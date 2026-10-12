@@ -78,6 +78,20 @@ func AutoSearcher() string {
 	return ""
 }
 
+// NamedSearchModel is the model the searcher Settings names searches with,
+// as "<provider>/<model>": what an agent's own web search row asks, so a
+// search goes to the searcher the user picked rather than first to the
+// agent's model (dsh, 我只会玩单机 on Discord). "" when Settings names
+// none, provider search is off, the one named can't be used, or it
+// searches with no model (a Kimi Code plan's search service).
+func NamedSearchModel() string {
+	p, m, why := chosenSearcher()
+	if p == nil || why != "" || m == "" {
+		return ""
+	}
+	return p.ID + "/" + m
+}
+
 // SearcherUnused is why the searcher Settings names isn't used (one of
 // the Searcher* reasons), "" when it is or none is named.
 func SearcherUnused() string {
