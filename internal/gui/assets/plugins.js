@@ -542,6 +542,80 @@
     return box;
   }
 
+  // The repositories on GitHub are many and of every kind (the owner: 这里
+  // 应该有分类以及搜索框方便用户筛选), so their section has its own kinds
+  // to pick from, each with how many there are, and a field that narrows
+  // them by name, author or description as it is typed, once there are
+  // more than a few to look through (counted before the page's search, so
+  // they don't go away under someone typing). Both narrow what the page's
+  // search has already found; only the section is drawn again.
+  // The section, its head and its field are made once and kept in the
+  // page, as the page's search field is (#1055).
+  let ghKind = "";       // "" (all) | "pv" | "mw" | "ag"
+  let ghQuery = "";
+  let ghList = [];       // what the page's search left of the repositories
+  const ghSec = el("section", "pm-sec pm-ghsec");
+  const ghHead = el("div", "pm-sechead");
+  const ghBar = el("div", "pm-ghbar");
+  const ghGrid = el("div", "pm-grid");
+  const ghFind = el("label", "pm-find pm-ghfind");
+  const ghQ = el("input");
+  ghQ.type = "search";
+  ghQ.spellcheck = false;
+  ghQ.autocomplete = "off";
+  ghQ.oninput = () => { ghQuery = ghQ.value; drawGh(); };
+  ghQ.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === "Escape" && ghQ.value) { ghQ.value = ""; ghQ.oninput(); } };
+  ghFind.append(glyph(SEARCH, 13, 1.6), ghQ);
+  const ghMatch = (l) => {
+    const f = ghQuery.trim().toLowerCase();
+    return !f || [l.name, l.github.repo, l.github.owner, l.package, summary(l)].join(" ").toLowerCase().includes(f);
+  };
+  function ghSection(list) {
+    ghList = list;
+    const h = [el("h3", "", t("Unofficial, on GitHub")), el("span", "", t("repositories their authors tagged {topic} — nobody has reviewed them; read the code before you install one", { topic }))];
+    ghHead.replaceChildren(...h);
+    drawGh();
+    return ghSec;
+  }
+  function drawGh() {
+    if ((tagged || []).length <= 6) {
+      ghGrid.replaceChildren(...ghList.map(card));
+      replaceKeeping(ghSec, [ghHead, ghGrid]);
+      return;
+    }
+    // the kinds there are, in the market's order, each with how many the
+    // field leaves of it; one kind alone needs no picking
+    const found = ghList.filter(ghMatch);
+    const kinds = ["pv", "mw", "ag"].filter((k) => ghList.some((l) => kindOf(l) === k));
+    if (!kinds.includes(ghKind)) ghKind = "";
+    const n = (k) => found.filter((l) => !k || kindOf(l) === k).length;
+    const bar = [];
+    if (kinds.length > 1) {
+      const pick = segs([["", t("All") + " · " + n("")], ...kinds.map((k) => [k, t(KINDS[k][1]) + " · " + n(k)])], ghKind, (k) => { ghKind = k; drawGh(); });
+      pick.classList.add("pm-ghkinds");
+      pick.setAttribute("role", "group");
+      pick.setAttribute("aria-label", t("Kind of plugin"));
+      bar.push(pick);
+    }
+    bar.push(el("span", "grow"), ghFind);
+    ghQ.placeholder = t("Filter by name, author or description");
+    ghQ.setAttribute("aria-label", t("Filter the plugins on GitHub"));
+    if (ghQ.value !== ghQuery) ghQ.value = ghQuery;
+    replaceKeeping(ghBar, bar);
+    const shown = found.filter((l) => !ghKind || kindOf(l) === ghKind);
+    if (shown.length) {
+      ghGrid.replaceChildren(...shown.map(card));
+      replaceKeeping(ghSec, [ghHead, ghBar, ghGrid]);
+      return;
+    }
+    const none = el("div", "pm-ghnone");
+    const all = el("button", "text", t("Show all"));
+    all.type = "button";
+    all.onclick = () => { ghKind = ""; ghQuery = ""; drawGh(); ghQ.focus(); };
+    none.append(el("span", "", t("No plugin on GitHub matches")), all);
+    replaceKeeping(ghSec, [ghHead, ghBar, none]);
+  }
+
   // the head and its search field are made once and drawn again in
   // place: the field is never taken out of the page, or a key an IME
   // commits while it is out lands twice (#1055)
@@ -633,7 +707,8 @@
   let body = null;
   function draw() {
     const scroll = page.scrollTop;
-    body = el("div", "lib-body pm-body");
+    // the body is made once, so the GitHub section's field stays in the page
+    body = body || el("div", "lib-body pm-body");
     replaceKeeping(page, [head(), body]);
     drawBody();
     page.scrollTop = scroll;
@@ -644,8 +719,9 @@
     const key = tab + (query ? ":q" : "");
     body.classList.toggle("enter", shown !== key);
     shown = key;
-    body.replaceChildren();
-    // the search field keeps its focus: only the body is redrawn while typing
+    // the search field keeps its focus: only the body is redrawn while
+    // typing, and the GitHub section's field is kept in it
+    if (tab === "installed" || !listings) body.replaceChildren();
     if (tab === "installed") return drawInstalled();
     if (failedList && !listings) {
       body.append(el("p", "pm-empty", t("Couldn't load the plugins: {error}", { error: failedList })));
@@ -661,21 +737,24 @@
     // a tagged repository the market already lists is the market's card
     const listed = new Set(listings.map((l) => l.package));
     const gh = (tagged || []).filter((l) => !(l.github.package && listed.has(l.github.package)) && match(l));
+    // put in place around the GitHub section, which stays in the page
+    const out = [];
     if (!f) {
-      body.append(intro());
+      out.push(intro());
       // magpie's community's alone: others' plugins are found by a search
       const ours = ls.filter((l) => l.community && kindOf(l) === "pv");
       const mws = ls.filter((l) => l.community && kindOf(l) === "mw");
       const ags = ls.filter((l) => l.community && kindOf(l) === "ag");
-      if (ours.length) body.append(section(t("Subscriptions"), t("written for magpie, checked against its own sign-ins"), ours));
-      if (mws.length) body.append(section(t("Gateway middleware"), t("runs in magpie's gateway on what every agent sends and gets back, whichever provider serves it"), mws));
-      if (ags.length) body.append(section(t("Agents"), t("agents magpie has no setup of its own for, connected to it as its own are"), ags));
-      if (gh.length) body.append(section(t("Unofficial, on GitHub"), t("repositories their authors tagged {topic} — nobody has reviewed them; read the code before you install one", { topic }), gh));
-      body.append(manual());
+      if (ours.length) out.push(section(t("Subscriptions"), t("written for magpie, checked against its own sign-ins"), ours));
+      if (mws.length) out.push(section(t("Gateway middleware"), t("runs in magpie's gateway on what every agent sends and gets back, whichever provider serves it"), mws));
+      if (ags.length) out.push(section(t("Agents"), t("agents magpie has no setup of its own for, connected to it as its own are"), ags));
+      if (gh.length) out.push(ghSection(gh));
+      out.push(manual());
+      replaceKeeping(body, out);
       return;
     }
-    if (ls.length) body.append(section(t("Suggested"), "", ls));
-    if (gh.length) body.append(section(t("Unofficial, on GitHub"), t("repositories their authors tagged {topic} — nobody has reviewed them; read the code before you install one", { topic }), gh));
+    if (ls.length) out.push(section(t("Suggested"), "", ls));
+    if (gh.length) out.push(ghSection(gh));
     const known = new Set([...listings.map((l) => l.package), ...(tagged || []).map((l) => l.github.package).filter(Boolean)]);
     const box = el("section", "pm-sec");
     const h = el("div", "pm-sechead");
@@ -691,7 +770,8 @@
       for (const x of list) g.append(card({ package: x.package, name: x.package, npm: x }));
       box.append(g);
     }
-    body.append(box);
+    out.push(box);
+    replaceKeeping(body, out);
   }
 
   function intro() {
