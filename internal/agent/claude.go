@@ -202,6 +202,54 @@ const claudeUnknownOutput = 32000
 // model is said to have only the levels magpie knows it has.
 const claudeCapsEnv = "CLAUDE_CODE_MODEL_CAPABILITIES"
 
+// claudeReviewEnv is whether Claude Code's auto mode asks the API to review
+// its actions (the dangerous-tool-use beta and `safeguards`), "0" for no.
+// Behind a gateway whose model doesn't answer, it classifies locally anyway
+// and names the gateway in a notice, "this session isn't eligible because
+// your requests go through 127.0.0.1:3425…" (1EFLOPS on X, Claude Code on
+// Codex). Anthropic's page on it says to set it to 0 for a gateway that
+// can't run the checks: magpie does while none of the models Claude Code
+// can reach through it is reviewed (claudeReviewed), and leaves it unset
+// while one is. One the user set is theirs.
+const claudeReviewEnv = "CLAUDE_CODE_AUTO_MODE_SERVER"
+
+// claudeReviewed reports whether a model Claude Code can reach through
+// magpie has its actions reviewed by Anthropic (gateway.AutoModeReviewed):
+// one shown to the agents in catalogs (Claude Code, Claude Desktop whose
+// Code tab is Claude Code, T3 Code's instance of it), a routing group's
+// member, a provider's fallback, or one of models (those it is set to).
+// Any such keeps the review on, as /model can take a session there.
+func claudeReviewed(catalogs []string, models ...string) bool {
+	var entries []provider.Entry
+	for _, c := range catalogs {
+		shown, _ := provider.CatalogFor(c)
+		entries = append(entries, shown...)
+	}
+	reviewed := func(p provider.Provider, model string) bool {
+		if gateway.AutoModeReviewed(p, model) {
+			return true
+		}
+		return slices.ContainsFunc(p.Fallback, func(id string) bool {
+			fp, fm, ok := provider.Resolve(id)
+			return ok && gateway.AutoModeReviewed(fp, fm)
+		})
+	}
+	find := provider.GroupFinder()
+	for _, e := range entries {
+		if e.Group == "" {
+			if reviewed(e.Provider, e.Model) {
+				return true
+			}
+			continue
+		}
+		_, ms, _ := find(e.ID)
+		if slices.ContainsFunc(ms, func(m provider.Member) bool { return reviewed(m.Provider, m.Model) }) {
+			return true
+		}
+	}
+	return slices.ContainsFunc(models, func(m string) bool { return gateway.AutoModeReviewed(provider.Provider{}, m) })
+}
+
 // claudeCapsMax bounds claudeCapsEnv: the models Claude Code is set to go
 // first, and those that don't fit after them are left as Claude Code takes
 // them.
@@ -716,6 +764,40 @@ func claudeIn(at place) *Agent {
 		return edit.SetJSON(path, edit.KV{Path: "env." + claudeCapsEnv, Value: v})
 	}
 	writeCaps := func(models ...string) error { return putCaps(true, models...) }
+	// the auto mode review magpie turned off (claudeReviewEnv), kept apart
+	// from the user's own in the same way
+	reviewKey := at.key("claude.auto_mode_server")
+	reviewOurs := func() bool {
+		cur := rawEnv(claudeReviewEnv)
+		return cur != "" && cur == stashLoad()[reviewKey]
+	}
+	dropReview := func() error {
+		defer forget(reviewKey)
+		if reviewOurs() {
+			return edit.DelJSON(path, "env."+claudeReviewEnv)
+		}
+		return nil
+	}
+	// writeReview turns the review off while no model Claude Code can reach
+	// through magpie runs it, and back on (unset) once one does
+	writeReview := func(models ...string) error {
+		if rawEnv(claudeReviewEnv) != "" && !reviewOurs() {
+			forget(reviewKey)
+			return nil
+		}
+		catalogs := []string{"claude"}
+		if desktopOn() {
+			catalogs = append(catalogs, "claude-desktop")
+		}
+		if claudeReviewed(catalogs, models...) {
+			return dropReview()
+		}
+		stash(map[string]string{reviewKey: "0"})
+		if rawEnv(claudeReviewEnv) == "0" {
+			return nil
+		}
+		return edit.SetJSON(path, edit.KV{Path: "env." + claudeReviewEnv, Value: "0"})
+	}
 	// writeWindow tells Claude Code the window of the models it runs on
 	// (claudeWindow), and while Claude Desktop runs on magpie, of those its
 	// Code tab runs it on too (claudeDesktopWindow): the least of them, as
@@ -748,6 +830,11 @@ func claudeIn(at place) *Agent {
 	// Claude Code's being wired in wrote them before, so a user who wired
 	// in Desktop alone had 200K for every Desktop model (#1458).
 	desktopOnly := func() error {
+		// the review is turned off only for Claude Code's own requests to
+		// magpie
+		if err := dropReview(); err != nil {
+			return err
+		}
 		if !desktopOn() {
 			if err := dropWindow(); err != nil {
 				return err
@@ -1033,6 +1120,9 @@ func claudeIn(at place) *Agent {
 			return err
 		}
 		if err := writePicker(); err != nil {
+			return err
+		}
+		if err := writeReview(models...); err != nil {
 			return err
 		}
 		return writeCaps(models...)
@@ -1424,6 +1514,9 @@ func claudeIn(at place) *Agent {
 				return err
 			}
 			if err := writePicker(); err != nil {
+				return err
+			}
+			if err := writeReview(models...); err != nil {
 				return err
 			}
 			return writeCaps(models...)
