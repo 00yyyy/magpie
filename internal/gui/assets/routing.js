@@ -2361,6 +2361,8 @@
       + (x.resetsAt ? " · " + resetInText(new Date(x.resetsAt)) : "")) : [];
   }
 
+  // when each rest was lifted by hand, by the key it rests by (#1869)
+  const liftedAt = new Map();
   // each account or key the kept requests weighed: how often it was
   // tried, answered and failed in them, and how the latest found it
   function renderActs(rs) {
@@ -2391,6 +2393,9 @@
         if (tr.rest && end >= a.restAt) { a.rest = tr.rest; a.restAt = end; }
       }
     }
+    // a rest lifted by hand since the request that found it (#1869): the
+    // kept requests still say it, until the next one asks it again
+    for (const a of by.values()) if (a.rest?.key && (liftedAt.get(a.rest.key) || 0) >= a.restAt) a.rest = null;
     const list = [...by.values()].sort((x, y) => (x.w.name || "").localeCompare(y.w.name || "") || x.w.provider.localeCompare(y.w.provider) || rankOf(x.w) - rankOf(y.w) || x.pos - y.pos);
     setText(actLabel, t("Accounts and keys"));
     setText(actNote, t("over those requests"));
@@ -2474,15 +2479,20 @@
         ms.append(...mdls.map((m) => el("code", "mdl", m)));
         row.append(ms);
       }
-      if (resting && (a.rest.why === "verify" || a.rest.why === "restricted")) {
-        // the vendor wants the account verified (#152), or restricted it
-        // until an appeal lifts it (#1849): where, and a way to stop its
-        // rest once it is
+      if (resting && a.rest.key) {
+        // any rest can be lifted by hand (#1869): a quota, a backoff, a
+        // Retry-After, a network blip read as down. It only ends the rest;
+        // the vendor refusing again rests it again as before. The vendor
+        // wants the account verified (#152), or restricted it until an
+        // appeal lifts it (#1849): where, and the way to stop its rest
+        // once it is
         const fix = el("div", "fix"), rest = a.rest;
         if (rest.link) { const b = el("button", "link", t("Verify the account ↗")); b.onclick = () => api("open", { url: rest.link }).catch(() => {}); fix.append(b); }
-        const go = el("button", "link", t(rest.why === "restricted" ? "The restriction is lifted — try it again" : "It's verified — try it again"));
+        const go = el("button", "link", t(rest.why === "restricted" ? "The restriction is lifted — try it again"
+          : rest.why === "verify" ? "It's verified — try it again" : "Try now"));
+        if (rest.why !== "restricted" && rest.why !== "verify") go.title = t("Ends the rest: the next request asks it again. Refused again, it rests again.");
         go.onclick = async () => {
-          try { await api("gateway/unrest", { key: rest.key }); rest.until = new Date().toISOString(); render(); } catch (e) { go.textContent = e.message; }
+          try { await api("gateway/unrest", { key: rest.key }); liftedAt.set(rest.key, Date.now()); render(); } catch (e) { go.textContent = e.message; }
         };
         fix.append(go);
         row.append(fix);

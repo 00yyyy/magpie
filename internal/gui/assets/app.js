@@ -13564,7 +13564,21 @@ function renderKeyAccounts(p) {
     if (k.rest && new Date(k.rest.until) > Date.now()) {
       const r = el("span", "key-rest", t("Resting · {why} · back at {time}", { why: (k.rest.status ? k.rest.status + " " : "") + t(KEY_FAIL[k.rest.why] || "failed"), time: new Date(k.rest.until).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) }));
       r.title = t("The gateway passes this key over until then, and tries the next one");
-      row.append(r);
+      // lifted by hand (#1869): the next request asks it again, and a
+      // refusal then rests it again as before
+      const go = el("button", "text key-unrest", t("Try now"));
+      go.title = t("Ends the rest: the next request asks it again. Refused again, it rests again.");
+      go.onclick = async (e) => {
+        e.stopPropagation();
+        go.classList.add("busy");
+        try {
+          await api("gateway/unrest", { key: k.rest.key });
+          k.rest = null;
+          renderProviders();
+          status(t("{key} is asked again from the next request", { key: k.name || k.masked }), "ok");
+        } catch (err) { go.classList.remove("busy"); status(err.message, "err"); }
+      };
+      row.append(r, go);
     }
     if (k.on && several) row.append(keyWeight(p, k, weightOf(k), weights));
     const proto = protoPicker(p, k.protocol, (v) => accountAction("keys/protocol", { id: p.id, ref: k.id, protocol: v }));
