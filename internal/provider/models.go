@@ -1062,6 +1062,9 @@ func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 		// served at no cost: not at the price of the model it is free of
 		return catalog.Price{}, true
 	}
+	if pr, ok := p.cursorFastPrice(model); ok {
+		return pr, true
+	}
 	names := pricedNames(model)
 	if p.kimiCodeMember() {
 		if id, ok := kimiCodeAPI[strings.ToLower(strings.TrimSpace(model))]; ok {
@@ -1077,6 +1080,56 @@ func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 		}
 	}
 	return catalog.Price{}, false
+}
+
+// cursorFast is a Cursor id of a Grok model in its fast mode, at an effort
+// or not, at a window or not: grok-4.7-fast, grok-4.7-low-fast,
+// grok-4.7-xhigh-fast@500k. m[1] is the model it is fast of.
+var cursorFast = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/@]*?)(?:-(?:minimal|low|medium|high|xhigh|extra-high))?-fast(?:@[0-9]+k)?$`)
+
+// cursorFastPrices are what Cursor bills a Grok model in its fast mode
+// per million tokens, as its own model list says
+// (https://cursor.com/docs/models, read 2026-10-12): Grok 4.7 (Fast) $4
+// input, $1 cache read, $12 output ("Fast mode is available at 2x
+// pricing"), and "Fast mode for long context (>256k) is billed at 3x
+// standard rates" ($6, $1.5, $18). No catalog lists these ids, so a call
+// on Cursor's grok-4.7-fast, or on a routing group of it, had no cost at
+// all (TradingLife on Discord).
+var cursorFastPrices = map[string]catalog.Price{
+	"grok-4.7": {Input: 4, CacheRead: 1, Output: 12,
+		Tiers: []catalog.Tier{{Above: 256000, Input: 6, CacheRead: 1.5, Output: 18}}},
+}
+
+// servedByCursor is whether p is a Cursor account: the built-in's or the
+// Cursor plugin's.
+func (p Provider) servedByCursor() bool {
+	if p.Account == nil {
+		return false
+	}
+	return p.Account.Agent == "cursor" || p.PluginProvider() == "cursor"
+}
+
+// cursorFastPrice is Cursor's price for its fast id of a Grok model
+// (cursorFastPrices), on a Cursor account only: elsewhere a "-fast" Grok
+// id is a model of its own (xAI's grok-4-fast is $0.2 / $0.5), not this
+// mode, and Grok Build's grok-4.7-build-fast has no published price.
+func (p Provider) cursorFastPrice(model string) (catalog.Price, bool) {
+	if !p.servedByCursor() {
+		return catalog.Price{}, false
+	}
+	m := cursorFast.FindStringSubmatch(strings.ToLower(strings.TrimSpace(model)))
+	if m == nil {
+		return catalog.Price{}, false
+	}
+	base := m[1]
+	if i := strings.LastIndex(base, "/"); i >= 0 {
+		base = base[i+1:]
+	}
+	pr, ok := cursorFastPrices[base]
+	if ok {
+		pr.Tiers = slices.Clone(pr.Tiers)
+	}
+	return pr, ok
 }
 
 // membershipCatalogs are models.dev catalogs of a membership's own
@@ -1259,8 +1312,9 @@ var grokWindow = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/@]*)@[0-9]+k$`)
 // according to OpenAI's rate card (2026-09-30):
 // https://help.openai.com/en/articles/11481834-chatgpt-rate-card-business-enterpriseedu-credit-based-pricing
 // This is a list-price estimate, not evidence of a response's served model.
-// Other names without catalog prices stay unpriced (grok-4.7-build, grok-4.7-mini,
-// grok-4.7-fast).
+// Other names without catalog prices stay unpriced here (grok-4.7-build,
+// grok-4.7-mini, grok-4.7-fast); a Cursor account's fast ids are priced at
+// Cursor's own fast rate (Provider.cursorFastPrice).
 func pricedNames(model string) []string {
 	out := []string{model}
 	if model == "codex-auto-review" {
