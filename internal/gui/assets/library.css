@@ -589,3 +589,11 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
    as the dialog lets them be */
 .lib-hookedit .lib-menu { max-width: 100%; height: 28px; color: var(--fg); }
 .lib-hookedit .lib-hooktimeout { max-width: 140px; }
+
+/* a chip whose agent has the item whatever is ticked (it reads
+   ~/.agents/skills itself, #595): lit, as it has it, with a lock on its
+   corner rather than greyed out, so it doesn't pass for a switch (#1862) */
+.lib-ag.always.blocked { opacity: 1; }
+.lib-ag.always::before, .lib-ag.always::after { content: ""; position: absolute; left: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%; pointer-events: none; }
+.lib-ag.always::before { background: var(--card); box-shadow: 0 0 0 1px var(--line); }
+.lib-ag.always::after { background: var(--fg-2); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5 7V5.5a3 3 0 0 1 6 0V7h.3a1 1 0 0 1 1 1v4.7a1 1 0 0 1-1 1H4.7a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm1.6 0h2.8V5.5a1.4 1.4 0 0 0-2.8 0z'/%3E%3C/svg%3E") center / 7px no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5 7V5.5a3 3 0 0 1 6 0V7h.3a1 1 0 0 1 1 1v4.7a1 1 0 0 1-1 1H4.7a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm1.6 0h2.8V5.5a1.4 1.4 0 0 0-2.8 0z'/%3E%3C/svg%3E") center / 7px no-repeat; }

@@ -2707,8 +2707,18 @@
     const name = el("div", "name" + (g.repo ? " mono" : ""), title);
     who.append(name);
     const n = g.skills.length;
-    who.append(el("div", "sub", filtering && hits.length !== n ? t("{n} of {total} skills", { n: hits.length, total: n })
-      : n === 1 ? t("1 skill") : t("{n} skills", { n })));
+    const sub = el("div", "sub", filtering && hits.length !== n ? t("{n} of {total} skills", { n: hits.length, total: n })
+      : n === 1 ? t("1 skill") : t("{n} skills", { n }));
+    // those kept in ~/.agents/skills, which some agents read themselves:
+    // said on the heading, before its chips are clicked (#1862)
+    const shared = g.skills.filter((s) => all.some((a) => s.always?.includes(a.id)));
+    if (shared.length) {
+      const readers = all.filter((a) => shared.some((s) => s.always.includes(a.id))).map((a) => a.name).join(", ");
+      const note = el("span", "lib-itself", " · " + t("{n} in ~/.agents/skills", { n: shared.length }));
+      sub.title = t("{agents} read ~/.agents/skills themselves: they have these {n} whatever is ticked here, and turning the group off for them leaves those on", { agents: readers, n: shared.length });
+      sub.append(note);
+    }
+    who.append(sub);
     const tags = el("div", "lib-tags");
     // one changed here is updated from its own row, which asks first (#1449)
     const stale = g.skills.filter((s) => s.check?.status === "update" && !s.edited);
@@ -2765,35 +2775,64 @@
   // Servers picked (#1027) are the same, counted of those an agent can
   // reach: one given every server it can reach of them has them all, and
   // one that can reach none of them can't be given them.
+  // A skill kept in ~/.agents/skills is had by an agent that reads that
+  // folder itself whatever is ticked (alwaysFor): a group's chips count, and
+  // give or take, only the skills magpie decides for each agent (#1862,
+  // WardLu: the group's chip went off and its rows stayed lit). An agent
+  // that reads every one of them itself is lit and locked, as a row's chip
+  // is; one that reads some says how many, before the click and after it.
   function groupChips(skills, all, repo, kind = "skills") {
     const servers = kind === "servers", hooks = kind === "hooks";
     const n = skills.length, names = skills.map((s) => s.name);
-    const can = (s, a) => (servers ? !!reaches(s)(a) : hooks ? !hookBlocked(s)(a) : true);
+    const own = (s, a) => !s.always?.includes(a.id);
+    const can = (s, a) => (servers ? !!reaches(s)(a) : hooks ? !hookBlocked(s)(a) : own(s, a));
     const reach = (a) => skills.filter((s) => can(s, a)).length;
     const count = (a) => skills.filter((s) => can(s, a) && s.agents?.includes(a.id)).length;
+    const itself = (a) => (servers || hooks ? 0 : skills.filter((s) => !own(s, a)).length);
     const full = all.filter((a) => reach(a) && count(a) === reach(a)).map((a) => a.id);
+    // each agent is sent the names it can be given: a skill it reads
+    // itself is left as it is, so a group's agents may go in more than one
+    const send = async (ids, on) => {
+      const by = new Map();
+      for (const id of ids) {
+        const a = all.find((x) => x.id === id);
+        const ns = servers || hooks || !a ? names : skills.filter((s) => own(s, a)).map((s) => s.name);
+        const k = ns.join("\n");
+        if (!by.has(k)) by.set(k, { names: ns, agents: [] });
+        by.get(k).agents.push(id);
+      }
+      let v = null;
+      for (const g of by.values()) v = await api("library/" + kind + "/agents-some", { names: g.names, agents: g.agents, on });
+      return v;
+    };
     const box = agentChips(all, full, async (next) => {
       const on = next.filter((id) => !full.includes(id)), off = full.filter((id) => !next.includes(id));
       box.classList.add("busy");
       try {
         let v = null;
-        if (on.length) v = await api("library/" + kind + "/agents-some", { names, agents: on, on: true });
-        if (off.length) v = await api("library/" + kind + "/agents-some", { names, agents: off, on: false });
+        if (on.length) v = await send(on, true);
+        if (off.length) v = await send(off, false);
         if (!v) return;
         take(v);
         const who = (ids) => ids.map(nameOf).join(", ");
-        report(v.result, repo != null
+        // taken from an agent that still reads some of them itself: said so
+        const still = off.map((id) => all.find((x) => x.id === id)).filter((a) => a && itself(a));
+        const kept = still.length ? " — " + t("{agent} still reads {n} of them from ~/.agents/skills itself", { agent: still[0].name, n: itself(still[0]) })
+          + (still.length > 1 ? " " + t("(and {n} more)", { n: still.length - 1 }) : "") : "";
+        report(v.result, (repo != null
           ? (on.length ? t("{repo}'s skills are on for {agents}", { repo, agents: who(on) }) : t("{repo}'s skills are off for {agents}", { repo, agents: who(off) }))
           : n === 1 ? (on.length ? t("{name} is on for {agents}", { name: names[0], agents: who(on) }) : t("{name} is off for {agents}", { name: names[0], agents: who(off) }))
           : servers ? (on.length ? t("{n} servers are on for {agents}", { n, agents: who(on) }) : t("{n} servers are off for {agents}", { n, agents: who(off) }))
           : hooks ? (on.length ? t("{n} hooks are on for {agents}", { n, agents: who(on) }) : t("{n} hooks are off for {agents}", { n, agents: who(off) }))
-          : on.length ? t("{n} skills are on for {agents}", { n, agents: who(on) }) : t("{n} skills are off for {agents}", { n, agents: who(off) }));
+          : on.length ? t("{n} skills are on for {agents}", { n, agents: who(on) }) : t("{n} skills are off for {agents}", { n, agents: who(off) })) + kept);
       } catch (e) {
         status(e.message, "err", 6000);
       }
       render();
     }, { all: true, blocked: servers ? (a) => (reach(a) ? "" : n === 1 ? sseBlocked(skills[0])(a) : t("{agent} can reach none of these servers", { agent: a.name }))
-      : hooks ? (a) => (reach(a) ? "" : n === 1 ? hookBlocked(skills[0])(a) : t("{agent} can run none of these hooks", { agent: a.name })) : null });
+      : hooks ? (a) => (reach(a) ? "" : n === 1 ? hookBlocked(skills[0])(a) : t("{agent} can run none of these hooks", { agent: a.name })) : null,
+    always: servers || hooks || !n ? null : (a) => (reach(a) ? "" : n === 1 ? alwaysFor(skills[0])(a)
+      : t("{agent} reads ~/.agents/skills itself, where all of these are kept — it has them whatever is ticked here", { agent: a.name })) });
     box.classList.add("lib-groupchips");
     for (const c of box.querySelectorAll(".lib-ag[data-agent]")) {
       const a = all.find((x) => x.id === c.dataset.agent), k = count(a), m = reach(a);
@@ -2807,9 +2846,11 @@
         ? (k === m ? t("{agent} has all of these servers — click to take them away", { agent: a.name })
           : k ? t("{agent} has {n} of these servers — click to give it the rest", { agent: a.name, n: k })
           : t("Give {agent} all of these servers", { agent: a.name }))
-        : k === n ? t("{agent} has all of them — click to take them away", { agent: a.name })
+        : (k === m ? t("{agent} has all of them — click to take them away", { agent: a.name })
           : k ? t("{agent} has {n} of them — click to give it the rest", { agent: a.name, n: k })
-          : t("Give {agent} all of them", { agent: a.name });
+          : t("Give {agent} all of them", { agent: a.name }))
+          + (m < n ? "\n" + t("It reads {n} of them from ~/.agents/skills itself: a click here leaves those as they are", { n: n - m }) : "");
+      if (m < n) c.classList.add("partly");
     }
     const every = box.querySelector(".lib-ag.all");
     if (every) every.title = every.classList.contains("on")
