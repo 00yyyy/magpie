@@ -287,6 +287,10 @@ func failureOf(c candidate, status int, body []byte) string {
 	if status >= 400 && c.p.Account != nil && c.p.Account.Agent == "claude" && provider.ClaudeSignInRequired(string(body)) {
 		return failAuth
 	}
+	// a subscription's sign-in its vendor revoked (#1793): no wait mends it
+	if provider.RevokedAccount(c.p.Account) && provider.SignInRevoked(status, body) {
+		return failAuth
+	}
 	return failure(status, body)
 }
 

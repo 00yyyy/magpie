@@ -3239,6 +3239,11 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	if err := p.Sign(ctx, req, to, body); err != nil {
 		return nil, err
 	}
+	// a sign-in its vendor revoked isn't sent again: the next member is
+	// asked, and the agent told to sign in again (#1793)
+	if why, ok := provider.RevokedSignIn(p.Account, req); ok {
+		return revokedReply(req, why), nil
+	}
 	if to == provider.Anthropic {
 		s.fitUserBetas(p, req.Header)
 	}
@@ -3267,6 +3272,7 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	}
 	// what a Codex account's reply says it has used, for its cap (#1295)
 	heardCodexLimits(p, res)
+	noteSignIn(ctx, p.Account, req, res)
 	return res, nil
 }
 

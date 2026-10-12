@@ -12129,7 +12129,15 @@ function renderAccounts(a, p) {
   // a restart): marked lapsed, or its allowance read saying so. Whatever
   // else it is (in use, the agent's own), it keeps a way to sign in again
   // and its Remove, and the reason never stands in their place.
-  const signedOut = (l) => !!sub?.plugin && !unusable(l) && (!!l.lapsed || SIGN_IN_GONE.test(quota?.[l.user]?.error || ""));
+  // A built-in Copilot account whose GitHub token GitHub refused (echo_ts
+  // on Discord: a revoked token) is the same, marked lapsed by magpie, and
+  // signed in again in place. So is any other built-in account whose
+  // sign-in its vendor revoked (#1793: ChatGPT's 401 token_revoked) or
+  // refused to refresh: the gateway passes over it till then.
+  const signedOut = (l) => !unusable(l) && (sub?.plugin ? !!l.lapsed || SIGN_IN_GONE.test(quota?.[l.user]?.error || "") : (a.agent === "copilot" && !!l.lapsed) || SIGN_IN_GONE.test(l.lapsed || ""));
+  // a Copilot account on an enterprise's GHE.com is named login@host, and
+  // signs in again there
+  const againSite = (l) => !sub?.plugin && a.agent === "copilot" && String(l.user).includes("@") ? String(l.user).split("@").pop() : undefined;
   const several = ls.filter((l) => !unusable(l) && ((l.active && !l.paused) || l.on)).length > 1;
   // kept signed in to one of the user's choosing (#524), the first is the
   // first in use in the order, which Make first sets without a sign-in
@@ -12203,7 +12211,7 @@ function renderAccounts(a, p) {
       row.classList.add("signed-out");
       row.append(el("span", "using", t("Sign-in required")));
       const again = el("button", "text", t("Sign in again"));
-      again.onclick = () => startSignIn(a.agent, false, undefined, { user: l.user });
+      again.onclick = () => startSignIn(a.agent, false, againSite(l), { user: l.user });
       const forget = el("button", "text quiet", t("Remove"));
       forget.title = l.own ? forgetOwnTitle(a) : t("magpie forgets this account's sign-in; the account itself is untouched");
       forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
@@ -12514,6 +12522,12 @@ const SIGN_IN_GONE = /sign-in has (expired|lapsed)|sign in again/i;
 
 function quotaError(err) {
   if (/sign-in has expired/.test(err)) return t("Signed out — add this account again to use it");
+  // a Copilot account GitHub refused the token of (copilot_lapsed.go), as
+  // its row says it, in English or already in the user's language
+  const copilotLapsed = "GitHub refused this Copilot sign-in; sign in again";
+  if (err === copilotLapsed || err === t(copilotLapsed)) return t(copilotLapsed);
+  // an account whose sign-in its vendor revoked (signin_revoked.go, #1793)
+  if (/'s sign-in was revoked; sign in again$/.test(err)) return t("The vendor revoked this sign-in; sign in again");
   if (/no longer supported for Gemini Code Assist for individuals/.test(err)) return t("Google no longer serves personal accounts to Gemini CLI — hover for more");
   if (/magpie accounts project/.test(err)) return t("Needs a Google Cloud project — hover for how");
   if (/^Antigravity (hasn't set|won't serve)/.test(err)) return t("Antigravity hasn't set this account up — hover for why");

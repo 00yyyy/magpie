@@ -338,6 +338,7 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	if l.Agent == "copilot" {
 		for _, c := range copilotLogins(copilotConfigDir()) {
 			if strings.EqualFold(c.User, l.User) {
+				orig := c.app
 				q := copilotSubscriptionUsage(ctx, c.app.Token, c.app.Host)
 				// an editor's stale token, the CLI signed in to the same
 				// account: read as the requests are sent (#1238)
@@ -348,7 +349,16 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 						q = copilotSubscriptionUsage(ctx, cli.Token, cli.Host)
 					}
 				}
+				// GitHub refused the token, with none in its place: the
+				// account is signed out (echo_ts on Discord)
+				if q.Error == http.StatusText(http.StatusUnauthorized) {
+					copilotRefuse(orig.Token, http.StatusUnauthorized)
+					copilotRefuse(c.app.Token, http.StatusUnauthorized)
+					copilotLapse(orig)
+					q.Error = copilotLapsedText
+				}
 				if q.Error == "" {
+					copilotUnlapse(orig)
 					refreshCopilotEntitlement(c.app, q.Plan, q.AccessSKU)
 				}
 				return q

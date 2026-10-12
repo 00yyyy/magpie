@@ -538,8 +538,15 @@ func compactOn(r *http.Request, model string) *provider.Provider {
 		return nil
 	}
 	others := p.AlsoOn()
+	// one whose sign-in its vendor revoked is the last asked (#1793)
+	revoked := func(o provider.Provider) bool { return provider.SignInMarked(o.Account) }
 	for i, o := range others {
-		if !resting(candidate{p: o, model: model, rest: o.ID}) {
+		if !resting(candidate{p: o, model: model, rest: o.ID}) && !revoked(o) {
+			return &others[i]
+		}
+	}
+	for i, o := range others {
+		if !revoked(o) {
 			return &others[i]
 		}
 	}
@@ -721,6 +728,12 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				end(502, msg, 0, 0)
 				return
 			}
+			// a sign-in its vendor revoked isn't sent again (#1793)
+			if why, ok := provider.RevokedSignIn(on.Account, req); ok {
+				writeError(w, provider.Responses, 401, why)
+				end(401, why, 0, 0)
+				return
+			}
 			req.Header.Del("Accept")
 			for _, v := range accept {
 				req.Header.Add("Accept", v)
@@ -739,6 +752,11 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			writeError(w, provider.Responses, 502, msg)
 			end(502, msg, 0, 0)
 			return
+		}
+		if on != nil {
+			// one of magpie's accounts: a revoked sign-in shows on its
+			// row, to sign in again (#1793)
+			noteSignIn(ctx, on.Account, req, res)
 		}
 		if !autoReset && rest == "/responses" && base != codexAPIBase && res.StatusCode == http.StatusTooManyRequests {
 			// the account is out of its allowance: one it lets spend its

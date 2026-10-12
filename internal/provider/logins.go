@@ -316,6 +316,12 @@ func upsertLogin(ls []savedLogin, l savedLogin) []savedLogin {
 			if l.Agent == "claude" && l.Lapsed == "" && ls[i].Refused != "" && ls[i].Refused == claudeLoginVersion(l) {
 				l.Lapsed, l.Refused = ls[i].Lapsed, ls[i].Refused
 			}
+			// so does a revoked sign-in's mark (signin_revoked.go), while
+			// the credential is the same: a sign-in anew or a refresh
+			// clears it, as does a request it serves
+			if l.Lapsed == "" && strings.HasPrefix(ls[i].Refused, revokedPrefix) && sameAuth(l.Auth, ls[i].Auth) && l.Home == ls[i].Home {
+				l.Lapsed, l.Refused = ls[i].Lapsed, ls[i].Refused
+			}
 			l.On = l.On || ls[i].On
 			l.Paused = l.Paused || ls[i].Paused
 			l.Order = ls[i].Order
@@ -869,6 +875,9 @@ func Logins(agent string) []Login {
 			Paused: (using || first) && pausedOwn(ls, l.Agent, l.User), first: first}
 		if l.Agent == "claude" {
 			lg.Lapsed = claudeSignedOut(l)
+		} else {
+			// the one in use too, its sign-in revoked (#1793)
+			lg.Lapsed = revokedLapse(l)
 		}
 		if !using {
 			if l.Agent != "claude" {
@@ -1321,6 +1330,8 @@ func ForgetAccounts() {
 	clear(newFetches.m)
 	newFetches.Unlock()
 	forgetAccountCaches()
+	// the revoked sign-ins known are read from logins.json again
+	resetRevoked()
 }
 
 // forgetAccountCaches makes the next look at the accounts read them afresh.

@@ -1166,11 +1166,20 @@ func copilotStandIn(a copilotApp) (copilotApp, bool) {
 	return cli, ok && copilotSameAccount(cli, a)
 }
 
-// session is what this sign-in's requests carry. An editor's token GitHub
-// refuses is replaced by the Copilot CLI's sign-in of the same account,
-// sent as the CLI sends it; with none, the error names the file the
-// refused token is in, since it is read before the CLI's (#1238).
+// session is what this sign-in's requests carry, and what GitHub said of
+// it is kept on its account: refused, it is signed out; served, it isn't
+// (copilotSessionDone).
 func (a copilotApp) session(ctx context.Context) (copilotSession, error) {
+	s, err := a.trade(ctx)
+	copilotSessionDone(a, err)
+	return s, err
+}
+
+// trade gets this sign-in's session. An editor's token GitHub refuses is
+// replaced by the Copilot CLI's sign-in of the same account, sent as the
+// CLI sends it; with none, the error names the file the refused token is
+// in, since it is read before the CLI's (#1238).
+func (a copilotApp) trade(ctx context.Context) (copilotSession, error) {
 	if a.cli {
 		return copilotDirect(ctx, a)
 	}
