@@ -197,6 +197,15 @@ type Provider struct {
 	// it as the client sent it, rather than given magpie's search (#359).
 	Searches bool `json:"searches,omitempty"`
 
+	// CodexAsSent has a request Codex sends on the Responses API go to it
+	// as Codex sent it, its model name alone swapped: a relay that checks
+	// it is Codex's own (#1758: "Codex 客户端请求特征无效", 10014), which
+	// the shape magpie fits it to for another backend (Responses Lite's
+	// additional_tools lifted into tools, the tool search as a function,
+	// OpenAI-only fields left out) fails. Off, the default, keeps that
+	// fitting, which a backend that isn't OpenAI's needs (#350).
+	CodexAsSent bool `json:"codexAsSent,omitempty"`
+
 	// PinUpstream, on the Cline API, has its DeepSeek models answered only
 	// by DeepSeek's own API (White Immortal on Discord): Cline routes a
 	// model through an AI gateway that may serve it from any host, and

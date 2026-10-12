@@ -3380,6 +3380,12 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	replay := proto == provider.Responses && (replaysReasoning(model, p.Host()) || replaysReasoning(upstream, p.Host()))
 	switch proto {
 	case provider.Responses:
+		if p.CodexAsSent && p.Account == nil && fromCodex(r.Header) {
+			// as Codex sent it, its model name alone swapped: a relay
+			// that checks it is Codex's own turns away the shape fitted
+			// for other backends (#1758)
+			break
+		}
 		// Responses Lite's tools, as an input item, go as OpenAI takes them
 		// only to OpenAI (#350)
 		if (p.Account == nil || p.Account.Agent != "codex") && !strings.HasSuffix(p.Host(), "openai.com") {

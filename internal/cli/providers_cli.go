@@ -33,7 +33,9 @@ const providerUsage = `usage:
                                           again, it adds another (deepseek-2); k=v pairs too: id, name, header.X-Foo
   magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, gemini, decide, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.token, models.url, search,
                                           access.key, access.secret (a Volcengine access key, or a Tencent Cloud SecretId and SecretKey, for its plan's windows)
-  magpie provider set <id> k=v…           change a provider's settings, with the same k=v pairs as add
+  magpie provider set <id> k=v…           change a provider's settings, with the same k=v pairs as add;
+                                          codex=as-sent sends Codex's Responses requests as Codex sent them
+                                          (a relay that checks they are Codex's own), codex=default fits them
   magpie provider key <id> <key>          change the API key
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
   magpie provider fallback <id> <provider/model>…   where requests go when it's out of quota or down (none clears)
@@ -944,6 +946,17 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			p.SecretAccessKey = v
 		case "models.url":
 			p.ModelsURL = v
+		case "codex":
+			// as-sent: Codex's requests go to it as Codex sent them, for
+			// a relay that checks they are Codex's own (#1758)
+			switch strings.ToLower(v) {
+			case "as-sent", "yes", "on":
+				p.CodexAsSent = true
+			case "default", "no", "off":
+				p.CodexAsSent = false
+			default:
+				return fmt.Errorf("codex=as-sent|default, not %q", v)
+			}
 		case "search":
 			// yes: the vendor searches the web by itself, a web search a
 			// client offers going to it as it was sent (a relay in front of

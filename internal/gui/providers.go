@@ -1319,6 +1319,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if in.QuotaRest == 0 && old != nil {
 					in.QuotaRest = old.QuotaRest
 				}
+				// and Codex's requests as sent, set with `magpie provider
+				// set <id> codex=as-sent` (#1758)
+				if !in.CodexAsSent && old != nil {
+					in.CodexAsSent = old.CodexAsSent
+				}
 				// each account's own proxy likewise: {} clears them
 				if in.AccountProxies == nil && old != nil {
 					in.AccountProxies = old.AccountProxies
