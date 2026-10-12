@@ -33,6 +33,7 @@ let prefs = null; // the settings page: theme, lang, version, dir, gateway
 let providers = null; // { providers, presets, gateway }
 let view = "agents";
 let showAllAgents = false; // the agents no one has set anything on, folded away
+let showHiddenAgents = false; // under them, the ones hidden by hand: a fold of their own, shut until asked
 let period = "today"; // usage window
 let usage = null;   // last usage summary
 let usageHidOpen = false; // the Usage page's hidden agents shown under their line
@@ -544,20 +545,60 @@ function renderAgents() {
     const inner = el("div", "agent-fold-inner");
     inner.inert = !showAllAgents;
     fold.style.setProperty("--n", folded.length);
-    // the ones hidden by hand, then the ones nothing is set on, each under
-    // a line that says which they are
+    // the ones nothing is set on, then, last and least, the ones hidden by
+    // hand (0xZaTe on Discord: listed first, right under the agents in use,
+    // hidden read as pinned, 反而更显眼了). Under the others the hidden ones
+    // are a disclosure of their own, shut until it is opened, as a Finder
+    // sidebar section is; with nothing else folded, the fold is theirs.
     const byHand = folded.filter(isHidden), unset = folded.filter((a) => !isHidden(a));
+    if (!byHand.length) showHiddenAgents = false;
     let i = 0;
-    for (const [group, cap] of [[byHand, "Hidden"], [unset, "Not set up"]]) {
-      if (!group.length) continue;
-      const c = el("div", "agent-fold-cap", t(cap));
-      c.style.setProperty("--i", i);
-      inner.append(c);
+    const rows = (group, into) => {
       for (const a of group) {
         const row = agentRow(a, true);
         row.style.setProperty("--i", i++);
-        inner.append(row);
+        into.append(row);
       }
+    };
+    const cap = (text) => {
+      const c = el("div", "agent-fold-cap", text);
+      c.style.setProperty("--i", i);
+      inner.append(c);
+    };
+    if (unset.length) {
+      cap(t("Not set up"));
+      rows(unset, inner);
+    }
+    if (byHand.length && !unset.length) {
+      cap(t("Hidden"));
+      rows(byHand, inner);
+    } else if (byHand.length) {
+      const line = el("button", "agent-fold-cap agent-hid-line");
+      line.type = "button";
+      line.style.setProperty("--i", i);
+      line.title = t("Hidden by you · click to see them");
+      const hc = el("span", "chev");
+      hc.append(svg(CHEV, 9, 1.8));
+      line.append(el("span", "", t("Hidden ({n})", { n: byHand.length })), hc);
+      const hf = el("div", "agent-hid-fold" + (showHiddenAgents ? " open" : ""));
+      const hi = el("div", "agent-hid-inner");
+      hi.inert = !showHiddenAgents;
+      hf.id = "agentsHidden";
+      line.setAttribute("aria-controls", hf.id);
+      line.setAttribute("aria-expanded", String(showHiddenAgents));
+      rows(byHand, hi);
+      hf.append(hi);
+      hf.addEventListener("transitionend", (e) => { if (e.target === hf) fit(); });
+      line.onclick = (e) => {
+        showHiddenAgents = !showHiddenAgents;
+        const room = hi.scrollHeight;
+        fit(showHiddenAgents ? room : -room, showHiddenAgents ? UNROLL : ROLLUP);
+        hf.classList.toggle("open", showHiddenAgents);
+        hi.inert = !showHiddenAgents;
+        line.setAttribute("aria-expanded", String(showHiddenAgents));
+        if (showHiddenAgents) unrollInView(hf, line, e);
+      };
+      inner.append(line, hf);
     }
     fold.append(inner);
     const more = el("button", "agent-more");
@@ -570,8 +611,7 @@ function renderAgents() {
       // what is folded, and how many of them were hidden by hand
       label.textContent = showAllAgents ? t("Show less")
         : !unset.length ? t("{n} hidden agents", { n: byHand.length })
-        : byHand.length ? t("Show {n} more ({h} hidden)", { n: folded.length, h: byHand.length })
-        : t("Show {n} more", { n: folded.length });
+        : t("Show {n} more", { n: unset.length });
       more.setAttribute("aria-expanded", String(showAllAgents));
     };
     labelFor();
@@ -586,6 +626,9 @@ function renderAgents() {
     fold.addEventListener("transitionend", (e) => { if (e.target === fold) settled(); });
     more.onclick = (e) => {
       showAllAgents = !showAllAgents;
+      // a fold of hidden ones only is the hidden ones' disclosure: Show on
+      // one of them leaves the rest open under their own line
+      if (!unset.length) showHiddenAgents = showAllAgents;
       // the panel's edge moves with the scroll, on the same beat and curve
       const room = inner.scrollHeight;
       fit(showAllAgents ? room : -room, showAllAgents ? UNROLL : ROLLUP);

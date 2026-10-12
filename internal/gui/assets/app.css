@@ -633,6 +633,17 @@ body.window .agent-fold-cap { padding: 10px 14px 3px; }
 .agent-fold-cap + .row { border-top: 0; }
 .agent-fold .agent-fold-cap { opacity: 0; transition: opacity .22s ease; }
 .agent-fold.open .agent-fold-cap { opacity: 1; transition: opacity .42s ease; transition-delay: calc(70ms + var(--i) * 48ms); }
+/* the ones hidden by hand, last, behind a disclosure of their own that is
+   shut until opened (a Finder sidebar section's): put away reads as put
+   away, not as pinned under the agents in use */
+.agent-hid-line { display: flex; align-items: center; gap: 4px; width: 100%; margin: 0; padding-bottom: 8px; border-left: 0; border-right: 0; border-bottom: 0; background: none; font-family: inherit; text-align: start; cursor: pointer; }
+.agent-hid-line:hover { color: var(--fg-2); }
+.agent-hid-line:focus-visible { outline: 1.5px solid var(--fg-2); outline-offset: -2px; }
+.agent-hid-line .chev { display: inline-flex; transform: rotate(-90deg); transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
+.agent-hid-line[aria-expanded="true"] .chev { transform: none; }
+.agent-hid-fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .42s cubic-bezier(.4, 0, .2, 1); }
+.agent-hid-fold.open { grid-template-rows: 1fr; transition-duration: .62s; transition-timing-function: cubic-bezier(.22, 1, .36, 1); }
+.agent-hid-inner { min-height: 0; overflow: hidden; }
 /* while a row is dragged the others slide out of its way */
 #agents.sorting { user-select: none; -webkit-user-select: none; }
 #agents.sorting > .row { transition: transform .22s cubic-bezier(.22, 1, .36, 1); }
