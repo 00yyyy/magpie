@@ -1761,13 +1761,31 @@
     const key = JSON.stringify([r.kind, items.map(([s, c, tr]) => [s, c, tr?.model, tr?.served]), r.order.map(logoOf)]);
     if (stepsKey === key) return;
     stepsKey = key;
-    steps.replaceChildren(...items.map(([s, c, tr]) => {
+    // A line that says the same stays the very node it was, and a new line
+    // takes its logo from one going: a logo made afresh loads its picture
+    // again and, in WebKit, blinks out for a frame, and the story is drawn
+    // again on every request that comes in and at each of its steps, so
+    // with an agent at work every logo in it blinked on and off
+    const logos = r.order.map(logoOf);
+    const was = new Map([...steps.children].map((li) => [li.dataset.k, li]));
+    const lis = items.map(([s, c, tr]) => {
+      const k = JSON.stringify([r.kind, s, c, tr?.model, tr?.served, logos]);
+      const old = was.get(k);
+      if (old) { was.delete(k); return { li: old }; }
+      return { k, s, c, tr };
+    });
+    keepIcons(...was.values());
+    replaceKeeping(steps, lis.map((x) => {
+      if (x.li) return x.li;
+      const { k, s, c, tr } = x;
       const li = el("li", c);
+      li.dataset.k = k;
       li.append(...(/^(why|ok|bad|wait|aside)$/.test(c) ? logoed(s, r) : [s]));
       if (c === "aside kind") li.prepend(kindTag(r), " ");
       if (c === "swap") li.prepend(swapTag(tr), " ");
       return li;
     }));
+    keptIcons = null;
   }
 
   // pick sets the stage to a past request, or back to live with the newest.
