@@ -81,8 +81,8 @@ function server(lang, calls) {
 }
 
 const words = {
-  en: { signIn: "Sign in", signOut: "Sign out", signed: "Signed in", label: "Sign-in", done: "Signed in to neon — the agents given it use magpie's sign-in", out: "Signed out of neon — the agents are given the server's own address again", exaDone: "Signed in to exa — the agents given it use magpie's sign-in", noSignIn: "already works without signing in", refused: "admits only the apps it lists" },
-  zh: { signIn: "登录", signOut: "退出登录", signed: "已登录", label: "登录", done: "已登录 neon，分配到它的 agent 共用 magpie 的登录", out: "已退出 neon，agent 改回使用服务器自身的地址", exaDone: "已登录 exa，分配到它的 agent 共用 magpie 的登录", noSignIn: "无需登录即可使用", refused: "只接受它列出的应用" },
+  en: { signIn: "Sign in", signOut: "Sign out", signed: "Signed in", label: "Sign-in", done: "Signed in to neon — the agents given it use magpie's sign-in", out: "Signed out of neon — the agents are given the server's own address again", exaDone: "Signed in to exa — the agents given it use magpie's sign-in", noSignIn: "already works without signing in", refused: "admits only the apps it lists", saveSignIn: "Save and sign in" },
+  zh: { signIn: "登录", signOut: "退出登录", signed: "已登录", label: "登录", done: "已登录 neon，分配到它的 agent 共用 magpie 的登录", out: "已退出 neon，agent 改回使用服务器自身的地址", exaDone: "已登录 exa，分配到它的 agent 共用 magpie 的登录", noSignIn: "无需登录即可使用", refused: "只接受它列出的应用", saveSignIn: "保存并登录" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -145,11 +145,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await exa.getByRole("button", { name: w.signIn, exact: true }).click();
         await exa.locator(".lib-signin-err", { hasText: w.noSignIn }).waitFor();
         assert.deepEqual(calls.slice(2), ["start exa"]);
-        // the URL changed to ?login: Sign in saves it, the dialog stays,
-        // and the sign-in is to it
+        // the URL changed to ?login: Sign in saves it, and says so (新v学员
+        // on Discord), the dialog stays, and the sign-in is to it
         const urlField = page.locator("#modal .lib-editor input.mono").first();
         await urlField.fill("https://mcp.exa.ai/mcp?login");
-        await exa.getByRole("button", { name: w.signIn, exact: true }).click();
+        await exa.getByRole("button", { name: w.saveSignIn, exact: true }).click();
         await page.waitForFunction((want) => document.querySelector("#status").textContent === want, w.exaDone);
         assert.deepEqual(calls.slice(3), ["save exa https://mcp.exa.ai/mcp?login {}", "start exa"]);
         await exa.locator(".lib-tag", { hasText: w.signed }).waitFor();

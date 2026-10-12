@@ -1617,7 +1617,9 @@
   // name is the server as saved ("" for one being added); ready saves what
   // the editor shows when it isn't that (a URL changed to the one that
   // signs in, as Exa's ?login) and gives the name it's saved as, for the
-  // sign-in to be to the server the form shows
+  // sign-in to be to the server the form shows. ready.saves says it would
+  // save, and the button then says so; box.redraw draws it again as the
+  // form changes
   function signInBox(name, ready) {
     const box = el("div", "lib-signin");
     const draw = () => {
@@ -1636,7 +1638,7 @@
         line.append(tag(t("Signed in"), "lib-signed"), el("span", "note", t("The agents given it use magpie's sign-in")), el("span", "grow"), button(t("Sign out"), "", signOut));
       } else {
         if (cur.dead) line.append(tag(t("Sign-in ran out"), "warn"));
-        line.append(button(cur.dead ? t("Sign in again") : t("Sign in"), "action", start));
+        line.append(button(ready?.saves?.() ? t("Save and sign in") : cur.dead ? t("Sign in again") : t("Sign in"), "action", start));
       }
       box.append(line);
       if (sg?.state === "failed") box.append(el("div", "lib-signin-err", sg.error));
@@ -1691,6 +1693,7 @@
         draw();
       } catch (e) { status(e.message, "err", 6000); }
     }
+    box.redraw = draw;
     draw();
     return box;
   }
@@ -1838,7 +1841,11 @@
     ed.append(head);
     const err = el("div", "editor-error");
 
-    const name = field2(d.name, t("e.g. github"), (v) => { d.name = v.trim(); });
+    let signBox = null; // the sign-in's, for its button to say it saves
+    // a sign-in saves the form first only to sign in to another server than
+    // the saved one; see ready
+    ready.saves = () => !s || d.name !== s.name || d.transport !== s.transport || d.url !== (s.url || "");
+    const name = field2(d.name, t("e.g. github"), (v) => { d.name = v.trim(); signBox?.redraw(); });
     ed.append(...field(t("Name"), name, t("Letters, digits, - and _ — what the agents call it")));
     const kindOf = () => segs([["stdio", t("Command")], ["http", "HTTP"], ["sse", "SSE"]], d.transport, (v) => { d.transport = v; draw(); });
     const kindBox = el("div");
@@ -1862,13 +1869,15 @@
         g.append(...field(t("Command"), line, t("The command and its arguments, as you'd type them")));
         g.append(...field(t("Environment"), pairs(d.env, "GITHUB_TOKEN", t("value"), (v) => { d.env = v; drawAgents(); }), refHint()));
       } else {
-        const url = field2(d.url, "https://example.com/mcp", (v) => { d.url = v.trim(); });
+        const url = field2(d.url, "https://example.com/mcp", (v) => { d.url = v.trim(); signBox?.redraw(); });
         url.classList.add("mono");
         g.append(...field("URL", url));
         g.append(...field(t("Headers"), pairs(d.headers, "Authorization", "Bearer …", (v) => { d.headers = v; drawAgents(); }), refHint()));
-        // Sign in saves the form first when it isn't what's saved, so a URL
-        // just changed (or a server just added) is the one signed in to
-        if (d.transport === "http") g.append(...field(t("Sign-in"), signInBox(s ? s.name : "", ready), t("For a server that asks you to sign in (OAuth): magpie signs in once, and every agent given it uses that sign-in")));
+        // Sign in saves the form first when it is of another server than
+        // the saved one, so a URL just changed (or a server just added) is
+        // the one signed in to
+        signBox = d.transport === "http" ? signInBox(s ? s.name : "", ready) : null;
+        if (signBox) g.append(...field(t("Sign-in"), signBox, t("For a server that asks you to sign in (OAuth): magpie signs in once, and every agent given it uses that sign-in")));
       }
       slot.append(g);
       // its own icon while it runs as it did; another way of running is another server
@@ -1904,15 +1913,19 @@
         render();
       } catch (e) { err.textContent = e.message; }
     };
-    // before a sign-in: the form saved, the dialog left open, when it
-    // isn't the server as saved
-    const sorted = (h) => JSON.stringify(Object.entries(h || {}).sort());
+    // before a sign-in: the form saved, the dialog left open, only when
+    // the sign-in is to another server than the saved one (a new one, a
+    // name or URL changed). It never saves the rest of the form on its
+    // own: a header removed, then Sign in, then Cancel left the header
+    // removed (新v学员 on Discord). A save says so on the button ("Save and
+    // sign in"), and what it saved is what Cancel then keeps
     async function ready() {
-      if (s && d.name === s.name && d.transport === s.transport && d.url === (s.url || "") && sorted(d.headers) === sorted(s.headers)) return s.name;
+      if (!ready.saves()) return s.name;
       err.textContent = "";
       const was = await send();
       report(lib.result, was ? t("{name} saved", { name: d.name }) : "");
       ok.textContent = t("Save");
+      original = JSON.stringify(d);
       render();
       return s.name;
     }
@@ -1937,7 +1950,7 @@
         status(t("Filled in from what you pasted"), "ok");
       } else pasteMany(found, d.agents);
     });
-    const original = JSON.stringify(d);
+    let original = JSON.stringify(d);
     modal = { save, dirty: () => JSON.stringify(d) !== original };
     openLib(ed);
     if (!s) requestAnimationFrame(() => name.focus());
