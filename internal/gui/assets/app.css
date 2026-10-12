@@ -1171,9 +1171,10 @@ body.window .field.solo { grid-column: auto; }
 /* over the requests: their sum, and at its right the request archive's switch */
 .led-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0 2px 7px; min-width: 0; }
 .led-head .led-sum { margin: 0; min-width: 0; }
-/* the two sources the request page counts and their total, in the same block
-   of cells as the totals above them, each one clickable to filter by it */
-.led-vias { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 9px; }
+/* the sources the request page counts and their total, in the same block
+   of cells as the totals above them, each one clickable to filter by it; a
+   fourth, the calls apps reported (#1874), only once there are some */
+.led-vias { grid-template-columns: repeat(var(--vias, 3), minmax(0, 1fr)); margin: 0 0 9px; }
 .led-vias[hidden] { display: none; }
 .led-vias .blk { cursor: pointer; text-align: left; border: 0; font: inherit; color: inherit; background: none; }
 .led-vias .blk:hover { background: var(--pill-hover); }
@@ -1274,6 +1275,7 @@ body.window .field.solo { grid-column: auto; }
 .led .src.access-api { --badge-ink: var(--tk-f); }
 .led .src.access-subscription { --badge-ink: var(--tk-k); }
 .led .src.proto { --badge-ink: var(--muted); font-weight: 500; }
+.led .src.reported { --badge-ink: var(--tk-o); }
 .led .duration { font-weight: 550; }
 .led .duration-fast { color: var(--tk-s); }
 .led .duration-slow { color: var(--amber); }

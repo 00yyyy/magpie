@@ -207,6 +207,65 @@ lists cut to its own rows (`usageapi.OwnPage`): the ledger's facets are drawn
 from every call in the period, so without the cut they would name other keys.
 `TestUsageOverGateway` covers both, and a red when either cut is removed.
 
+### Calls an app reports itself
+
+`POST /v1/magpie/usage/requests`
+([`internal/gateway/usage_ingest.go`](../../internal/gateway/usage_ingest.go),
+#1874) takes calls that never went through magpie, from an app that sends
+them straight to its vendor, so the Usage page covers them too. The body is
+one record or an array of up to 5000 (32 MiB at most), in `usage.jsonl`'s
+shape: `t`, `agent`, `provider`, `model` and `rid` are required; `in`,
+`out`, `cache_read`, `cache_write`, `cache_write_1h`, `reasoning`, `ms`,
+`ttft_ms`, `status`, `cost`, `effort`, `session` and `err` are optional.
+Any other field, a quoted number, a negative or out-of-range count, a time
+more than an hour ahead or before 2000-01-01T00:00:00Z refuses the whole
+post with a 400 that names the record (`error.index`) and the field
+(`error.param`), and nothing is written. A past `t` is taken as given,
+however old, so a client's history can be backfilled.
+
+- **Who may post:** the GET routes' rule, through the same `lanGuard`:
+  this machine, or another with an enabled gateway key while shared. On
+  top of that a browser page (`fromBrowser`) needs a key wherever it is,
+  since `corsGuard` lets a localhost page and `Origin: null` through, and
+  a held key is refused. `TestUsageIngestAccess`.
+- **Writing:** `usage.IngestReported`
+  ([`internal/usage/reported.go`](../../internal/usage/reported.go))
+  appends under the same mutex and to the same file as `usage.Append`,
+  each row with `source: "reported"` and no caller key. A `rid` the log
+  already has as reported, or one repeated in the post, is skipped. The
+  set of reported rids is read from the log itself, so it survives a
+  restart: the first post after one scans the log once, keeping only
+  lines that carry the reported mark, and each later post reads only what
+  was appended since. The reply counts `accepted` and `skipped` and gives
+  each record's `index`, `rid` and `status`, so a re-run of a batch is
+  safe.
+- **Pricing:** a record with `cost` keeps it (`Record.OwnCost`, the
+  `rowOwnCost` flag on a packed row). Without one it is priced at magpie's
+  own prices, like a gateway row.
+- **Showing:** reported rows count in every total. They also have a source
+  of their own (`SourceReported`): `RequestPage.Reported`, `?via=reported`,
+  and a fourth cell and a "Reported" badge on the Requests tab.
+- **Nothing live:** a reported row only shows on the Usage page.
+  `Record.IsReported` keeps it out of a gateway key's budget and spend
+  limit (`budget.counts`), a subscription window's holds (and the log's
+  start that decides whether a window can be reckoned, `firstOwn`), the
+  Sessions page's gateway sessions, what a session was routed to (`Vias`),
+  and Codex's sealed answers and remembered model. Nothing else is done
+  for it: no OTel span, no rate limit, no rest, no alert.
+
+`TestUsageIngest*` and `TestIngestReported*` cover these, including
+concurrent posts beside the gateway's own writes, and a backfill of a full
+5000-record batch landing on the right 7d/30d/all days.
+`TestReportedTouchesNothingLive` and `TestUsageIngestTouchesNoLimit` go red
+when any of the live guards is removed. Browser:
+`usage-ledger-reported.test.cjs`.
+
+With 200k reported rows (a 47 MB log), 40 posts of 5000 took 0.4 s in all.
+The first post after a restart took 0.45 s to read the rids back, and a
+later one about 2 ms. The Usage page's first read builds the log index
+(2.1 s, as it does for the gateway's own rows); after that, a page of all
+took 27 ms and the all-time summary 215 ms.
+
 A usage record's `Session` stays the conversation. A Claude Code subagent's
 record adds `Subagent` and `ParentAgent`. Through the gateway they come from
 the `x-claude-code-agent-id` and `x-claude-code-parent-agent-id` headers

@@ -166,6 +166,16 @@ type Record struct {
 	// a call brought here by sync (#542); "" for one made here, as every
 	// call in usage.jsonl is
 	Computer string `json:"computer,omitempty"`
+	// Source is SourceReported for a call a client told magpie of through
+	// POST /v1/magpie/usage/requests (#1874), one that went straight to its
+	// vendor and that magpie never saw; "" for the gateway's own. Reported
+	// calls count in the totals and are told apart, and filtered, on the
+	// page.
+	Source string `json:"source,omitempty"`
+	// OwnCost is what such a client said the call cost, in USD. nil when it
+	// said nothing: the call is then priced at magpie's own prices, as the
+	// gateway's calls are, and priced again when those change.
+	OwnCost *float64 `json:"cost,omitempty"`
 	// OTel is transient trace context; SkipOTel avoids exporting ledger records
 	// when the gateway exports its attempts separately. Neither is persisted.
 	OTel     *OTelSpan `json:"-"`
@@ -219,6 +229,14 @@ func Append(r Record) {
 
 // IsRejected also recognizes local rejections written before the explicit flag.
 func (r Record) IsRejected() bool { return r.Rejected || r.Provider == "" && r.Status >= 400 }
+
+// IsReported is a call an app reported itself (#1874), which never went
+// through magpie. It is shown and counted on the Usage page only: nothing
+// that acts on live traffic (a key's budget, a window's holds, the Sessions
+// page's gateway sessions, what a session was routed to, Codex's sealed
+// answers or remembered model) reads it, since it may be a backfill of
+// calls long past and none of them were magpie's to route.
+func (r Record) IsReported() bool { return r.Source == SourceReported }
 
 // Load streams complete records from the log. Historical request bodies are
 // not retained by a global cache after the caller finishes with this snapshot.
@@ -328,8 +346,12 @@ const (
 var Periods = []Period{Today, Week, Month, All}
 
 // CostAt is what the call costs at a price: at the tier its input reaches,
-// its 1-hour cache writes at theirs.
+// its 1-hour cache writes at theirs. A reported call that said what it
+// cost costs that, at any price.
 func (r Record) CostAt(p catalog.Price) float64 {
+	if r.OwnCost != nil {
+		return *r.OwnCost // a reported call's own cost (#1874)
+	}
 	return p.CostSplit(r.Input, r.Output, r.CacheRead, r.CacheWrite, r.CacheWrite1h)
 }
 
@@ -920,7 +942,7 @@ func Vias(since time.Time) map[string][]Via {
 func buildVias(snapshot *logSnapshot, since time.Time) map[string][]Via {
 	out := map[string][]Via{}
 	snapshot.visit(since, func(r Record) {
-		if r.IsRejected() || r.Session == "" || r.Model == "" {
+		if r.IsRejected() || r.IsReported() || r.Session == "" || r.Model == "" {
 			return
 		}
 		k := AgentOf(r.Agent) + "|" + r.Session

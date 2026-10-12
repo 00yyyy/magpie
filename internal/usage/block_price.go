@@ -16,7 +16,7 @@ const swapKnown = 64
 // one provider, model, served model and effort.
 type pricedAs struct {
 	provider string
-	flags    uint8
+	flags    uint16
 	price    *catalog.Price
 }
 
@@ -115,7 +115,7 @@ func (b *blockPricer) block(packed *rowChunk) *rowChunk {
 	}
 	type ids struct {
 		provider uint32
-		flags    uint8
+		flags    uint16
 		price    *catalog.Price
 	}
 	names := map[[4]uint32]ids{}
@@ -136,6 +136,13 @@ func (b *blockPricer) block(packed *rowChunk) *rowChunk {
 		}
 		p.Text[0], p.Text[1] = agent, got.provider
 		p.Flags = p.Flags&^(1|2|32) | got.flags
+		if p.Flags&rowOwnCost != 0 {
+			// a reported call that said what it cost costs that (#1874)
+			if p.Tokens[0]+p.Tokens[1] > 0 {
+				p.Flags |= 1
+			}
+			continue
+		}
 		p.Cost = 0
 		if got.price != nil && p.Tokens[0]+p.Tokens[1] > 0 {
 			p.Flags |= 1

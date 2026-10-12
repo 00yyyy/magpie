@@ -154,7 +154,7 @@ func (c *rowChunk) unpackInto(into []packedRow) *rowChunk {
 		p.RouteID = int64(take())
 		p.Sent, p.Flow = int64(take()), int64(take())
 		p.Own, p.Retried, p.Queued = int64(take()), int64(take()), int64(take())
-		p.Cost, p.Status, p.Flags = math.Float64frombits(take()), int32(take()), uint8(take())
+		p.Cost, p.Status, p.Flags = math.Float64frombits(take()), int32(take()), uint16(take())
 		p.Tries = int32(take())
 	}
 	if !valid || len(data) != 0 {

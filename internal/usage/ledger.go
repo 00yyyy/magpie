@@ -64,8 +64,8 @@ type Filter struct {
 	// Computer narrows to the calls of one computer (#542): ThisComputer,
 	// OtherComputers, or another's id; "" is every computer's
 	Computer string
-	// Through narrows to one of the two sources a row can be of
-	// (SourceGateway, SourceSession); "" keeps both. It is what the requests
+	// Through narrows to one of the sources a row can be of
+	// (SourceGateway, SourceSession, SourceReported); "" keeps all. It is what the requests
 	// page's source cells filter by, and, as with the other dimensions, the
 	// cells themselves are counted with it cleared so all three stay
 	// switchable. Not Record.Via, which is the computer that forwarded the
@@ -74,13 +74,17 @@ type Filter struct {
 }
 
 // SourceGateway and SourceSession are the two sources a request row is of,
-// which Row.Source spells "log" and "": the calls magpie's own gateway
+// which Row.Source spells "" and "log": the calls magpie's own gateway
 // served, and the ones read from the agents' own session files, which it
 // never saw. They are the requests page's source cells, and the values its
 // via= takes.
 const (
 	SourceGateway = "through"
 	SourceSession = "direct"
+	// SourceReported is the third: the calls a client reported through
+	// POST /v1/magpie/usage/requests (#1874), which went straight to their
+	// vendor. Record.Source and Row.Source spell it the same, as does via=.
+	SourceReported = "reported"
 )
 
 // SourceOf is the source a row is of, as the page's cells name them: the
@@ -92,8 +96,11 @@ func SourceOf(r Row) string {
 	if r.IsRejected() {
 		return ""
 	}
-	if r.Source == "log" {
+	switch r.Source {
+	case "log":
 		return SourceSession
+	case SourceReported:
+		return SourceReported
 	}
 	return SourceGateway
 }
@@ -376,7 +383,7 @@ func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessi
 		if r.Provider != "" && !slices.Contains(providers, r.Provider) {
 			providers = append(providers, r.Provider)
 		}
-		if !f.keeps(r) {
+		if !f.keepsRow(Row{Record: r, Source: source}) {
 			return
 		}
 		if !r.IsRejected() {
@@ -401,7 +408,7 @@ func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessi
 		if id, ok := renamed[r.Provider]; ok {
 			r.Provider = id
 		}
-		add(r, priceOf(r), "")
+		add(r, priceOf(r), r.Source)
 	}
 	for i, c := range logs {
 		if (!since.IsZero() && c.Time.Before(since)) || after(until, c.Time) || matched[i] {
@@ -432,6 +439,11 @@ func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessi
 	return rows, sum, agents, providers
 }
 
+// ownPrice is what pricer answers for a reported call that said what it
+// cost: a price, so the call counts as priced, which Record.CostAt passes
+// over for the call's own cost.
+var ownPrice catalog.Price
+
 // pricer uses the same effective price as the model CLI and session totals:
 // explicit provider/model or provider-wide prices (including zero), then the
 // provider catalog, then the maker catalog. Settings are read once per query.
@@ -446,6 +458,9 @@ func pricer() func(Record) *catalog.Price {
 	prices := map[[3]string]*catalog.Price{}
 	s := settings.Load()
 	return func(r Record) *catalog.Price {
+		if r.OwnCost != nil {
+			return &ownPrice // CostAt answers its own cost (#1874)
+		}
 		served := strings.TrimSpace(r.Served)
 		if served == r.Model {
 			served = ""

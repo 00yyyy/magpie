@@ -18410,14 +18410,14 @@ function renderLedger() {
   // are counted with the pick cleared (usage.RequestPage), so all three stay
   // switchable whichever is on.
   const via = $("#ledVia");
-  const thru = l.through || { calls: 0 }, dir = l.direct || { calls: 0 };
-  if (thru.calls + dir.calls > 0) {
+  const thru = l.through || { calls: 0 }, dir = l.direct || { calls: 0 }, rep = l.reported || { calls: 0 };
+  if (thru.calls + dir.calls + rep.calls > 0) {
     // the total is the two sources added up, not the page's own totals: those
     // are the rows the filter keeps, so with one source picked the total cell
     // would read that one's figures under the whole period's count
     const all = {};
     for (const k of ["calls", "errors", "input", "output", "cache_read", "cache_write", "cost", "timed", "ttft_ms", "decode_ms", "decode_out"]) {
-      all[k] = (thru[k] || 0) + (dir[k] || 0);
+      all[k] = (thru[k] || 0) + (dir[k] || 0) + (rep[k] || 0);
     }
     const tile = (b, label, calls, tot, pick) => {
       const on = ledVia === pick;
@@ -18439,16 +18439,22 @@ function renderLedger() {
       };
       return b;
     };
-    // the three cells are the same elements from one redraw to the next, so
+    // the calls apps reported themselves (#1874) are a fourth cell, once
+    // there are some, or while they are the ones picked
+    const n = rep.calls > 0 || ledVia === "reported" ? 4 : 3;
+    // the cells are the same elements from one redraw to the next, so
     // one being pressed or focused is never swapped out from under a reader
     let cells = [...via.children];
-    if (cells.length !== 3) {
-      cells = [el("button"), el("button"), el("button")];
+    if (cells.length !== n) {
+      cells = cells.slice(0, n);
+      while (cells.length < n) cells.push(el("button"));
       via.replaceChildren(...cells);
     }
-    tile(cells[0], "all requests", thru.calls + dir.calls, all, "");
+    via.style.setProperty("--vias", String(n));
+    tile(cells[0], "all requests", thru.calls + dir.calls + rep.calls, all, "");
     tile(cells[1], "through magpie", thru.calls, thru, "through");
     tile(cells[2], "not through magpie", dir.calls, dir, "direct");
+    if (n === 4) tile(cells[3], "reported by apps", rep.calls, rep, "reported");
     via.hidden = false;
   } else {
     via.replaceChildren();
@@ -18551,6 +18557,12 @@ function renderLedger() {
       k.title = r.session_provider
         ? t("Read from the agent's session file, which names the provider it was set up to call. The name shown is that record, not a route magpie saw.")
         : t("Read from the agent's session file. The account is shown only when local metadata identifies it; no service provider is inferred.");
+      badges.append(k);
+    }
+    // a call an app reported itself (#1874): it went straight to its vendor
+    if (r.source === "reported") {
+      const k = el("span", "src reported", t("Reported"));
+      k.title = t("Reported by the app that made it, through POST /v1/magpie/usage/requests: the call went straight to its vendor, not through magpie.");
       badges.append(k);
     }
     if (badges.childElementCount) wc.append(badges);
@@ -24508,7 +24520,7 @@ if (mode === "window" && params.get("view") === "usage") {
   ledPurpose = params.get("purpose") || "";
   ledComputer = params.get("computer") || "";
   const v = params.get("via") || "";
-  ledVia = v === "through" || v === "direct" ? v : "";
+  ledVia = v === "through" || v === "direct" || v === "reported" ? v : "";
   const u = new URL(location.href);
   for (const k of ["tab", "provider", "agent", "computer", "card", "purpose", "via"]) u.searchParams.delete(k);
   history.replaceState(null, "", u);

@@ -39,6 +39,9 @@ type RequestPage struct {
 	// is the two together; the page shows the three beside each other so a
 	// reader can tell what magpie carried from what it only read about.
 	Through, Direct Totals
+	// Reported are the calls a client told magpie of (#1874), which went
+	// straight to their vendor: counted in Sum, apart from both of those.
+	Reported Totals
 	// Accounts are the subscription accounts that answered calls in the
 	// period, by provider and account, for the Account filter (#557)
 	Accounts []Group
@@ -67,11 +70,16 @@ type packedRow struct {
 	RouteID                        int64
 	Cost                           float64
 	Status, Tries                  int32
-	Flags                          uint8
+	Flags                          uint16
 }
 
 // rowHandedOn is the Flags bit of Record.HandedOn
 const rowHandedOn = 128
+
+// rowOwnCost marks a reported call that said what it cost (#1874): Cost is
+// that, which the block pricer keeps, and reading the row back gives
+// Record.OwnCost again.
+const rowOwnCost = 256
 
 type rowChunk struct {
 	Archive   []byte
@@ -139,6 +147,10 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	if r.HandedOn {
 		p.Flags |= rowHandedOn
 	}
+	if r.OwnCost != nil {
+		p.Flags |= rowOwnCost
+		p.Cost = *r.OwnCost
+	}
 	c.Rows = append(c.Rows, p)
 	c.Count = len(c.Rows)
 	if r.Time.After(c.Latest) {
@@ -154,6 +166,13 @@ func (c *rowChunk) row(i int) Row {
 	}
 	if r.Swapped && p.Flags&swapKnown == 0 && (SameSpelled(r.Model, r.Served) || ServingName(r.Model, r.Served) || RelayRenamed(r.Model, r.Served)) {
 		r.Swapped = false // kept before a name spelled otherwise, a vendor's serving name or a relay's rename was the same
+	}
+	if r.Source == SourceReported {
+		r.Record.Source = SourceReported
+		if p.Flags&rowOwnCost != 0 {
+			own := p.Cost
+			r.OwnCost = &own
+		}
 	}
 	r.Computer = c.Computer
 	return r
@@ -829,9 +848,12 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 		// while another is picked, or one of them would read 0 and
 		// there would be no way back.
 		if !r.IsRejected() && viaFilter.keepsRow(r) {
-			if r.Source == "log" {
+			switch r.Source {
+			case "log":
 				out.Direct.addRow(r)
-			} else {
+			case SourceReported:
+				out.Reported.addRow(r)
+			default:
 				out.Through.addRow(r)
 			}
 		}
@@ -1015,9 +1037,12 @@ func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now t
 		if r.IsRejected() || !viaFilter.keepsRow(r) {
 			continue
 		}
-		if r.Source == "log" {
+		switch r.Source {
+		case "log":
 			out.Direct.addRow(r)
-		} else {
+		case SourceReported:
+			out.Reported.addRow(r)
+		default:
 			out.Through.addRow(r)
 		}
 	}

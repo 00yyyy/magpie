@@ -179,7 +179,7 @@ func buildGatewaySessions(snapshot *logSnapshot, since time.Time, nativeKeys map
 	daily := map[dayKey]*GatewayDayUsage{}
 	perSession := map[key]map[dayKey]*GatewayDayUsage{}
 	snapshot.visit(since, func(r Record) {
-		if r.IsRejected() || r.Session == "" {
+		if r.IsRejected() || r.IsReported() || r.Session == "" {
 			return
 		}
 		a := AgentOf(r.Agent)

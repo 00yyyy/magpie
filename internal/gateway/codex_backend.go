@@ -308,7 +308,7 @@ func loggedAnswers(convs ...string) []loggedAnswer {
 	}
 	var all []loggedAnswer
 	usage.Visit(time.Now().Add(-sealerKeep), func(r usage.Record) {
-		if r.Provider == "" || r.Provider == "magpie" || r.IsRejected() || r.Status <= 0 || r.Status >= 400 || r.Computer != "" || isTitleKind(r.Kind) {
+		if r.Provider == "" || r.Provider == "magpie" || r.IsRejected() || r.IsReported() || r.Status <= 0 || r.Status >= 400 || r.Computer != "" || isTitleKind(r.Kind) {
 			return
 		}
 		if r.Provider == "openai" && strings.HasPrefix(r.Endpoint, CodexPath) {
