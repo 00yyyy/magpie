@@ -23410,6 +23410,71 @@ function sideDrag(edge) {
   });
   addEventListener("resize", () => { if (sideW) sideWidth(); });
 }
+// a box of the sidebar that runs longer than the window has no bar of its
+// own (app.css .side-bar): a thin one is laid over its edge while it
+// scrolls and fades once it stops, as a Mac's overlay bar does; held under
+// the pointer it stays, and dragged it scrolls the box
+function sideBars() {
+  const side = $("#side");
+  if (!side) return;
+  for (const box of side.querySelectorAll(".side-scroll, .side-foot")) {
+    const bar = document.createElement("div");
+    bar.className = "side-bar";
+    bar.setAttribute("aria-hidden", "true");
+    bar.hidden = true;
+    const thumb = document.createElement("i");
+    bar.append(thumb);
+    side.append(bar);
+    let fade = 0;
+    const place = () => {
+      const ch = box.clientHeight, sh = box.scrollHeight;
+      bar.hidden = !ch || sh <= ch + 1;
+      if (bar.hidden) return;
+      bar.style.top = box.offsetTop + "px";
+      bar.style.height = ch + "px";
+      const h = Math.max(24, Math.round(ch * ch / sh));
+      const y = Math.round((ch - h) * box.scrollTop / (sh - ch));
+      thumb.style.height = h + "px";
+      thumb.style.transform = `translateY(${y}px)`;
+    };
+    const rest = () => { clearTimeout(fade); fade = setTimeout(() => { if (!bar.matches(":hover") && !bar.classList.contains("drag")) bar.classList.remove("on"); }, 900); };
+    box.addEventListener("scroll", () => { place(); if (bar.hidden) return; bar.classList.add("on"); rest(); }, { passive: true });
+    bar.addEventListener("pointerleave", rest);
+    // a click on the bar off the thumb pages the box toward it, as a Mac's does
+    bar.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      if (e.target !== thumb) {
+        const r = thumb.getBoundingClientRect();
+        box.scrollTop += (e.clientY < r.top ? -1 : 1) * box.clientHeight * 0.9;
+        return;
+      }
+      bar.setPointerCapture(e.pointerId);
+      bar.classList.add("drag");
+      const y0 = e.clientY, top0 = box.scrollTop;
+      const per = (box.scrollHeight - box.clientHeight) / Math.max(1, box.clientHeight - thumb.offsetHeight);
+      const move = (m) => { box.scrollTop = top0 + (m.clientY - y0) * per; };
+      const end = () => {
+        bar.removeEventListener("pointermove", move);
+        bar.removeEventListener("pointerup", end);
+        bar.removeEventListener("pointercancel", end);
+        if (bar.hasPointerCapture(e.pointerId)) bar.releasePointerCapture(e.pointerId);
+        bar.classList.remove("drag");
+        rest();
+      };
+      bar.addEventListener("pointermove", move);
+      bar.addEventListener("pointerup", end);
+      bar.addEventListener("pointercancel", end);
+    });
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(place);
+      ro.observe(box);
+      new MutationObserver(() => { for (const c of box.children) ro.observe(c); place(); }).observe(box, { childList: true, subtree: true });
+    }
+    addEventListener("resize", place);
+    place();
+  }
+}
 // the sidebar's button in the title bar, as a Mac app has it, at every
 // width; ⌃⌘S as the Mac's View menu has it
 function renderSideToggle() {
@@ -23619,6 +23684,7 @@ if (mode === "window") {
   layoutNav();
   $("#sideToggle").onclick = toggleSideNav;
   sideDrag($("#sideEdge"));
+  sideBars();
   if (!web) addEventListener("keydown", (e) => {
     const mac = /^Mac/.test(navigator.platform);
     const mod = mac ? e.metaKey && e.ctrlKey && !e.shiftKey : e.ctrlKey && e.shiftKey && !e.metaKey;

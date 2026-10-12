@@ -329,8 +329,20 @@ body.side-drag, body.side-drag * { cursor: col-resize !important; user-select: n
 body.window.mac .side-top { height: calc(50px / var(--zoom, 1)); padding: calc(2px / var(--zoom, 1)) 0 0 calc(84px / var(--zoom, 1)); }
 /* Windows' title bar above already shows the icon and the name */
 body.window:not(.mac):not(.linux):not(.web) .side-top { height: 10px; }
-.side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 10px 10px; scrollbar-width: thin; }
+.side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 10px 10px; }
 .side-foot { flex: none; max-height: 55%; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding: 8px 10px 10px; border-top: .5px solid var(--line-2); }
+/* a short window's sidebar keeps no bar beside its pages: a thin one is laid
+   over them while they scroll and fades once they stop, as a Mac's overlay
+   scroll bar does (app.js sideBars), the same in WebKit, WebView2 and
+   WebKitGTK, whose own bars would take a gutter at rest */
+:is(.side-scroll, .side-foot) { scrollbar-width: none; }
+:is(.side-scroll, .side-foot)::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.side-bar { position: absolute; right: 4px; width: 11px; z-index: 2; opacity: 0; pointer-events: none; transition: opacity .35s ease .1s; }
+.side-bar.on, .side-bar.drag { opacity: 1; pointer-events: auto; transition-duration: .1s; transition-delay: 0s; }
+.side-bar[hidden] { display: none; }
+.side-bar > i { position: absolute; right: 2px; top: 0; width: 6px; min-height: 24px; border-radius: 3px; background: var(--muted); opacity: .55; transition: width .15s ease, opacity .15s ease; touch-action: none; }
+.side-bar:hover > i, .side-bar.drag > i { width: 8px; opacity: .75; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { .side-bar, .side-bar > i { transition: none; } }
 body.side-nav #nav { position: static; transform: none; display: flex; flex-direction: column; gap: 1px; padding: 0; border-radius: 0; }
 body.side-nav .nav-gl { display: block; padding: 14px 8px 4px; font-size: 11px; font-weight: 500; letter-spacing: .04em; color: var(--muted); }
 body.side-nav .nav-gl:first-child { padding-top: 2px; }
