@@ -387,13 +387,24 @@ func FetchingNew() bool { return newRunning.Load() > 0 }
 // accounts there then; an account signed in while magpie runs (in magpie or
 // in the agent's own app) otherwise showed magpie's built-in list, fewer
 // models than the vendor serves, until Refresh was clicked (#204). One that
-// fails is asked again after newFetchRetry, not each time.
-func FetchNew(timeout time.Duration) {
+// fails is asked again after newFetchRetry, not each time. It reports
+// whether an account is left without its list (one that failed, or that
+// failed less than newFetchRetry ago), for a caller with no page to ask
+// again from (the terminal, magpie serve) to try once more later.
+func FetchNew(timeout time.Duration) (missing bool) {
 	newRunning.Add(1)
 	defer newRunning.Add(-1)
 	newFetches.Lock()
 	defer newFetches.Unlock()
-	for _, p := range All() {
+	// listing them asks a CLI who is signed in, if never asked: one that
+	// hasn't answered yet is waited for, and they are listed again
+	ps := All()
+	if waited, unknown := awaitIdentities(timeout); unknown {
+		missing = true
+	} else if waited {
+		ps = All()
+	}
+	for _, p := range ps {
 		// a list of decision models fetched before magpie kept their
 		// windows and input, or not fetched yet (ARNO on Discord)
 		decide := p.decideListDue()
@@ -405,6 +416,7 @@ func FetchNew(timeout time.Duration) {
 			continue
 		}
 		if t, ok := newFetches.m[p.ID]; ok && time.Since(t) < newFetchRetry {
+			missing = true
 			continue
 		}
 		newFetches.m[p.ID] = time.Now()
@@ -417,9 +429,11 @@ func FetchNew(timeout time.Duration) {
 		}
 		if err != nil {
 			log.Println(p.ID + ": " + err.Error())
+			missing = true
 		}
 		cancel()
 	}
+	return missing
 }
 
 // fetchOne asks the first endpoint that answers, with p's key.

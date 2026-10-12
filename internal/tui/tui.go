@@ -72,6 +72,9 @@ type picker struct {
 	crumbs []string
 	input  textinput.Model
 	items  []agent.Option
+	// relist, on a picker of models, lists them again when an account's
+	// list or the models.dev catalog arrives while it is open
+	relist func() []agent.Option
 	match  []int
 	cursor int
 	custom bool
@@ -229,10 +232,44 @@ func (m *model) goTo(p page) tea.Cmd {
 }
 
 func (m model) Init() tea.Cmd {
+	// a signed-in account's list exists only at its vendor: asked for at
+	// start, as the app does, or Cursor offered its fallback Auto alone
+	// until m on the Providers page asked for it (#1789)
 	if m.syncing {
-		return syncCmd
+		return tea.Batch(syncCmd, fetchModelsCmd)
 	}
-	return nil
+	return fetchModelsCmd
+}
+
+// modelsMsg says FetchNew is done; missing, that an account is left
+// without its list.
+type modelsMsg struct{ missing bool }
+
+func fetchModelsCmd() tea.Msg {
+	return modelsMsg{missing: provider.FetchNew(20 * time.Second)}
+}
+
+// modelsRetry is how long the terminal waits to ask again for a list it
+// couldn't get (the network not up yet at start, a vendor slow to answer),
+// while it stays open: the app asks again each time its page is read.
+var modelsRetry = time.Minute
+
+// modelsChanged shows the models as they are now: the page, and a picker
+// of models open meanwhile, its filter and the model on its cursor kept.
+func (m *model) modelsChanged() {
+	m.reload()
+	if m.mode != modePick || m.pk.relist == nil {
+		return
+	}
+	on, _ := m.pk.choice()
+	m.pk.items = m.pk.relist()
+	m.pk.refilter()
+	for i, j := range m.pk.match {
+		if m.pk.items[j].Value == on {
+			m.pk.cursor = i
+			break
+		}
+	}
 }
 
 func syncCmd() tea.Msg {
@@ -299,8 +336,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, saveInstructions(msg.text)
+	case modelsMsg:
+		m.modelsChanged()
+		if msg.missing {
+			return m, tea.Tick(modelsRetry, func(time.Time) tea.Msg { return fetchModelsCmd() })
+		}
+		return m, nil
 	case syncedMsg:
 		m.syncing = false
+		m.modelsChanged()
 		if msg.err != nil {
 			m.flash, m.flashOK = "catalog sync failed: "+msg.err.Error(), false
 		} else {
@@ -425,6 +469,7 @@ func (m *model) openFieldPicker() {
 		crumbs: []string{a.Name, f.Label},
 		input:  newInput("type to filter, or enter a custom value"),
 		items:  items,
+		relist: func() []agent.Option { return withCurrent(a.Picks(f, a.Values()), f.Get()) },
 		custom: true,
 		empty:  "no models known yet, type one",
 		onPick: func(v string) tea.Cmd {

@@ -176,6 +176,34 @@ func (c *cliIdentity) refresh() chan struct{} {
 	return done
 }
 
+// cliIdentities are the CLIs asked who is signed in.
+func cliIdentities() []*cliIdentity { return []*cliIdentity{cursorStatus, devinStatus} }
+
+// awaitIdentities waits, at most timeout, for each CLI being asked who is
+// signed in for the first time: waited, if one was, and unknown, if one
+// still hasn't answered. FetchNew asks for the lists of the accounts known:
+// at the start of a magpie with nothing kept from before, `cursor-agent
+// about` (which asks Cursor's servers) answered after a look's 3s, and
+// Cursor's list wasn't asked for at all (#1789).
+func awaitIdentities(timeout time.Duration) (waited, unknown bool) {
+	deadline := time.After(timeout)
+	for _, c := range cliIdentities() {
+		c.Lock()
+		pending, done := c.at.IsZero() && c.refreshing, c.done
+		c.Unlock()
+		if !pending {
+			continue
+		}
+		waited = true
+		select {
+		case <-done:
+		case <-deadline:
+			return true, true
+		}
+	}
+	return waited, false
+}
+
 // forget has the next look ask the CLI and wait for it: after a sign-in or
 // a sign-out, the last answer is the wrong one.
 func (c *cliIdentity) forget() {
