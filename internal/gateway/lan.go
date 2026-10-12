@@ -227,7 +227,8 @@ func (s *Server) Relisten() error {
 	return nil
 }
 
-// lanGuard: a request from another machine — any peer that isn't
+// lanGuard: a request from an address the allow list (allow.go) leaves out
+// is refused first, whatever key it carries. A request from another machine — any peer that isn't
 // loopback, and a proxy's or tunnel's on loopback — needs an enabled gateway
 // key, and is answered at all only while the gateway is shared or listens on
 // the network (OnNetwork). Loopback clients may still use any token,
@@ -236,6 +237,11 @@ func lanGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if ownCallback(r) {
 			next.ServeHTTP(w, r)
+			return
+		}
+		// the allow list comes before the key: one that leaked is of no
+		// use from an address left out of it
+		if refuseNotAllowed(w, r) {
 			return
 		}
 		remote := !local(r)

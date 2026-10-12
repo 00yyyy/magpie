@@ -134,6 +134,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		LANKeyID:             "lan-key-id",
 		Port:                 3591,
 		CORSOrigins:          []string{"http://localhost:3000"},
+		AllowIPs:             []string{"203.0.113.7"},
 		GitHubToken:          "ghp_kept",
 		RequestArchive:       true,
 		RequestArchiveMaxMB:  64,

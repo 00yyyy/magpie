@@ -20563,6 +20563,7 @@ function renderSettings() {
   renderOTel(s, keep);
   renderPort(s);
   renderLAN(s);
+  renderAllow(s);
   renderCORS(s);
   renderSync();
 
@@ -22394,6 +22395,69 @@ function renderCORS(s) {
     x.onclick = () => set(origins.filter((v) => v !== o));
     const v = el("div", "val");
     v.append(x);
+    row.append(w, v);
+    box.append(row);
+  }
+}
+
+// renderAllow: the addresses other computers may reach magpie from at
+// all (lc on Discord: magpie in Docker on a public host), as IPs and CIDR
+// ranges, under Share on local network — a row to add one, and one row
+// each to take it away. None listed lets every address in, with a gateway
+// key, as before; this computer is always let in. MAGPIE_ALLOW_IPS, where
+// set, is the list, shown and not edited here.
+let allowDraft = { value: "", err: "" };
+function allowSays(m) {
+  if (/is not an IP address/.test(m)) return t("Write an address as 203.0.113.7, or a range as 10.0.0.0/8 or 2001:db8::/32");
+  if (/shut out/.test(m)) return t("That list leaves out the address this page is open from: add it first, or this page can’t reach magpie");
+  if (/MAGPIE_ALLOW_IPS/.test(m)) return t("MAGPIE_ALLOW_IPS sets this list; change it there");
+  return t(m);
+}
+function renderAllow(s) {
+  const box = $("#allowList");
+  box.replaceChildren();
+  const env = s.allowIPsEnv || "";
+  if (!s.lan && !s.onNetwork && !env) return;
+  const list = env ? (s.allowIPsFromEnv || []) : (s.allowIPs || []);
+  const d = allowDraft;
+  const set = (next, done) => writingPrefs(api("settings/allowips", { ips: next }))
+    .then((ns) => { prefs = ns; d.err = ""; done?.(); renderSettings(); status(t("Saved"), "ok", 1500); })
+    .catch((e) => { d.err = allowSays(e.message); status(d.err, "err"); renderSettings(); });
+  const r = el("div", "row pref rule-row");
+  const who = el("div", "who");
+  const sub = d.err || (env ? t("Set by MAGPIE_ALLOW_IPS. Other computers reach magpie only from these addresses, even with a gateway key; this computer always can")
+    : t("Other computers reach magpie only from these addresses or ranges (CIDR), even with a gateway key; this computer always can. None listed lets every address in"));
+  who.append(el("div", "name", t("Allowed addresses")), el("div", "sub" + (d.err ? " err" : ""), sub));
+  r.append(who);
+  if (!env) {
+    const field = input(d.value, "203.0.113.7, 10.0.0.0/8");
+    field.className = "words rule-match allow-ip";
+    field.setAttribute("aria-label", t("IP address or range"));
+    field.autocomplete = "off";
+    field.spellcheck = false;
+    const add = el("button", "text", t("Add"));
+    add.onclick = () => {
+      d.value = field.value.trim();
+      if (!d.value) return field.focus();
+      set([...list, ...d.value.split(/[\s,;]+/).filter(Boolean)], () => { allowDraft = { value: "", err: "" }; });
+    };
+    field.oninput = () => { d.value = field.value; };
+    field.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") add.onclick(); };
+    const val = el("div", "val rule-add");
+    val.append(field, add);
+    r.append(val);
+  }
+  box.append(r);
+  for (const a of list) {
+    const row = el("div", "row pref allow-ip-row");
+    const w = el("div", "who");
+    w.append(el("div", "name", a));
+    const v = el("div", "val");
+    if (!env) {
+      const x = el("button", "text", t("Remove"));
+      x.onclick = () => set(list.filter((o) => o !== a));
+      v.append(x);
+    }
     row.append(w, v);
     box.append(row);
   }

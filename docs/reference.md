@@ -591,6 +591,17 @@ address with sharing on, not at loopback. A proxy here that signs its
 clients in itself can be trusted with `MAGPIE_TRUST_PROXY=1`, which keeps
 what it forwards local, as before.
 
+To let other computers in only from some addresses, list them as IPs and
+CIDR ranges in **Settings → Network and sharing → Allowed addresses**, or in
+`MAGPIE_ALLOW_IPS` (`203.0.113.7,10.0.0.0/8,2001:db8::/32`), which comes
+first. A request from any other address is refused 403, even with an
+enabled gateway key, and the refusal names the address it came from. This
+computer is always let in. The address is the connection's own, never a
+forwarding header, so behind a proxy or tunnel every client has the proxy's
+address: limit them at the proxy. A mistyped entry in `MAGPIE_ALLOW_IPS`
+lets nothing in rather than everything. `magpie web`'s page honours the same
+list.
+
 **Usage → Overview → Gateway keys** groups calls by the client's key, never
 the provider's credential. **Usage → Requests** offers the same filter;
 CSV includes `caller_key_id` and `caller_key_name`. Deleted keys keep their

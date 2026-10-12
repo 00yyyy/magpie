@@ -97,6 +97,12 @@ type Settings struct {
 	// reply, each with an enabled gateway key. None by default: a page
 	// gets no CORS headers, as before.
 	CORSOrigins []string `json:"corsOrigins,omitempty"`
+	// AllowIPs are the addresses (IPs and CIDR ranges) other computers may
+	// reach the gateway from at all (lc on Discord); any other is refused
+	// 403 even with a gateway key. None: every address, as before. This
+	// computer is always let in. MAGPIE_ALLOW_IPS, where set, is used in
+	// its place (gateway.AllowIPs).
+	AllowIPs []string `json:"allowIPs,omitempty"`
 	// Port is the gateway's port on this computer, 0 for DefaultPort.
 	// MAGPIE_ADDR, where it is set, comes first (GatewayAddr).
 	Port int `json:"port,omitempty"`

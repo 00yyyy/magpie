@@ -346,6 +346,12 @@ type settingsJSON struct {
 	PublicURL string `json:"publicURL,omitempty"`
 	// MAGPIE_ADDR, when it sets the gateway's address over Settings' port
 	AddrEnv string `json:"addrEnv,omitempty"`
+	// MAGPIE_ALLOW_IPS, when it sets the allow list over Settings', and
+	// the list it sets; OnNetwork: MAGPIE_ADDR listens on the network, so
+	// the list is shown even while sharing is off
+	AllowIPsEnv     string   `json:"allowIPsEnv,omitempty"`
+	AllowIPsFromEnv []string `json:"allowIPsFromEnv,omitempty"`
+	OnNetwork       bool     `json:"onNetwork,omitempty"`
 	// Dir is the data folder beside a portable magpie (#508)
 	Portable bool `json:"portable,omitempty"`
 	// WSL is whether there is WSL to look in for agents (Windows), for
@@ -519,6 +525,10 @@ func searchState(s *settingsJSON) {
 func settingsState() settingsJSON {
 	s := settingsJSON{Settings: settings.Load(), Version: Version, Dir: tilde(settings.Dir()), Portable: settings.Portable() != "", Gateway: gateway.URL()}
 	s.AddrEnv = os.Getenv("MAGPIE_ADDR")
+	s.OnNetwork = gateway.OnNetwork()
+	if list, env := gateway.AllowIPs(); env {
+		s.AllowIPsEnv, s.AllowIPsFromEnv = os.Getenv(gateway.AllowIPsEnv), list
+	}
 	if s.LAN || gateway.OnNetwork() {
 		s.PublicURL = gateway.PublicURL()
 	}
@@ -1073,6 +1083,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.LANKeyID = cur.LANKeyID
 		in.Port = cur.Port                                 // set on its own (port below), which moves the gateway
 		in.CORSOrigins = cur.CORSOrigins                   // set on its own (cors below)
+		in.AllowIPs = cur.AllowIPs                         // set on its own (allowips below)
 		in.GitHubToken = cur.GitHubToken                   // set on its own (github-token below), never sent to the page
 		in.RequestArchive = cur.RequestArchive             // the Gateway page's, set on its own
 		in.RequestArchiveMaxMB = cur.RequestArchiveMaxMB   // in settings.json only
@@ -1655,6 +1666,38 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		s := settings.Load()
 		s.CORSOrigins = origins
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// the allow list (lc on Discord): the addresses other computers may
+	// reach magpie from, as IPs and CIDR ranges; none lets every address in.
+	// One that would shut out the page saving it (magpie web, opened from
+	// another computer) is refused, and so is any while MAGPIE_ALLOW_IPS
+	// sets the list.
+	mux.HandleFunc("POST /api/settings/allowips", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ IPs []string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if _, env := gateway.AllowIPs(); env {
+			fail(rw, fmt.Errorf("%s sets the allow list; change it there", gateway.AllowIPsEnv))
+			return
+		}
+		list, err := settings.CleanAllowIPs(in.IPs)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		if addr, out := gateway.KeepsOut(list, r); out {
+			fail(rw, fmt.Errorf("that allow list would shut out %s, the address this page is open from: add it first", addr))
+			return
+		}
+		s := settings.Load()
+		s.AllowIPs = list
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return
