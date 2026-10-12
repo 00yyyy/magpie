@@ -80,6 +80,29 @@ func TestProviderModelsAddsRemovesAndSaysWhatItReplaced(t *testing.T) {
 	if _, err := run("all"); err != nil || picks() != nil {
 		t.Fatalf("all left %v, %v", picks(), err)
 	}
+	// none serves none of them, kept for its balance (#1818); all gives
+	// the vendor's list back, a pick just that one
+	if _, err := run("none"); err != nil {
+		t.Fatal(err)
+	}
+	if p := mustFind(t, "og"); !p.ServesNone() || len(p.Exposed()) != 0 {
+		t.Fatalf("none left %v noModels %v, exposing %d", p.Models, p.NoModels, len(p.Exposed()))
+	}
+	if _, err := run("all"); err != nil {
+		t.Fatal(err)
+	}
+	if p := mustFind(t, "og"); p.NoModels || len(p.Exposed()) != 4 {
+		t.Fatalf("all after none: noModels %v, exposing %d", p.NoModels, len(p.Exposed()))
+	}
+	if _, err := run("none"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run("m3"); err != nil {
+		t.Fatal(err)
+	}
+	if p := mustFind(t, "og"); p.NoModels || !slices.Equal(p.Models, []string{"m3"}) {
+		t.Fatalf("a pick after none: %v noModels %v", p.Models, p.NoModels)
+	}
 }
 
 // magpie models and magpie provider <id> name the models a provider's list

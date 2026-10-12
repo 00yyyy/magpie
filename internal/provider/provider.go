@@ -292,8 +292,14 @@ type Provider struct {
 	ModelsURL string `json:"modelsURL,omitempty"`
 
 	// Models the user chose to expose. Empty means "the preset's picks, or
-	// everything the vendor lists when that list is short".
+	// everything the vendor lists when that list is short" — unless NoModels.
 	Models []string `json:"models,omitempty"`
+	// NoModels is the user's Select none (#1818): with no Models picked,
+	// none of its models are served — not to agents, not to any routing
+	// group, not by a "provider/model" id — while its balance and usage
+	// are still read and shown. Without it, no picks is the vendor's list
+	// as ever, so a file saved before it reads as it did. A pick clears it.
+	NoModels bool `json:"noModels,omitempty"`
 	// PickedFrom are the models the vendor listed when Models were saved: one
 	// listed since is served beside picks that held every one listed then
 	// (withNewlyListed), and one listed then and left unpicked stays out.
@@ -539,7 +545,7 @@ func allProviders() []Provider {
 		pk := picks[a.ID]
 		a.PickedFrom = pk.PickedFrom
 		a.Models, a.Unlisted, a.Off, a.Fallback, a.Routing, a.Affinity, a.KeepLogin, a.KeepLoginAs, a.Contexts, a.Family = pk.Models, pk.Unlisted, pk.Off, pk.Fallback, pk.Routing, pk.Affinity, pk.KeepLogin, pk.KeepLoginAs, pk.Contexts, pk.Family
-		a.Sink = pk.Sink
+		a.Sink, a.NoModels = pk.Sink, pk.NoModels
 		a.Proxy, a.AccountProxies, a.AccountModels = pk.Proxy, pk.AccountProxies, pk.AccountModels
 		a.AccountCaps, a.AccountWindowCaps = pk.AccountCaps, pk.AccountWindowCaps
 		a.AccountNames = pk.AccountNames
@@ -668,7 +674,7 @@ func Save(p Provider) error {
 		if p.ID == "kiro" {
 			key = p.Key
 		}
-		p = Provider{ID: p.ID, Key: key, Models: p.Models, PickedFrom: p.PickedFrom, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, QuotaRest: p.QuotaRest, PinUpstream: p.PinUpstream, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
+		p = Provider{ID: p.ID, Key: key, Models: p.Models, NoModels: p.NoModels, PickedFrom: p.PickedFrom, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, QuotaRest: p.QuotaRest, PinUpstream: p.PinUpstream, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
 	} else {
 		p.AccountProxies = keyProxies(p) // a provider of keys proxies each key apart
 		if subscriptionID(p.ID) && !stored(p.ID) {
@@ -1015,6 +1021,9 @@ func normalize(p Provider) Provider {
 	p.AccountCaps = normalAccountCaps(p.AccountCaps)
 	p.AccountWindowCaps = normalWindowCaps(p.AccountWindowCaps)
 	p.AccountNames = normalAccountNames(p.AccountNames)
+	if len(p.Models) > 0 {
+		p.NoModels = false // a pick is no longer Select none
+	}
 	p.ZhipuTeam = p.ZhipuTeam.normal()
 	p.Vertex = p.Vertex.Normal()
 	if !p.IsVertex() {

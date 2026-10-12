@@ -8648,7 +8648,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -8951,7 +8951,7 @@ function drawEditor(p, presetID) {
       const priceRate = priceRateOfDraft();
       if (priceRate === undefined) return priceRateError(ed);
       if (priceTypedError(ed)) return;
-      saving(saveBtn, t("Saving…")); providerAction("save", { id: p.id, models: chosenIds(), unlisted: draft.unlisted, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...routingOfDraft(p) }, t("{name} saved", { name: p.name })); };
+      saving(saveBtn, t("Saving…")); providerAction("save", { id: p.id, models: chosenIds(), noModels: noneChosen(), unlisted: draft.unlisted, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...routingOfDraft(p) }, t("{name} saved", { name: p.name })); };
     bar.append(cancel, saveBtn);
     ed.append(bar);
     return ed;
@@ -9436,7 +9436,7 @@ function drawEditor(p, presetID) {
       body.baseAPI = draft.api === "openai" ? "chat" : draft.api;
     }
     if (custom) { body.icon = draft.icon || "generic"; body.balanceURL = (draft.balanceURL || "").trim(); body.balancePath = (draft.balancePath || "").trim(); body.modelsURL = (draft.modelsURL || "").trim(); }
-    if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; body.modelPrefs = modelPrefsOfDraft(); Object.assign(body, routingOfDraft(p)); }
+    if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; body.noModels = noneChosen(); body.modelPrefs = modelPrefsOfDraft(); Object.assign(body, routingOfDraft(p)); }
     body.searches = !!draft.searches && searchable();
     body.pinUpstream = !!draft.pinUpstream;
     if (twoKeyHeaders()) body.authHeader = draft.authHeader || "";
@@ -10346,6 +10346,15 @@ function chosenIds() {
   return [...draft.chosen, ...typed.filter((id) => !draft.chosen.includes(id))].filter((id, i, all) => all.indexOf(id) === i);
 }
 
+// noneChosen: Select none kept, with nothing picked (#1818): none of the
+// provider's models served, not to agents, not to routing groups, while its
+// balance and usage still show. Without it no picks is the vendor's list.
+const noneChosen = () => !!draft.none && !chosenIds().length;
+
+// servedIds: the models the provider serves as the editor has it: the
+// picks; none after Select none; else those the vendor's list serves
+const servedIds = (p) => draft.chosen.length ? draft.chosen : draft.none ? [] : p.models.filter((m) => m.on).map((m) => m.id);
+
 // modelsOpen: a provider editor's models let out to their full height
 // (#833), kept for the next editor opened. MCHIPS_MAX: the most the box is
 // tall held, as app.css's .mchips max-height: min(132px, 28vh) says
@@ -10467,8 +10476,11 @@ function renderModels(p) {
     let shown = 0, hidden = 0;
     // with none picked agents are served the vendor's list, up to 24 of
     // it: those are drawn as served, not as left out (#614: the one model
-    // unticked and saved was still "1 model" on the card)
-    const served = draft.chosen.length || decideOnly(p) || draft.unlisted ? new Set() : new Set(p.models.slice(0, 24).map((m) => m.id));
+    // unticked and saved was still "1 model" on the card). Kept for routing
+    // groups alone, those are what the groups use (#1818: drawn as none
+    // while the card and the auto groups had all 17); after Select none,
+    // none is served
+    const served = draft.chosen.length || decideOnly(p) || draft.none ? new Set() : new Set(p.models.slice(0, 24).map((m) => m.id));
     // a filter is a search: what it doesn't match is left out, picked or not
     for (const m of p.models) {
       const on = draft.chosen.includes(m.id);
@@ -10490,7 +10502,7 @@ function renderModels(p) {
       if (m.default) c.title = `${m.id} · ${m.default}`;
       else if (m.name && m.name !== m.id) c.title = m.id;
       if (free) c.title = (c.title || m.id) + " · " + t(m.free ? "free: it doesn't use the plan's credits" : "free: so its name says");
-      if (served.has(m.id)) c.title = (c.title || m.id) + "\n" + t("Agents see it: none are picked, so the vendor's list is used") + "\n" + t("Click to pick just this model");
+      if (served.has(m.id)) c.title = (c.title || m.id) + "\n" + t(draft.unlisted ? "Routing groups use it: none are picked, so the vendor's list is used" : "Agents see it: none are picked, so the vendor's list is used") + "\n" + t("Click to pick just this model");
       tested(c, m.id);
       menu(c, m.id);
       // a click picks the model, a served one too: with none picked it
@@ -10523,8 +10535,9 @@ function renderModels(p) {
     drawFold();
     drawWorkOn();
     why.textContent = decideOnly(p) ? t("Agents never see them: a routing group picks one as its classifier.")
-      : draft.unlisted ? t("Agents don't see them: only the routing groups they are in use them.")
-      : t(draft.chosen.length ? "Agents see the models picked." : "None picked: agents see the vendor's list, up to {n} (dashed). Click a model to pick just it. To show them none, tick Only through routing groups, or switch the provider off.", { n: 24 });
+      : !draft.chosen.length && draft.none ? t("None selected: no agent or routing group uses its models. Its balance and usage still show. Click a model to pick it.")
+      : draft.unlisted ? t(draft.chosen.length ? "Agents don't see them: only the routing groups they are in use them." : "Agents don't see them: the routing groups they are in use the vendor's list, up to {n} (dashed). Select none to use none of them.", { n: 24 })
+      : t(draft.chosen.length ? "Agents see the models picked." : "None picked: agents see the vendor's list, up to {n} (dashed). Click a model to pick just it, or Select none to use none of them while its balance and usage still show.", { n: 24 });
     drawLost();
   };
   // those of its models in no routing group, while it is kept for groups:
@@ -10533,7 +10546,7 @@ function renderModels(p) {
   // makes a group of itself at a click
   const drawLost = () => {
     lost.replaceChildren();
-    const ids = draft.chosen.length ? draft.chosen : p.models.filter((m) => m.on).map((m) => m.id);
+    const ids = servedIds(p);
     const none = decideOnly(p) || !draft.unlisted ? [] : ids.filter((id) => !p.groups?.[id]?.length && !decidesModel(p, id));
     lost.hidden = !none.length;
     if (!none.length) return;
@@ -10571,7 +10584,7 @@ function renderModels(p) {
     };
     head.append(el("b", "", t("Names & levels")), fold);
     names.append(head);
-    const ids = draft.chosen.length ? draft.chosen : p.models.filter((m) => m.on).map((m) => m.id);
+    const ids = servedIds(p);
     if (!ids.length) { names.append(el("span", "hint", t("Pick a model first."))); return; }
     const prefs = draft.modelPrefs = draft.modelPrefs || {};
     draft.onModelPrefs = drawNames;
@@ -10869,7 +10882,7 @@ function renderModels(p) {
   };
   const allOff = el("button", "text action", t("Select none"));
   allOff.title = t("Unpick every model");
-  allOff.onclick = () => { draft.chosen = []; draw(); };
+  allOff.onclick = () => { draft.chosen = []; draft.none = true; draw(); };
   bulk.append(allOn, allOff);
   // just the free ones (Discord: 是否可以支持只选择免费模型), offered only
   // when the list has both free and paid models: with none free it would
@@ -10893,7 +10906,7 @@ function renderModels(p) {
   const workOn = el("button", "text action works-only", t("Working only"));
   const failedPicks = () => {
     const got = modelTests[p.id] || {};
-    const ids = draft.chosen.length ? draft.chosen : p.models.filter((m) => m.on).map((m) => m.id);
+    const ids = servedIds(p);
     return [ids, ids.filter((id) => got[id] && !got[id].ok)];
   };
   workOn.onclick = () => {
@@ -10959,7 +10972,7 @@ function renderModels(p) {
   const testAll = el("button", "text action", t("Test models"));
   testAll.title = t("Send a tiny request to each model agents see, to find the ones that don't answer") + "\n" + t("Right-click a model to test just it");
   testAll.onclick = async () => {
-    const ids = (draft.chosen.length ? draft.chosen : p.models.filter((m) => m.on).map((m) => m.id)).filter((id) => p.decideTest || !decidesModel(p, id));
+    const ids = servedIds(p).filter((id) => p.decideTest || !decidesModel(p, id));
     if (!ids.length) { status(t("Pick a model first."), "err"); return; }
     testAll.classList.add("busy");
     const got = modelTests[p.id] = {};

@@ -547,7 +547,7 @@ func Deciders() []Entry {
 	var out []Entry
 	s := settings.Load()
 	for _, p := range All() {
-		if !p.Decides() || !p.On() {
+		if !p.Decides() || !p.On() || p.ServesNone() && !p.DecideOnly() {
 			continue
 		}
 		ms := p.Exposed()

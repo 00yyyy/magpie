@@ -804,9 +804,17 @@ func (p Provider) Serves(k KeyAccount, model string) bool {
 	return !found || len(keys) == 0 || !listed || slices.Contains(keys, id)
 }
 
+// ServesNone is the user's Select none (NoModels) with nothing picked:
+// none of its models are served, its balance and usage still read.
+func (p Provider) ServesNone() bool { return p.NoModels && len(p.Models) == 0 }
+
 // Exposed lists the models magpie offers to agents for this provider: the
-// user's picks; else the preset's; else everything, when that is few.
+// user's picks; else the preset's; else everything, when that is few; none
+// after Select none (ServesNone).
 func (p Provider) Exposed() []catalog.Model {
+	if p.ServesNone() {
+		return nil
+	}
 	avail := p.Available()
 	byID := make(map[string]catalog.Model, len(avail))
 	for _, m := range avail {
@@ -1673,7 +1681,7 @@ func resolveIn(entries []Entry, id string) (Provider, string, bool) {
 	if pid, model, ok := strings.Cut(id, "/"); ok {
 		// the providers a request holds (All): an agent's value of a
 		// model not listed lands here
-		if p, err := findIn(All(), pid); err == nil && p.On() {
+		if p, err := findIn(All(), pid); err == nil && p.On() && !p.ServesNone() {
 			return *p, model, true
 		}
 	}
@@ -1703,7 +1711,7 @@ func resolveIn(entries []Entry, id string) (Provider, string, bool) {
 func listedBy() map[string][]Provider {
 	out := map[string][]Provider{}
 	for _, p := range All() {
-		if !p.On() {
+		if !p.On() || p.ServesNone() {
 			continue
 		}
 		seen := map[string]bool{}

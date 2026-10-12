@@ -200,6 +200,7 @@ type providerJSON struct {
 	Draws     int         `json:"draws,omitempty"`   // how many of its models draw images (gateway.Drawers)
 	DrawIDs   []string    `json:"drawIds,omitempty"` // those models' ids, listed apart in its editor
 	Unlisted  bool        `json:"unlisted"`          // its models serve only through routing groups
+	NoModels  bool        `json:"noModels"`          // Select none: none of its models served (#1818)
 	// Groups are the routing groups ("group/<id>") each of its models is
 	// in, by model id: what an unlisted one is still used through, and the
 	// editor names those in none
@@ -509,7 +510,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
 		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Picks(), Models: []modelJSON{}, Agents: []providerAgent{},
-		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Unlisted: p.Unlisted, Off: p.Off, Contexts: p.Contexts,
+		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Unlisted: p.Unlisted, NoModels: p.ServesNone(), Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
 		AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
 		Outputs: provider.OutputsOf(p.ID), Compacts: provider.CompactsOf(p.ID),
@@ -1103,12 +1104,18 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// Base, for detect: the base URL typed, asked as each API
 			// takes it where the form has no URL of that API's own
 			Base string `json:"base"`
+			// NoModels, for save: the editor's Select none, kept with no
+			// model picked (#1818); a save that leaves it out keeps it
+			NoModels *bool `json:"noModels"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			fail(rw, err)
 			return
 		}
 		in := req.Provider
+		if req.NoModels != nil {
+			in.NoModels = *req.NoModels
+		}
 		if req.Routing != nil {
 			in.Routing = *req.Routing
 		}
@@ -1136,7 +1143,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// editor's Try again is pressed with it unticked but not saved
 			// (noting_ever on X: deep-model unticked, and the move failed
 			// on it all the same)
-			if in.Models != nil {
+			if in.Models != nil && !in.NoModels {
 				var err error
 				if moved, err = agent.Reseat(func() error { return provider.SetModels(in.ID, in.Models) }); err != nil {
 					fail(rw, err)
@@ -1191,6 +1198,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			if pr, err := provider.FromPreset(in.Preset); err == nil && in.Chat == "" && in.Responses == "" && in.Anthropic == "" && in.Gemini == "" {
 				pr.Key, pr.Models, pr.Fallback, pr.Headers, pr.BalanceToken, pr.Contexts = in.Key, in.Models, in.Fallback, in.Headers, in.BalanceToken, in.Contexts
 				pr.ZhipuTeam = in.ZhipuTeam
+				pr.NoModels = in.NoModels
 				pr.ExtraBody = in.ExtraBody
 				pr.SecretAccessKey = in.SecretAccessKey
 				pr.Vertex = in.Vertex
@@ -1354,6 +1362,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				// and its extra body fields: {} clears them
 				if in.ExtraBody == nil && old != nil {
 					in.ExtraBody = old.ExtraBody
+				}
+				// Select none likewise, while nothing is picked (#1818)
+				if req.NoModels == nil && old != nil {
+					in.NoModels = old.NoModels
 				}
 				// a Volcengine access key likewise: its ID kept when left
 				// out, its Secret when sent blank, unless the form dropped it

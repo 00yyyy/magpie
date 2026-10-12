@@ -40,7 +40,8 @@ const providerUsage = `usage:
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
   magpie provider fallback <id> <provider/model>…   where requests go when it's out of quota or down (none clears)
   magpie provider models <id> [ids…]      fetch the vendor's model list, or choose which models to expose:
-                                          ids… replace the list, +id adds one, -id takes one out, all: the default
+                                          ids… replace the list, +id adds one, -id takes one out, all: the default,
+                                          none: serve none of them, its balance and usage still shown
   magpie provider refresh <id>            fetch the vendor's model list again (as the app's Fetch models)
   magpie provider account-models <id> [account|key [ids…|all]]
                                           the models one account or key alone serves; all: every model the provider has
@@ -313,7 +314,7 @@ func models(args []string) error {
 	// the models a provider's list has that it doesn't expose, which a
 	// group naming one finds "not served" (MOMO on Discord: 35 of 37)
 	for _, p := range provider.All() {
-		if !p.On() || p.Unlisted {
+		if !p.On() || p.Unlisted || p.ServesNone() {
 			continue
 		}
 		if ids, why := notExposed(p); len(ids) > 0 {
@@ -601,11 +602,17 @@ func providerCmd(args []string) error {
 		}
 		if len(rest) > 1 {
 			before := *p
+			// none: no model served at all, the provider kept for its
+			// balance and usage (#1818); all is the vendor's list again
+			none := len(rest) == 2 && rest[1] == "none"
 			picks, err := editPicks(*p, rest[1:])
+			if none {
+				picks, err = nil, nil
+			}
 			if err != nil {
 				return err
 			}
-			p.Models = picks
+			p.Models, p.NoModels = picks, none
 			if err := provider.Save(*p); err != nil {
 				return err
 			}
@@ -1653,7 +1660,7 @@ func editPicks(p provider.Provider, args []string) ([]string, error) {
 	}
 	if len(picks) == 0 {
 		// no picks means the default list, not none
-		return nil, fmt.Errorf("that leaves no model exposed · to keep %s's models out of the list: magpie provider listed %s no", p.Name, p.ID)
+		return nil, fmt.Errorf("that leaves no model exposed · to serve none of %s's models: magpie provider models %s none; to keep them for routing groups alone: magpie provider listed %s no", p.Name, p.ID, p.ID)
 	}
 	return picks, nil
 }
