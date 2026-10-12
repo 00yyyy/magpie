@@ -350,8 +350,12 @@ var anthropicModel = regexp.MustCompile(`(?i)(?:^|[/.:-])claude-`)
 // GLM-5.3 answers 1210, "…always engages in thinking…", or, in Chinese
 // (ZCode's GLM-5.3-Flash), "该模型始终支持思考，不可关闭" (#699); DashScope's
 // own glm-5.3 answers "The value of the enable_thinking parameter is
-// restricted to True."
-var alwaysThinks = regexp.MustCompile(`(?i)always engages in thinking|thinking (?:can ?not|can't) be (?:disabled|turned off)|enable_thinking[^"]{0,60}restricted to true|始终(?:支持|开启|启用)?思考|思考[^"]{0,20}(?:不可|无法|不能)关闭`)
+// restricted to True." MiniMax's MiniMax-M3.1-Flash-Preview answers
+// "…requires adaptive thinking; thinking.type="disabled" (including
+// reasoning.effort=none) is not allowed (2013)", and Volcengine Ark's
+// glm-5.3 "thinking.type `disabled` is not supported by this model"
+// (#1141).
+var alwaysThinks = regexp.MustCompile(`(?i)always engages in thinking|thinking (?:can ?not|can't) be (?:disabled|turned off)|enable_thinking[^"]{0,60}restricted to true|始终(?:支持|开启|启用)?思考|思考[^"]{0,20}(?:不可|无法|不能)关闭|requires adaptive thinking\W+thinking\.type\W+disabled\W+\(including reasoning\.effort=none\) is not allowed|thinking\.type \x60disabled\x60 is not supported by this model`)
 
 // ThinksOnlyWhenAsked is a model that takes thinking turned off on the
 // Messages API whatever its levels: one of Anthropic's own (anthropicModel,

@@ -669,6 +669,48 @@ func TestAnthropicPassthroughAlwaysThinksInChinese(t *testing.T) {
 	}
 }
 
+// #1141: MiniMax and Volcengine Ark refuse thinking turned off in their
+// own words, the reporters' literal messages. The request magpie turned it
+// off for (Claude Desktop's model_validation probe, its health probe and
+// titles send none) is asked again with thinking left to the model, once;
+// thinking the caller asked for goes as it came, and another 400 on the
+// same request, or a near wording, is the caller's to see.
+func TestAnthropicPassthroughMiniMaxArkThinkingOffRefused(t *testing.T) {
+	for _, c := range []struct{ vendor, refusal string }{
+		{"MiniMax", `{"type":"error","error":{"type":"invalid_request_error","message":"invalid params, model \"MiniMax-M3.1-Flash-Preview\" requires adaptive thinking; thinking.type=\"disabled\" (including reasoning.effort=none) is not allowed (2013)"}}`},
+		{"Ark", `{"type":"error","error":{"type":"invalid_request_error","message":"thinking.type ` + "`disabled`" + ` is not supported by this model Request id: 021760000000000000000000000000000000000000000000000000"}}`},
+	} {
+		t.Run(c.vendor, func(t *testing.T) {
+			f := &fake{t: t, ctype: "application/json", reply: `{"id":"msg","type":"message","content":[]}`}
+			f.refuse = func(b []byte) (int, string) {
+				if bytes.Contains(b, []byte(`"disabled"`)) {
+					return 400, c.refusal
+				}
+				return 0, ""
+			}
+			setup(t, provider.Anthropic, f)
+			code, body := post(t, "/v1/messages", `{"model":"m1","max_tokens":1,"messages":[{"role":"user","content":[{"type":"text","text":"Hi","cache_control":{"type":"ephemeral"}}]}]}`)
+			if code != 200 || f.calls != 2 || bytes.Contains(f.got, []byte("thinking")) || !bytes.Contains(f.got, []byte(`"Hi"`)) {
+				t.Fatalf("omitted: %d %s after %d calls, last sent %s", code, body, f.calls, f.got)
+			}
+			f.calls = 0
+			if code, body := post(t, "/v1/messages", `{"model":"m1","max_tokens":1,"thinking":{"type":"adaptive"},"messages":[{"role":"user","content":"."}]}`); code != 200 || f.calls != 1 || !bytes.Contains(f.got, []byte(`"thinking":{"type":"adaptive"}`)) {
+				t.Errorf("adaptive: %d %s after %d calls, sent %s", code, body, f.calls, f.got)
+			}
+			for _, other := range []string{
+				`{"type":"error","error":{"type":"invalid_request_error","message":"invalid params, max_tokens must be less than 8192 (2013)"}}`,
+				`{"type":"error","error":{"type":"invalid_request_error","message":"top_k is not supported by this model Request id: 0217"}}`,
+			} {
+				f.calls = 0
+				f.refuse = func([]byte) (int, string) { return 400, other }
+				if code, _ := post(t, "/v1/messages", `{"model":"m1","max_tokens":1,"messages":[{"role":"user","content":"."}]}`); code != 400 || f.calls != 1 {
+					t.Errorf("%s: %d after %d calls", other, code, f.calls)
+				}
+			}
+		})
+	}
+}
+
 func TestOpenRouterMandatoryReasoningRetries(t *testing.T) {
 	const refusal = `{"error":{"message":"OpenRouter: Reasoning is mandatory for this endpoint and cannot be disabled.","type":"invalid_request_error"},"type":"error"}`
 	for _, tc := range []struct {

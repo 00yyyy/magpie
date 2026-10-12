@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -92,6 +93,17 @@ func TestTranslatedEffortLoggedAsSent(t *testing.T) {
 // (#1636): asked again thinking at its least, as before, and from then on
 // asked so at once.
 func TestTranslatedThinkingOffRefused(t *testing.T) {
+	for i, refusal := range []string{
+		`GLM-5.3 always engages in thinking and cannot be disabled`,
+		// MiniMax's and Volcengine Ark's wordings (#1141)
+		`invalid params, model \"MiniMax-M3.1-Flash-Preview\" requires adaptive thinking; thinking.type=\"disabled\" (including reasoning.effort=none) is not allowed (2013)`,
+		"thinking.type `disabled` is not supported by this model Request id: 0217",
+	} {
+		t.Run(fmt.Sprint(i), func(t *testing.T) { translatedThinkingOffRefused(t, refusal) })
+	}
+}
+
+func translatedThinkingOffRefused(t *testing.T, refusal string) {
 	var sent []string
 	f := &fake{t: t, reply: anthropicHi}
 	f.refuse = func(b []byte) (int, string) {
@@ -103,7 +115,7 @@ func TestTranslatedThinkingOffRefused(t *testing.T) {
 		json.Unmarshal(b, &v)
 		sent = append(sent, v.Thinking.Type)
 		if v.Thinking.Type == "disabled" {
-			return 400, `{"type":"error","error":{"type":"invalid_request_error","message":"GLM-5.3 always engages in thinking and cannot be disabled"}}`
+			return 400, `{"type":"error","error":{"type":"invalid_request_error","message":"` + refusal + `"}}`
 		}
 		return 0, ""
 	}
