@@ -171,6 +171,26 @@ func DelYAML(path string, keyPaths ...string) error {
 	return writeYAML(path, root)
 }
 
+// EditYAMLNode hands fn the node at a key path, nil when there is none, to
+// change in place: a list grown by one item keeps the comments on the rest,
+// where SetYAML would write the whole value anew. fn says whether it changed
+// the node, and whether the key is to go instead. The file is written only
+// on a change.
+func EditYAMLNode(path, keyPath string, fn func(n *yaml.Node) (changed, remove bool)) error {
+	root, err := loadYAMLForEdit(path)
+	if err != nil || root == nil {
+		return err
+	}
+	changed, remove := fn(lookupYAML(root, strings.Split(keyPath, ".")))
+	switch {
+	case remove:
+		return DelYAML(path, keyPath)
+	case changed:
+		return writeYAML(path, root)
+	}
+	return nil
+}
+
 // EditYAMLStrings calls fn on every string under the key paths — mapping
 // keys and values, sequence items, at any depth — and puts fn's answer in
 // its place, comments and quoting kept. The file is written only when an
