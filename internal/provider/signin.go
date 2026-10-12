@@ -23,8 +23,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/yetone/magpie/internal/netproxy"
@@ -70,6 +73,12 @@ type SignInState struct {
 	// than a new account added (#413)
 	Again bool   `json:"again,omitempty"`
 	Error string `json:"error,omitempty"`
+	// CallbackBlocked says why the port the browser is sent back to
+	// couldn't be opened: "reserved" (Windows keeps it for Hyper-V, WSL or
+	// Docker) or "busy" (another program has it). The sign-in goes on
+	// without it, finished by the address its page ends on, pasted (#1782).
+	CallbackBlocked string `json:"callbackBlocked,omitempty"`
+	CallbackPort    int    `json:"callbackPort,omitempty"`
 	// Proxy is the one the sign-in goes through ("" the global one,
 	// "direct" none): the one the account's requests will (#1663)
 	Proxy string `json:"proxy,omitempty"`
@@ -268,6 +277,9 @@ func (s *signInFlow) begin() error {
 
 	var ln net.Listener
 	var err error
+	// blocked is a callback port that couldn't be opened: the sign-in waits
+	// for its address, pasted, instead of for the browser
+	blocked := ""
 	q := url.Values{}
 	switch agent {
 	case "claude":
@@ -276,8 +288,12 @@ func (s *signInFlow) begin() error {
 			return err
 		}
 	case "codex":
+		// ChatGPT sends the browser back only to this one port. One that
+		// can't be had (Windows reserves it, or another program holds it)
+		// doesn't stop the sign-in: the page the browser ends on has the
+		// code in its address, and that address pasted finishes it (#1782)
 		if ln, err = listenCodexCallback(); err != nil {
-			return err
+			blocked = callbackBlocked(err, runtime.GOOS)
 		}
 		_, port, _ := net.SplitHostPort(codexCallbackAddr)
 		s.redirect = "http://localhost:" + port + "/auth/callback"
@@ -391,7 +407,7 @@ func (s *signInFlow) begin() error {
 		return fmt.Errorf("magpie can't sign in to %s accounts", agent)
 	}
 
-	if ln != nil {
+	if ln != nil || blocked != "" {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/", s.callback)
 		srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
@@ -400,17 +416,40 @@ func (s *signInFlow) begin() error {
 		// a browser that can't reach this port (magpie on a server, in
 		// Docker) ends on a page that won't load: its address finishes it
 		s.st.PasteCallback = true
+		if blocked != "" {
+			s.st.CallbackBlocked = blocked
+			if u, err := url.Parse(s.redirect); err == nil {
+				s.st.CallbackPort, _ = strconv.Atoi(u.Port())
+			}
+		}
 		s.mu.Unlock()
-		go func() { _ = srv.Serve(ln) }()
+		if ln != nil {
+			go func() { _ = srv.Serve(ln) }()
+		}
 	}
 	return nil
+}
+
+// callbackBlocked names why a callback port couldn't be listened on, as
+// SignInState.CallbackBlocked says it. Windows refuses a port in a range it
+// has excluded for Hyper-V, WSL or Docker with WSAEACCES (10013), though no
+// program has it ("netsh interface ipv4 show excludedportrange
+// protocol=tcp" lists the ranges).
+func callbackBlocked(err error, goos string) string {
+	var errno syscall.Errno
+	if goos == "windows" && errors.As(err, &errno) && errno == 10013 {
+		return "reserved"
+	}
+	return "busy"
 }
 
 // listenCodexCallback takes Codex's callback port. A `codex login` left
 // waiting there is asked to stop first, the way Codex itself does it.
 func listenCodexCallback() (net.Listener, error) {
+	var err error
 	for i := 0; i < 10; i++ {
-		ln, err := net.Listen("tcp", codexCallbackAddr)
+		var ln net.Listener
+		ln, err = net.Listen("tcp", codexCallbackAddr)
 		if err == nil {
 			return ln, nil
 		}
@@ -422,7 +461,7 @@ func listenCodexCallback() (net.Listener, error) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	return nil, errors.New("port 1455, where ChatGPT sends the sign-in back, is busy; close any other Codex sign-in and try again")
+	return nil, err
 }
 
 // SignInStatus reports on a sign-in StartSignIn began.

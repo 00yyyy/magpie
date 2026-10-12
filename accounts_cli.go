@@ -470,9 +470,15 @@ func addAccount(agentID string) error {
 	ctx, stop := interruptContext()
 	defer stop()
 	if st.PasteCallback || st.PasteCode {
-		if st.PasteCode {
+		switch {
+		case st.PasteCode:
 			fmt.Println("Paste the code the page shows here and press Enter:")
-		} else {
+		case st.CallbackBlocked == "reserved":
+			// the port ChatGPT comes back to can't be had (#1782)
+			fmt.Println(amber.Render("!"), fmt.Sprintf("Windows keeps port %d, where the sign-in comes back, for Hyper-V, WSL or Docker, so the page the browser ends on won't load. Paste its whole address here and press Enter:", st.CallbackPort))
+		case st.CallbackBlocked != "":
+			fmt.Println(amber.Render("!"), fmt.Sprintf("Another program has port %d, where the sign-in comes back, so the page the browser ends on won't finish it. Paste its whole address here and press Enter:", st.CallbackPort))
+		default:
 			fmt.Println("If the page the browser ends on won't load (magpie on a server or in Docker), paste its whole address here and press Enter:")
 		}
 		id := st.ID

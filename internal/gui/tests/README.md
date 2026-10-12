@@ -1503,6 +1503,12 @@ posts the address to the sign-in's callback route once, and the account is
 named in the status line. Nothing scrolls. The checks run in English and
 Chinese, in Chromium and WebKit.
 
+`signin-port-blocked.test.cjs` checks a ChatGPT sign-in whose port 1455
+couldn't be opened (#1782): the box says why, Windows reserving the port or
+another program holding it, with the port named, in place of the
+server-or-Docker guess, and the pasted address finishes the sign-in. Every
+language, Chromium and WebKit, 900 and 420 wide.
+
 `signin-paste-key.test.cjs` checks Command Code signed in to from a browser
 that can't reach magpie (on a server, in Docker), where Command Code's page
 posts its key to magpie unseen and leaves no address to paste. While the
