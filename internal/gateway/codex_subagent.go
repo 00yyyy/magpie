@@ -59,6 +59,12 @@ func codexSubagentPick(r *http.Request, agent, kind, asked string, body []byte) 
 		return nil
 	}
 	pick := &SubagentPick{Asked: asked, To: to}
+	if _, off := idOff(to); off {
+		// the user disabled it (#1867): the subagent stays on its lead's
+		// model, itself refused when it is disabled too
+		pick.Kept = "it is disabled in magpie"
+		return pick
+	}
 	if why := provider.CodexSubagentUnserved(to); why != "" {
 		pick.Kept = why
 		return pick

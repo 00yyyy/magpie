@@ -387,6 +387,8 @@ type settingsJSON struct {
 	VisionMissing string `json:"visionMissing,omitempty"`
 	// the models Codex's thread titles may be sent to (CodexTitles, #705)
 	TitleModels []modelRef `json:"titleModels"`
+	// what each of the disabled models (#1867) turns off now, by pattern
+	DisabledHits map[string][]string `json:"disabledHits,omitempty"`
 	// the model magpie's generate_image tool draws with when ImageGen
 	// names none, and those that can be named
 	ImageGenAuto string `json:"imageGenAuto,omitempty"`
@@ -601,6 +603,12 @@ func settingsState() settingsJSON {
 		}
 	}
 	s.TitleModels = []modelRef{}
+	for _, pat := range s.DisabledModels {
+		if s.DisabledHits == nil {
+			s.DisabledHits = map[string][]string{}
+		}
+		s.DisabledHits[pat] = provider.DisabledHits(pat)
+	}
 	for _, e := range provider.Served() {
 		if e.Group != "" || e.Provider.Ready() && !e.Provider.DecideOnly() {
 			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon}
@@ -1118,6 +1126,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.RequestArchiveMaxMB = cur.RequestArchiveMaxMB   // in settings.json only
 		in.GatewayConversations = cur.GatewayConversations // Sessions' explicit recording consent
 		in.RedactRules = cur.RedactRules                   // the masking rules, set on their own
+		in.DisabledModels = cur.DisabledModels             // set on their own (disabled-models below, #1867)
 		// used or left is the Usage page's toggle as much as Settings', set on its own
 		in.QuotaLeft = cur.QuotaLeft
 		in.QuotaReads = cur.QuotaReads // set on its own (quota-reads below)
@@ -1389,6 +1398,20 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	})
 	// where Codex's requests for a thread's title go (#705): "" as Codex
 	// sends them, "off", or a model's id
+	// the models turned off for every request through magpie (#1867), each
+	// an id or a glob, the list sent whole
+	mux.HandleFunc("POST /api/settings/disabled-models", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Models []string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetDisabledModels(in.Models); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	mux.HandleFunc("POST /api/settings/codex-titles", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ Model string }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {

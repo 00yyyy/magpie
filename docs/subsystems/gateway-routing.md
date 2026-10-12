@@ -36,6 +36,7 @@ served by a plugin are in [Provider and plugin ownership](provider-plugins.md).
    - With *Mask secrets* on, the user's own masking rules (`redactRules`, `redact.Rule`: a placeholder name and a prefix or an RE2 pattern, [`internal/redact/rules.go`](../../internal/redact/rules.go)) run before magpie's. Settings → Privacy adds them, removes them, and edits one in place (`POST /api/settings/redact-rule` with the rule's index and its current value, `editRedactRule` in [`internal/gui/api.go`](../../internal/gui/api.go)). Every rule is checked by `redact.CheckRules` when settings are saved; an edit that doesn't compile, matches the empty string, repeats another rule or names a rule no longer at that index is refused with the rules left as they were. The gateway reads the rules from settings on each request (`redactionOptions`), so a change applies to the next request.
    - `DecidesModel` gives a 400.
    - A gateway key held to some models (`keyHolds`, #882) gets a 403 for any other model.
+   - A model the user disabled (#1867) gets a 403 for every caller (`idOff`), before anything is sent; see [Disabled models](#disabled-models).
    - Sealed tasks (#619) are checked here. A Codex subagent's task its lead's `spawn_agent` sealed goes only to a ChatGPT account, or back to the Responses provider that answered the lead (`leadProvider`, a relay of the ChatGPT backend such as Sub2API, #1109), relayed as it came even when web search is offered. A lead's turn carrying its subagent's sealed reply (`send_message`) goes back to the Responses provider that answered the lead's own conversation (`leadProvider` of the request's `conversationID`, #1237); otherwise it is refused before anyone is asked (`sealedReader`, `sealedTaskError`). A sealed message (`Message Type: MESSAGE`, not a task) that nobody asked can open is left out instead, an `input_text` note naming its sender in its place (`withoutSealedMessages`, #1613): a lead on a chat provider whose subagent is on one of Codex's own models goes on, as the subagent's final result still reaches it as text. Only a sealed task (`NEW_TASK`, or an item with neither header) is refused. Who answered is first what affinity remembers; when affinity has let it go (a day since, a restart past the 512 conversations `affinity.json` keeps, or the lead's last reply broken off, `unanswered`), the usage log's answers to the lead's thread and the request's own conversation in the last 30 days count too (`loggedAnswers`, #1367), and `leadFirst` reads the lead's key or account from them. A refused or failed call and a title answer nothing, and Codex's own sign-in is told of as the ChatGPT backend. The refusal names who sealed the task when it is known, and says how to go on with it. It also says what is sealed (`sealedTaskItself`, #1855): the task itself, `spawn_agent`'s `message`, which the backend returns sealed (`encrypted_function_args`) and Codex hands the subagent as it came, so `fork_turns="none"`, which only leaves the lead's turns out, doesn't help; nothing in it can be left out for the subagent to go on.
    - A model set for Codex's subagents (`settings.CodexSubagentModel`, the Agents page's Codex "subagent model", willz on Discord) is put on a Codex subagent's request (`x-openai-subagent` read as `kind:collab_spawn`) before this check, whatever model its lead's `spawn_agent` asked for (`codexSubagentPick` in [`codex_subagent.go`](../../internal/gateway/codex_subagent.go)): in `codexBackend` for one of Codex's own bare models, which then goes through `serveAgent`, and in `serve` for any other. Any model magpie serves can be set (`provider.SetCodexSubagentModel`, #1633): a task handed as text (a lead magpie served on a chat provider, or multi-agent V1) is read by any model. A request carrying a task the ChatGPT backend sealed (`sealedTaskIn`: a sealed agent message that isn't a `MESSAGE`, which `withoutSealedMessages` leaves out) is put only on a ChatGPT account's model; set to another, the subagent stays on the model asked for, which the sealed gate below handles as with nothing set. When magpie doesn't serve the model set now, or a gateway key held to some models may not use it, the subagent goes on the model asked for too. The route trace keeps both models and the reason it stayed (`Route.Subagent`), and the Routing page's `kindWhy` says it. The lead's turns, titles and every other kind are never moved.
    - Rules and image inputs are handled here too.
@@ -355,11 +356,54 @@ Covered by `TestAutoVisionPassesOverOneOut`,
 `TestAutoVisionTierAmongThoseWithAllowance`, `TestSpentModelAcrossAccounts`,
 `TestVisionDoesNotAskSpentDescriber` and `TestSearcherPassesOverOneOut`.
 
+## Disabled models
+
+Settings › Models › Disabled models, `magpie model disable|enable|disabled`
+and `POST /api/settings/disabled-models` keep `settings.DisabledModels`
+(#1867): patterns, each an exact id or a glob (`*` any run of characters,
+`/` among them; `?` one), matched ignoring case against a model's
+`<provider>/<model>`, its bare id and the bare id's last segment
+([`internal/provider/disabled.go`](../../internal/provider/disabled.go)).
+Nothing is disabled by default.
+
+- Lists: `buildEntries` (`entriesOff`) leaves a disabled model out of the
+  catalog, so `/v1/models`, the agents' model files and pickers, Codex's
+  list, Muse and every routing group go without it; `membersIn`
+  (`membersOff`) skips it as a member and `Deciders` as a decision model.
+  `codexModels` drops a disabled one of Codex's own, and `codexListTag`
+  changes with the list so Codex fetches it again.
+- Requests: the gateway refuses it with a 403 in each API's shape
+  ([`internal/gateway/disabled.go`](../../internal/gateway/disabled.go)),
+  `model <id> is disabled in magpie …`, at the choke points #882 holds keys
+  at: `serve` (every chat, Responses, Messages and Gemini request, magpie's
+  own side calls, a session that was on it, a Codex sub-agent put on it),
+  `perKeyBarred` (no candidate is planned for it: a group's next member, a
+  provider's `Fallback`), `countTokens` and Gemini's `:countTokens`
+  (`countOff`), `serveSystemOne`, `serveDecisionGroup` and `postDecide`
+  (every decision call), draw, video and embeddings, and `codexBackend` for
+  one of Codex's own bare models. A bare id the catalog no longer has is
+  refused as disabled, not 404 (`provider.BareDisabled`). A group with a
+  member left goes on without the rest; one with none left is refused,
+  naming its disabled members (`provider.GroupDisabledOut`). A Codex
+  sub-agent pick onto a disabled model is kept on its lead's model
+  (`codexSubagentPick`, "it is disabled in magpie").
+- A settings.json that can't be read is never "none disabled": the list read
+  last stays in force, and with none read since start every request is
+  refused until it is fixed (`DisabledUnknown`); `SetDisabledModels` writes
+  nothing over a file it couldn't read.
+- Only requests through magpie are covered: an agent signed in to the vendor
+  itself is not, which the Settings row says.
+- Tests: `TestDisabled*` in `internal/gateway`, `internal/provider`,
+  `TestModelDisableCmd`, `TestDisabledModelsSetting`, and
+  `internal/gui/tests/disabled-models.test.cjs`.
+
 ## Verification
 
 ```sh
 go test -tags nogui ./internal/gateway -run 'TestGroupAsksOneRestingMemberNotEach|TestLoneRestingMemberStillAsked|TestRetrievalGroupAsksOneRestingMember|TestProbeOne|TestLoop|TestLongReplyThatDoesNotLoop|TestQuiet|TestSilentHeld|TestRotateSpreadsSessions|TestRouting|TestSmartRouting|TestFallback|TestNoFallbackForOtherErrors|TestLastFallbackErrorReachesTheAgent|TestRateLimitedSinksToTheBack|TestGroupRateLimitedSinks|TestAffinity|TestSeveralKeysOnTakeOverFromEachOther|TestModelNotInPlanRestsTheModelNotTheKey|TestSubscriptionAccountsTakeOver|TestGroup|TestTrace|TestImageTool|TestCodexNoCredits|TestWindowCapsHoldTheAccount|TestAccountCap|TestClaudeGoesOnMessagesWhereTheRelayHasThem|TestAutoRelaysOnTheClientsOwnAPI|TestSearchOfferedStaysOnTheClientsAPI|TestSearchFollowsTheSearchersProxy|TestCodexSearchAnsweredOnResponses|TestAgentEffortOnCursorLocal|TestAzureCompactionWithoutMagpiesReasoning|TestCodexCompact|TestProtection|TestSearchedConversation|TestUnsearchedConversationUnchanged|TestNotAnAPIReply|TestAPIReplyUntouched|TestCodexBackendWebPage|TestSub2APIKeyLimitIsQuota|TestKeysWeighedByTheirWindows|TestGroupWeighsKeyWindows|TestKeyOutOfItsWindowRestsUntilReset|TestKeyPoolErrorDoesNotRestForWindow|TestKeyBackOnceItsWindowIsNotFull|TestRestingKeyReadAgainInAnOrderedGroup|TestClaudeAccountBackOnceItsWindowRenews|TestThinkingStreams|TestHeldThinkingKeepsTheAgentAlive|TestCodexHeardWithinItsIdleTimeout|TestRefusalAfterThinkingFailsOver|TestGeminiEmptyRepliesAskedAgain|TestLocalUnredacted|TestCORS|TestForeignPagesRefused|TestAIStudioThinking|TestGeminiThoughtsThroughLocalProxy|TestGeminiRefusedLevel|TestGeminiThinkingOffAtItsLowest|TestThinkingOff|TestTranslatedEffortLoggedAsSent|TestTranslatedThinkingOffRefused|TestClaudeFiveFiveThinkingOffOnTheWire|TestSamplingAsTheModelTakesIt|TestHaikuFiveFiveSamplingOnTheWire|TestGeminiThoughtsMarkedInExtraContent|TestGeminiThinkingLevelRefused|TestGeminiMinimalRefusedTwiceAtOnce|TestPassthroughGeminiMinimalRefused|TestPassthroughEffortNoneRefused|TestPassthroughMinimalRefusedNoneTaken|TestOtherOffNamed|TestClaudeSignInNotToldItsSignInFailed|TestSignInWriterReleasesA403|TestSignInBetaStaysWithMagpie|TestStructuredOutput|TestResponsesTextKeepsVerbosityBesideFormat|TestRefusedFormatToldInWords|RPM|TestQueued|TestCustomGeminiUpstream|TestWholeNums|TestGrokCalls|TestOnlyGrokCalls|TestGrokModel|TestGrokPluginCalls'
 go test -tags nogui ./internal/gateway -run 'TestVertex'
+go test -tags nogui ./internal/gateway ./internal/provider ./internal/cli ./internal/gui -run 'TestDisabled|TestModelDisableCmd'
+node --test internal/gui/tests/disabled-models.test.cjs
 go test -tags nogui ./internal/gateway -run 'TestTextWritten|TestGLMTextCall|TestPluginTextWrittenCall|TestQuietWholeReplyStreamed'
 go test -tags nogui ./internal/gateway -run 'TestAutoMode|TestClaudeBridgeSafeguard'
 go test -tags nogui ./internal/gateway -run 'TestCreditsExhaustedIsOutOfCredit|TestOutOfCreditLeavesFreeModels'

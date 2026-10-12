@@ -424,6 +424,11 @@ type Settings struct {
 	// or a group's) taken out of an agent's lists one by one, by agent id,
 	// after Visible: a model not named here, a new one among them, is shown.
 	HiddenModels map[string][]string `json:"hiddenModels,omitempty"`
+	// DisabledModels are models turned off for every request through magpie
+	// (#1867), each an exact id or a glob ("*fable*"), matched ignoring case
+	// against "<provider>/<model>" and the bare model id: they are left out
+	// of every list, and the gateway refuses them on every route.
+	DisabledModels []string `json:"disabledModels,omitempty"`
 	// PickedModels, for an agent it names, are the only catalog entries its
 	// lists show, after Visible (#1337): the user switched the agent to
 	// "only models I pick", so a model that comes later, of a new provider

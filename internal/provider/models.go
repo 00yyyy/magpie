@@ -1547,7 +1547,10 @@ func providerEntries() []Entry {
 	return heldEntries(buildEntries)
 }
 
-func buildEntries() []Entry {
+func buildEntries() []Entry { return entriesOff(disabledNow()) }
+
+// entriesOff is the providers' catalog less the models off reports.
+func entriesOff(off func(pid, model string) bool) []Entry {
 	var out []Entry
 	s := settings.Load()
 	gone := retiredNow() // its vendor said it is retired (retired.go)
@@ -1556,6 +1559,9 @@ func buildEntries() []Entry {
 			continue
 		}
 		for _, m := range p.Exposed() {
+			if off(p.ID, m.ID) { // the user turned it off (#1867)
+				continue
+			}
 			if !p.isDecision(m) && !gone[p.ID+"/"+m.ID] {
 				out = append(out, entryFor(p, m, s))
 			}

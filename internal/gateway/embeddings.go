@@ -46,7 +46,22 @@ func (s *Server) retrieve(path, operation string) http.HandlerFunc {
 		who := callerOf(r)
 		call := Call{Time: start, From: provider.Chat, Agent: who.agent, Via: who.via, Model: asked}
 		usage.Saw(agentOf(r))
+		// a model the user disabled (#1867), or a group of them all
+		if msg, off := idOff(asked); off {
+			call.Status, call.Error = 403, msg
+			writeError(w, provider.Chat, 403, msg)
+			s.record(call)
+			return
+		}
 		p, model, ok := resolveRetrievalModel(asked)
+		if _, _, isGroup := provider.FindGroup(asked); ok && !isGroup {
+			if msg, off := modelOff(p, model, asked); off {
+				call.Status, call.Error = 403, msg
+				writeError(w, provider.Chat, 403, msg)
+				s.record(call)
+				return
+			}
+		}
 		if !ok {
 			msg := unknownModel(asked, "")
 			if off, isOff := provider.SwitchedOff(asked); isOff {

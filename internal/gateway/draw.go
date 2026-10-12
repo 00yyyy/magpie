@@ -373,6 +373,10 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 			fail(403, keyModelError(keyWho, d.Model))
 			return
 		}
+		if msg, off := modelOff(p, model, d.Model); off { // disabled by the user (#1867)
+			fail(403, msg)
+			return
+		}
 		var unmask func()
 		w, d.Prompt, unmask = redactedPrompt(w, d.Prompt)
 		defer unmask()

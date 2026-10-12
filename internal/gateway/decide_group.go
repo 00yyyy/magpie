@@ -86,6 +86,9 @@ func (s *Server) decideFailed(c candidate, status int, header http.Header, body 
 // in turn until one answers, or the last one's answer passed on.
 func (s *Server) serveDecisionGroup(w http.ResponseWriter, r *http.Request, body []byte, asked string, g provider.Group, ms []provider.Member) {
 	start := time.Now()
+	if refuseOff(w, provider.Chat, asked) { // every model of it disabled (#1867)
+		return
+	}
 	g = g.Live()
 	keyWho, keyHeld := keyHolds(r)
 	accWho, accHeld := accountHolds(r)

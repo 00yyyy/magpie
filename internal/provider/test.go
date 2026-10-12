@@ -232,6 +232,10 @@ func (p Provider) TestModels(ctx context.Context, models []string) []Result {
 }
 
 func (p Provider) testOne(ctx context.Context, model string) Result {
+	if pat, off := ModelDisabled(p.ID, model); off {
+		// the user disabled it (#1867): not even a test reaches it
+		return Result{Model: model, Error: fmt.Sprintf("model %s/%s is disabled in magpie (it matches %q in Settings › Models › Disabled models)", p.ID, model, pat)}
+	}
 	if p.DecidesModel(model) && p.AsksDecideModels() {
 		// a decision model is sent the smallest System One question, a
 		// yes-or-no (ARNO on Discord: a System One model typed in by hand
@@ -359,6 +363,7 @@ func (p Provider) keyFor(proto Protocol) (Provider, bool) {
 // draws on an images API.
 func (p Provider) testModel(q Provider, proto Protocol) string {
 	k := q.first()
+	off := disabledNow() // a model the user disabled is never asked (#1867)
 	var pools [][]catalog.Model
 	if ms := p.Exposed(); len(ms) > 0 {
 		pools = append(pools, ms)
@@ -378,7 +383,7 @@ func (p Provider) testModel(q Provider, proto Protocol) string {
 	} {
 		for _, pool := range pools {
 			for _, m := range pool {
-				if !p.DecidesModel(m.ID) && want(m.ID) && (k.Key == "" || p.Serves(k, m.ID)) {
+				if !p.DecidesModel(m.ID) && !off(p.ID, m.ID) && want(m.ID) && (k.Key == "" || p.Serves(k, m.ID)) {
 					return m.ID
 				}
 			}

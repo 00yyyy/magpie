@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -353,6 +354,12 @@ func (s *Server) systemOne(ctx context.Context, p provider.Provider, model strin
 // the provider answers in another one. DecideURL and Sign errors are as
 // they are; a transport error is named with p.
 func (s *Server) postDecide(ctx context.Context, p provider.Provider, model string, body []byte) (int, []byte, http.Header, error) {
+	// every decision call goes through here — System One, a group rule's
+	// classifier, a decision group's members: a model the user disabled
+	// (#1867) is never asked
+	if msg, off := modelOff(p, model, p.ID+"/"+model); off {
+		return 0, nil, nil, errors.New(msg)
+	}
 	ctx = s.metered(p.Via(ctx), p, "") // counted against its MaxRPM (rpm.go)
 	u, err := p.DecideModelURL(ctx, model)
 	if err != nil {
@@ -415,6 +422,11 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, http.StatusBadRequest, "not a System One request")
 		return
 	}
+	// a decision model the user disabled (#1867), or a group of them all
+	// disabled, is refused as a chat model is
+	if refuseOff(w, provider.Chat, q.Model) {
+		return
+	}
 	// a routing group of decision models: each of them in turn
 	// (decide_group.go)
 	if g, ms, ok, status, err := decisionGroupOf(q.Model); err != nil {
@@ -434,6 +446,10 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 	asked := q.Model
 	if asked == "" {
 		asked = p.ID + "/" + model
+	}
+	if msg, off := modelOff(p, model, asked); off {
+		writeError(w, provider.Chat, http.StatusForbidden, msg)
+		return
 	}
 	// a gateway key held to some models (#882) is refused another; a
 	// decision model is a model, and System One asks one directly

@@ -658,6 +658,10 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		fail(403, keyModelError(keyWho, f.Model))
 		return
 	}
+	if msg, off := modelOff(p, model, f.Model); off { // disabled by the user (#1867)
+		fail(403, msg)
+		return
+	}
 	// the provider's other keys to start the video on, when the first
 	// says it doesn't serve the model
 	var keys []candidate

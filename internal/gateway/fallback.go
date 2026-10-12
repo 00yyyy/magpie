@@ -154,6 +154,9 @@ func perKeyOf(p provider.Provider, model string, from provider.Protocol) (out, a
 // serve the model (provider.AccountModels, #474): never tried, whatever
 // else there is — none, when every one of them is.
 func perKeyBarred(p provider.Provider, model string, from provider.Protocol) (out, aside, left, barred []candidate) {
+	if _, off := provider.ModelDisabled(p.ID, model); off || provider.DisabledUnknown() {
+		return nil, nil, nil, nil // the user disabled it (#1867): never planned, a fallback no more than the model asked
+	}
 	if p.Account != nil {
 		also := p.AlsoOn()
 		var all []candidate

@@ -53,6 +53,13 @@ const modelUsage = `usage:
                                                  and says when there was no name of its own to take away
   magpie model wires                             the names your vendors are asked for models by
   magpie model names                             the models you named or narrowed
+  magpie model disable <model> [<model>...]      turn models off for every request through magpie: each an id
+                                                 (provider/model or a bare model id) or a glob, * any run of
+                                                 characters and ? one, as '*fable*'. A disabled model leaves
+                                                 every list and routing group, and the gateway refuses it on
+                                                 every route (403). Quote a glob: a shell reads a bare *
+  magpie model enable <model> [<model>...]       take them off the disabled list, as written there
+  magpie model disabled                          the disabled list, and the models each one turns off now
   magpie model suffix [on|own|off]               whether the agents' lists name each model with its provider
                                                  (or "routing group") after it: on, as by default, "Sol · OpenAI";
                                                  own, a name you gave a model just as you wrote it, "Opus 5.5",
@@ -109,6 +116,12 @@ func modelCmd(args []string) error {
 		return modelOutput(args[1:])
 	case "wire", "upstream":
 		return modelWire(args[1:])
+	case "disable":
+		return modelDisable(args[1:])
+	case "enable":
+		return modelEnable(args[1:])
+	case "disabled", "list-disabled":
+		return modelDisabled()
 	case "help", "-h", "--help":
 		fmt.Println(modelUsage)
 		return nil
@@ -1235,4 +1248,67 @@ func exampleOf(p *provider.Provider, name string) string {
 		return p.Name + " is asked for every one of its models as " + name + star
 	}
 	return p.ID + "/" + model + " is asked for as " + strings.ReplaceAll(name, "*", model) + star
+}
+
+// modelDisable adds models, by id or glob, to the disabled list (#1867).
+func modelDisable(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("name the models to disable, by id or glob: magpie model disable '*fable*'")
+	}
+	if err := provider.DisableModels(args...); err != nil {
+		return err
+	}
+	for _, pat := range args {
+		if pat = strings.TrimSpace(pat); pat == "" {
+			continue
+		}
+		hits := provider.DisabledHits(pat)
+		note := "· no model magpie serves matches it now; one that does later is disabled too"
+		if len(hits) > 0 {
+			note = "· " + strings.Join(hits, ", ")
+		}
+		fmt.Println(green.Render("✓"), bold.Render(pat), muted.Render("is disabled "+note))
+	}
+	fmt.Println(muted.Render("  only requests through magpie are refused; magpie model enable <model> takes it back"))
+	return nil
+}
+
+// modelEnable takes models off the disabled list.
+func modelEnable(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("name the models to enable, as magpie model disabled lists them")
+	}
+	missing, err := provider.EnableModels(args...)
+	if err != nil {
+		return err
+	}
+	for _, pat := range args {
+		if pat = strings.TrimSpace(pat); pat == "" {
+			continue
+		}
+		if slices.Contains(missing, pat) {
+			fmt.Println(muted.Render("· " + pat + " was not on the disabled list (magpie model disabled lists it)"))
+			continue
+		}
+		fmt.Println(green.Render("✓"), bold.Render(pat), muted.Render("is enabled again"))
+	}
+	return nil
+}
+
+// modelDisabled lists the disabled models and what each turns off now.
+func modelDisabled() error {
+	list := provider.DisabledModels()
+	if len(list) == 0 {
+		fmt.Println(muted.Render("no model is disabled · magpie model disable <model> turns one off"))
+		return nil
+	}
+	for _, pat := range list {
+		hits := provider.DisabledHits(pat)
+		note := "matches no model magpie serves now"
+		if len(hits) > 0 {
+			note = strings.Join(hits, ", ")
+		}
+		fmt.Println(bold.Render(pat), muted.Render("· "+note))
+	}
+	return nil
 }

@@ -107,6 +107,15 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			// not only Codex's first five (Gearclickist on Discord)
 			body = spawnAgentModels(r, body, model, true)
 		}
+		// one of Codex's own models the user disabled (#1867) is refused
+		// here, never relayed to the ChatGPT backend; a magpie model is
+		// refused by serve
+		if !strings.Contains(model, "/") {
+			if msg, off := codexNativeOff(model); off {
+				writeError(w, provider.Responses, http.StatusForbidden, msg)
+				return
+			}
+		}
 		// The namespace owns the route even if a model is not in the catalog.
 		// Unknown providers/groups must fail locally, never fall through to OpenAI.
 		if strings.Contains(model, "/") {
@@ -1232,6 +1241,20 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 			slug, _ := o["slug"].(string)
 			if v, _ := o["visibility"].(string); v != "hide" && (all || off[slug]) {
 				continue
+			}
+			kept = append(kept, m)
+		}
+		own = kept
+	}
+	// and the ones the user disabled (#1867), which are refused (codexNativeOff)
+	if len(provider.DisabledModels()) > 0 {
+		kept := own[:0]
+		for _, m := range own {
+			o, _ := m.(map[string]any)
+			if slug, _ := o["slug"].(string); slug != "" {
+				if _, off := codexNativeOff(slug); off {
+					continue
+				}
 			}
 			kept = append(kept, m)
 		}

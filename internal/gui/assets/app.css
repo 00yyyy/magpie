@@ -3797,3 +3797,6 @@ input[type="checkbox"]:indeterminate::before { transform: scale(1); -webkit-mask
 input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 input[type="checkbox"]:disabled { opacity: .45; }
 .editor .pair .side .key-count { white-space: nowrap; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+
+/* a disabled model's pattern, as typed (#1867): an id or a glob */
+.disabled-model .name { font-family: var(--code); font-size: 12px; overflow-wrap: anywhere; }

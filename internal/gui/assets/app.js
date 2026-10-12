@@ -20732,6 +20732,7 @@ function renderSettings() {
   renderImages(s, keep);
   renderSearch(s, keep);
   renderReplies(s, keep);
+  renderDisabledModels(s);
   renderRedact(s, keep);
   renderDiscovery(s);
   renderOTel(s, keep);
@@ -22178,6 +22179,59 @@ function renderReplies(s, keep) {
     (v) => savePrefs({ ...keep, noLoopGuard: v === "off" })));
   l.append(lwho, lval);
   box.append(r, l);
+}
+
+// renderDisabledModels: the models the user turned off for every request
+// through magpie (#1867). Each pattern is a row with what it matches now and
+// Enable; Disable a model picks one from the list, or takes what is typed
+// (a glob such as *fable*). A disabled model is left out of magpie's lists
+// and refused by the gateway, so nothing reaches it through magpie; an agent
+// signed in to the vendor itself isn't covered, which the row says.
+function renderDisabledModels(s) {
+  const box = $("#disabledModelsList");
+  if (!box) return;
+  const list = s.disabledModels || [];
+  const save = (next) => writingPrefs(api("settings/disabled-models", { models: next }))
+    .then((ns) => { prefs = ns; renderSettings(); })
+    .catch((e) => { status(t(e.message), "err"); renderSettings(); });
+  const add = el("div", "row pref");
+  add.id = "disabledAddRow";
+  const who = el("div", "who");
+  who.append(el("div", "name", t("Disable a model")),
+    el("div", "sub wraps", t("A disabled model is refused on every route through magpie (a request, a session, a routing group, a fallback, a sub-agent, a decision model) and left out of magpie's lists and agents' pickers. Only requests through magpie are covered. Type a pattern such as *fable* to disable every model it matches")));
+  const val = el("div", "val");
+  const b = el("button", "text action", t("Disable…"));
+  b.type = "button";
+  b.id = "disabledAdd";
+  const models = (s.titleModels || []).filter((x) => x.provider);
+  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "disabledModels", label: "model", value: "",
+    options: models.map((x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id })),
+    onPick: (id) => {
+      id = String(id || "").trim();
+      if (!id || list.some((p) => p.toLowerCase() === id.toLowerCase())) return;
+      save([...list, id]);
+    } }, b, ev);
+  val.append(b);
+  add.append(who, val);
+  const rows = list.map((pat) => {
+    const r = el("div", "row pref disabled-model");
+    r.dataset.pattern = pat;
+    const w = el("div", "who");
+    const hits = (s.disabledHits || {})[pat] || [];
+    const sub = hits.length
+      ? t("Matches {n}: {list}", { n: hits.length, list: hits.slice(0, 4).join(", ") + (hits.length > 4 ? ", …" : "") })
+      : t("Matches no model now; it is refused if one appears");
+    w.append(el("div", "name", pat), el("div", "sub wraps", sub));
+    const v = el("div", "val");
+    const on = el("button", "text", t("Enable"));
+    on.type = "button";
+    on.setAttribute("aria-label", t("Enable {model}", { model: pat }));
+    on.onclick = () => save(list.filter((p) => p !== pat));
+    v.append(on);
+    r.append(w, v);
+    return r;
+  });
+  box.replaceChildren(add, ...rows);
 }
 
 // REDACT_KINDS are redact.Categories as Settings lists them: id, name,

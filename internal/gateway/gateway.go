@@ -1027,6 +1027,10 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	if countHeld(w, r, provider.Anthropic, id) {
 		return
 	}
+	// nor on one the user disabled (#1867)
+	if countOff(w, provider.Anthropic, id) {
+		return
+	}
 	// and counts the unmasked one where generation sends that
 	if _, ms, isGroup := provider.FindGroup(id); ok && unredactedRoute(p, isGroup, ms) {
 		body = plain
@@ -1233,6 +1237,9 @@ func (s *Server) gemini(w http.ResponseWriter, r *http.Request) {
 		if countHeld(w, r, provider.Gemini, model) {
 			return
 		}
+		if countOff(w, provider.Gemini, model) { // nor a disabled one (#1867)
+			return
+		}
 		s.geminiCount(w, model, body)
 		return
 	default:
@@ -1425,6 +1432,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		call.Model, asked = subagent.Asked, subagent.To
 	}
 	p, model, ok := provider.Resolve(asked)
+	// a model the user disabled (#1867) — asked by its id, the model a
+	// sub-agent was put on, a group with every model in it disabled — is
+	// refused here, before anything is sent anywhere; a group with one
+	// left goes on without the rest (provider.membersIn)
+	if msg, off := idOff(asked); off {
+		call.Status, call.Error = 403, "model disabled"
+		writeError(w, from, 403, msg)
+		turnedAway()
+		return
+	}
 	if ok {
 		s.rememberCodexTurn(r, call.Agent, agent, call.Kind, asked)
 	}

@@ -508,6 +508,10 @@ func codexListTag(kind string) string {
 	for _, slug := range slices.Sorted(maps.Keys(unlisted)) {
 		ms = append(ms, catalog.Model{ID: "~unlisted:" + slug})
 	}
+	// and the models the user disabled (#1867)
+	for _, pat := range DisabledModels() {
+		ms = append(ms, catalog.Model{ID: "!" + pat})
+	}
 	// and the order the user put them in, the account's own among them
 	for _, id := range ModelOrder("codex") {
 		ms = append(ms, catalog.Model{ID: "^" + id})
