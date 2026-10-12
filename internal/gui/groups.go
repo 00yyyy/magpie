@@ -124,6 +124,10 @@ type modelRef struct {
 	// group's classifier set to it asks that subscription at every turn,
 	// which the Routing page says (#1839)
 	Sub bool `json:"sub,omitempty"`
+	// VendorPicks: an image model whose vendor picks the model itself,
+	// whichever is named (a ChatGPT account's, #1865), which Settings ›
+	// Images says
+	VendorPicks bool `json:"vendorPicks,omitempty"`
 }
 
 // servedRef is a served model as the Routing page lists it

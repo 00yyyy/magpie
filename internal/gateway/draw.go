@@ -123,12 +123,36 @@ const (
 	grokDrawerFamily  = "grok-imagine-image"
 )
 
-// codexDrawers are the image models a ChatGPT account draws with, at
-// its Codex backend's images API, as Codex CLI does (gpt-image-2 is the one
-// it asks for).
+// codexDrawers is the image model a ChatGPT account draws with, at its
+// Codex backend's images API, as Codex CLI does (gpt-image-2 is the one it
+// asks for). It is one: the backend picks the model itself, and answers
+// gpt-image-2, gpt-image-2.5 and a made-up name alike with the same image
+// (#1865), so listing 2.5 apart said there was a choice where there is
+// none. A gpt-image-2.5 saved when it was listed still draws there
+// (drawsFamily) and shows as this one (ListedDrawer).
 var codexDrawers = []catalog.Model{
-	{ID: "gpt-image-2", Name: "GPT Image 2", Released: "2026-01-01"},
-	{ID: "gpt-image-2.5", Name: "GPT Image 2.5", Released: "2026-06-01"},
+	{ID: "gpt-image-2", Name: "GPT Image", Released: "2026-01-01"},
+}
+
+// VendorPicksDrawer is whether p's vendor picks the image model itself,
+// whichever is named: a ChatGPT account's images backend (#1865).
+func VendorPicksDrawer(p provider.Provider) bool { return drawsCodex(p) }
+
+// ListedDrawer is the listed image model a picked one (provider/model)
+// stands for: a ChatGPT account's gpt-image-2.5, or any other GPT Image
+// name, is its one GPT Image, as its backend draws the same for any name
+// (#1865). ref itself otherwise, and when its provider isn't found. The
+// pick itself is kept as it was saved, and draws as before.
+func ListedDrawer(ref string) string {
+	pid, id, ok := strings.Cut(ref, "/")
+	if !ok || !strings.HasPrefix(id, codexDrawerFamily) || id == codexDrawer {
+		return ref
+	}
+	p, err := provider.Find(pid)
+	if err != nil || !drawsCodex(*p) {
+		return ref
+	}
+	return pid + "/" + codexDrawer
 }
 
 // codexDrawer is the image model Codex CLI asks a ChatGPT account for, the

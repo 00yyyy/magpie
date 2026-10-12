@@ -341,10 +341,11 @@ func TestCodexAccountDraws(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ds := Drawers(*p); len(ds) != 2 || ds[0].ID != "gpt-image-2" || ds[1].ID != "gpt-image-2.5" {
+	// one: the backend picks the model itself (#1865)
+	if ds := Drawers(*p); len(ds) != 1 || ds[0].ID != "gpt-image-2" || ds[0].Name != "GPT Image" {
 		t.Fatalf("drawers %v", ds)
 	}
-	// Automatic asks for what Codex CLI asks for: a plan may be refused 2.5
+	// Automatic asks for what Codex CLI asks for
 	if m, ok := drawer(); !ok || m != "codex/gpt-image-2" {
 		t.Fatalf("drawer = %q %v", m, ok)
 	}

@@ -391,8 +391,12 @@ type settingsJSON struct {
 	// names none, and those that can be named
 	ImageGenAuto string `json:"imageGenAuto,omitempty"`
 	// the ImageGen the user picked when magpie can't find it any more
-	ImageGenMissing string     `json:"imageGenMissing,omitempty"`
-	ImageGenModels  []modelRef `json:"imageGenModels"`
+	ImageGenMissing string `json:"imageGenMissing,omitempty"`
+	// the listed model the ImageGen the user picked stands for, when it
+	// isn't listed itself: a ChatGPT account's gpt-image-2.5, saved when
+	// magpie listed it, is its one GPT Image (gateway.ListedDrawer, #1865)
+	ImageGenShown  string     `json:"imageGenShown,omitempty"`
+	ImageGenModels []modelRef `json:"imageGenModels"`
 	// the web search APIs a model's search goes to when no provider can
 	// search (#419), their keys masked; the ones that can be added; and
 	// the provider that searches first, if one does
@@ -617,8 +621,11 @@ func settingsState() settingsJSON {
 			if name == "" {
 				name = m.ID
 			}
-			s.ImageGenModels = append(s.ImageGenModels, modelRef{ID: p.ID + "/" + m.ID, Name: name, Provider: p.ID, PName: p.Name, Icon: p.Icon})
+			s.ImageGenModels = append(s.ImageGenModels, modelRef{ID: p.ID + "/" + m.ID, Name: name, Provider: p.ID, PName: p.Name, Icon: p.Icon, VendorPicks: gateway.VendorPicksDrawer(p)})
 		}
+	}
+	if v := gateway.ListedDrawer(s.ImageGen); v != s.ImageGen {
+		s.ImageGenShown = v
 	}
 	return s
 }

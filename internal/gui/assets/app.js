@@ -21839,6 +21839,10 @@ function renderImageGen(s, keep, box) {
   };
   const icOf = (id) => models.find((x) => x.id === id)?.icon;
   const v = s.imageGen || "";
+  // a pick that stands for a listed model shows as it, and is kept as saved
+  // until another is picked: a ChatGPT account's gpt-image-2.5 is its one
+  // GPT Image, as the backend draws the same for any name (#1865)
+  const shown = s.imageGenShown || v;
   // a picked model magpie can't find any more is said, as Image recognition's
   const gone = v && v === s.imageGenMissing;
   const r = el("div", "row pref");
@@ -21847,25 +21851,29 @@ function renderImageGen(s, keep, box) {
     v === "off" ? t("Agents given Magpie Image can't generate images or videos: the tool says it is off")
     : t("The model Magpie Image draws with. Give an agent the tool from Library → MCP servers → Discover → Magpie Image; images are saved in its project"));
   who.append(el("div", "name", t("Image generation")), sub);
+  // ChatGPT's images backend picks the model itself, so its one entry says
+  // so where it draws, picked or automatic (#1865)
+  const draws = v === "off" || gone ? "" : v ? shown : s.imageGenAuto;
+  if (models.find((x) => x.id === draws)?.vendorPicks) who.append(el("div", "sub image-gen-vendor", t("ChatGPT's image backend picks the model itself, whichever is named, so one GPT Image is listed")));
   if (gone) who.append(el("div", "sub err image-gen-missing", s.imageGenAuto
     ? t("{model}, picked here, isn't set up any more: its provider was removed or turned off, or no longer has it. {auto}, the automatic choice, draws in its place. Pick another model here.", { model: v, auto: named(s.imageGenAuto) })
     : t("{model}, picked here, isn't set up any more: its provider was removed or turned off, or no longer has it. No other model draws, so a request that names no model is turned away. Pick another model here.", { model: v })));
   const b = el("button", "rt-cond on");
   if (v === "off") b.append(el("span", "", t("Off")));
   else if (gone) b.append(icon("generic"), el("span", "", v + " · " + t("missing")));
-  else if (v) b.append(icon(icOf(v) || "generic"), el("span", "", named(v)));
+  else if (v) b.append(icon(icOf(shown) || "generic"), el("span", "", named(shown)));
   else {
     if (s.imageGenAuto) b.append(icon(icOf(s.imageGenAuto) || "generic"));
     b.append(el("span", "", s.imageGenAuto ? t("Automatic") + " · " + named(s.imageGenAuto) : t("Automatic") + " · " + t("no model that draws")));
   }
   // a routing group (no provider of its own) goes with the others, as in
   // an agent's picker, not in a group of its own with its own rail button
-  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
-  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "imageGen", label: "model", value: v, options: [
+  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.vendorPicks ? x.providerName + " · " + t("ChatGPT picks the model") : x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
+  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "imageGen", label: "model", value: shown, options: [
     { value: "", label: t("Automatic"), note: s.imageGenAuto ? named(s.imageGenAuto) : t("no model that draws"), reset: true },
     { value: "off", label: t("Off"), note: t("no images generated"), reset: true },
     ...models.map(opt)],
-  onPick: (id) => { if (id !== v) savePrefs({ ...keep, imageGen: id }); } }, b, ev);
+  onPick: (id) => { if (id !== shown) savePrefs({ ...keep, imageGen: id }); } }, b, ev);
   const val = el("div", "val");
   val.append(b);
   r.append(who, val);

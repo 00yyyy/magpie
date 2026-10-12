@@ -427,6 +427,11 @@ func asideImageOptions() []Option {
 }
 
 func asideImageOffered(value string) bool {
+	// a ChatGPT account's gpt-image-2.5, offered before #1865, is its one
+	// GPT Image, which draws the same
+	if ref, ok := strings.CutPrefix(value, "magpie/"); ok {
+		value = "magpie/" + gateway.ListedDrawer(ref)
+	}
 	for _, o := range asideImageOptions() {
 		if o.Value == value {
 			return true
