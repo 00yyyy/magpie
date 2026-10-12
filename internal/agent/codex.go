@@ -135,10 +135,14 @@ func codexIn(at place) *Agent {
 	// ownList is magpie's model list for Codex as written to catalogPath:
 	// what the user added by hand to the list there (a key magpie doesn't
 	// write, supports_reasoning_summaries on a model magpie gave none) is
-	// kept, not written over by the next model switch or sync (#1450)
+	// kept, not written over by the next model switch or sync (#1450).
+	// Each model's default effort is the one this config starts new
+	// sessions at, or the model's nearest (codexcat.ModelDefault), which
+	// Codex takes on a switch to it.
+	list := func() []byte { return codexcat.CatalogAt(magpieModels("codex"), get("model_reasoning_effort")) }
 	ownList := func() []byte {
 		cur, _ := edit.Read(catalogPath)
-		return codexcat.Keep(cur, codexcat.Catalog(magpieModels("codex")))
+		return codexcat.Keep(cur, list())
 	}
 	// dropList takes the list away as magpie steps out as Codex's
 	// provider; one holding what the user added stays, which the config
@@ -148,7 +152,7 @@ func codexIn(at place) *Agent {
 		if err != nil {
 			return
 		}
-		b := codexcat.Catalog(magpieModels("codex"))
+		b := list()
 		if string(codexcat.Keep(cur, b)) == string(b) {
 			os.Remove(catalogPath)
 		}
@@ -193,12 +197,30 @@ func codexIn(at place) *Agent {
 		}
 		return catalog.Codex()
 	}
+	// relist hands Codex its models again after the effort new sessions
+	// start at changed, which their default efforts follow: magpie's
+	// catalog written again, or the list the gateway hands Codex beside
+	// its sign-in marked stale (its tag carries the effort)
+	relist := func() error {
+		switch {
+		case asProvider() && ownCatalog(get("model_catalog_json")):
+			b := ownList()
+			if cur, _ := edit.Read(catalogPath); string(cur) != string(b) {
+				return edit.WriteAtomic(catalogPath, b)
+			}
+		case viaBase():
+			return codexStaleCache(filepath.Join(dir, "models_cache.json"), provider.CodexListTag())
+		}
+		return nil
+	}
 	var dropSubEffort func() error
 	// keep the effort valid for the model: one set that the model doesn't
-	// take becomes its default. One left unset stays unset — Codex then
-	// takes the model's own default, which is what Default on the effort
-	// control asked for (lgtm: Default turned into medium on its own).
-	// Routed, the Codex app offers magpie's models' efforts too (#310).
+	// take becomes the model's nearest (xhigh on a group of high and max
+	// becomes max, codexcat.ModelDefault), not the middle of the road. One
+	// left unset stays unset — Codex then takes the model's own default,
+	// which is what Default on the effort control asked for (lgtm: Default
+	// turned into medium on its own). Routed, the Codex app offers
+	// magpie's models' efforts too (#310).
 	settle := func() error {
 		if routed() {
 			if err := codexEnableEfforts(path, magpieModels("codex")); err != nil {
@@ -208,7 +230,10 @@ func codexIn(at place) *Agent {
 		ms := models()
 		model, effort := get("model"), get("model_reasoning_effort")
 		if e := catalog.Efforts(ms, model); len(e) > 0 && effort != "" && !contains(e, effort) {
-			if err := edit.SetTOMLTop(path, edit.KV{Path: "model_reasoning_effort", Value: codexcat.DefaultEffort(e)}); err != nil {
+			if err := edit.SetTOMLTop(path, edit.KV{Path: "model_reasoning_effort", Value: codexcat.ModelDefault(e, effort)}); err != nil {
+				return err
+			}
+			if err := relist(); err != nil {
 				return err
 			}
 		}
@@ -1134,11 +1159,20 @@ func codexIn(at place) *Agent {
 				// takes is on the Default option (Takes), not the value, so
 				// picking Default doesn't read back as medium (lgtm)
 				Get: func() string { return get("model_reasoning_effort") },
+				// set, magpie's models start at it too when Codex is switched
+				// to one, or at their nearest (relist, codexcat.ModelDefault):
+				// it fell back to the middle of the road (Creat.wu on Discord)
 				Set: func(v string) error {
+					var err error
 					if v == "" {
-						return edit.DelTOMLTop(path, "model_reasoning_effort")
+						err = edit.DelTOMLTop(path, "model_reasoning_effort")
+					} else {
+						err = edit.SetTOMLTop(path, edit.KV{Path: "model_reasoning_effort", Value: v})
 					}
-					return edit.SetTOMLTop(path, edit.KV{Path: "model_reasoning_effort", Value: v})
+					if err != nil {
+						return err
+					}
+					return relist()
 				},
 				// Default first, with the level Codex takes for the model
 				// when none is set, as the catalog entry it reads says it

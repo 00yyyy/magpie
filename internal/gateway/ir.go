@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // The APIs are close cousins; everything below is the shape they have
@@ -664,7 +666,7 @@ func effortOf(s string) string {
 }
 
 // effortRank orders the reasoning levels agents and vendors name.
-var effortRank = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
+var effortRank = catalog.EffortRank
 
 // ByStrength is efforts weakest first, in effortRank's order; a level it
 // doesn't know keeps its place among the others of its kind, after them.
@@ -694,28 +696,7 @@ func fitEffort(want string, levels []string) string {
 		want = "max"
 		levels = slices.DeleteFunc(slices.Clone(levels), func(l string) bool { return l == "ultra" })
 	}
-	if len(levels) == 0 || slices.Contains(levels, want) {
-		return want
-	}
-	at := slices.Index(effortRank, want)
-	if at < 0 {
-		return want
-	}
-	best, dist := want, len(effortRank)
-	for _, l := range levels {
-		i := slices.Index(effortRank, l)
-		if i < 0 || l == "none" {
-			continue
-		}
-		d := i - at
-		if d < 0 {
-			d = -d
-		}
-		if d < dist || d == dist && i > at {
-			best, dist = l, d
-		}
-	}
-	return best
+	return catalog.NearestEffort(want, levels)
 }
 
 // budgetOf is the Anthropic thinking budget for an effort level.

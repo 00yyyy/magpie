@@ -1208,20 +1208,26 @@ func claudeIn(at place) *Agent {
 			if v == "" {
 				// the model's own default, as /effort auto leaves it: its
 				// level goes, its other keys (maxEffortLevel) stay
+				own := ""
 				if n != "" {
+					own, _ = edit.GetJSON(path, "modelSettings."+n+".effortLevel")
 					if err := claudeDropModelEffort(path, n); err != nil {
 						return err
 					}
 				}
-				if claudeReadsTop(m) {
+				// the top one goes with it when it is the model's level
+				// written beside it below; a level of the user's own
+				// for the other models stays
+				if top := jsonGet(path, "effortLevel")(); claudeReadsTop(m) || top != "" && top == own {
 					return edit.DelJSON(path, "effortLevel")
 				}
 				return nil
 			}
-			var kvs []edit.KV
-			if claudeReadsTop(m) {
-				kvs = append(kvs, edit.KV{Path: "effortLevel", Value: v})
-			}
+			// the top one too for a model that reads only its own: a model
+			// picked in Claude Code later (a routing group, another
+			// vendor's) reads the top one, and starts at the chosen level
+			// rather than its default (Creat.wu on Discord)
+			kvs := []edit.KV{{Path: "effortLevel", Value: v}}
 			if n != "" {
 				kvs = append(kvs, edit.KV{Path: "modelSettings." + n + ".effortLevel", Value: v})
 			}

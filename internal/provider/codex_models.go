@@ -492,6 +492,12 @@ func codexListTag(kind string) string {
 	if v := settings.Load().CodexAutoReview; v != "" {
 		ms = append(ms, catalog.Model{ID: "~autoreview:" + v})
 	}
+	// and the effort new sessions start at, which magpie's models take as
+	// their default (codexcat.ModelDefault): another one set, Codex asks
+	// for the list again
+	if v := codexcat.NewSessionEffort(); v != "" {
+		ms = append(ms, catalog.Model{ID: "~effort:" + v})
+	}
 	return codexcat.PolicyTag(kind + codexcat.Tag(ms))
 }
 

@@ -1360,6 +1360,39 @@ func MagpieAdded(etag, slug, description string) bool {
 		strings.Contains(etag, "+magpie-") && strings.Contains(slug, "/")
 }
 
+// EffortRank orders the reasoning levels agents and vendors name, weakest
+// first.
+var EffortRank = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
+
+// NearestEffort is the level of levels nearest want in EffortRank's order,
+// a tie going up, never "none" unless it is want; want itself when levels
+// are none, hold it, or want is no level EffortRank knows. The gateway
+// fits an effort to a model's levels by it on the way out (fitEffort), and
+// Codex's catalog gives a model the effort set for new sessions by it
+// (codexcat.ModelDefault), so the level a model starts at is the one it
+// would be sent at.
+func NearestEffort(want string, levels []string) string {
+	at := slices.Index(EffortRank, want)
+	if len(levels) == 0 || at < 0 || slices.Contains(levels, want) {
+		return want
+	}
+	best, dist := want, len(EffortRank)
+	for _, l := range levels {
+		i := slices.Index(EffortRank, l)
+		if i < 0 || l == "none" {
+			continue
+		}
+		d := i - at
+		if d < 0 {
+			d = -d
+		}
+		if d < dist || d == dist && i > at {
+			best, dist = l, d
+		}
+	}
+	return best
+}
+
 // Efforts returns the reasoning levels a model supports, if known.
 func Efforts(models []Model, id string) []string {
 	for _, m := range models {
