@@ -979,7 +979,9 @@ func (p Provider) Levelless(model string) bool {
 // lists them, or — for a vendor models.dev doesn't list the model under (a
 // custom provider, a proxy) — its maker's, else the ones the others serving
 // it give. A model models.dev lists for this vendor without levels takes
-// none: the vendor says it has none to pick from.
+// none: the vendor says it has none to pick from — unless it says the
+// model thinks and lists its family with levels (catalog's levels: a model
+// just added, gpt-6.1-sol).
 func effortsOf(m catalog.Model) []string {
 	if len(m.Efforts) > 0 || m.Provider != "" {
 		return m.Efforts
@@ -991,12 +993,20 @@ func effortsOf(m catalog.Model) []string {
 // word on: its maker's, when a vendor of magpie's presets makes it — none
 // for Xiaomi's mimo-v2.6-flash, which takes a thinking switch alone and
 // turns away the max resellers list for it (#214) — else those most of the
-// providers giving any give it (a Volcengine endpoint's glm-5.3-flash).
+// providers giving any give it (a Volcengine endpoint's glm-5.3-flash),
+// else, for one newer than the catalog, its maker's line's
+// (catalog.KinEfforts).
 func borrowedEfforts(id string) []string {
 	if e, ok := catalog.ListedBy(makerCatalogs(), id); ok {
 		return e
 	}
-	return catalog.EffortsOf(id)
+	if e := catalog.EffortsOf(id); len(e) > 0 {
+		return e
+	}
+	// one newer than this machine's catalog: its maker's line's levels
+	// (gpt-6.1-sol, NextCommit on Discord)
+	e, _ := catalog.KinEfforts(makerCatalogs(), id)
+	return e
 }
 
 // makerCatalogs are the models.dev ids of the vendors among the presets

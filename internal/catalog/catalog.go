@@ -287,6 +287,9 @@ type mdModel struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	ReleaseDate string `json:"release_date"`
+	// Family is the line models.dev puts the model in (gpt-sol, mimo):
+	// the levels a new one it lists without any most likely takes
+	Family      string `json:"family"`
 	Temperature *bool  `json:"temperature"` // false: rejects temperature/top_p
 	Thinks      bool   `json:"reasoning"`
 	Reasoning   []struct {
@@ -324,6 +327,34 @@ func (m mdModel) efforts() []string {
 		}
 	}
 	return out
+}
+
+// levels are the reasoning levels p gives m: its own, else, for one it
+// says thinks but lists without levels — a model just added, as OpenAI's
+// gpt-6.1-sol was (NextCommit on Discord) — those of the newest of p's
+// thinking models of its family released by then (gpt-6-sol's). A family
+// whose models all take a thinking switch alone (Xiaomi's mimo) gives
+// none, as before (#214).
+func (p mdProvider) levels(m mdModel) []string {
+	if e := m.efforts(); len(e) > 0 || !m.Thinks || m.Family == "" || m.budgeted() {
+		return e
+	}
+	var kin *mdModel
+	for _, x := range p.Models {
+		if x.Family != m.Family || !x.Thinks || x.ID == m.ID || len(x.efforts()) == 0 {
+			continue
+		}
+		if m.ReleaseDate != "" && x.ReleaseDate > m.ReleaseDate {
+			continue
+		}
+		if kin == nil || x.ReleaseDate > kin.ReleaseDate || x.ReleaseDate == kin.ReleaseDate && x.ID > kin.ID {
+			kin = &x
+		}
+	}
+	if kin == nil {
+		return nil
+	}
+	return kin.efforts()
 }
 
 // window is the tokens a prompt to m may hold: the input limit where
@@ -734,7 +765,7 @@ func Provider(id string) []Model {
 		mm := Model{ID: m.ID, Name: m.Name, Provider: id, Released: m.ReleaseDate, Price: m.Cost, Temperature: m.Temperature,
 			Images: slices.Contains(m.Modalities.Input, "image"), ImageInput: imageInput(m.Modalities.Input), Context: m.window(), Output: m.Limit.Output,
 			InputModalities: m.Modalities.Input, OutputModalities: m.Modalities.Output}
-		mm.Efforts = m.efforts()
+		mm.Efforts = p.levels(m)
 		mm.Reasoning = m.Thinks || len(mm.Efforts) > 0
 		out = append(out, mm)
 	}
@@ -1007,13 +1038,63 @@ func ListedBy(providers []string, id string) ([]string, bool) {
 				if bareID(key) != want {
 					continue
 				}
-				if e := m.efforts(); len(e) > 0 || !m.budgeted() {
+				if e := all[pid].levels(m); len(e) > 0 || !m.budgeted() {
 					return slices.Clone(e), true
 				}
 			}
 		}
 	}
 	return nil, false
+}
+
+// KinEfforts are the reasoning levels of a model none of the providers
+// named lists, taken from the newest of their thinking models of the same
+// name but for its version (gpt-6.1-sol's from gpt-6-sol, mimo-v2.7-flash's
+// from mimo-v2.6-flash): a model newer than the catalog on this machine
+// offers its line's levels, not none. False when none of them has one.
+func KinEfforts(providers []string, id string) ([]string, bool) {
+	all := load()
+	shape, ok := versionless(bareID(id))
+	if !ok {
+		return nil, false
+	}
+	var (
+		levels             []string
+		newest, from, name string
+		found              bool
+	)
+	for _, pid := range providers {
+		for key, m := range all[pid].Models {
+			if !m.Thinks && len(m.efforts()) == 0 || m.budgeted() {
+				continue
+			}
+			if s, ok := versionless(bareID(key)); !ok || s != shape {
+				continue
+			}
+			// the newest; of two the same day, the first provider's, then
+			// the greater id, whatever order the map gives
+			if !found || m.ReleaseDate > newest || m.ReleaseDate == newest && pid == from && key > name {
+				levels, newest, from, name, found = all[pid].levels(m), m.ReleaseDate, pid, key, true
+			}
+		}
+	}
+	return slices.Clone(levels), found
+}
+
+// versionless is a model id with each of its version parts (6.1, v2.6) as
+// "#", and whether it has one beside a name: gpt-#-sol.
+func versionless(b string) (string, bool) {
+	parts := strings.Split(b, "-")
+	versioned, named := false, false
+	for i, s := range parts {
+		v := strings.TrimPrefix(s, "v")
+		if v != "" && strings.Trim(v, "0123456789.") == "" && v[0] != '.' {
+			parts[i], versioned = "#", true
+		} else {
+			named = true
+		}
+	}
+	return strings.Join(parts, "-"), versioned && named
 }
 
 // budgeted reports whether models.dev says the model takes a thinking
