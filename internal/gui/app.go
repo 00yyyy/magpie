@@ -361,6 +361,12 @@ func Run(version string, showMain bool, link string) error {
 		// Wails exits on some webview errors; say why before it does.
 		ErrorHandler: func(err error) { log.Println("magpie:", err) },
 	})
+	// Windows without the WebView2 runtime can make no window: Wails would
+	// exit on the first, with nothing on screen to say why (#1806). The
+	// reader is told in a box of Windows' own instead, and the launch ends.
+	if !webView2Check(h.app) {
+		return nil
+	}
 	// Wails' default Learn More replaces the current window with wails.io.
 	// Keep the native menus, but open magpie's help in the system browser.
 	// macOS only: it is the one that shows a menu bar unasked; on Linux a
