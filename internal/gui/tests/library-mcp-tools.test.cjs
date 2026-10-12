@@ -11,6 +11,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { reach } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const HOME = "/Users/nf";
@@ -144,7 +145,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await list.locator(".lib-tooldesc").first().click();
         assert.equal(await page.evaluate(() => document.querySelector("#modal").classList.contains("lib")), false);
 
-        // Check again checks that one afresh; the list stays while it does
+        // Check again checks that one afresh; the list stays while it does.
+        // At 420 in German it is under the window's foot since the Hooks
+        // tab came in (e3a497d7a): the reader scrolls down to it
+        await reach(page, list.locator(".lib-toolfoot button", { hasText: w.check }));
         const at = await scrollTop(), pillThen = await where();
         await list.locator(".lib-toolfoot button", { hasText: w.check }).click();
         for (let i = 0; i < 50 && checks.length < 2; i++) await page.waitForTimeout(20);
