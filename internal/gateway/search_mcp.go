@@ -68,14 +68,14 @@ func serveMCP(w http.ResponseWriter, r *http.Request, what string, limit int64, 
 		http.Error(w, "POST JSON-RPC messages here (MCP Streamable HTTP)", http.StatusMethodNotAllowed)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, limit))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	body, ok := readMCPBody(w, r, limit)
+	if !ok {
 		return
 	}
 	body = bytes.TrimSpace(body)
 	batch := len(body) > 0 && body[0] == '['
 	var msgs []mcpMessage
+	var err error
 	if batch {
 		err = json.Unmarshal(body, &msgs)
 	} else {
@@ -203,4 +203,31 @@ func (s *Server) searchMCPRun(r *http.Request, query string) (string, error) {
 		return "", searchMCPError(msg)
 	}
 	return said, nil
+}
+
+// readMCPBody reads a request body of at most limit bytes, answering 413
+// for a longer one. A LimitReader alone ends at the limit as if the body
+// had, so a valid message padded past it was read as its prefix and run
+// (#1766); one byte more tells a body that ended from one that was cut.
+func readMCPBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, bool) {
+	if r.Body == nil {
+		return nil, true
+	}
+	tooLarge := func() ([]byte, bool) {
+		w.Header().Set("Connection", "close")
+		http.Error(w, "the request body is longer than this server takes", http.StatusRequestEntityTooLarge)
+		return nil, false
+	}
+	if r.ContentLength > limit {
+		return tooLarge()
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return nil, false
+	}
+	if int64(len(body)) > limit {
+		return tooLarge()
+	}
+	return body, true
 }

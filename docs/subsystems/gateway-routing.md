@@ -227,6 +227,14 @@ search, the tool error says where to add a search API. Settings › Models ›
 Web search shows the address (`#searchMcpRow`, from the Settings page's own
 `gateway` address).
 
+A POST's body is read by `readMCPBody`, up to 1 MiB here and 32 MiB for
+vision and for a signed-in server's `/mcp/{name}`. A longer body is refused
+whole with 413, before any message in it runs or is passed on: the length is
+told from the bytes read, one past the limit, not from Content-Length, so a
+valid message padded past the limit is never run as its prefix (#1766).
+`TestOwnMCPRejectsOversizedBody` and `TestMCPProxyRejectsOversizedBody`
+cover it.
+
 Covered by `TestSearchMCPServesWebSearch`, `TestSearchMCPWithNoSearcher`,
 `TestSearchMCPGuarded`, `TestSearchMCPHeldToKeyLimit`,
 `TestSearchMCPRoutedAsTheAgentsCall` and `search-mcp.test.cjs`.
