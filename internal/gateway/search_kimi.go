@@ -158,7 +158,7 @@ func (s *Server) kimiSearch(ctx context.Context, p provider.Provider, query stri
 		}
 	}
 	if len(pages) == 0 {
-		return "", nil, fmt.Errorf("%s found nothing", p.Name)
+		return "", nil, fmt.Errorf("%s %w", p.Name, errFoundNothing)
 	}
 	said, hits := pagesSaid(pages)
 	return said, hits, nil

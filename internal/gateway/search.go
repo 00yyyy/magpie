@@ -70,6 +70,16 @@ type CallFor struct {
 	// called magpie's MCP server (SearchMCPPath, VisionMCPPath) itself, for
 	// no model of magpie's.
 	MCP bool `json:"mcp,omitempty"`
+	// Instead, on a web search, is the searcher asked first that failed
+	// or found nothing (Why, NothingFound): the searcher that did search
+	// was the next one magpie tried in its place, and the Routing view
+	// says so. Picked is that the first was the one picked in Settings.
+	// A fallback that said nothing read as magpie ignoring the pick
+	// (Gearclickist on Discord: Grok picked, Codex's model searched).
+	Instead      string `json:"instead,omitempty"`
+	Why          string `json:"why,omitempty"`
+	NothingFound bool   `json:"nothingFound,omitempty"`
+	Picked       bool   `json:"picked,omitempty"`
 }
 
 func searchFor(ctx context.Context) *CallFor {
@@ -596,6 +606,9 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 		if slices.ContainsFunc(tried, func(t pick) bool { return t.id == c.Provider.ID }) {
 			continue
 		}
+		if len(tried) == 1 {
+			ctx = searchingInstead(ctx, p, model, err)
+		}
 		tried = append(tried, pick{c.Provider.ID, c.Small})
 		next := searcherSpent(c.Provider, c.Small)
 		if next == nil {
@@ -627,6 +640,34 @@ func searcherSpent(p provider.Provider, model string) error {
 	}
 	return fmt.Errorf("%s/%s: out of its allowance%s, not asked", p.ID, model, when)
 }
+
+// searchingInstead is ctx with its web search's CallFor saying that the
+// searcher asked first, p's model, failed with err, so the searches made
+// with ctx are in its place.
+func searchingInstead(ctx context.Context, p provider.Provider, model string, err error) context.Context {
+	f := searchFor(ctx)
+	if f == nil {
+		f = &CallFor{}
+	}
+	g := *f
+	g.Instead = p.ID
+	if model != "" {
+		g.Instead += "/" + model
+	}
+	g.Picked = false
+	if c, _, why := chosenSearcher(); why == "" && c != nil && c.ID == p.ID {
+		g.Picked = true
+	}
+	g.NothingFound = errors.Is(err, errFoundNothing)
+	g.Why = ""
+	if !g.NothingFound {
+		g.Why = strings.TrimPrefix(err.Error(), g.Instead+": ")
+	}
+	return context.WithValue(ctx, searchForKey{}, &g)
+}
+
+// errFoundNothing is a searcher's reply that names no page it found.
+var errFoundNothing = errors.New("found nothing")
 
 // searchWith asks one searcher's model to search: what it said, with the
 // pages its searches found. A reply with no page found and no address in
@@ -697,7 +738,7 @@ func (s *Server) searchWith(ctx context.Context, p provider.Provider, model, que
 	}
 	said := strings.TrimSpace(text.String())
 	if said == "" || (len(found) == 0 && !strings.Contains(said, "://")) {
-		return "", nil, fmt.Errorf("%s/%s found nothing", p.ID, model)
+		return "", nil, fmt.Errorf("%s/%s %w", p.ID, model, errFoundNothing)
 	}
 	if len(sources) > 0 && len(sources) <= 20 {
 		said += "\n\nSources:\n" + strings.Join(sources, "\n")

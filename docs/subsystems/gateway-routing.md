@@ -186,6 +186,22 @@ results. Covered by `TestWorkBuddySearchesForItsModels` (Claude Code's
 literal WebSearch request, the real service's reply bytes) and
 `TestWorkBuddyPluginSearches`.
 
+## A searcher that fails or finds nothing
+
+`modelSearch` asks the searcher picked in Settings (or the one magpie picks)
+first. When it fails, or its reply names no page it found
+(`errFoundNothing`), the next of `Searchers()` searches in its place, up to
+three in all (#669). That fallback is not silent: `searchingInstead` puts
+on the search's `CallFor` the searcher asked first (`instead`), whether the
+user picked it (`picked`), and why it didn't search (`why`, or
+`nothingFound`). The Routing row of the search that answered says which
+searcher was asked first, for whom, why it didn't search, and which one
+searched in its place (`kindWhy`). Gearclickist on Discord had Grok picked
+and saw Codex's model search, with nothing saying why.
+
+Covered by `TestSearchInPlaceOfPickedSaysWhy` and
+`search-instead.test.cjs`.
+
 ## A search API's base URL
 
 Each search API ([`provider.SearchAPI`](../../internal/provider/search_api.go))
