@@ -90,8 +90,38 @@ func resolveDrawing(id string) (provider.Provider, string, bool) {
 			}
 		}
 	}
+	// a subscription's newer image model, named before magpie lists it
+	// (grok-imagine-image-2.0, #1857): its vendor draws it, or says why not
+	for _, p := range provider.All() {
+		if p.On() && !p.DecideOnly() && drawsFamily(p, id) {
+			return p, id, true
+		}
+	}
 	return provider.Resolve(id)
 }
+
+// drawsFamily is whether a subscription whose image models magpie lists
+// itself (codexDrawers, grokDrawers) draws id, a model of the family those
+// are of: any grok-imagine-image* on a Grok subscription, any gpt-image-*
+// on a ChatGPT account. The vendor's newer ones work before magpie names
+// them, as grok-imagine-video* do for videos; one it doesn't serve is
+// refused by the vendor, in its own words.
+func drawsFamily(p provider.Provider, id string) bool {
+	switch {
+	case drawsGrok(p):
+		return strings.HasPrefix(id, grokDrawerFamily)
+	case drawsCodex(p):
+		return strings.HasPrefix(id, codexDrawerFamily)
+	}
+	return false
+}
+
+// The families of the image models a ChatGPT account and a Grok
+// subscription draw with (drawsFamily).
+const (
+	codexDrawerFamily = "gpt-image-"
+	grokDrawerFamily  = "grok-imagine-image"
+)
 
 // codexDrawers are the image models a ChatGPT account draws with, at
 // its Codex backend's images API, as Codex CLI does (gpt-image-2 is the one

@@ -189,8 +189,18 @@ func bareVideomaker(name string) (provider.Provider, string, bool) {
 			}
 		}
 	}
+	// any grok-imagine-video*, as videosCreate takes with the provider
+	// named: the vendor's newer ones work before magpie lists them (#1857)
+	for _, p := range provider.All() {
+		if p.On() && !p.DecideOnly() && drawsGrok(p) && strings.HasPrefix(name, grokVideoFamily) {
+			return p, name, true
+		}
+	}
 	return provider.Provider{}, "", false
 }
+
+// grokVideoFamily is the family of a Grok subscription's video models.
+const grokVideoFamily = "grok-imagine-video"
 
 // filming is one videos request, whichever shape it came in.
 type filming struct {
@@ -674,7 +684,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	custom := !remote && filmsCustom(p, model)
 	volcengine := p.Preset == "volcengine" && slices.ContainsFunc(p.PlanVideos(), func(m catalog.Model) bool { return m.ID == model })
 	// any grok-imagine-video*, not only those listed: the vendor's newer ones work before magpie names them
-	if !remote && !custom && !volcengine && (!drawsGrok(p) || !strings.HasPrefix(model, "grok-imagine-video")) {
+	if !remote && !custom && !volcengine && (!drawsGrok(p) || !strings.HasPrefix(model, grokVideoFamily)) {
 		fail(400, fmt.Sprintf(`%s/%s can't make videos: magpie makes videos with a Grok subscription's grok-imagine-video, Volcengine Agent Plan's Seedance models, another magpie's, and the models a provider's own model list marks "kind": "video"`, p.ID, model))
 		return
 	}
