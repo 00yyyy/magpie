@@ -32,20 +32,30 @@ models, token totals, start/last timestamps and effective prices come from the
 same usage records used by Usage and stats endpoints.
 
 Claude Desktop gateway rows can have a local name even without a CLI
-transcript. [`DesktopTitles`](../../internal/sessions/desktop_titles.go) reads
-`claude-code-sessions/*/*/local_*.json` and
+transcript (#1675). [`DesktopTitles`](../../internal/sessions/desktop_titles.go)
+reads `claude-code-sessions/*/*/local_*.json` and
 `local-agent-mode-sessions/*/*/local_*.json` in Desktop's data folders
-(`DesktopDataDirs`, including Claude-3p). The metadata's `title` names its
-explicit `sessionId`, `cliSessionId`, and `priorCliSessionIds`; prior runs
-share the current name but remain separate usage identities. A current ID
-takes precedence over a prior ID, and conflicting names at the same rank
-are unknown. Missing, unreadable or incomplete metadata leaves the existing
-recorded first-prompt title or ID fallback. Metadata is read only, cached by
-file identity/size/mtime, and
-renames take effect without another model request. This lookup also names
-native Desktop sessions and Routing's `/api/gateway/session-titles` results.
-It does not grant resume or native transcript capabilities to a gateway row.
-Verification: `TestDesktopSessionTitles`, `TestDesktopSessionTitleIdentity`.
+(`DesktopDataDirs`, the same `desktopdir.Everywhere` the session readers use,
+Claude-3p and Windows' MSIX folders included). The record's `title` names the
+CLI ids Desktop's own LocalSessionManager counts as the session's: its live
+handles `cliSessionId` and `unarchivedCliSessionId`, its lineage
+`preClearCliSessionId` and `priorCliSessionIds`, and, with no `cliSessionId`,
+its `sessionId` without `local_`. Prior runs share the current name but remain
+separate usage identities. A live handle takes precedence over a lineage one,
+and conflicting names at the same rank are unknown. A record that is there but
+doesn't read or parse (Desktop midway through writing it) keeps its last
+parse; one gone takes its names with it; with none, the row keeps the recorded
+first-prompt title or its id. Files are read through `filememo`, and the names
+stand for a second (`desktopTitlesHeld`) before the files are looked at again,
+so a list that assembles hundreds of native Desktop sessions stats them once
+and a rename in Desktop shows within a second. The names reach the native
+Desktop sessions (`assemble`), every gateway list (`MergeExternal`), the stats
+summaries (`MergeExternalStats`), Routing's `/api/gateway/session-titles`
+(`Titles`) and the Context page. It does not grant resume or native transcript
+capabilities to a gateway row. Verification: `TestDesktopSessionTitles`,
+`TestDesktopSessionTitleIdentity`, `TestDesktopSessionTitleHandles`,
+`TestDesktopSessionTitleInStats`, `TestDesktopTitlesReadOncePerList`,
+`TestDesktopSessionTitlesOnPages`.
 
 A gateway projection can be deleted (lc on Discord). `sessions.DeleteGateway`
 moves its recorded text folders (`gateway-conversations/<date>/<identity hash>`)

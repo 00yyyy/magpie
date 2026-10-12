@@ -896,7 +896,7 @@ func pricer() func(string) *catalog.Price {
 // Reset forgets the kept parses, in memory only.
 func Reset() {
 	desktopTitles.Lock()
-	desktopTitles.files = nil
+	desktopTitles.names, desktopTitles.last = nil, nil
 	desktopTitles.Unlock()
 	directoryCache.Lock()
 	directoryCache.entries = map[string]directoryEntry{}

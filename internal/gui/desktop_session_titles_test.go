@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -81,9 +82,20 @@ func TestDesktopSessionTitlesOnPages(t *testing.T) {
 		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil || len(out.Titles) != 2 || out.Titles["claude-desktop:"+id] != name || out.Titles["claude-desktop:"+prior] != name {
 			t.Fatalf("routing names: %d %s", w.Code, w.Body)
 		}
+		// the Context page's sessions
+		titles := map[string]string{}
+		for _, s := range contextOf([]gateway.Route{ctxRoute(1, "claude-desktop", id, 20000, 1000, 200000, 0), ctxRoute(2, "claude-desktop", "remote-only", 20000, 1000, 200000, 0)}, 7).Sessions {
+			titles[s.Key] = s.Title
+		}
+		if titles[id] != name || titles["remote-only"] != "" {
+			t.Fatalf("context titles %v, want %q", titles, name)
+		}
 	}
 	check("Desktop 会话标题", "remote-only")
 	write("Desktop renamed")
+	// what was read stands for a second (desktopTitlesHeld); Reset is that
+	// second gone by
+	sessions.Reset()
 	check("Desktop renamed", "remote-only")
 	// Keep upstream's newly added first-prompt title when no Desktop name
 	// is available, while a saved Desktop name still takes precedence.
