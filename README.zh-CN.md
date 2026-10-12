@@ -43,7 +43,7 @@
 
 ## 快速开始
 
-**1 · 安装。**从 **[usemagpie.ai](https://usemagpie.ai/zh/)** 下载应用，或者运行：
+**1 · 安装**。从 **[usemagpie.ai](https://usemagpie.ai/zh/)** 下载应用，或者运行：
 
 ```sh
 curl -fsSL https://usemagpie.ai/install.sh | sh
@@ -51,9 +51,9 @@ curl -fsSL https://usemagpie.ai/install.sh | sh
 
 <sub>Mac 版已签名并公证，每个版本都会自动更新。网络受限时可用 `--proxy` 或 `--mirror`。也可以 `go install github.com/yetone/magpie@latest`，或者用 [Docker 镜像](https://usemagpie.ai/docs/zh/docker)。</sub>
 
-**2 · 添加 provider。**打开 magpie，进入 **Providers → 添加 provider**。选一个预设、粘贴 key，或者登录一个订阅。
+**2 · 添加 provider**。打开 magpie，进入 **Providers → 添加 provider**。选一个预设、粘贴 key，或者登录一个订阅。
 
-**3 · 选模型。**在 **Agents** 页给每个 Agent 选一个模型。开一个新会话就用上了。
+**3 · 选模型**。在 **Agents** 页给每个 Agent 选一个模型。开一个新会话就用上了。
 
 也可以全程在终端里操作：
 
@@ -122,7 +122,7 @@ flowchart LR
 
 ### 任意模型，任意 Agent
 
-点一下模型，弹出可搜索的列表：你添加的每个 provider 的每个模型，格式是 `provider/model`。选中后 magpie 原子地改写 Agent 的配置，注释、顺序和格式原样保留。**方案（Profile）**把所有 Agent 的配置存成一个名字，比如「省钱」「专注」，一键全部切回去。每个 Agent 还可以有自己的常用模型短名单，方案也会一并保存。
+点一下模型，弹出可搜索的列表：你添加的每个 provider 的每个模型，格式是 `provider/model`。选中后 magpie 原子地改写 Agent 的配置，注释、顺序和格式原样保留。**方案**（Profile）把所有 Agent 的配置存成一个名字，比如「省钱」「专注」，一键全部切回去。每个 Agent 还可以有自己的常用模型短名单，方案也会一并保存。
 
 <table>
 <tr>
@@ -147,7 +147,7 @@ flowchart LR
 
 > **预设包括** Anthropic · OpenAI · Google Gemini · DeepSeek · Kimi · 智谱 GLM · MiniMax · 阶跃星辰 · 通义千问 · 百度千帆 · 腾讯云 · 华为云 MaaS · 火山方舟 · Mistral · Groq · xAI · OpenRouter · Together · Fireworks · 硅基流动 · NVIDIA NIM · 魔搭 · Ollama · LM Studio …… 以及任何兼容 OpenAI 或 Anthropic 的地址。
 
-**导入**能读取你在 CC Switch、Claude Code、Codex 和 Alma 里配置的 provider。**[「添加到 magpie」链接](https://usemagpie.ai/docs/zh/import)**让 provider 网站一键把配置交给 magpie。每个 key 和每个账号都可以走自己的代理。
+**导入**能读取你在 CC Switch、Claude Code、Codex 和 Alma 里配置的 provider。[**「添加到 magpie」链接**](https://usemagpie.ai/docs/zh/import)让 provider 网站一键把配置交给 magpie。每个 key 和每个账号都可以走自己的代理。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/public/img/add-zh-dark.png">
@@ -177,7 +177,7 @@ flowchart LR
 | **`usage`** | 优先用用得最少的成员 |
 | **`pace`** | 优先用距离重置前每小时剩余周额度最多的账号 |
 
-只要厂商的提示词缓存还值得保留，**对话就留在回答它的那个账号上**。路由组可以嵌套。**[意图路由](https://usemagpie.ai/docs/zh/intent)**由你选的一个小模型读每一轮新消息，写测试交给强模型，简单问题交给便宜的模型。路由页实时展示每一次决策。
+只要厂商的提示词缓存还值得保留，**对话就留在回答它的那个账号上**。路由组可以嵌套。[**意图路由**](https://usemagpie.ai/docs/zh/intent)由你选的一个小模型读每一轮新消息，写测试交给强模型，简单问题交给便宜的模型。路由页实时展示每一次决策。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/public/img/routing-zh-dark.png">
