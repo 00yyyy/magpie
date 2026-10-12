@@ -8,6 +8,7 @@
 package provider
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
@@ -403,6 +404,10 @@ func read() (file, error) {
 	if err != nil {
 		return f, &unreadableError{Path(), err}
 	}
+	// An editor that saves with a byte-order mark leaves JSON that Go's
+	// decoder refuses; read as broken, the file fell back to its .bak, an
+	// older generation without what was saved since (#1821).
+	b = bytes.TrimPrefix(b, utf8BOM)
 	if err := json.Unmarshal(b, &f); err != nil {
 		// one left all zero by a crash (#1505) is its last good generation
 		bak, ferr := lastgood.Fallback(Path(), b, validProviders)
@@ -420,8 +425,10 @@ func read() (file, error) {
 // validProviders is providers.json's contents read as the catalog.
 func validProviders(b []byte) bool {
 	var f file
-	return json.Unmarshal(b, &f) == nil
+	return json.Unmarshal(bytes.TrimPrefix(b, utf8BOM), &f) == nil
 }
+
+var utf8BOM = []byte("\xef\xbb\xbf")
 
 // FileError is why providers.json can't be read, nil when it can or isn't
 // there: for what lists the providers to say so, not "none yet".
@@ -808,7 +815,9 @@ func AddCopy(p Provider, from string) (string, error) {
 	if p.BalanceToken == "" {
 		p.BalanceToken = src.BalanceToken
 	}
-	if p.AccessKeyID == "" && p.SecretAccessKey == "" {
+	// the access key as the copy's editor showed it: the form sends its ID
+	// but never the saved Secret, which went missing from the copy (#1821)
+	if p.SecretAccessKey == "" && (p.AccessKeyID == "" || p.AccessKeyID == src.AccessKeyID) {
 		p.AccessKeyID, p.SecretAccessKey = src.AccessKeyID, src.SecretAccessKey
 	}
 	if p.ZhipuTeam == nil {

@@ -12591,6 +12591,10 @@ function quotaError(err) {
   if (/violation of Terms of Service/i.test(err)) return t("Google has suspended this account — hover for details");
   if (/access token is invalid or expired|didn't take the access token/.test(err)) return t("AiHubMix didn't take the access token — paste a new one in the provider's settings");
   if (/this key has no limit/.test(err)) return t("This key has no limit — add the account's access token in the provider's settings to see its balance");
+  // a Volcengine or Tencent plan whose provider has no access key to read
+  // it with (accessKeyCard, #1821): the card used to be left out unsaid
+  if (/^this plan's usage is read with the account's access key: give its SecretId/.test(err)) return t("This plan's usage needs the account's SecretId and SecretKey — give them in the provider's settings");
+  if (/^this plan's usage is read with the account's access key/.test(err)) return t("This plan's usage needs the account's AccessKey ID and Secret — give them in the provider's settings");
   // ZCode with no GLM Coding Plan and no Start Plan left: the account has
   // nothing to spend, which is not a reading that failed (#1001). Both the
   // built-in (zcodeStartQuota, internal/provider/zcode_start.go) and the
@@ -16736,6 +16740,14 @@ function quotaWindows(sub) {
     e.title = sub.error;
     // read again from here too: a failed reading is the one most wanted
     e.prepend(quotaRefresh(sub));
+    // a plan that needs the access key the provider hasn't: the way to
+    // give it, one click away (#1821)
+    if (sub.needsAccessKey && sub.provider) {
+      const go = el("button", "quota-fix", t("Open settings"));
+      go.type = "button";
+      go.onclick = (ev) => { ev.stopPropagation(); openProvider(sub.provider); };
+      e.append(" ", go);
+    }
     return e;
   };
   if (sub.balance && !sub.windows?.length) {

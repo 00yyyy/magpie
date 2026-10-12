@@ -112,6 +112,10 @@ type SubscriptionQuota struct {
 	Until *time.Time `json:"until,omitempty"`
 	Renew string     `json:"renew,omitempty"`
 	Error string     `json:"error,omitempty"`
+	// NeedsAccessKey is a plan read with the account's access key, which
+	// its provider hasn't (accessKeyCard, #1821): the Usage page offers
+	// the provider's settings to give it in.
+	NeedsAccessKey bool `json:"needsAccessKey,omitempty"`
 	// AsOf is when an allowance shown in place of one that couldn't be
 	// read was read (see keepLast); nil for a reading just made.
 	AsOf *time.Time `json:"asOf,omitempty"`

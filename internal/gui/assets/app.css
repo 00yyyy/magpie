@@ -825,6 +825,8 @@ body.window .field.solo { grid-column: auto; }
 .quota-track { height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; }
 .quota-track i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .subscription-error { font-size: 11px; color: var(--faint); }
+/* the way to the provider's settings, on a plan card that needs its access key (#1821) */
+.subscription-error .quota-fix { font: inherit; color: var(--accent); padding: 0; background: none; border: 0; cursor: pointer; }
 /* WorkBuddy's credits a day (#568): the period's sum over a bar a day; a
    day before counting began is an empty slot, not a zero */
 .credit-days { margin-top: 10px; }

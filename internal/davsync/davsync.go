@@ -746,21 +746,18 @@ func take(to *backup.Bundle, from backup.Bundle, part string) {
 	case "providers":
 		keys := from.Keys || (from.ProvidersKeys != nil && *from.ProvidersKeys)
 		ps := from.Providers
-		if !keys && (to.Keys || (to.ProvidersKeys != nil && *to.ProvidersKeys)) { // sent without keys: keep the ones the server has
-			keys := map[string]provider.Provider{}
+		if to.Keys || (to.ProvidersKeys != nil && *to.ProvidersKeys) {
+			// Keep the server's secrets the upload hasn't: all its keys when
+			// it was sent without, and an access key or balance token a
+			// keyed one from an older magpie doesn't know (#1821).
+			server := map[string]provider.Provider{}
 			for _, p := range to.Providers {
-				keys[p.ID] = p
+				server[p.ID] = p
 			}
 			ps = slices.Clone(ps)
 			for i, p := range ps {
-				if k, ok := keys[p.ID]; ok && p.Key == "" && len(p.Keys) == 0 {
-					ps[i].Key, ps[i].KeyName, ps[i].Keys, ps[i].KeyProtocol, ps[i].KeyWeight = k.Key, k.KeyName, k.Keys, k.KeyProtocol, k.KeyWeight
-					if p.BalanceToken == "" {
-						ps[i].BalanceToken = k.BalanceToken
-					}
-					if p.AccessKeyID == "" && p.SecretAccessKey == "" {
-						ps[i].AccessKeyID, ps[i].SecretAccessKey = k.AccessKeyID, k.SecretAccessKey
-					}
+				if k, ok := server[p.ID]; ok {
+					ps[i] = provider.KeepSecrets(p, k, !keys && p.Key == "" && len(p.Keys) == 0)
 				}
 			}
 		}

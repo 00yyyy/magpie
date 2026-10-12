@@ -1368,8 +1368,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.NoModels = old.NoModels
 				}
 				// a Volcengine access key likewise: its ID kept when left
-				// out, its Secret when sent blank, unless the form dropped it
-				if req.AccessKeyID == nil && old != nil {
+				// out or sent blank (an editor opened before the key was
+				// given sends ""), its Secret when sent blank, unless the
+				// form dropped it (#1821)
+				if in.AccessKeyID == "" && old != nil && !req.ClearAccessKey {
 					in.AccessKeyID = old.AccessKeyID
 				}
 				if in.SecretAccessKey == "" && old != nil && !req.ClearAccessKey {

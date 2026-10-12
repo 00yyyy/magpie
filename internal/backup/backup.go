@@ -23,7 +23,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -228,11 +227,9 @@ func Collect(keys bool, app string) (Bundle, error) {
 	return b, nil
 }
 
-var secretHeader = regexp.MustCompile(`(?i)auth|key|token|secret|cookie|session|password`)
-
 // Secret reports whether a header or an environment variable by that name
 // looks like it holds a key: what a backup without keys leaves empty.
-func Secret(name string) bool { return secretHeader.MatchString(name) }
+func Secret(name string) bool { return provider.SecretHeader(name) }
 
 func withoutKeys(p provider.Provider) provider.Provider {
 	p.Key, p.KeyName, p.Keys, p.KeyProtocol, p.KeyWeight = "", "", nil, "", 0
