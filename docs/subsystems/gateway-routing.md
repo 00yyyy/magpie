@@ -154,11 +154,11 @@ and Volcengine's polls and downloads as well.
 ## Turning provider search off
 
 [Settings](../../internal/settings/settings.go)' `searcher: "off"` disables magpie's provider-assisted search,
-including Kimi Code's search service and Google sign-ins' separate search
-requests. Configured Search APIs still run in their saved order; failures
+including Kimi Code's and WorkBuddy's search services and Google sign-ins'
+separate search requests. Configured Search APIs still run in their saved order; failures
 never fall back to a provider while this setting is off. Without a ready
 Search API, [`canSearchFor`](../../internal/gateway/search_kimi.go) does not offer magpie's replacement search tool.
-`searchesOwn` is the one check for a provider searching for its own models (Kimi Code, a Google sign-in), so
+`searchesOwn` is the one check for a provider searching for its own models (Kimi Code, WorkBuddy, a Google sign-in), so
 `ownSearcher` and the model list another magpie reads (`webSearchOf`, which then says no search) follow it too.
 A provider's native search on the client's protocol remains unchanged.
 An empty `searcher` still selects a provider automatically; an unavailable
@@ -167,6 +167,23 @@ named provider still falls back to that selection.
 [`webSearch`](../../internal/gateway/search.go) enforces the API-only path.
 Covered by `TestSearchProviderOff`, `TestSearchProviderOffForwarding`, `TestSearchProviderOffTellsRemoteMagpie`,
 `TestSearcherChosen`, `TestSettingsSearchProviderOff`, and `searcher-pick.test.cjs`.
+
+## WorkBuddy's search service
+
+A WorkBuddy plan's models (the China build's and WorkBuddy AI's, built-in
+or moved onto the plugin) have no search tool of their own. With nothing
+else in magpie that searches, `canSearchFor` was false and Claude Code's
+WebSearch came back empty (#1798). `wbSearch`
+([`search_workbuddy.go`](../../internal/gateway/search_workbuddy.go)) asks the
+plan's own service as WorkBuddy's CLI does: POST
+`<site>/agenttool/v1/search` with `{"query","type":"text2text","max_results":5}`,
+signed by `Provider.Sign` and sent by `Provider.Do`, so a moved account goes
+through the plugin's fetch. `searchesOwn` names it for the plan's own models
+only, before magpie's picked searcher, as with Kimi Code. A `{code, msg}`
+refusal (15001 is its search quota) is reported as an error, never as no
+results. Covered by `TestWorkBuddySearchesForItsModels` (Claude Code's
+literal WebSearch request, the real service's reply bytes) and
+`TestWorkBuddyPluginSearches`.
 
 ## A search API's base URL
 
@@ -301,7 +318,7 @@ go test -tags nogui ./internal/gateway -run 'TestAutoMode|TestClaudeBridgeSafegu
 go test -tags nogui ./internal/gateway -run 'TestCreditsExhaustedIsOutOfCredit|TestOutOfCreditLeavesFreeModels'
 go test -tags nogui ./internal/gateway ./internal/usage -run 'TestRetriedRequestCountsOnce|TestRequestsCountedOnceWithTheirRetries'
 go test -tags nogui ./internal/gateway -run 'TestRemoteMagpie|TestRedactedKinds|TestKeyLimitTellsOnlyTheCaller'
-go test -tags nogui ./internal/gateway -run 'TestSearchMCP|TestVisionMCP|TestAutoVisionPassesOverOneOut|TestAutoVisionTierAmongThoseWithAllowance|TestSpentModelAcrossAccounts|TestVisionDoesNotAskSpentDescriber|TestSearcherPassesOverOneOut'
+go test -tags nogui ./internal/gateway -run 'TestSearchMCP|TestVisionMCP|TestWorkBuddySearchesForItsModels|TestWorkBuddyPluginSearches|TestAutoVisionPassesOverOneOut|TestAutoVisionTierAmongThoseWithAllowance|TestSpentModelAcrossAccounts|TestVisionDoesNotAskSpentDescriber|TestSearcherPassesOverOneOut'
 go test -tags nogui ./internal/gateway ./internal/gui . -run 'TestSearchAPIAtItsOwnBaseURL|TestSearchKeyStaysAtItsBaseURL|TestSearchAPIBaseURLFromSettings|TestSearchCLI'
 go test -tags nogui ./internal/redact ./internal/gui -run 'TestMoreKinds|TestCategoryDefaults|TestRedactKindsAreRedacts|TestRedactRuleEdit'
 go test -tags nogui ./internal/gateway -run 'TestCodexModelList|TestCodexModelsEtag'
