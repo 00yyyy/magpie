@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,22 @@ func fastOTel(t *testing.T) {
 	every, sessionsEvery := usage.OTelEvery, usage.OTelSessionsEvery
 	usage.OTelEvery, usage.OTelSessionsEvery = 200*time.Millisecond, 50*time.Millisecond
 	t.Cleanup(func() { usage.OTelEvery, usage.OTelSessionsEvery = every, sessionsEvery })
+}
+
+// otelExports takes every export the collector has received once stop() has
+// flushed, as trace exports and metric exports. A request that outlasts an
+// export interval has its attempt spans sent in one export and its root in
+// the next (#1794), so a test reads them all, never only the first.
+func otelExports(received chan []byte) (traces, metrics [][]byte) {
+	for len(received) > 0 {
+		b := <-received
+		if strings.Contains(string(b), `"resourceMetrics"`) {
+			metrics = append(metrics, b)
+		} else {
+			traces = append(traces, b)
+		}
+	}
+	return traces, metrics
 }
 
 func TestOTelSessionDedupOnlyUnkeyedLoopback(t *testing.T) {
@@ -427,7 +444,7 @@ func TestOTelWaterfallIncludesUnbilledFallback(t *testing.T) {
 	plan := &fake{ctype: "application/json", code: 429, reply: `{"error":{"message":"PRIVATE-ERROR"}}`}
 	spare := &fake{ctype: "application/json", reply: `{"id":"ok","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}`}
 	twoProviders(t, plan, spare)
-	received := make(chan []byte, 4)
+	received := make(chan []byte, 64)
 	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		received <- b
@@ -451,34 +468,38 @@ func TestOTelWaterfallIncludesUnbilledFallback(t *testing.T) {
 		t.Fatalf("gateway: %d %s", response.Code, response.Body.String())
 	}
 	stop()
-	exported := <-received
-	if strings.Contains(string(exported), "PRIVATE-") {
-		t.Fatalf("private data exported: %s", exported)
+	traces, metricExports := otelExports(received)
+	type span struct {
+		TraceID    string `json:"traceId"`
+		SpanID     string `json:"spanId"`
+		ParentID   string `json:"parentSpanId"`
+		Start      string `json:"startTimeUnixNano"`
+		End        string `json:"endTimeUnixNano"`
+		Attributes []struct {
+			Key   string
+			Value map[string]string
+		}
+		Status struct{ Code int }
 	}
-	var wire struct {
-		ResourceSpans []struct {
-			ScopeSpans []struct {
-				Spans []struct {
-					TraceID    string `json:"traceId"`
-					SpanID     string `json:"spanId"`
-					ParentID   string `json:"parentSpanId"`
-					Start      string `json:"startTimeUnixNano"`
-					End        string `json:"endTimeUnixNano"`
-					Attributes []struct {
-						Key   string
-						Value map[string]string
-					}
-					Status struct{ Code int }
-				}
+	var spans []span
+	for _, exported := range traces {
+		if strings.Contains(string(exported), "PRIVATE-") {
+			t.Fatalf("private data exported: %s", exported)
+		}
+		var wire struct {
+			ResourceSpans []struct{ ScopeSpans []struct{ Spans []span } }
+		}
+		if err := json.Unmarshal(exported, &wire); err != nil {
+			t.Fatal(err)
+		}
+		for _, rs := range wire.ResourceSpans {
+			for _, ss := range rs.ScopeSpans {
+				spans = append(spans, ss.Spans...)
 			}
 		}
 	}
-	if err := json.Unmarshal(exported, &wire); err != nil {
-		t.Fatal(err)
-	}
-	spans := wire.ResourceSpans[0].ScopeSpans[0].Spans
 	if len(spans) != 3 {
-		t.Fatalf("want two attempts and a root: %s", exported)
+		t.Fatalf("want two attempts and a root, in %d exports: %+v", len(traces), spans)
 	}
 	root := spans[2]
 	if root.TraceID != traceID || root.ParentID != parentID || root.Status.Code != 0 {
@@ -502,9 +523,13 @@ func TestOTelWaterfallIncludesUnbilledFallback(t *testing.T) {
 		t.Fatalf("ledger: %+v", records)
 	}
 	// Metric histograms count two attempts, not the request parent.
-	metrics := string(<-received)
-	if strings.Contains(metrics, `"stringValue":""`) {
-		t.Fatalf("root included in metrics: %s", metrics)
+	if len(metricExports) == 0 {
+		t.Fatal("no metrics exported")
+	}
+	for _, metrics := range metricExports {
+		if strings.Contains(string(metrics), `"stringValue":""`) {
+			t.Fatalf("root included in metrics: %s", metrics)
+		}
 	}
 }
 
@@ -536,7 +561,7 @@ func TestOTelWaterfallFailureAndCancellation(t *testing.T) {
 				f.refuse = func([]byte) (int, string) { cancel(); return 400, f.reply }
 			}
 			setup(t, provider.Chat, f)
-			received := make(chan []byte, 4)
+			received := make(chan []byte, 64)
 			collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				b, _ := io.ReadAll(r.Body)
 				received <- b
@@ -554,16 +579,16 @@ func TestOTelWaterfallFailureAndCancellation(t *testing.T) {
 			req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)).WithContext(ctx)
 			New().Handler().ServeHTTP(httptest.NewRecorder(), req)
 			stop()
-			select {
-			case b := <-received:
-				if strings.Count(string(b), `"code":2`) != 2 || strings.Count(string(b), `"parentSpanId"`) != 1 {
-					t.Fatalf("expected failed child and root: %s", b)
-				}
-				if canceled && !strings.Contains(string(b), `"intValue":"499"`) {
-					t.Fatalf("cancellation status missing: %s", b)
-				}
-			case <-time.After(time.Second):
+			traces, _ := otelExports(received)
+			if len(traces) == 0 {
 				t.Fatal("no failure trace")
+			}
+			b := string(bytes.Join(traces, []byte("\n")))
+			if strings.Count(b, `"code":2`) != 2 || strings.Count(b, `"parentSpanId"`) != 1 {
+				t.Fatalf("expected failed child and root: %s", b)
+			}
+			if canceled && !strings.Contains(b, `"intValue":"499"`) {
+				t.Fatalf("cancellation status missing: %s", b)
 			}
 		})
 	}
