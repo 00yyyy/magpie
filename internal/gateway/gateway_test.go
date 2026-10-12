@@ -70,9 +70,15 @@ func sse(lines ...string) string {
 }
 
 // setup points magpie's provider file at a temp dir and adds one provider
-// speaking only the given protocol, backed by the fake.
+// speaking only the given protocol, backed by the fake. Rests are kept
+// for the process, by provider id, and every test's provider is "fake":
+// one a test rested (out of its allowance, held without asking since
+// #1772) is lifted before and after it, or a later test's request would be
+// answered from it, its fake never asked (#1840).
 func setup(t *testing.T, proto provider.Protocol, f *fake) *httptest.Server {
 	t.Helper()
+	noRests()
+	t.Cleanup(noRests)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	up := httptest.NewServer(f)
@@ -90,6 +96,14 @@ func setup(t *testing.T, proto provider.Protocol, f *fake) *httptest.Server {
 		t.Fatal(err)
 	}
 	return up
+}
+
+// noRests lifts every rest the package's tests have recorded.
+func noRests() {
+	restingUntil.Lock()
+	restingUntil.m = map[string]time.Time{}
+	restingUntil.note = map[string]Rest{}
+	restingUntil.Unlock()
 }
 
 func post(t *testing.T, path, body string) (int, string) {
