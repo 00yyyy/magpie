@@ -352,12 +352,19 @@ type statsKept struct {
 	at   time.Time
 	st   sessions.Stats
 	busy bool
+	used time.Time
 }
+
+// statsMemoMost is how many distinct ?days values the memo keeps: each one is
+// a whole sessions.Stats, and ?days takes any number a caller sends, so the
+// least recently asked one is let go when a new value comes past it.
+const statsMemoMost = 8
 
 func statsFor(days int) sessions.Stats {
 	days = max(0, days)
 	statsMemo.Lock()
 	if k := statsMemo.m[days]; k != nil {
+		k.used = time.Now()
 		if !k.busy && time.Since(k.at) > 10*time.Second {
 			k.busy = true
 			go func() {
@@ -378,7 +385,17 @@ func statsFor(days int) sessions.Stats {
 		statsMemo.m = map[int]*statsKept{}
 	}
 	if statsMemo.m[days] == nil {
-		statsMemo.m[days] = &statsKept{at: time.Now(), st: st}
+		if len(statsMemo.m) >= statsMemoMost {
+			oldest := -1
+			for d, k := range statsMemo.m {
+				if oldest == -1 || k.used.Before(statsMemo.m[oldest].used) {
+					oldest = d
+				}
+			}
+			delete(statsMemo.m, oldest)
+		}
+		now := time.Now()
+		statsMemo.m[days] = &statsKept{at: now, st: st, used: now}
 	}
 	statsMemo.Unlock()
 	return st
