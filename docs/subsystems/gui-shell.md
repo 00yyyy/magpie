@@ -257,6 +257,26 @@ waits for `show` to accept navigation before creating its draft.
 
 ## Verification
 
+The session readers include Cursor CLI chat stores, Cursor editor project
+transcripts and older editor `cursorDiskKV` conversations. CLI stores win
+when the same session ID has a project transcript. Editor conversations are
+read only, including at the delete API, and cannot be resumed by cursor-agent.
+Project transcripts contain no message timestamps or billing data; their
+existing file modification time supplies the activity date, and tokens and
+cost are not inferred. Database bubbles retain their own timestamps.
+The editor database is opened as one read-only snapshot per listing, shared
+by its chats and removed when the listing ends. Metadata changes invalidate
+the cached summary even if the project transcript has not changed. See
+[`cursor_editor.go`](../../internal/sessions/cursor_editor.go),
+`TestCursorEditorTranscript` and `TestCursorEditorLiveDatabaseAndMetadataRefresh`
+in [`cursor_editor_test.go`](../../internal/sessions/cursor_editor_test.go).
+
+Messages without tokens or an active-time estimate still count as sessions
+in the overview. Cursor and OpenCode conversations can be opened through
+the existing transcript API, including CLI reasoning and tool calls. When the selected date range is empty but
+matching history exists, Usage offers **All sessions**, preserving the agent,
+model, folder and search filters. See `sessions-empty-range.test.cjs`.
+
 ```sh
 go test -tags nogui ./internal/gui
 go test -run TestWebView2 ./internal/gui   # on Windows: Wails' runtime lookup, missing and present

@@ -19287,6 +19287,19 @@ function renderSessions() {
     stats.classList.add("empty");
     const filtered = sessAgent !== "all" || sessModel || sessFolder || q;
     stats.append(el("div", "none", !all.length && !rows.length ? t("No sessions yet. Claude Code's, Codex's, OpenCode's and Pi's sessions on this computer show up here, with what each cost and the command that resumes it.") : filtered ? t("No session matches.") : t("Nothing in this range.")));
+    if (from && all.some((s) => byAgent(s) && byFolder(s) &&
+      (!sessModel || s.models.some((m) => m.model === sessModel)) &&
+      (!q || [s.title, s.cwd, s.id, s.name, ...s.models.map((m) => m.model)].some((x) => (x || "").toLowerCase().includes(q))))) {
+      stats.firstChild.textContent = t("No sessions in this range");
+      const history = el("button", "text sess-show-history", t("All sessions"));
+      history.onclick = () => {
+        sessRange = "all";
+        try { localStorage.setItem("magpie.sessRange", sessRange); } catch {}
+        sessStats = null;
+        loadSessions().catch((e) => status(e.message, "err"));
+      };
+      stats.append(history);
+    }
     box.hidden = true;
     chart.hidden = true;
     grid.hidden = true;

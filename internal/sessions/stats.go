@@ -210,6 +210,10 @@ func statsAt(days int, now time.Time) Stats {
 			}
 			sh.prompts += d.Prompts
 			sh.replies += d.Replies
+			if d.Prompts+d.Replies > 0 {
+				sh.dates[date] = true
+				dates[date] = true
+			}
 			pd.messages += d.Prompts + d.Replies
 			for name, n := range d.Tools {
 				sh.tools[name] += n

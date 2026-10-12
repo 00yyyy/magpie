@@ -30,7 +30,7 @@ var ErrNoTranscript = errors.New("this agent's conversations can't be shown")
 // transcript.
 func HasTranscript(agent string) bool {
 	switch agent {
-	case "claude", "qoder", "qoder-cn", "codex", "pi", "omp":
+	case "claude", "qoder", "qoder-cn", "codex", "pi", "omp", "cursor", "opencode":
 		return true
 	}
 	return false
@@ -72,6 +72,10 @@ func readTranscript(s Session, add func(bool, Part) bool) error {
 func readTranscriptOf(s Session, keep func([]byte) bool, add func(bool, Part) bool) error {
 	whole := Call{Agent: s.Agent, File: s.Path, To: math.MaxInt64}
 	switch s.Agent {
+	case "opencode":
+		return openCodeTranscript(s, add)
+	case "cursor":
+		return cursorTranscript(s.Path, add)
 	case "codex":
 		return codexContentOf(whole, keep, add)
 	case "pi", "omp":
