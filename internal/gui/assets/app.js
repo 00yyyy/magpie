@@ -23217,7 +23217,28 @@ let holding = false; // one frame loop, whatever the clicks
 // coming or going with it: nothing the click did, and what it held is no
 // longer where it was read, so the page isn't scrolled after it
 let heldWidth = innerWidth;
-addEventListener("resize", () => { if (innerWidth !== heldWidth) { heldWidth = innerWidth; held = null; } });
+// It is the reader's place that is kept instead: where they were, or as far
+// down as the page goes, while it is laid out again. Crossing SIDE_AT, the
+// browser clamps the view to each layout it passes through (app.css's
+// side-nav rules before layoutNav has moved the tabs, then a part a few
+// pixels short of its new height), and the page ended short of its foot:
+// at the foot of Settings, 960 to 1440 wide in WebKit left it 6px up (#911).
+let relaidUntil = 0;
+const relaid = new ResizeObserver(() => {
+  if (performance.now() > relaidUntil) { relaid.disconnect(); return; }
+  const v = $("#view-" + view);
+  if (v && !v.hidden && !held && performance.now() >= purposeUntil) backToReader(v);
+});
+addEventListener("resize", () => {
+  if (innerWidth === heldWidth) return;
+  heldWidth = innerWidth;
+  held = null;
+  const v = $("#view-" + view);
+  if (!v || v.hidden) return;
+  relaidUntil = performance.now() + 1000;
+  relaid.disconnect();
+  for (const c of v.children) if (!c.classList.contains("view-room")) relaid.observe(c);
+});
 // A part that grows or shrinks as it plays (the agents' scroll unrolling
 // above the button that unrolls it) is held again as soon as it is laid out,
 // before it's painted: a frame's loop sees it only as the frame before left
