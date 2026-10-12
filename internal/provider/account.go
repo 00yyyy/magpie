@@ -489,7 +489,7 @@ type claudeKeychainItem struct {
 // service alone when the account is "". Either way it is the one under
 // $USER that a sign-in is written back to.
 func readClaudeKeychainItem(account string) claudeKeychainItem {
-	args := []string{"find-generic-password", "-s", "Claude Code-credentials", "-w"}
+	args := []string{"find-generic-password", "-s", claudeHomeService(), "-w"}
 	if account != "" {
 		args = append(args, "-a", account)
 	}
@@ -506,6 +506,17 @@ func readClaudeKeychainItem(account string) claudeKeychainItem {
 		c: c, ok: ok, found: true, hex: wasHex,
 		loc: claudeCredentialLocation{keychain: true, account: claudeKeychainAccount()},
 	}
+}
+
+// claudeHomeService is the keychain item Claude Code keeps the sign-in
+// magpie reads as its own in: "Claude Code-credentials", or with
+// CLAUDE_CONFIG_DIR set, that directory's own (claudeDirService), as
+// Claude Code names it, beside the .credentials.json there.
+func claudeHomeService() string {
+	if d := appdir.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+		return claudeDirService(d)
+	}
+	return "Claude Code-credentials"
 }
 
 // claudeKeychainAccount is the account Claude Code keeps its sign-in
@@ -589,7 +600,7 @@ func saveClaudeCredential(loc claudeCredentialLocation, c claudeCredentials) err
 			return err
 		}
 	} else {
-		args := []string{"add-generic-password", "-U", "-s", "Claude Code-credentials"}
+		args := []string{"add-generic-password", "-U", "-s", claudeHomeService()}
 		if loc.account != "" {
 			args = append(args, "-a", loc.account)
 		}

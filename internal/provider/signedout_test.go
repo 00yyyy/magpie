@@ -187,6 +187,48 @@ func TestClaudeFileSignInWhenNoKeychainItem(t *testing.T) {
 	}
 }
 
+// With CLAUDE_CONFIG_DIR set, Claude Code keeps its sign-in in that
+// directory's own item, named for it, not in "Claude Code-credentials":
+// that one is read, and a sign-in is put back there.
+func TestClaudeConfigDirKeychainItem(t *testing.T) {
+	shellFakes(t)
+	home := claudeHome(t)
+	dir := filepath.Join(home, "elsewhere")
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	t.Setenv("USER", "tester")
+	bin := filepath.Join(home, "bin")
+	os.MkdirAll(bin, 0o755)
+	added := filepath.Join(home, "added.log")
+	testenv.Program(t, filepath.Join(bin, "security"), `#!/bin/sh
+case "$1" in
+find-generic-password)
+	case "$*" in
+	*"-s `+claudeDirService(dir)+` "*"-a tester"*) echo '{"claudeAiOauth":{"accessToken":"dir-item"}}' ;;
+	*"-s Claude Code-credentials "*) echo '{"claudeAiOauth":{"accessToken":"home-item"}}' ;;
+	*) exit 1 ;;
+	esac ;;
+add-generic-password)
+	echo "$*" >> '`+added+`' ;;
+*) exit 1 ;;
+esac
+`)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	claudeKeychain = true
+	forgetClaudeCredential()
+	c, loc, ok := readClaudeCredential()
+	if !ok || c.OAuth.AccessToken != "dir-item" || !loc.keychain {
+		t.Fatalf("the config directory's item is not the sign-in: %v %+v %+v", ok, c.OAuth, loc)
+	}
+	if err := putClaudeLogin(savedLogin{Agent: "claude", User: "fresh@example.com", Auth: mustJSONRaw(t, map[string]any{
+		"claudeAiOauth": map[string]any{"accessToken": "fresh-access", "refreshToken": "fresh-refresh"},
+	})}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(added); !strings.Contains(string(b), "-s "+claudeDirService(dir)+" -a tester") || !strings.Contains(string(b), "fresh-access") {
+		t.Fatalf("the sign-in was not put in the config directory's item: %s", b)
+	}
+}
+
 // An item magpie wrote over lines comes back from `security -w` as hex,
 // which Claude Code reads as no item at all (#70): beside a file that holds
 // a sign-in, the file is the one it goes by, and the item is left alone.
