@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -152,6 +153,10 @@ func TestPartnersFetchedLastIsHeld(t *testing.T) {
 		_, _ = rw.Write([]byte(b))
 	}))
 	t.Cleanup(srv.Close)
+	// runs before srv.Close, which waits for the held fetch: a check that
+	// fails before the release below doesn't leave it held (#1808)
+	let := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(let)
 	t.Setenv("MAGPIE_PARTNERS", srv.URL)
 
 	Partners()
@@ -162,7 +167,7 @@ func TestPartnersFetchedLastIsHeld(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	body.Store(`{"partners":[]}`)
-	go func() { time.Sleep(50 * time.Millisecond); close(release) }()
+	go func() { time.Sleep(50 * time.Millisecond); let() }()
 	fetchPartnersNow()
 	<-served
 	// the earlier fetch has answered; give it the time to store its list
