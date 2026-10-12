@@ -276,6 +276,10 @@ type stateJSON struct {
 	// Last: this is the state kept from the last read (laststate.go), for
 	// the page to draw while the fresh one is read
 	Last bool `json:"last,omitempty"`
+	// Served is how many models magpie serves, groups left out: the Get
+	// started card's first step ("add a model source") is done once
+	// there is one, agents found or not
+	Served int `json:"served"`
 }
 
 // unlistedJSON is a model of a provider kept for routing groups, and the
@@ -1089,6 +1093,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.CompactAt = cur.CompactAt     // and so is the threshold
 		// Claude Desktop's list, set in its row on the Agents page
 		in.DesktopLongest = cur.DesktopLongest
+		// and the Get started card put away, from the card itself
+		in.GuideHidden = cur.GuideHidden
 
 		in.CodexTitles = cur.CodexTitles // set on its own (codex-titles below)
 		// and so is the model Codex's auto-review runs on (codex-auto-review)
@@ -1275,6 +1281,21 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			return
 		}
 		if err := provider.SetCodexAgentsV1(in.On); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// the Agents page's Get started card put away, or back (GuideHidden)
+	mux.HandleFunc("POST /api/settings/guide", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Hidden bool }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		s.GuideHidden = in.Hidden
+		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return
 		}
@@ -1861,6 +1882,11 @@ func state() stateJSON {
 	}
 	s.Unlisted = unlistedModels()
 	s.CLIBehind = cliBehind()
+	for _, e := range provider.Served() {
+		if e.Group == "" {
+			s.Served++
+		}
+	}
 	for _, a := range agent.Clients() {
 		s.Clients = append(s.Clients, clientJSON{ID: a.ID, Name: a.Name, Icon: a.Icon})
 	}

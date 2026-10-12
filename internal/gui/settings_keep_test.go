@@ -159,6 +159,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		WindowMaximised:      true,
 		FullContext:          true,
 		DesktopLongest:       true,
+		GuideHidden:          true,
 		GatewayMode:          "off",
 		QuotaReads:           "asked",
 		NoAccountDiscovery:   true,

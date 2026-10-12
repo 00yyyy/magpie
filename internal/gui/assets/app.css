@@ -3556,6 +3556,42 @@ body.window .row.agent > .ag-conn { margin-left: 12px; align-self: center; curso
 .ag-lead .ag-lead-h { display: block; font-size: 14px; margin-bottom: 4px; }
 .ag-lead p { margin: 0; line-height: 1.55; color: var(--muted); }
 .ag-lead .text.primary { margin-top: 12px; }
+/* Get started (wangye1644294 on X): a new user's steps, in the lead's
+   place, as a grouped list on a card, each step's number turning into a
+   tick as it is done; nothing striped, the tick is the state */
+.ag-lead.guiding { margin: 0 0 12px; }
+.guide { padding: 14px 16px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.guide-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.guide-h { font-size: 14px; }
+.guide-n { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.guide-x { margin-left: auto; flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 11px; color: var(--muted); }
+.guide-x:hover { background: var(--pill); color: var(--fg); }
+.guide-x:focus-visible, .guide-agent:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+.guide-steps { list-style: none; }
+.guide-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; }
+.guide-step + .guide-step { border-top: 1px solid var(--line-2); }
+.guide-tick { flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 0; border-radius: 10px; border: 1.5px solid var(--faint); color: var(--muted); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.guide-step.done .guide-tick { border-color: var(--green); background: var(--green); color: var(--card); }
+.guide-body { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; line-height: 1.45; }
+.ag-lead .guide-title { font-weight: 550; }
+.guide-step.done .guide-title { color: var(--fg-2); }
+.guide-say { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.guide-step.optional:not(.done) .guide-title { color: var(--fg-2); }
+.ag-lead .guide .text.primary { margin-top: 5px; }
+.guide-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.guide-acts .text { margin-top: 5px; }
+.guide-agents { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 5px; }
+.guide-agent { display: inline-flex; align-items: center; gap: 6px; height: 26px; max-width: 100%; padding: 0 10px 0 7px; border: 1px solid var(--line); border-radius: 13px; background: var(--card); color: var(--fg); font-size: 12px; cursor: pointer; transition: background .12s, border-color .12s; }
+.guide-agent > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guide-agent .ic { width: 15px; height: 15px; flex: none; }
+.guide-agent:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.guide-agent:disabled { cursor: default; color: var(--muted); }
+.guide-agent:disabled .ic { opacity: .55; }
+.guide-agent.busy { color: var(--fg); }
+.guide-more { color: var(--muted); font-size: 12px; }
+body.panel .guide { padding: 10px 12px 4px; border-radius: 10px; }
+body.panel .guide-step { gap: 10px; padding: 8px 0; }
+body.panel:not([data-ptab="agents"]) #agentsLead { display: none; }
 /* the first line keeps its place opened: a line of its own height, the
    row not centring what it holds; no gap between its lines, which the
    opened part couldn't fold away: it starts where the shut row ended */

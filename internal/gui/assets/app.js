@@ -1334,6 +1334,16 @@ function agentsLead(list) {
     list.before(lead);
   }
   lead.replaceChildren();
+  // a new user's first view: the Get started card in the welcome's place,
+  // in the panel as in the window
+  const g = guideShown();
+  lead.classList.toggle("guiding", !!g);
+  if (g) {
+    lead.hidden = false;
+    lead.classList.remove("welcome");
+    lead.append(guideCard(g));
+    return;
+  }
   const kinds = mode === "panel" ? [] : state.agents.map(connectKind);
   lead.hidden = !kinds.some((k) => k === "ok" || k === "empty");
   if (lead.hidden) return;
@@ -1354,9 +1364,227 @@ function agentsLead(list) {
   }
 }
 
+// ---------- Get started (wangye1644294 on X) ----------
+// A new user is shown three steps above the agents: add a model source,
+// connect an agent (those magpie found here listed, each connected in a
+// click), and, optionally, a routing group made of their own models in a
+// click (provider.Templates). Each step is ticked from what is so — the
+// models magpie serves (state.served), an agent wired, a group of the
+// user's own — never from having been seen. The card goes once the first
+// two are done, or when put away (settings.GuideHidden, saved on the
+// server so the panel and the window agree).
+
+// the templates offered as a starter, most harmless first: each behind
+// the other changes no model the agent asked for until one fails
+const GUIDE_TEMPLATES = ["steady", "thrifty", "smart"];
+const GUIDE_TEMPLATE_NAMES = { smart: "Hard to strong, easy to cheap", thrifty: "Cheap first", steady: "Never stuck" };
+const GUIDE_TEMPLATE_SAYS = {
+  smart: "A hard task goes to the strongest model, an easy one and compaction to a cheap one",
+  thrifty: "A cheap model first; the strongest for high reasoning, or when the cheap ones fail",
+  steady: "The strongest model of each provider, each behind the other: one down doesn't stop the agent",
+};
+const GUIDE_X = "M4.5 4.5l7 7M11.5 4.5l-7 7";
+const GUIDE_CHIPS = 6; // agents named on the card; the rest are in the list under it
+// guideGroups: /api/groups as the card last read it, and for which served
+// count, read again when the models change or a group is added
+let guideGroups = null, guideGroupsFor = null, guideGroupsBusy = false;
+let guideBusy = ""; // what the card is doing: "hide", "template", an agent's id
+
+// guideShown: the steps' state when the card is to be shown, else null
+function guideShown() {
+  if (gatewayMode || !state || state.settings?.guideHidden) return null;
+  const source = (state.served || 0) > 0 || anyMagpieModels();
+  const agent = state.agents.some((a) => a.wired);
+  if (source && agent) return null;
+  const own = guideGroups?.groups?.filter((x) => !x.auto) || [];
+  return { source, agent, routing: own.length > 0, own };
+}
+
+function guideStep(n, done, title, say) {
+  const li = el("li", "guide-step" + (done ? " done" : ""));
+  const tick = el("span", "guide-tick");
+  tick.setAttribute("aria-hidden", "true");
+  if (done) tick.append(svg(CHECK, 12, 2));
+  else tick.textContent = String(n);
+  const body = el("div", "guide-body");
+  const h = el("b", "guide-title", title);
+  body.append(h);
+  if (say) body.append(el("span", "guide-say", say));
+  li.append(tick, body);
+  li.setAttribute("aria-label", (done ? t("Done") + ": " : "") + title);
+  return { li, body };
+}
+
+function guideCard(g) {
+  const card = el("section", "guide");
+  card.setAttribute("aria-label", t("Get started"));
+  const head = el("div", "guide-head");
+  const steps = [g.source, g.agent];
+  head.append(el("b", "guide-h", t("Get started")), el("span", "guide-n", t("{n} of {m} done", { n: steps.filter(Boolean).length, m: steps.length })));
+  const x = el("button", "guide-x");
+  x.type = "button";
+  x.title = t("Hide Get started");
+  x.setAttribute("aria-label", x.title);
+  x.append(svg(GUIDE_X, 12, 1.6));
+  x.disabled = guideBusy === "hide";
+  x.onclick = (e) => { e.stopPropagation(); hideGuide(); };
+  head.append(x);
+  card.append(head);
+  const list = el("ol", "guide-steps");
+
+  // 1: a model source
+  const one = guideStep(1, g.source, t("Add a model source"),
+    g.source ? t("{n} models ready to use", { n: state.served || 0 }) : t("A subscription you already pay for, a provider, or an API key"));
+  one.li.dataset.step = "source";
+  if (!g.source) {
+    const add = el("button", "text primary guide-go", t("Add a provider"));
+    add.type = "button";
+    add.onclick = (e) => {
+      e.stopPropagation();
+      if (mode === "window") addProviderFromAgents();
+      else api("window/main?view=providers", {}).catch((err) => status(err.message, "err"));
+    };
+    one.body.append(add);
+  }
+  list.append(one.li);
+
+  // 2: an agent, those found here named, each connected in a click
+  const found = state.agents.filter((a) => connectKind(a) === "ok" || connectKind(a) === "empty");
+  const two = guideStep(2, g.agent, t("Connect an agent"),
+    g.agent ? "" : found.length ? t("magpie found these on this computer. Click one to connect it:") : t("Install Claude Code, Codex, Gemini CLI, OpenCode… and magpie will list them here."));
+  two.li.dataset.step = "agent";
+  if (!g.agent && found.length) {
+    const chips = el("div", "guide-agents");
+    for (const a of found.slice(0, GUIDE_CHIPS)) {
+      const b = el("button", "guide-agent");
+      b.type = "button";
+      b.dataset.id = a.id;
+      b.append(icon(a.icon), el("span", "", a.name));
+      const ready = connectKind(a) === "ok";
+      b.disabled = !ready || !!guideBusy;
+      b.classList.toggle("busy", guideBusy === a.id);
+      b.title = ready ? t("Switch on and {agent}'s model list gets magpie's models", { agent: a.name }) : t("Add a key or a subscription first; then there are models to connect");
+      b.onclick = (e) => { e.stopPropagation(); guideConnect(a); };
+      chips.append(b);
+    }
+    if (found.length > GUIDE_CHIPS) chips.append(el("span", "guide-more", t("+{n} more below", { n: found.length - GUIDE_CHIPS })));
+    two.body.append(chips);
+  }
+  list.append(two.li);
+
+  // 3, optional: a routing group of the user's own models
+  const three = guideStep(3, g.routing, t("Set up routing (optional)"),
+    g.routing ? g.own.map((x) => x.name || x.id).join(", ") : t("A routing group sends each request to the right model, and to the next one when a model fails"));
+  three.li.dataset.step = "routing";
+  three.li.classList.add("optional");
+  if (!g.routing && g.source) {
+    guideLoadGroups();
+    const acts = el("div", "guide-acts");
+    const tp = GUIDE_TEMPLATES.map((k) => guideGroups?.templates?.find((x) => x.kind === k && !x.need && x.group?.members?.length)).find(Boolean);
+    if (tp) {
+      const name = t(GUIDE_TEMPLATE_NAMES[tp.kind] || tp.group.name);
+      const add = el("button", "text primary guide-go guide-tpl", t("Add “{name}”", { name }));
+      add.type = "button";
+      add.dataset.kind = tp.kind;
+      add.title = t(GUIDE_TEMPLATE_SAYS[tp.kind] || "") + "\n" + tp.group.members.join(" → ");
+      add.disabled = !!guideBusy;
+      add.onclick = (e) => { e.stopPropagation(); guideTemplate(tp, name); };
+      acts.append(add);
+    }
+    const open = el("button", "text guide-open", t("Open Routing"));
+    open.type = "button";
+    open.onclick = (e) => {
+      e.stopPropagation();
+      if (mode === "window") show("routing");
+      else api("window/main?view=routing", {}).catch((err) => status(err.message, "err"));
+    };
+    acts.append(open);
+    three.body.append(acts);
+    if (tp) three.body.append(el("span", "guide-say guide-tpl-say", t(GUIDE_TEMPLATE_SAYS[tp.kind] || "")));
+  }
+  list.append(three.li);
+  card.append(list);
+  return card;
+}
+
+// guideLoadGroups reads the groups and templates for step 3, once for
+// each count of models served, and draws the card again with them
+function guideLoadGroups(again) {
+  const key = String(state.served || 0);
+  if (guideGroupsBusy || (!again && guideGroupsFor === key)) return;
+  guideGroupsBusy = true;
+  guideGroupsFor = key;
+  api("groups").then((gs) => { guideGroups = gs; }, () => { /* the step links to Routing still */ })
+    .finally(() => { guideGroupsBusy = false; if (view === "agents" || mode === "panel") guideRedraw(); });
+}
+
+// guideRedraw draws the lead again, and the panel to its height
+function guideRedraw() {
+  const list = $("#agents");
+  if (!list || !state) return;
+  agentsLead(list);
+  fit();
+}
+
+async function guideConnect(a) {
+  if (guideBusy) return;
+  guideBusy = a.id;
+  guideRedraw();
+  try {
+    state = await api("agents/connect/" + a.id, {});
+    guideBusy = "";
+    renderAgents();
+    const msg = connectedSaid(a, state.connected);
+    if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
+    else status(msg, "ok", 7000);
+  } catch (err) {
+    guideBusy = "";
+    guideRedraw();
+    status(t(err.message), "err");
+  }
+}
+
+async function guideTemplate(tp, name) {
+  if (guideBusy) return;
+  guideBusy = "template";
+  guideRedraw();
+  try {
+    guideGroups = await api("groups/template", { kind: tp.kind, name });
+    guideBusy = "";
+    status(t("Added {name}", { name }), "ok");
+    // the agents' pickers list the new group
+    state = await api("state");
+    renderAgents();
+  } catch (err) {
+    guideBusy = "";
+    guideRedraw();
+    status(t(err.message), "err");
+  }
+}
+
+async function hideGuide() {
+  if (guideBusy) return;
+  guideBusy = "hide";
+  guideRedraw();
+  try {
+    prefs = await writingPrefs(api("settings/guide", { hidden: true }));
+    state.settings = prefs;
+    guideBusy = "";
+    renderAgents();
+  } catch (err) {
+    guideBusy = "";
+    guideRedraw();
+    status(t(err.message), "err");
+  }
+}
+
 async function addProviderFromAgents() {
   if (!await show("providers")) return;
-  $("#addProvider")?.click();
+  // the list not read yet (the page's first opening): clicked before it is
+  // in, the button drew a list of nothing and threw; read, an empty list
+  // opens the sheet itself
+  if (!providers) { try { await loadProviders(); } catch { return; } }
+  if (!adding) $("#addProvider")?.click();
 }
 
 // desktopLongestLine: Claude Desktop lists a model of 1M or more twice, the
