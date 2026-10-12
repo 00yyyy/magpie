@@ -463,11 +463,12 @@ body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
 @keyframes view-in { from { opacity: 0; transform: translateY(5px); } }
 @media (prefers-reduced-motion: reduce) { .view { animation-name: fade-in; } }
 body.window .view { padding: 2px 16px 8px; }
-/* a page of rows and settings keeps to a width the eye can follow across,
-   centred in a maximized window, rather than its name at one edge and its
-   switch at the other (#860); the tables and charts of Routing, Usage and
-   Sessions take the whole width */
-body.window :is(#view-agents, #view-providers, #view-gateway, #view-library, #view-plugins, #view-settings) { padding-left: max(16px, calc(50% - 600px)); padding-right: max(16px, calc(50% - 600px)); }
+/* every page keeps to a width the eye can follow across, centred in a
+   maximized window, rather than its name at one edge and its switch at the
+   other (#860); Routing, Usage and Sessions too, so a large screen doesn't
+   stretch them alone edge to edge while the others sit in the middle (面条 on
+   Discord): their tables and charts lay out by the room they get */
+body.window :is(#view-agents, #view-sessions, #view-providers, #view-routing, #view-gateway, #view-usage, #view-library, #view-plugins, #view-settings) { padding-left: max(16px, calc(50% - 600px)); padding-right: max(16px, calc(50% - 600px)); }
 /* a view takes focus (tabIndex -1) only so the keys scroll it after a click;
    a ring round the whole list there marks nothing a reader can act on (#1601) */
 .view:focus { outline: none; }
