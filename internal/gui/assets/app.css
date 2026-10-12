@@ -953,9 +953,11 @@ body.window .field.solo { grid-column: auto; }
 /* a narrow window, three tabs and the periods beside it: the words after the
    sum give way, never the page sideways */
 .usage-cost span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* how many it couldn't price stays, at every width: a sum never reads as
+   if those cost nothing (#1856) */
 @media (max-width: 640px) {
   .usage-head { gap: 7px; }
-  .usage-cost span:not(.skeleton) { display: none; }
+  .usage-cost span:not(.skeleton):not(.unpriced) { display: none; }
   .usage-cost b { font-size: 14px; }
   /* and the refresh's picker is its figure alone; where the tabs, the periods and
      these are more than a line, the sum goes on a line of its own, at the right */
@@ -969,7 +971,7 @@ body.window .field.solo { grid-column: auto; }
 /* the same, wider, wherever the sum would be cut otherwise (#1599): a
    class app.js sets when the sum runs past its box */
 .usage-head.tight { gap: 7px; flex-wrap: wrap; height: auto; min-height: 34px; row-gap: 2px; }
-.usage-head.tight .usage-cost span:not(.skeleton) { display: none; }
+.usage-head.tight .usage-cost span:not(.skeleton):not(.unpriced) { display: none; }
 .usage-head.tight .usage-cost b { font-size: 14px; }
 .usage-head.tight .usage-cost { margin-left: auto; }
 .usage-head.tight .usage-refresh { margin-right: 0; }

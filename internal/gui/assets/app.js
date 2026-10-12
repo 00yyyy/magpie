@@ -14608,6 +14608,22 @@ function fmtCost(t) {
   const s = c >= 100 ? c.toFixed(0) : c >= 1 ? c.toFixed(2) : c.toFixed(3);
   return sign + s + (t.unpriced ? "+" : "");
 }
+// costHead is the Usage head's sum: the cost at effective prices, or, when
+// some of what it sums has no known price, how many beside it (#1856) — a
+// total never reads as if those cost nothing — and with none priced, the
+// count alone. note is that count in words ("" when everything was
+// priced), title the tooltip.
+function costHead(c, note, title) {
+  const cost = $("#usageCost");
+  cost.replaceChildren();
+  cost.title = "";
+  if (!c && !note) return;
+  if (c) cost.append(el("b", "", "≈" + c));
+  cost.append(el("span", note ? "unpriced" : "", note || t("effective prices")));
+  cost.title = title;
+}
+const unpricedCalls = (n) => t(n === 1 ? "{n} call unpriced" : "{n} calls unpriced", { n: ledNum(n) });
+const unpricedCallsWhy = (n) => n ? t(n === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n }) : t("Estimated using effective model prices, including custom prices");
 // renderCosts redraws whatever on the Usage page shows a cost, once the
 // currency changes — the numbers alone, not the page around them, so a
 // click on the setting never moves anything it isn't showing (#212)
@@ -16925,15 +16941,7 @@ function renderUsage() {
   view.classList.remove("loading");
   view.removeAttribute("aria-busy");
   renderPeriod();
-  const cost = $("#usageCost");
-  cost.replaceChildren();
-  const c = fmtCost(u);
-  if (c) {
-    cost.append(el("b", "", "≈" + c), el("span", "", t("effective prices")));
-    cost.title = u.unpriced ? t(u.unpriced === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n: u.unpriced }) : t("Estimated using effective model prices, including custom prices");
-  } else if (u.calls) {
-    cost.append(el("span", "", t("no price for these models")));
-  }
+  costHead(fmtCost(u), u.unpriced ? unpricedCalls(u.unpriced) : "", unpricedCallsWhy(u.unpriced));
 
   const stats = $("#stats");
   stats.replaceChildren();
@@ -16971,7 +16979,7 @@ function renderUsage() {
   const hit = u.cache_read && promptTokens ? t("hit rate {p}", { p: Math.round(100 * u.cache_read / promptTokens) + "%" }) : "";
   tile(fmtN(u.cache_read), t("cache read"), hit, u.cache_write ? t("{n} written", { n: fmtN(u.cache_write) }) + cacheTTLs(u, fmtN) : "");
   tile(fmtN(u.reasoning), t("reasoning"), t("inside output"));
-  tile(String(u.calls), t(u.calls === 1 ? "call" : "calls"), [u.errors ? t("{n} failed", { n: u.errors }) : "", u.retried ? t("{n} answered on a retry", { n: u.retried }) : ""].filter(Boolean).join(" · "));
+  tile(String(u.calls), t(u.calls === 1 ? "call" : "calls"), [u.errors ? t("{n} failed", { n: u.errors }) : "", u.retried ? t("{n} answered on a retry", { n: u.retried }) : "", u.unpriced ? t("{n} unpriced", { n: u.unpriced }) : ""].filter(Boolean).join(" · "), u.unpriced ? unpricedCallsWhy(u.unpriced) : "");
 
   // the timeline: one bar per hour, day or week; output sits on top of input
   const chart = $("#chart");
@@ -18306,14 +18314,7 @@ function renderLedger() {
   renderPeriod();
   renderArchive();
 
-  const cost = $("#usageCost");
-  cost.replaceChildren();
-  cost.title = "";
-  const c = fmtCost(l);
-  if (c) {
-    cost.append(el("b", "", "≈" + c), el("span", "", t("effective prices")));
-    cost.title = l.unpriced ? t(l.unpriced === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n: l.unpriced }) : t("Estimated using effective model prices, including custom prices");
-  }
+  costHead(fmtCost(l), l.unpriced ? unpricedCalls(l.unpriced) : "", unpricedCallsWhy(l.unpriced));
 
   // the filters: choices seen in the period, and failures alone
   sessPick($("#ledPurpose"), "All purposes", ledPurpose, purposeOptions(l.purposes || [], ledPurpose), "Purpose", (v) => { ledPurpose = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
@@ -19198,15 +19199,11 @@ function renderSessions() {
   // active time isn't told apart by model
   const active = sessModel ? null : acts.filter((a) => byAgent(a) && byFolder(a)).reduce((n, a) => n + a.seconds, 0);
 
-  const cost = $("#usageCost");
-  cost.replaceChildren();
-  cost.title = "";
   const c = tot.cost ? fmtCost(tot) : "";
   const unpricedNote = tot.unpriced ? t("Not counted: {models}, with no known price", { models: sessModelNames([...unpriced]) }) : t("Estimated using effective model prices, including custom prices");
-  if (c) {
-    cost.append(el("b", "", "≈" + c), el("span", "", t("effective prices")));
-    cost.title = unpricedNote;
-  }
+  // a session's models are counted, not its calls: the agents' files price by model
+  const unpricedModels = tot.unpriced ? t(tot.unpriced === 1 ? "{n} model unpriced" : "{n} models unpriced", { n: tot.unpriced }) : "";
+  costHead(c, unpricedModels, unpricedNote);
 
   // the overview is read again for the filters as they are now; until it is
   // in, the last one stands, dimmed
@@ -19254,7 +19251,7 @@ function renderSessions() {
     tile(ov.count == null ? "—" : fmtN(ov.count), t("sessions"), ov.count ? t("median {m} · p90 {p}", { m: fmtN(ov.median), p: fmtN(ov.p90) }) : "",
       t("Tokens in and out per session: the middle session's, and what nine in ten stay under"), stale ? "stale" : "");
     tile(fmtN(tot.input + tot.output), t("tokens"), t("{a} in · {b} out", { a: fmtN(tot.input), b: fmtN(tot.output) }));
-    tile(c ? "≈" + c : "—", t("cost"), t("at effective prices"), unpricedNote);
+    tile(c ? "≈" + c : "—", t("cost"), unpricedModels || t("at effective prices"), unpricedNote);
     // input leaves out what was read from the cache and written to it
     const prompt = tot.input + tot.cache_read + tot.cache_write;
     tile(fmtN(tot.cache_read), t("cache read"), tot.cache_read && prompt ? t("hit rate {p}", { p: Math.round(100 * tot.cache_read / prompt) + "%" }) : "", tot.cache_write ? t("{n} written", { n: fmtN(tot.cache_write) }) : "");
@@ -24036,8 +24033,11 @@ setInterval(async () => {
     frame = 0;
     if (!head.offsetWidth) return;
     head.classList.remove("tight");
-    const cost = $("#usageCost"), sum = cost.querySelector("b");
-    head.classList.toggle("tight", !!sum && sum.getBoundingClientRect().right > cost.getBoundingClientRect().right + 0.5);
+    const cost = $("#usageCost"), sum = cost.querySelector("b"), unpriced = cost.querySelector("span.unpriced");
+    // and wherever how many it couldn't price would be cut, the sum or not
+    // beside it (#1856): that count stays whole as the sum does
+    head.classList.toggle("tight", !!sum && sum.getBoundingClientRect().right > cost.getBoundingClientRect().right + 0.5 ||
+      !!unpriced && (unpriced.scrollWidth > unpriced.clientWidth + 1 || !unpriced.clientWidth));
   };
   const later = () => { if (!frame) frame = requestAnimationFrame(fit); };
   // the sum's own box too: it can shrink with the head's width the same,

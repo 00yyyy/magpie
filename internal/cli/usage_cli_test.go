@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 	stats "github.com/yetone/magpie/internal/usage"
@@ -152,5 +153,28 @@ func TestUsageAskedAtMidnight(t *testing.T) {
 	gw, own, ok := strings.Cut(b.String(), "not through magpie")
 	if !ok || !strings.Contains(gw, "relay/m") || !strings.Contains(own, "gpt-6-luna") {
 		t.Fatal(b.String())
+	}
+}
+
+// magpie usage's headline says how many calls its cost leaves out for
+// having no known price, beside the sum, not only a "+" after it (#1856):
+// a Kimi K3 Auto that nobody prices is never read as costing nothing.
+func TestUsageSaysCallsUnpriced(t *testing.T) {
+	groupsHome(t)
+	day := stats.Today.Since(holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)))
+	if err := provider.SetModelPrice("a/m", &catalog.Price{Input: 1, Output: 2}); err != nil {
+		t.Fatal(err)
+	}
+	stats.Append(stats.Record{Time: day.Add(time.Second), Agent: "codex", Provider: "a", Model: "m", Input: 1000, Output: 100, Status: 200})
+	for i := range 2 {
+		stats.Append(stats.Record{Time: day.Add(time.Duration(2+i) * time.Second), Agent: "codex", Provider: "a", Model: "only-a", Input: 1000, Output: 100, Status: 200})
+	}
+	var b strings.Builder
+	if err := usageTo(&b, []string{"usage", "today"}); err != nil {
+		t.Fatal(err)
+	}
+	head, _, _ := strings.Cut(b.String(), "\n")
+	if !strings.Contains(head, "≈$0.001+") || !strings.Contains(head, "(2 calls unpriced)") {
+		t.Fatalf("headline %q", head)
 	}
 }

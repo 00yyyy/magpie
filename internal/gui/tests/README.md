@@ -991,6 +991,14 @@ recorded tokens under no model name (tony on Discord: the cost's note read
 and its models name it "a model with no name", with no blank where a name
 goes; in Chromium and WebKit, English and Chinese.
 
+`usage-unpriced-sum.test.cjs` checks that Usage's sum says how many calls it
+couldn't price (#1856): Overview's and Requests' heads read "2 calls
+unpriced" beside the sum, or alone when none was priced, Overview's calls
+tile counts them, and Sessions says how many models. From 360 to 1240 wide
+the count and the sum stay whole and the page never scrolls sideways; in
+Chromium and WebKit, in every language. `MAGPIE_ASSETS` pointed at older
+assets shows it failing.
+
 `usage-keys-fold.test.cjs` checks the Usage page's card of a provider with
 many keys, each its balance (361 on Discord: an OpenRouter card listed every
 key's): the first three are in sight, the rest behind "Show N more keys" at

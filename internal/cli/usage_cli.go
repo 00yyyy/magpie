@@ -112,7 +112,7 @@ func usageTo(out io.Writer, args []string) error {
 // printUsage is a summary's totals and its tables: agents, models,
 // upstream keys, accounts, gateway keys and the top sessions.
 func printUsage(out io.Writer, s stats.Summary, title string, names map[string]string) {
-	fmt.Fprintln(out, bold.Render(fmtTokens(s.Tokens())+" tokens"), muted.Render(title+" ·"), plural(s.Calls, "call"), muted.Render("·"), cost(s.Totals))
+	fmt.Fprintln(out, bold.Render(fmtTokens(s.Tokens())+" tokens"), muted.Render(title+" ·"), plural(s.Calls, "call"), muted.Render("·"), cost(s.Totals)+unpricedNote(s.Unpriced))
 	fmt.Fprintln(out, muted.Render("  in "+fmtTokens(s.Input)+"  out "+fmtTokens(s.Output)+"  cache read "+fmtTokens(s.CacheRead)+"  cache write "+fmtTokens(s.CacheWrite)+"  reasoning "+fmtTokens(s.Reasoning)),
 		func() string {
 			// requests, each counted once by how it ended: one a later try
@@ -222,6 +222,16 @@ func fmtMs(ms int64) string {
 		return fmt.Sprintf("%d ms", ms)
 	}
 	return fmt.Sprintf("%.1f s", float64(ms)/1000)
+}
+
+// unpricedNote is how many calls a total's cost leaves out for having no
+// known price, said beside it, so the sum never reads as if they cost
+// nothing (#1856)
+func unpricedNote(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return faint.Render(" (" + plural(n, "call") + " unpriced)")
 }
 
 func plural(n int, unit string) string {

@@ -943,6 +943,14 @@ relay that sells `kimi-k3` as `moonshot-kimi-k3` answers as `kimi-k3`, so its
 calls are counted at `relay-a/kimi-k3`'s price. A model with a price of its
 own, `0` included, keeps it whatever its reply says.
 
+A call with no price at all is left out of a total's cost, never counted as
+free: the Usage page's sum says how many calls it couldn't price beside it
+("≈$1.20+", then "3 calls unpriced"; Sessions, which prices by model, says how
+many models), and `magpie usage` and the terminal app's Usage page say the
+same after their totals. magpie doesn't guess a variant's price from a
+similar name (`-auto`, `-max`, `-fast` can each cost differently); give it
+one with `magpie model price`, or in the provider's editor under the model.
+
 A **Kimi Code** membership's models are counted at the Kimi API model each
 one is, not at the $0 models.dev lists them at for the plan: `k3` and
 `k3-256k` at `kimi-k3`, `kimi-for-coding-highspeed` at
