@@ -283,7 +283,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 // drawn over each other (#1549, Ti800: the leanest 170K one step from the
 // axis's 160K read as "1170K"), at a phone's width and a desk's
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  test(`${engine}: the curve's axis labels never overlap`, async (t) => {
+  test(`${engine}: the curve's axis labels and tags never overlap`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
     const close = {
@@ -293,19 +293,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           compact: { model: "claude-opus-5-5", current: 400000, best: 170000, cost: 1.9e9, low: 1.46e9, curve: curve(160000, 1000000, 170000), facts } },
         { knob: "compact", model: "claude-sonnet-5", setting: {},
           compact: { model: "claude-sonnet-5", current: 990000, best: 500000, cost: 1.9e9, low: 1.46e9, curve: curve(160000, 1000000, 500000), facts } },
+        // the setting now one step from the advice: its "+3%" tag would sit
+        // on "Leanest"
+        { knob: "compact", model: "claude-haiku-4-5", setting: {},
+          compact: { model: "claude-haiku-4-5", current: 180000, best: 170000, cost: 1.9e9, low: 1.46e9, curve: curve(160000, 1000000, 170000), facts } },
       ] }],
     };
-    for (const [width, height] of [[360, 760], [1100, 760]]) {
+    // German's "Sparsamste" is the widest "Leanest"
+    for (const lang of ["en", "de"]) for (const [width, height] of [[360, 760], [1100, 760]]) {
       const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
       await ctx.addInitScript(() => { try { localStorage.setItem("magpie.usageTab", "context"); } catch {} });
       const page = await ctx.newPage();
       page.setDefaultTimeout(5000);
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
-      const base = serve("en", []);
+      const base = serve(lang, []);
       await page.route("**/*", (r) => new URL(r.request().url()).pathname === "/api/tune" ? r.fulfill({ json: close }) : base(r));
       await page.goto("http://magpie.test/?view=usage");
-      await page.locator(".ctx-tune-chart").nth(1).waitFor();
+      await page.locator(".ctx-tune-chart").nth(2).waitFor();
       const axes = await page.locator(".ctx-tc-x").evaluateAll((all) => all.map((a) => [...a.children].map((s) => {
         const r = s.getBoundingClientRect();
         return { text: s.textContent, cls: s.className, left: r.left, right: r.right };
@@ -316,9 +321,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.ok(a.right <= b.left || b.right <= a.left, `${width}px: "${a.text}" (${Math.round(a.left)}–${Math.round(a.right)}) overlaps "${b.text}" (${Math.round(b.left)}–${Math.round(b.right)})`);
         }
       }
+      // nor the tags over the dots, and "Leanest" always keeps its own
+      const tags = await page.locator(".ctx-tune-chart").evaluateAll((all) => all.map((c) => [...c.querySelectorAll(".ctx-tc-tag")].map((s) => {
+        const r = s.getBoundingClientRect();
+        return { text: s.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      })));
+      for (const list of tags) {
+        assert.ok(list.some((s) => s.text === { en: "Leanest", de: "Sparsamste" }[lang]), `${lang} ${width}px: no "Leanest" tag`);
+        for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+          const [a, b] = [list[i], list[j]];
+          assert.ok(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top, `${lang} ${width}px: tag "${a.text}" overlaps "${b.text}"`);
+        }
+      }
       // the advice's value and the one set now keep their labels
-      assert.deepEqual(axes[0].map((s) => s.text), ["170K", "400K", "1M"], width + "px");
-      assert.deepEqual(axes[1].map((s) => s.text), ["160K", "500K", "990K"], width + "px");
+      assert.deepEqual(axes[0].map((s) => s.text), ["170K", "400K", "1M"], lang + " " + width + "px");
+      assert.deepEqual(axes[1].map((s) => s.text), ["160K", "500K", "990K"], lang + " " + width + "px");
       assert.deepEqual(errors, []);
       await ctx.close();
     }

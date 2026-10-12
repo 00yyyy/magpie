@@ -975,15 +975,29 @@
         : t("{value}: {tokens} more tokens over the range (+{pct})", { value: show(p.value), tokens: fmtK(extra(p)), pct: pct(extra(p) / low) });
       plot.append(dot);
     };
-    if (worst !== now && worst !== top) at(worst, "worst", "+" + pct(extra(worst) / low));
-    at(top, "best", t("Leanest"));
-    if (now && now !== top) at(now, "now", "+" + pct(extra(now) / low));
-    const axis = el("div", "ctx-tc-x");
     // the advice's value first, then the setting now, then the range's two
     // ends: a value that sits too close to one before it is left off, so two
     // labels are never drawn over each other (#1549, Ti800: 170K, the
     // leanest, one step from the axis's 160K, read as "1170K")
     const along = (p) => pts.indexOf(p) / (pts.length - 1);
+    // the tags over the dots the same way: "Leanest" first, then the setting
+    // now, then the costliest; one beside a tag that matters more and at
+    // about its height keeps its dot and tooltip but not its tag, so a
+    // setting one step from the advice doesn't print its "+3%" over
+    // "Leanest" (#1549)
+    const tagged = [];
+    const tag = (p, label) => {
+      if (tagged.some((k) => Math.abs(along(k) - along(p)) < TICK_GAP && Math.abs(Y(k) - Y(p)) < 20)) return "";
+      tagged.push(p);
+      return label;
+    };
+    const bestTag = tag(top, t("Leanest"));
+    const nowTag = now && now !== top ? tag(now, "+" + pct(extra(now) / low)) : "";
+    const worstTag = worst !== now && worst !== top ? tag(worst, "+" + pct(extra(worst) / low)) : "";
+    if (worst !== now && worst !== top) at(worst, "worst", worstTag);
+    at(top, "best", bestTag);
+    if (now && now !== top) at(now, "now", nowTag);
+    const axis = el("div", "ctx-tc-x");
     const kept = [];
     for (const p of new Set([top, now, pts[0], pts[pts.length - 1]].filter(Boolean))) {
       if (kept.every((k) => Math.abs(along(k) - along(p)) >= TICK_GAP)) kept.push(p);
