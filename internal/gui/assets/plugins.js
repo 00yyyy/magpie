@@ -925,7 +925,9 @@
     if (mw && !e.off && !ask) who.append(mwLine(mw));
     if (ag && !e.off && !ask) who.append(agentLine(ag));
     if (mw && !e.off && !ask && editing?.pkg === pkg) who.append(optionsEditor(e));
-    r.append(logo(l?.icon || l?.npm?.icon || subs[0]?.icon || ag?.icon, false, e.middlewareOnly ? "mw" : e.inMagpieOnly && e.isAgent && !e.isMiddleware ? "ag" : ""), who);
+    // the plugin's own picture (package.json's magpie.icon) before its
+    // first provider's, which a plugin of several gives each its own (#1775)
+    r.append(logo(l?.icon || l?.npm?.icon || e.icon || subs[0]?.icon || ag?.icon, false, e.middlewareOnly ? "mw" : e.inMagpieOnly && e.isAgent && !e.isMiddleware ? "ag" : ""), who);
     const val = el("div", "val");
     const b = busy.get(pkg) || busy.get(e.spec);
     // npm's newer version, or a git one's repository at a newer commit
@@ -1001,7 +1003,7 @@
     };
     val.append(onoff, rm);
     r.append(val);
-    r.onclick = (ev) => { if (!ev.target.closest("button, .pm-opts")) detail(l || (isGit(e.spec) ? { package: e.spec, name: e.package || e.spec, npm: { version: e.version, repository: gitWeb(e.spec) } } : { package: pkg, name: label(e.spec), npm: { version: e.latest } })); };
+    r.onclick = (ev) => { if (!ev.target.closest("button, .pm-opts")) detail(l || (isGit(e.spec) ? { package: e.spec, name: e.package || e.spec, icon: e.icon, npm: { version: e.version, repository: gitWeb(e.spec) } } : { package: pkg, name: label(e.spec), icon: e.icon, npm: { version: e.latest } })); };
     return r;
   }
 

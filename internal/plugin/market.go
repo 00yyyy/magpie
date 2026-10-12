@@ -636,6 +636,26 @@ func Installed(spec string) string {
 	return p.Version
 }
 
+// InstalledIcon is the picture the installed plugin spec's package.json
+// gives in magpie.icon, as ownIcon takes one: the plugin's own, for its
+// row, apart from those its providers give themselves in the auth hook
+// (#1775). "" for none, or a plugin that is one file.
+func InstalledIcon(spec string) string {
+	b, err := os.ReadFile(filepath.Join(Target(spec), "package.json"))
+	if err != nil {
+		return ""
+	}
+	var p struct {
+		Magpie struct {
+			Icon string `json:"icon"`
+		} `json:"magpie"`
+	}
+	if json.Unmarshal(b, &p) != nil {
+		return ""
+	}
+	return ownIcon(p.Magpie.Icon)
+}
+
 // Upgrade installs the newest version of one plugin: npm's, or its git
 // repository's commit now. One bun won't install says why.
 func Upgrade(ctx context.Context, name string) error {

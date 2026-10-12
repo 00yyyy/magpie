@@ -73,6 +73,10 @@ type pluginEntryJSON struct {
 	Providers []string `json:"providers"`         // the names of those it signs in to
 	Version   string   `json:"version,omitempty"` // installed
 	Latest    string   `json:"latest,omitempty"`  // on npm, when the market asked
+	// Icon is the picture its own package.json gives (magpie.icon), as
+	// the page can show it: the plugin's, which its row shows before any
+	// of its providers' own (#1775)
+	Icon string `json:"icon,omitempty"`
 	// Package is the package installed from a git repository, which its
 	// own package.json names
 	Package string `json:"package,omitempty"`
@@ -212,6 +216,15 @@ func pluginsState(ctx context.Context, w Windows) pluginsJSON {
 			j.Moved = []string{}
 		}
 		s.Plugins = append(s.Plugins, j)
+	}
+	// each plugin's own picture, kept and checked as a listed one's; at
+	// once: one still being fetched shows on the next ask
+	said := make([]string, len(s.Plugins))
+	for i, j := range s.Plugins {
+		said[i] = plugin.InstalledIcon(j.Spec)
+	}
+	for i, ic := range provider.RepoIcons(said, 0) {
+		s.Plugins[i].Icon = ic
 	}
 	return s
 }

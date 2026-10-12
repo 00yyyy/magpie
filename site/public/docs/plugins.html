@@ -254,10 +254,10 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     <p>OpenCode ignores the <code>magpie</code> object, so these are safe to add to an OpenCode plugin.</p>
     <div class="table-wrap"><table>
       <tr><th>Field</th><th>Meaning</th></tr>
-      <tr><td><code>magpie.icon</code></td><td>The provider’s picture, also on the plugin’s card in Discover (read from npm, or from the repository for one on GitHub): an <code>https://</code> URL or a <code>data:image/…</code> URI, at most 1 MB. SVG, PNG and the like.</td></tr>
+      <tr><td><code>magpie.icon</code></td><td>The plugin’s picture, on its card in Discover (read from npm, or from the repository for one on GitHub) and its row in Installed, and the picture of each of its providers that doesn’t give its own: an <code>https://</code> URL or a <code>data:image/…</code> URI, at most 1 MB. SVG, PNG and the like.</td></tr>
       <tr><td><code>magpie.maxConcurrency</code></td><td>How many requests each account takes at once, a whole number from 1 to 1000. A limit the user sets on the provider wins over it.</td></tr>
     </table></div>
-    <p>The same fields can be set on the <code>auth</code> hook (<code>auth.icon</code>, <code>auth.maxConcurrency</code>), where they win over <code>package.json</code>.</p>
+    <p>The same fields can be set on the <code>auth</code> hook (<code>auth.icon</code>, <code>auth.maxConcurrency</code>), where they win over <code>package.json</code>. A plugin that signs in to several providers can give each its own <code>auth.icon</code> and keep <code>magpie.icon</code> for the plugin itself.</p>
 
     <h2 id="provider"><a class="anchor" href="#provider">Provider and models</a></h2>
     <h3>Declaring the provider</h3>

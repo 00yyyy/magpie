@@ -254,10 +254,10 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     <p>OpenCode 会忽略 <code>magpie</code> 对象，所以给 OpenCode 插件加上它是安全的。</p>
     <div class="table-wrap"><table>
       <tr><th>字段</th><th>含义</th></tr>
-      <tr><td><code>magpie.icon</code></td><td>供应商的图标，也是这个插件在「发现」里卡片上的图标（从 npm 读取，GitHub 上的插件从仓库读取）：<code>https://</code> 地址或 <code>data:image/…</code> URI，最大 1 MB，SVG、PNG 等都行。</td></tr>
+      <tr><td><code>magpie.icon</code></td><td>插件自己的图标，用在「发现」里的卡片（从 npm 读取，GitHub 上的插件从仓库读取）和「已安装」里的那一行；没有自己图标的供应商也用它：<code>https://</code> 地址或 <code>data:image/…</code> URI，最大 1 MB，SVG、PNG 等都行。</td></tr>
       <tr><td><code>magpie.maxConcurrency</code></td><td>每个账号同时接多少个请求，1 到 1000 的整数。用户在供应商上设置的上限优先。</td></tr>
     </table></div>
-    <p>同样的字段也可以写在 <code>auth</code> 钩子上（<code>auth.icon</code>、<code>auth.maxConcurrency</code>），优先于 <code>package.json</code>。</p>
+    <p>同样的字段也可以写在 <code>auth</code> 钩子上（<code>auth.icon</code>、<code>auth.maxConcurrency</code>），优先于 <code>package.json</code>。一个插件登录多个供应商时，可以给每个供应商各写一个 <code>auth.icon</code>，<code>magpie.icon</code> 留给插件本身。</p>
 
     <h2 id="provider"><a class="anchor" href="#provider">供应商与模型</a></h2>
     <h3>声明供应商</h3>
