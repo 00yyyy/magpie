@@ -4,8 +4,55 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/testenv"
 )
+
+// #1823 (mdwsk88): HasApp read the developer's own /Applications, so on a
+// Mac with DeepSeek Harness.app installed
+// TestAsideOfflineDisconnectRestoresWithoutDaemon found dsh's app, and its
+// CLI was never missing. Every folder magpie looks for installed apps in —
+// the desktop apps', Pencil's, T3 Code's, Reasonix Studio's, Cursor Private
+// Inference's — lies under the test's home, on every OS, and an app a test
+// installs in the sandbox's /Applications is the one found.
+func TestAppFoldersStayInTheTestHome(t *testing.T) {
+	sandbox := os.Getenv(testenv.Marker)
+	if sandbox == "" {
+		t.Fatal("the package's tests aren't isolated (testenv)")
+	}
+	inside := func(what, dir string) {
+		t.Helper()
+		rel, err := filepath.Rel(sandbox, dir)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			t.Errorf("%s looks in %s, outside the test's home %s", what, dir, sandbox)
+		}
+	}
+	for _, d := range appFolders() {
+		inside("appFolders", d)
+	}
+	for _, d := range macAppFolders(sandbox) {
+		inside("macAppFolders", d)
+	}
+	for _, d := range cursorLocalRoots() {
+		inside("cursorLocalRoots", d)
+	}
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	dsh := &Agent{ID: "dsh", Name: "DeepSeek Harness", Bin: "dsh"}
+	if dsh.HasApp() {
+		t.Fatal("an empty sandbox has DeepSeek Harness.app")
+	}
+	apps := proc.SystemDirs("/Applications")[0]
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(apps, "DeepSeek Harness.app")) })
+	installApp(t, apps, "DeepSeek Harness.app", codexAppPlist("com.deepseek.dsh", "0.2.0"))
+	if v := dsh.AppVersion(); v != "0.2.0" {
+		t.Fatalf("the sandbox's /Applications/DeepSeek Harness.app: %q", v)
+	}
+}
 
 // codexAppPlist is the Codex app's Info.plist as macOS has it (ChatGPT.app
 // 26.930.31730, its keys in their order), cut to the keys around the ones

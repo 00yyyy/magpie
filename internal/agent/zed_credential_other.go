@@ -46,10 +46,9 @@ func saveZedCredential(url string) error {
 // Trust the installed Zed bundle, including a CLI symlink to a custom location.
 func zedAppPath(ctx context.Context) (string, error) {
 	home, _ := os.UserHomeDir()
-	paths := []string{
+	paths := append([]string{
 		filepath.Join(home, "Applications", "Zed.app"), filepath.Join(home, "Applications", "Zed Preview.app"),
-		"/Applications/Zed.app", "/Applications/Zed Preview.app",
-	}
+	}, proc.SystemDirs("/Applications/Zed.app", "/Applications/Zed Preview.app")...)
 	binName := os.Getenv("MAGPIE_ZED_BIN")
 	if binName == "" {
 		binName = "zed"

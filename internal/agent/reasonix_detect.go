@@ -23,7 +23,7 @@ func reasonixDetected(home string) bool {
 			}
 		}
 	case "darwin":
-		for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
+		for _, dir := range macAppFolders(home) {
 			if reasonixStudioPackage(filepath.Join(dir, "Reasonix Studio.app", "Contents", "Resources", "app.asar")) {
 				return true
 			}

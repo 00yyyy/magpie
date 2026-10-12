@@ -97,7 +97,7 @@ func t3App(home string) bool {
 	if runtime.GOOS != "darwin" {
 		return false
 	}
-	for _, d := range []string{"/Applications", filepath.Join(home, "Applications")} {
+	for _, d := range macAppFolders(home) {
 		for _, n := range []string{"T3 Code (Alpha).app", "T3 Code.app"} {
 			if _, err := os.Stat(filepath.Join(d, n)); err == nil {
 				return true

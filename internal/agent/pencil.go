@@ -81,7 +81,7 @@ func pencilApp(home string) bool {
 	if runtime.GOOS != "darwin" {
 		return false
 	}
-	for _, d := range []string{"/Applications", filepath.Join(home, "Applications")} {
+	for _, d := range macAppFolders(home) {
 		for _, n := range []string{"Pencil.app", "pen.dev.app"} {
 			if _, err := os.Stat(filepath.Join(d, n)); err == nil {
 				return true

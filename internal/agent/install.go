@@ -207,8 +207,12 @@ var npmPrefixes memo
 func npmGlobalPrefix() string {
 	npm, err := proc.Look("npm")
 	if err != nil {
-		npm = filepath.Join(os.Getenv("ProgramFiles"), "nodejs", "npm.cmd")
-		if os.Getenv("ProgramFiles") == "" || !isFile(npm) {
+		pf := proc.SystemDirs(os.Getenv("ProgramFiles"))
+		if len(pf) == 0 {
+			return ""
+		}
+		npm = filepath.Join(pf[0], "nodejs", "npm.cmd")
+		if !isFile(npm) {
 			return ""
 		}
 	}

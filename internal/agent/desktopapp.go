@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // An agent that is a desktop app as well as a CLI has the app's version shown
@@ -44,17 +45,27 @@ var desktopApps = map[string]desktopApp{
 var appFolders = func() []string {
 	switch runtime.GOOS {
 	case "darwin":
-		dirs := []string{"/Applications"}
-		if home, err := os.UserHomeDir(); err == nil {
-			dirs = append(dirs, filepath.Join(home, "Applications"))
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return proc.SystemDirs("/Applications")
 		}
-		return dirs
+		return macAppFolders(home)
 	case "windows":
 		if local := appdir.Getenv("LOCALAPPDATA"); local != "" {
 			return []string{filepath.Join(local, "Programs")}
 		}
 	}
 	return nil
+}
+
+// macAppFolders are the folders a Mac keeps apps in: /Applications and
+// home's Applications. /Applications goes through proc.SystemDirs, so in a
+// test binary testenv isolated it lies under the test's home: tests read
+// the developer's own /Applications, and on a Mac with DeepSeek Harness.app
+// installed dsh's CLI was never missing (#1823, mdwsk88). Every reader of a
+// Mac's installed apps takes its folders from here.
+func macAppFolders(home string) []string {
+	return append(proc.SystemDirs("/Applications"), filepath.Join(home, "Applications"))
 }
 
 var (
