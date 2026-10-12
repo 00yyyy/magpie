@@ -47,6 +47,12 @@
   // page when the agent or the filter changes.
   const SM_PAGE = 100;
   const drawnIn = new Map();
+  // The folders are drawn a page at a time too, under FOLDERS in drawnIn:
+  // an app that runs Codex once per picture in a folder of its own left
+  // 11,358 folders of one session each, and drawing them all made 114,000
+  // elements, held every click on the page for over a second, and slowed
+  // the Library page after it (yetone).
+  const FOLDERS = "\x00folders";
 
   // A session seen only through magpie's gateway has no folder magpie knows
   // (its agent's files are on another computer, in a container or under
@@ -551,55 +557,84 @@
       return;
     }
     const q = query.trim();
-    for (const [cwd, items] of groups) {
-      const open = !!q || opened.has(cwd);
-      const g = el("div", "list sm-group");
-      const r = el("div", "row sm-folder");
-      const writable = items.filter((s) => s.deletable);
-      // the folder's box picks every session of it shown, folded or not,
-      // for the bar's Delete; the bar still counts sessions (#527)
-      if (current()?.deletable && writable.length) {
-        const c = el("input", "sm-check sm-folder-check");
-        c.type = "checkbox";
-        // a session's own box ticked or not shows here at once
-        c.sync = () => {
-          c.checked = writable.every((s) => picked.has(s.id));
-          c.indeterminate = !c.checked && writable.some((s) => picked.has(s.id));
-        };
-        c.sync();
-        folderBoxes.set(cwd, c);
-        c.setAttribute("aria-label", t("Select every session in {folder}", { folder: groupName(cwd) }));
-        c.onclick = (e) => e.stopPropagation();
-        c.onchange = () => {
-          for (const s of writable) c.checked ? picked.add(s.id) : picked.delete(s.id);
-          redrawList();
-        };
-        r.append(c);
-      }
-      const fold = el("button", "fold");
-      fold.type = "button";
-      fold.setAttribute("aria-expanded", String(open));
-      fold.append(svg(CHEV_R, 10, 1.6), el("span", "name", groupName(cwd)));
-      fold.onclick = () => {
-        if (opened.has(cwd)) opened.delete(cwd); else opened.add(cwd);
+    const all = [...groups];
+    // a page of folders, or as many as were drawn before, and down to the
+    // folder of the session opened to its details
+    const at = detail ? all.findIndex(([, items]) => items.some((s) => s.id === detail)) : -1;
+    const n = Math.min(all.length, Math.max(drawnIn.get(FOLDERS) || SM_PAGE, at + 1));
+    for (const [cwd, items] of all.slice(0, n)) tree.append(folder(cwd, items, q));
+    if (n < all.length) tree.append(moreFolders(all, n, q));
+    toFocus();
+  }
+
+  // moreFolders adds the next page of folders above itself, as moreRow does
+  // a folder's sessions
+  function moreFolders(all, n, q) {
+    drawnIn.set(FOLDERS, n);
+    const b = el("button", "text sess-page-more sm-more-folders");
+    b.type = "button";
+    b.dataset.unrolls = ""; // it goes down with the folders it opens
+    const label = () => t("Show {n} more folders", { n: Math.min(SM_PAGE, all.length - n) });
+    b.textContent = label();
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const next = Math.min(all.length, n + SM_PAGE);
+      b.before(...all.slice(n, next).map(([cwd, items]) => folder(cwd, items, q)));
+      n = next;
+      drawnIn.set(FOLDERS, n);
+      if (n >= all.length) b.remove();
+      else b.textContent = label();
+    };
+    return b;
+  }
+
+  function folder(cwd, items, q) {
+    const open = !!q || opened.has(cwd);
+    const g = el("div", "list sm-group");
+    const r = el("div", "row sm-folder");
+    const writable = items.filter((s) => s.deletable);
+    // the folder's box picks every session of it shown, folded or not,
+    // for the bar's Delete; the bar still counts sessions (#527)
+    if (current()?.deletable && writable.length) {
+      const c = el("input", "sm-check sm-folder-check");
+      c.type = "checkbox";
+      // a session's own box ticked or not shows here at once
+      c.sync = () => {
+        c.checked = writable.every((s) => picked.has(s.id));
+        c.indeterminate = !c.checked && writable.some((s) => picked.has(s.id));
+      };
+      c.sync();
+      folderBoxes.set(cwd, c);
+      c.setAttribute("aria-label", t("Select every session in {folder}", { folder: groupName(cwd) }));
+      c.onclick = (e) => e.stopPropagation();
+      c.onchange = () => {
+        for (const s of writable) c.checked ? picked.add(s.id) : picked.delete(s.id);
         redrawList();
       };
-      const path = cwd === GW ? "" : cwd;
-      r.append(fold, el("span", "sub sm-path", path), el("span", "grow"), el("span", "note", t(items.length === 1 ? "{n} session" : "{n} sessions", { n: items.length })));
-
-      r.title = path;
-      g.append(r);
-      if (open) {
-        // a page, or as many as were drawn before, and down to the session
-        // opened to its details (from the Usage page's list, #752)
-        const at = detail ? items.findIndex((s) => s.id === detail) : -1;
-        const n = Math.min(items.length, Math.max(drawnIn.get(cwd) || SM_PAGE, at + 1));
-        for (const s of items.slice(0, n)) g.append(item(s));
-        if (n < items.length) g.append(moreRow(cwd, items, n));
-      }
-      tree.append(g);
+      r.append(c);
     }
-    toFocus();
+    const fold = el("button", "fold");
+    fold.type = "button";
+    fold.setAttribute("aria-expanded", String(open));
+    fold.append(svg(CHEV_R, 10, 1.6), el("span", "name", groupName(cwd)));
+    fold.onclick = () => {
+      if (opened.has(cwd)) opened.delete(cwd); else opened.add(cwd);
+      redrawList();
+    };
+    const path = cwd === GW ? "" : cwd;
+    r.append(fold, el("span", "sub sm-path", path), el("span", "grow"), el("span", "note", t(items.length === 1 ? "{n} session" : "{n} sessions", { n: items.length })));
+
+    r.title = path;
+    g.append(r);
+    if (open) {
+      // a page, or as many as were drawn before, and down to the session
+      // opened to its details (from the Usage page's list, #752)
+      const at = detail ? items.findIndex((s) => s.id === detail) : -1;
+      const n = Math.min(items.length, Math.max(drawnIn.get(cwd) || SM_PAGE, at + 1));
+      for (const s of items.slice(0, n)) g.append(item(s));
+      if (n < items.length) g.append(moreRow(cwd, items, n));
+    }
+    return g;
   }
 
   // moreRow adds the folder's next page of sessions above itself, leaving
