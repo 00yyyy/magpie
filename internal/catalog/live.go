@@ -55,6 +55,18 @@ func Live(provider string) (models []Model, fetched time.Time, ok bool) {
 	return ms, f.Fetched, true
 }
 
+// LiveAll is the whole model list last fetched from the provider, the
+// models that draw or make videos among them, with each one's keys: what
+// tells which of the provider's keys serves an image model (#1657), which
+// Live, the models to talk to, leaves out.
+func LiveAll(provider string) (models []Model, ok bool) {
+	f, err := readLive(provider)
+	if err != nil || len(f.Models) == 0 {
+		return nil, false
+	}
+	return f.Models, true
+}
+
 // LiveDrawers are the models in the provider's fetched list that make
 // images, in the list's order.
 func LiveDrawers(provider string) []Model {

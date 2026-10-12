@@ -658,6 +658,9 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		fail(403, keyModelError(keyWho, f.Model))
 		return
 	}
+	// the provider's other keys to start the video on, when the first
+	// says it doesn't serve the model
+	var keys []candidate
 	if !p.IsRemoteMagpie() && filmsCustom(p, model) {
 		// at a provider's own videos API: sent on the first key a chat
 		// for the model would go to (#1657), never one whose own list of
@@ -668,7 +671,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 			fail(code, msg)
 			return
 		}
-		p = cs[0].p
+		p, keys = cs[0].p, cs[1:]
 	} else if keyWho, held := accountHolds(r); held {
 		// held to some accounts (#905): sent on a key the calling key may
 		// use, of those in use — not the provider's first alone, which a
@@ -712,6 +715,12 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), drawTimeout)
 	defer cancel()
 	b, code, err := s.send(ctx, p, at, "application/json", body, true)
+	// a key answering 404 that it doesn't serve the model hands it to the
+	// next (#1657), as a drawing does; the id names the key that started it
+	for ; err != nil && len(keys) > 0 && ctx.Err() == nil && keyLacksModel(code, err); keys = keys[1:] {
+		p = keys[0].p
+		b, code, err = s.send(ctx, p, at, "application/json", body, true)
+	}
 	call.Millis, call.Status = time.Since(start).Milliseconds(), code
 	var started map[string]any
 	theirs := ""

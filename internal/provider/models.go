@@ -142,10 +142,7 @@ func (p Provider) Listed() (time.Time, bool) {
 // onto it left its own last list under the same id. A preset with no list
 // ignores old fetched models too, unless a region or explicit URL lists them.
 func (p Provider) live() ([]catalog.Model, time.Time, bool) {
-	if p.IsPlugin() {
-		return nil, time.Time{}, false
-	}
-	if pr := Preset(p.Preset); p.Account == nil && pr != nil && pr.NoList && strings.TrimSpace(p.ModelsURL) == "" && !p.listRegion(pr) {
+	if !p.lists() {
 		return nil, time.Time{}, false
 	}
 	type live struct {
@@ -155,6 +152,30 @@ func (p Provider) live() ([]catalog.Model, time.Time, bool) {
 	}
 	l := heldOf("fetched:"+p.ID, func() live { ms, at, ok := catalog.Live(p.ID); return live{ms, at, ok} })
 	return l.ms, l.at, l.ok
+}
+
+// lists says whether the provider's fetched list is its own to read: not
+// a plugin's, nor a preset's that lists nothing (Preset.NoList).
+func (p Provider) lists() bool {
+	if p.IsPlugin() {
+		return false
+	}
+	pr := Preset(p.Preset)
+	return p.Account != nil || pr == nil || !pr.NoList || strings.TrimSpace(p.ModelsURL) != "" || p.listRegion(pr)
+}
+
+// liveAll is live with the models that draw or make videos too
+// (catalog.LiveAll): which of its keys serves one is said there alone.
+func (p Provider) liveAll() ([]catalog.Model, bool) {
+	if !p.lists() {
+		return nil, false
+	}
+	type live struct {
+		ms []catalog.Model
+		ok bool
+	}
+	l := heldOf("fetched-all:"+p.ID, func() live { ms, ok := catalog.LiveAll(p.ID); return live{ms, ok} })
+	return l.ms, l.ok
 }
 
 // Fetch asks the vendor which models it serves and remembers the answer.
@@ -788,9 +809,11 @@ func anyImageInput(a, b *bool) *bool {
 // vendor's lists say another of the provider's keys sees it and k doesn't.
 // A key no list marks — its own wasn't answered, or it was added since —
 // is unknown, and serves: a failed list is not an empty one (#1598, the
-// first of five keys left out of every request).
+// first of five keys left out of every request). The lists are read whole,
+// the models that draw or make videos among them: a text key never says
+// it serves an image model only another key lists (#1657).
 func (p Provider) Serves(k KeyAccount, model string) bool {
-	live, _, ok := p.live()
+	live, ok := p.liveAll()
 	if !ok {
 		return true
 	}

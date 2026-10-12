@@ -696,11 +696,20 @@ func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider
 	for i, c := range cs {
 		p = c.p
 		out, code, err = s.draw(ctx, p, model, d)
-		if err == nil || ctx.Err() != nil || i+1 == len(cs) || !accountRefusedDrawing(code) {
+		if err == nil || ctx.Err() != nil || i+1 == len(cs) || !accountRefusedDrawing(code) && !keyLacksModel(code, err) {
 			break
 		}
 	}
 	return p, out, code, time.Time{}, err
+}
+
+// keyLacksModel says a vendor answered 404 that the model isn't one this
+// key or account serves: a relay's "Model "gpt-image-2" is not supported by
+// any configured account in this group" for a key of its text models
+// alone, while the provider's next key serves it (#1657). The next is
+// asked; a bare 404, a wrong address, is the request's and asks none.
+func keyLacksModel(code int, err error) bool {
+	return code == http.StatusNotFound && err != nil && modelRefused(code, []byte(err.Error()))
 }
 
 // accountRefusedDrawing says a failure to draw was the account's — its
