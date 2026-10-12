@@ -6,7 +6,6 @@ import (
 	"debug/buildinfo"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -306,9 +305,10 @@ func (a *Agent) Detected() bool {
 // started before Claude Code's installer put claude.exe in ~/.local/bin
 // and added that to the user's PATH, or a self-update restarting with the
 // PATH it had then, never listed it, while the sign-in, which asked
-// FindTool, found it (#839, #1482). "" when it is in none.
+// FindTool, found it (#839, #1482). A mise wrapper script found there is
+// given as the program it runs (proc.LookPath). "" when it is in none.
 func binAt(name string) string {
-	if p, err := exec.LookPath(name); err == nil {
+	if p, err := proc.LookPath(name); err == nil {
 		return p
 	}
 	if runtime.GOOS == "windows" {

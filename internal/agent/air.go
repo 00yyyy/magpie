@@ -33,13 +33,13 @@ package agent
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // airAgent is the name magpie's agent has in acp.json, and so in Air's
@@ -65,7 +65,7 @@ func airDir(home, cfg string) string {
 // one OpenCode's installer puts in ~/.opencode/bin, as a full path, since
 // Air, an app, may not have the shell's PATH; "" when there is none.
 var airOpenCode = func(home string) string {
-	if p, err := exec.LookPath("opencode"); err == nil {
+	if p, err := proc.LookPath("opencode"); err == nil {
 		if abs, err := filepath.Abs(p); err == nil {
 			return abs
 		}

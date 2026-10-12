@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -187,6 +188,7 @@ func startClaudeSignIn(s *signInFlow) error {
 
 	printed := make(chan string, 1)
 	exited := make(chan string, 1)
+	var said lastSaid
 	go func() {
 		sc := bufio.NewScanner(out)
 		var tail []string
@@ -201,6 +203,7 @@ func startClaudeSignIn(s *signInFlow) error {
 			}
 			if line = strings.TrimSpace(strings.TrimPrefix(line, "Paste code here if prompted >")); line != "" {
 				tail = append(tail, line)
+				said.set(line)
 			}
 		}
 		err := cmd.Wait()
@@ -252,7 +255,7 @@ func startClaudeSignIn(s *signInFlow) error {
 		case <-grace:
 			if link == "" {
 				cancel()
-				return errors.New("claude auth login gave no link to open")
+				return claudeNoLink(cli, said.get())
 			}
 			s.mu.Lock()
 			s.st.URL, s.st.PasteCode = link, true
@@ -261,6 +264,32 @@ func startClaudeSignIn(s *signInFlow) error {
 		case <-tick.C:
 		}
 	}
+}
+
+// lastSaid is the last line a login command printed, which says why
+// there's no link.
+type lastSaid struct {
+	mu   sync.Mutex
+	line string
+}
+
+func (l *lastSaid) set(s string) { l.mu.Lock(); l.line = s; l.mu.Unlock() }
+
+func (l *lastSaid) get() string { l.mu.Lock(); defer l.mu.Unlock(); return l.line }
+
+// claudeNoLink is the error of a `claude auth login` that gave no link in
+// linkWait: what it last printed, or, when it printed nothing at all, the
+// program that was run, which may be a script that never starts Claude
+// Code (deluxe on Discord: a mise wrapper running itself), and how to see
+// what it does.
+func claudeNoLink(cli claudeCLI, last string) error {
+	if last != "" {
+		return errors.New("claude auth login gave no link to open: " + last)
+	}
+	if cli.path == "" {
+		return fmt.Errorf("claude auth login gave no link to open and printed nothing in %s", linkWait)
+	}
+	return fmt.Errorf("claude auth login gave no link to open: %s printed nothing in %s; run `%s auth login` in a terminal to see what it does", cli.path, linkWait, cli.path)
 }
 
 // claudeCallbackPort is the port a Claude sign-in page sends the browser

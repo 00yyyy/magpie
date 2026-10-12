@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -164,7 +163,7 @@ func SawCodexClient(h http.Header) {
 // PATH it looks where npm, nvm, bun, volta, pnpm, mise and the standalone
 // installer put it, which a desktop app's PATH lacks.
 var codexExecutable = func() string {
-	if p, err := exec.LookPath("codex"); err == nil {
+	if p, err := proc.LookPath("codex"); err == nil {
 		return p
 	}
 	names := []string{"codex"}

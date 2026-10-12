@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -39,7 +38,7 @@ import (
 
 // DevinExecutable finds the devin CLI; a var so tests can fake it.
 var DevinExecutable = func() string {
-	if p, err := exec.LookPath("devin"); err == nil {
+	if p, err := proc.LookPath("devin"); err == nil {
 		return p
 	}
 	home, _ := os.UserHomeDir()
