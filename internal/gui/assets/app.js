@@ -22434,7 +22434,7 @@ let corsDraft = { value: "", err: "" };
 // page's language
 function corsSays(m) {
   if (/wildcard/.test(m)) return t("Name each origin: a wildcard would let every web page use magpie");
-  if (/is not an origin/.test(m)) return t("Write an origin as http://localhost:3000 or https://app.example.com");
+  if (/is not an (extension's )?origin/.test(m)) return t("Write an origin as http://localhost:3000 or https://app.example.com, or a browser extension's as chrome-extension://, moz-extension:// or safari-web-extension:// followed by its ID");
   return t(m);
 }
 function renderCORS(s) {
@@ -22467,7 +22467,7 @@ function renderCORS(s) {
   r.append(who, val);
   box.append(r);
   for (const o of origins) {
-    const row = el("div", "row pref");
+    const row = el("div", "row pref cors-origin"); // an extension's id runs long: wrapped, never cut
     const w = el("div", "who");
     w.append(el("div", "name", o));
     const x = el("button", "text", t("Remove"));

@@ -2996,6 +2996,7 @@ input.words.compact-num { flex: none; width: 76px; font-variant-numeric: tabular
 .row.pref.rule-row { flex-wrap: wrap; row-gap: 8px; }
 .row.pref.rule-row .who { flex: 1 1 100%; }
 .row.pref.rule-row .sub { white-space: normal; }
+.row.pref.cors-origin .name { white-space: normal; overflow-wrap: anywhere; }
 /* a kind of personal data, under Mask personal data */
 .row.pref.redact-kind .who { padding-left: 14px; min-width: 0; }
 .row.pref.redact-kind .sub { white-space: normal; overflow-wrap: anywhere; line-height: 1.45; }
