@@ -106,6 +106,13 @@ missing or over a minute old), never `?asked=1`. A kept day's list shows
 none, since those requests were weighed by readings long gone. See
 `routing-account-windows.test.cjs`.
 
+The refresh beside the Accounts and keys heading (`#rtReadAllowances`,
+#1834) reads them again by hand: `loadQuotas(true)`, the asked read the
+Usage page's Refresh now makes. It turns while the read is on its way,
+and a click then asks nothing more. Nothing on the page reads again by
+itself. It shows only live, with a subscription account listed. See
+`routing-read-allowances.test.cjs`.
+
 ### Desktop fonts
 
 Settings → General offers independent interface and code fonts, each with

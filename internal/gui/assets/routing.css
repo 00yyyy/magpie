@@ -315,6 +315,15 @@ button.rt-session { cursor: pointer; }
 .rt-act .st:empty { display: none; }
 .rt-act .st.rest { color: var(--red); }
 .rt-act .st.left { color: var(--muted); }
+/* the accounts' allowances read again by hand (#1834), beside the heading */
+.rt-read { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; height: 20px; margin: -3px 0 -3px 6px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; transition: background .12s, color .12s; }
+.rt-read[hidden] { display: none; }
+.rt-read:hover { color: var(--fg); background: var(--pill-hover); }
+.rt-read:focus-visible { color: var(--fg); background: var(--pill-hover); outline: none; }
+.rt-read svg { flex: none; }
+.rt-read.busy { cursor: default; color: var(--fg-2); }
+.rt-read.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .rt-read.busy svg > * { animation: none; } }
 /* a subscription account's windows each (#1833), under its one figure */
 .rt-act .wins { display: flex; flex-wrap: wrap; gap: 2px 12px; min-width: 0; color: var(--fg-2); font-size: 11px; font-variant-numeric: tabular-nums; }
 .rt-act .wins span { min-width: 0; overflow-wrap: anywhere; }

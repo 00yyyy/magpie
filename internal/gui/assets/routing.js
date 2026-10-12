@@ -149,7 +149,27 @@
   const actHead = el("div", "row-head"), actNote = el("span", "note");
   const acts = el("div", "list rt-acts");
   const actLabel = el("span", "label");
-  actHead.append(actLabel, el("span", "grow"), actNote);
+  // the accounts' allowances read again, by hand only (#1834): an asked
+  // read, as the Usage page's Refresh now is, never on a timer; it turns
+  // while the read is on its way, and the windows each account shows
+  // (winsOf) are drawn again from what comes back
+  const actRead = el("button", "rt-read");
+  actRead.type = "button";
+  actRead.id = "rtReadAllowances";
+  actRead.hidden = true;
+  actRead.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg>';
+  actRead.onclick = async () => {
+    if (actRead.classList.contains("busy")) return;
+    actRead.classList.add("busy");
+    actRead.setAttribute("aria-busy", "true");
+    try { await loadQuotas(true); } finally {
+      actRead.classList.remove("busy");
+      actRead.removeAttribute("aria-busy");
+      steady(() => renderActs(listed()));
+      render();
+    }
+  };
+  actHead.append(actLabel, actRead, el("span", "grow"), actNote);
   const hist = el("div", "rt-cols");
   const colA = el("div", "rt-col"), colB = el("div", "rt-col");
   const filters = el("div", "rt-filters");
@@ -2329,6 +2349,13 @@
     const list = [...by.values()].sort((x, y) => (x.w.name || "").localeCompare(y.w.name || "") || x.w.provider.localeCompare(y.w.provider) || rankOf(x.w) - rankOf(y.w) || x.pos - y.pos);
     setText(actLabel, t("Accounts and keys"));
     setText(actNote, t("over those requests"));
+    // live, with a subscription account listed: a kept day's were weighed
+    // by readings long gone, and a key has no allowance to read
+    actRead.hidden = !!day || !list.some((a) => a.w.kind === "account");
+    if (actRead.title !== t("Read the accounts' allowances again")) {
+      actRead.title = t("Read the accounts' allowances again");
+      actRead.setAttribute("aria-label", t("Refresh now"));
+    }
     const n = now();
     let prov = "";
     const out = [];
