@@ -206,6 +206,9 @@ func groupsState() groupsJSON {
 			out.Models = append(out.Models, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts, CanFast: provider.CanFast(e.Provider, e.Model), OwnFast: provider.OwnFast(e.Provider, e.Model), Images: seesImages(e), ImagesUnknown: imagesUnknown(e)})
 		}
 	}
+	// every provider's models read once for the groups, not once a group
+	// (#1762)
+	find := provider.GroupFinder()
 	for _, g := range provider.Groups() {
 		gj := groupJSON{Group: g, Info: []memberJSON{}, Holds: []string{}, Offers: []string{}, Shared: []string{}, Patterns: []provider.PatternHit{}}
 		if gj.Members == nil {
@@ -222,7 +225,7 @@ func groupsState() groupsJSON {
 				break
 			}
 		}
-		if _, ms, ok := provider.FindGroup(provider.GroupPrefix + g.ID); ok {
+		if _, ms, ok := find(provider.GroupPrefix + g.ID); ok {
 			for _, m := range ms {
 				for _, v := range m.Groups() {
 					if !slices.Contains(gj.Holds, v) {
@@ -238,7 +241,7 @@ func groupsState() groupsJSON {
 				m.Group = true
 				for _, e := range served {
 					if e.ID == id {
-						_, ms, _ := provider.FindGroup(id)
+						_, ms, _ := find(id)
 						m.Ready, m.Name, m.Icon, m.On = true, e.Name, e.Provider.Icon, len(ms)
 						m.Context, m.Images, m.ImagesUnknown = e.Context, seesImages(e), imagesUnknown(e)
 						// the levels it offers agents: those every model in
