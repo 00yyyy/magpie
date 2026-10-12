@@ -35,6 +35,19 @@ func TestFakeMCPServer(t *testing.T) {
 		fmt.Fprintf(l, "%d\n", os.Getpid())
 		l.Close()
 	}
+	if f := os.Getenv("MAGPIE_FAKE_MCP_CWD"); f != "" {
+		wd, _ := os.Getwd()
+		os.WriteFile(f, []byte(wd), 0o644)
+	}
+	if mode == "needcwd" {
+		// A server that writes into its working directory on start (the
+		// doris-mcp-server shape in #1727). Fail loudly if "." is not writable.
+		if err := os.MkdirAll(filepath.Join(".", "logs"), 0o755); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
+		mode = "ok"
+	}
 	switch mode {
 	case "sleep":
 		time.Sleep(time.Minute)
@@ -124,6 +137,55 @@ func TestCheckStdio(t *testing.T) {
 		h := CheckServer(context.Background(), &Server{Name: "x", Transport: "stdio", Command: "magpie-no-such-mcp-server"})
 		if h.State != "error" || h.Why != "notfound" || h.Detail != "magpie-no-such-mcp-server" {
 			t.Fatalf("got %+v, want notfound", h)
+		}
+	})
+	t.Run("starts in the home directory", func(t *testing.T) {
+		// Without cmd.Dir=home, the check inherits whatever cwd the process
+		// has (on Windows Start-menu launches, often an unwritable system
+		// dir). Move this test into a throwaway folder and require the child
+		// to report HOME instead.
+		work := t.TempDir()
+		orig, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chdir(work); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chdir(orig)
+		cwdFile := filepath.Join(t.TempDir(), "cwd")
+		h := CheckServer(context.Background(), fakeStdio(t, "ok", map[string]string{"MAGPIE_FAKE_MCP_CWD": cwdFile}))
+		if h.State != "ok" {
+			t.Fatalf("got %+v, want ok", h)
+		}
+		got, _ := os.ReadFile(cwdFile)
+		want := home()
+		if want == "" {
+			t.Fatal("HOME is empty")
+		}
+		if string(got) != want {
+			t.Fatalf("check started the server in %q, want home %q (process cwd was %q)", got, want, work)
+		}
+	})
+	t.Run("writable home when process cwd is not", func(t *testing.T) {
+		// Read-only process cwd: a server that mkdir's ./logs fails unless
+		// the check pins Dir to HOME (#1727).
+		ro := filepath.Join(t.TempDir(), "ro")
+		if err := os.Mkdir(ro, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(ro, 0o755)
+		orig, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chdir(ro); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chdir(orig)
+		h := CheckServer(context.Background(), fakeStdio(t, "needcwd", nil))
+		if h.State != "ok" || h.Tools != 3 {
+			t.Fatalf("got %+v, want ok with 3 tools (server must not inherit the read-only cwd)", h)
 		}
 	})
 	t.Run("timeout ends the tree", func(t *testing.T) {
