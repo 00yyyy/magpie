@@ -294,6 +294,8 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 @media (prefers-reduced-motion: reduce) { .ctx-tune-chart :is(svg, .ctx-tc-dot) { animation: none; } }
 .ctx-tune-note { padding: 0 4px 12px; }
 .ctx-tune-why { margin: 0; font-size: 12px; line-height: 1.5; color: var(--fg-2); }
+/* what the advice doesn't weigh (#1854), quieter than the facts it follows */
+.ctx-tune-caveat { margin: -4px 0 0; font-size: 11px; line-height: 1.45; color: var(--muted); overflow-wrap: anywhere; }
 .ctx-tune-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .ctx-tune-src { font-size: 11px; color: var(--muted); margin-top: -7px; overflow-wrap: anywhere; }
 .ctx-tune-foot .grow { flex: 1; }

@@ -1010,7 +1010,8 @@
       return f;
     };
     vals.append(val("Now", cur, "now"));
-    if (!same) vals.append(el("span", "ctx-tune-arrow", "→"), val("Best for you", best, "best"));
+    // named for what it is measured by, tokens alone, not "best" (#1854)
+    if (!same) vals.append(el("span", "ctx-tune-arrow", "→"), val("Fewest tokens", best, "best"));
     row.append(vals);
     const c = a.compact
       ? chart(a.compact.curve || [], r.current, r.best, show)
@@ -1027,6 +1028,9 @@
       why.textContent = t("{quick} of your calls came within 5 minutes of the one before, {pause} after a pause of 5 to 60 minutes.", { quick: pct(f.quick || 0), pause: pct(f.pause || 0) });
     }
     row.append(why);
+    // a window advised is weighed by tokens alone: what a compaction loses of
+    // the task isn't measured, and a smaller one compacts more often (#1854)
+    if (a.compact && !same) row.append(el("p", "ctx-tune-caveat", t("A token estimate only: it doesn't measure how well the agent keeps the task after a compaction. The lower the window, the more often it compacts.")));
 
     const foot = el("div", "ctx-tune-foot");
     const verdict = same || applied

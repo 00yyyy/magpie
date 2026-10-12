@@ -7,7 +7,9 @@
 // of and has none either; one magpie put in has Undo. Drawn before the
 // gateway has read anything, in Chromium and WebKit, at a phone's width and
 // a desk's, in every language, none of it wider than the page. Each row
-// draws what every setting would have spent past the advice.
+// draws what every setting would have spent past the advice. The advice is
+// named "Fewest tokens", and a window it would change says it is a token
+// estimate that doesn't weigh what a compaction loses of the task (#1854).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -76,6 +78,14 @@ function serve(lang, posts) {
   };
 }
 
+const fewest = { en: "Fewest tokens", zh: "最省 Token", "zh-TW": "最省 Token", ja: "トークン最少", de: "Wenigste Tokens" };
+const caveat = {
+  en: "A token estimate only: it doesn't measure how well the agent keeps the task after a compaction. The lower the window, the more often it compacts.",
+  zh: "只是 Token 估算：没有衡量压缩后 Agent 还能多好地接着做任务。阈值越低，压缩越频繁。",
+  "zh-TW": "只是 Token 估算：沒有衡量壓縮後 Agent 還能多好地接著做任務。閾值越低，壓縮越頻繁。",
+  ja: "トークンの見積もりだけです。コンパクトのあとエージェントが作業をどれだけ保てるかは測っていません。しきい値が低いほどコンパクトの回数は増えます。",
+  de: "Nur eine Token-Schätzung: Wie gut der Agent die Aufgabe nach einer Kompaktierung behält, misst sie nicht. Je niedriger die Schwelle, desto öfter wird kompaktiert.",
+};
 const heading = { en: "Tuned for you", zh: "为你调优", "zh-TW": "為你調校", ja: "あなた向けの調整", de: "Für dich abgestimmt" };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -106,6 +116,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const buttons = page.locator(".ctx-tune-row button");
         assert.equal(await buttons.count(), 1);
         assert.match(await rows.nth(0).locator(".ctx-tune-val.best b").innerText(), /160K/);
+        // the advice is named for tokens and says what it doesn't weigh
+        // (#1854): on a window it would change, not on one already the
+        // leanest, nor on a cache lifetime
+        assert.equal(await rows.nth(0).locator(".ctx-tune-val.best .ctx-k").textContent(), fewest[lang]);
+        assert.equal(await rows.nth(0).locator(".ctx-tune-caveat").innerText(), caveat[lang]);
+        assert.ok(await rows.nth(0).locator(".ctx-tune-caveat").isVisible());
+        for (const i of [1, 2, 3]) assert.equal(await rows.nth(i).locator(".ctx-tune-caveat").count(), 0, `row ${i} has no caveat`);
         assert.match(await rows.nth(2).locator(".ctx-tune-src").innerText(), /CLAUDE_CODE_PROMPT_CACHE_TTL/);
         assert.equal(await rows.nth(1).locator(".ctx-tune-val.best").count(), 0, "a window already the leanest shows no other");
         // the curve is what each setting spends past the advice: the window
