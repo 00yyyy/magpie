@@ -32,8 +32,16 @@ func TestParseScutil(t *testing.T) {
 	if p.URL != "http://127.0.0.1:7891" || len(p.Bypass) != 2 || p.Bypass[1] != "*.local" {
 		t.Fatalf("%+v", p)
 	}
-	if p := parseScutil("<dictionary> {\n  SOCKSEnable : 1\n  SOCKSPort : 1080\n  SOCKSProxy : 10.0.0.2\n}"); p.URL != "socks5://10.0.0.2:1080" {
+	// each entry alone, for Codex's reqwest, which takes the HTTP one for
+	// an http:// URL and never the HTTPS or SOCKS one
+	if p.HTTP != "http://127.0.0.1:7890" || p.SOCKS != "socks5://127.0.0.1:7892" {
+		t.Fatalf("entries: %+v", p)
+	}
+	if p := parseScutil("<dictionary> {\n  SOCKSEnable : 1\n  SOCKSPort : 1080\n  SOCKSProxy : 10.0.0.2\n}"); p.URL != "socks5://10.0.0.2:1080" || p.HTTP != "" || p.SOCKS != p.URL {
 		t.Fatalf("socks: %+v", p)
+	}
+	if p := parseScutil("<dictionary> {\n  HTTPSEnable : 1\n  HTTPSPort : 7890\n  HTTPSProxy : 127.0.0.1\n}"); p.URL != "http://127.0.0.1:7890" || p.HTTP != "" {
+		t.Fatalf("https only: %+v", p)
 	}
 	if p := parseScutil("<dictionary> {\n  HTTPEnable : 0\n  HTTPProxy : x\n}"); p.URL != "" {
 		t.Fatalf("off: %+v", p)
@@ -50,6 +58,13 @@ func TestParseWindows(t *testing.T) {
 		if got := parseWindows(server, "").URL; got != want {
 			t.Errorf("%q: %q, want %q", server, got, want)
 		}
+	}
+	// reqwest reads ProxyServer as one address: a list per protocol isn't one
+	if p := parseWindows("127.0.0.1:7890", ""); p.HTTP != "http://127.0.0.1:7890" {
+		t.Fatalf("one for all: %+v", p)
+	}
+	if p := parseWindows("http=127.0.0.1:1;https=127.0.0.1:2;socks=127.0.0.1:3", ""); p.HTTP != "" || p.SOCKS != "socks5://127.0.0.1:3" {
+		t.Fatalf("per protocol: %+v", p)
 	}
 	p := parseWindows("127.0.0.1:7890", "*.corp;<local>")
 	if !bypassed("git.corp", p.Bypass) || !bypassed("intranet", p.Bypass) || bypassed("chatgpt.com", p.Bypass) {

@@ -352,8 +352,13 @@ func noProxy(host, list string) bool {
 }
 
 // Proxy is the system's proxy: one address, and the hosts that skip it.
+// HTTP and SOCKS are the system's entries for plain http:// requests and
+// for SOCKS, each alone, for a client that reads them so (Codex's reqwest
+// takes macOS' HTTP entry and nothing else for an http:// URL).
 type Proxy struct {
 	URL    string
+	HTTP   string
+	SOCKS  string
 	Bypass []string
 }
 

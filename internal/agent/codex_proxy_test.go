@@ -5,11 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +48,13 @@ func TestCodexProxyFor(t *testing.T) {
 	os.WriteFile(plain, []byte("model = \"gpt-5.5\"\n"), 0o600)
 	respect := filepath.Join(t.TempDir(), "config.toml")
 	os.WriteFile(respect, []byte("model = \"gpt-5.5\"\n\n[features]\nrespect_system_proxy = true\n"), 0o600)
-	win := netproxy.Proxy{URL: clash, Bypass: []string{"localhost", "127.*", "<local>"}}
+	win := netproxy.Proxy{URL: clash, HTTP: clash, Bypass: []string{"localhost", "127.*", "<local>"}}
+	socks := "socks5://127.0.0.1:7891"
+	// macOS' entries as scutil reads them: "Web proxy (HTTP)" and "Secure
+	// web proxy (HTTPS)" set, or only one of HTTPS and SOCKS
+	mac := netproxy.Proxy{URL: "http://127.0.0.1:7892", HTTP: clash, Bypass: []string{"127.0.0.1", "localhost"}}
+	macHTTPS := netproxy.Proxy{URL: clash, Bypass: []string{"127.0.0.1"}}
+	macSOCKS := netproxy.Proxy{URL: socks, SOCKS: socks, Bypass: []string{"*.local"}}
 	cases := []struct {
 		name string
 		cfg  string
@@ -66,11 +74,24 @@ func TestCodexProxyFor(t *testing.T) {
 		// the reporter's: Windows' proxy on, with 127.* in its bypass list,
 		// which reqwest doesn't read as 127.0.0.1
 		{"Windows 127.*", plain, nil, win, "windows", clash},
-		{"Windows 127.0.0.1", plain, nil, netproxy.Proxy{URL: clash, Bypass: []string{"127.0.0.1"}}, "windows", ""},
-		{"Windows NO_PROXY wins over its list", plain, map[string]string{"NO_PROXY": "example.com"}, netproxy.Proxy{URL: clash, Bypass: []string{"127.0.0.1"}}, "windows", clash},
-		{"macOS exceptions not read", plain, nil, netproxy.Proxy{URL: clash, Bypass: []string{"127.0.0.1"}}, "darwin", clash},
+		{"Windows 127.0.0.1", plain, nil, netproxy.Proxy{URL: clash, HTTP: clash, Bypass: []string{"127.0.0.1"}}, "windows", ""},
+		{"Windows NO_PROXY wins over its list", plain, map[string]string{"NO_PROXY": "example.com"}, netproxy.Proxy{URL: clash, HTTP: clash, Bypass: []string{"127.0.0.1"}}, "windows", clash},
+		// a ProxyServer per protocol is no address to reqwest: direct
+		{"Windows per protocol", plain, nil, netproxy.Proxy{URL: clash, SOCKS: socks}, "windows", ""},
+		{"macOS exceptions not read", plain, nil, mac, "darwin", clash},
+		// liu_dyj on X: reqwest takes macOS' HTTP entry alone for an
+		// http:// URL; with only HTTPS or SOCKS set Codex goes direct
+		{"macOS HTTPS entry alone", plain, nil, macHTTPS, "darwin", ""},
+		{"macOS SOCKS entry alone", plain, nil, macSOCKS, "darwin", ""},
+		{"macOS SOCKS entry, ALL_PROXY", plain, map[string]string{"ALL_PROXY": socks}, macSOCKS, "darwin", socks},
 		{"respect: Windows 127.* goes around", respect, nil, win, "windows", ""},
-		{"respect: system proxy", respect, nil, netproxy.Proxy{URL: clash, Bypass: []string{"*.local"}}, "darwin", clash},
+		{"respect: system proxy", respect, nil, netproxy.Proxy{URL: clash, HTTP: clash, Bypass: []string{"*.local"}}, "darwin", clash},
+		{"respect: macOS exceptions", respect, nil, mac, "darwin", ""},
+		{"respect: macOS HTTPS entry alone", respect, map[string]string{"HTTP_PROXY": clash}, macHTTPS, "darwin", ""},
+		// a SOCKS entry Codex can't use: the environment's then
+		{"respect: macOS SOCKS entry, no env", respect, nil, macSOCKS, "darwin", ""},
+		{"respect: macOS SOCKS entry, HTTP_PROXY", respect, map[string]string{"HTTP_PROXY": clash}, macSOCKS, "darwin", clash},
+		{"respect: macOS SOCKS entry, NO_PROXY", respect, map[string]string{"ALL_PROXY": socks, "NO_PROXY": "127.0.0.1"}, macSOCKS, "darwin", ""},
 		// the system says direct, and the environment isn't asked (codex-cli
 		// 0.162.1 with HTTP_PROXY set sent nothing to it)
 		{"respect: no system proxy, env not read", respect, map[string]string{"HTTP_PROXY": clash}, netproxy.Proxy{}, "darwin", ""},
@@ -82,6 +103,31 @@ func TestCodexProxyFor(t *testing.T) {
 				t.Fatalf("got %q from %q, want %q", got, from, c.want)
 			}
 		})
+	}
+}
+
+// liu_dyj on X: magpie opened from the Dock lacks the NO_PROXY a shell
+// profile sets, which the Codex a terminal or the ChatGPT app runs has.
+// The login shell's value is Codex's; magpie's own only where the shell
+// has none.
+func TestCodexEnvTakesLoginShell(t *testing.T) {
+	was := loginEnv
+	t.Cleanup(func() { loginEnv = was })
+	loginEnv = func(k string) string { return map[string]string{"NO_PROXY": "127.0.0.1"}[k] }
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:7890")
+	if got := codexEnv("NO_PROXY"); got != "127.0.0.1" {
+		t.Fatalf("NO_PROXY = %q, want the login shell's", got)
+	}
+	if got := codexEnv("HTTP_PROXY"); got != "http://127.0.0.1:7890" {
+		t.Fatalf("HTTP_PROXY = %q, want magpie's own", got)
+	}
+	proxyAs(t, nil, netproxy.Proxy{URL: "http://127.0.0.1:7890", HTTP: "http://127.0.0.1:7890"}, "darwin", nil)
+	codexProxyEnv = codexEnv
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(cfg, []byte("model = \"gpt-5.5\"\n"), 0o600)
+	if p, from := codexProxyFor(cfg, "http://127.0.0.1:3425/v1"); p != "" {
+		t.Fatalf("NO_PROXY=127.0.0.1 in the shell, still through %q from %q", p, from)
 	}
 }
 
@@ -113,6 +159,63 @@ func TestRealProxyProbe(t *testing.T) {
 	if !realProxyProbe(gw.URL+"/v1", pass.URL) {
 		t.Fatal("a proxy passing the request on didn't count")
 	}
+	// Codex's reqwest has no SOCKS: a socks5:// proxy is asked as an HTTP
+	// one at that address. Clash's mixed port passes it on; a SOCKS-only
+	// port, which Go would speak SOCKS to, doesn't, and Codex 502s
+	if !realProxyProbe(gw.URL+"/v1", "socks5://"+strings.TrimPrefix(pass.URL, "http://")) {
+		t.Fatal("an HTTP proxy named socks5:// didn't count, though Codex gets through it")
+	}
+	if realProxyProbe(gw.URL+"/v1", "socks5://"+socksOnly(t)) {
+		t.Fatal("a SOCKS-only proxy counted, though Codex can't speak SOCKS")
+	}
+}
+
+// socksOnly is the address of a SOCKS5 proxy that speaks nothing else: it
+// passes a CONNECT on and drops anything that isn't SOCKS5.
+func socksOnly(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				c.SetDeadline(time.Now().Add(5 * time.Second))
+				b := make([]byte, 262)
+				if _, err := io.ReadFull(c, b[:2]); err != nil || b[0] != 5 {
+					return
+				}
+				if _, err := io.ReadFull(c, b[:b[1]]); err != nil {
+					return
+				}
+				c.Write([]byte{5, 0})
+				if _, err := io.ReadFull(c, b[:4]); err != nil || b[3] != 1 {
+					return
+				}
+				if _, err := io.ReadFull(c, b[:6]); err != nil {
+					return
+				}
+				to := net.JoinHostPort(net.IP(b[:4]).String(), strconv.Itoa(int(b[4])<<8|int(b[5])))
+				up, err := net.Dial("tcp", to)
+				if err != nil {
+					return
+				}
+				defer up.Close()
+				c.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
+				c.SetDeadline(time.Time{})
+				go io.Copy(up, c)
+				io.Copy(c, up)
+			}()
+		}
+	}()
+	return ln.Addr().String()
 }
 
 // Muma102kMichael on X: Codex 502 on every project and every new chat once
@@ -139,7 +242,7 @@ func TestCodexFailoverHeldWhileProxyDoesNotPassOn(t *testing.T) {
 	os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), b, 0o600)
 
 	works := false
-	proxyAs(t, nil, netproxy.Proxy{URL: "http://127.0.0.1:7890", Bypass: []string{"localhost", "127.*"}}, "windows", &works)
+	proxyAs(t, nil, netproxy.Proxy{URL: "http://127.0.0.1:7890", HTTP: "http://127.0.0.1:7890", Bypass: []string{"localhost", "127.*"}}, "windows", &works)
 	cx := codex(home)
 	sync := func() string {
 		t.Helper()
