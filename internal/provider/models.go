@@ -955,6 +955,23 @@ func (p Provider) Thinks(model string) bool {
 	return catalog.Thinks(model)
 }
 
+// PaidBesideFree says model costs its subscription's credits while the
+// subscription serves other models at no cost to them (catalog.Model's
+// Free: WorkBuddy's "x0.00", Qoder's is_free, Cline's free models). Its
+// credits running out then says nothing of those: they draw on none
+// (Creat.wu on Discord). False for a model not on the list, or where no
+// model is free.
+func (p Provider) PaidBesideFree(model string) bool {
+	listed, paid, free := false, false, false
+	for _, m := range p.Available() {
+		if strings.EqualFold(m.ID, model) {
+			listed, paid = true, !m.Free
+		}
+		free = free || m.Free
+	}
+	return listed && paid && free
+}
+
 // Known are the model's own reasoning levels, when known.
 func (p Provider) Known(model string) []string {
 	for _, m := range p.Available() {

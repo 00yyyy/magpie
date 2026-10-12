@@ -116,8 +116,10 @@ var (
 	creditWords = regexp.MustCompile(`(?i)insufficient.?(balance|credit|fund)|balance|credit|billing|payment|arrear|overdue|suspended|余额|欠费|充值|账户.*(不足|停)`)
 	// brokeWords: a 429 that says the balance itself is spent, as Zhipu
 	// answers a GLM Coding Plan's key at the pay-as-you-go endpoint (1113
-	// "余额不足或无可用资源包，请充值") — out of credit, not a rate limit
-	brokeWords = regexp.MustCompile(`(?i)insufficient.?(balance|credit|fund)|余额不足|欠费|请充值`)
+	// "余额不足或无可用资源包，请充值") — out of credit, not a rate limit;
+	// WorkBuddy's 429 14018 "Credits exhausted. Please visit the link
+	// below to purchase add-on packs…" too (Creat.wu on Discord)
+	brokeWords = regexp.MustCompile(`(?i)insufficient.?(balance|credit|fund)|\bcredits? (are )?exhausted\b|余额不足|欠费|请充值`)
 	// quotaWords: it has used up what its plan allows for now.
 	usedUpWords = regexp.MustCompile(`(?i)quota|usage.?limit|out of budget|budget (exceeded|exhausted)|limit.?reached|hit your .*limit|limit.{0,24}resets|exceeded.*(plan|limit)|额度|用量|套餐|上限`)
 	// rateWords: a 429 that is a short rate limit — requests or tokens per
@@ -569,6 +571,15 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// models is the model's limit: the others still answer (WorkBuddy's
 	// "您也可以切换其他模型继续使用", #1669)
 	if pooled || unserved || why == failQuota && resetsWhen.Match(wordsOf(body)) && otherModels.Match(wordsOf(body)) {
+		id = c.restID()
+	}
+	// out of credit, or of a quota, on a model that costs credits where
+	// the subscription serves other models free is that model's: the free
+	// ones draw on no credits, and the account still serves them (Creat.wu
+	// on Discord: WorkBuddy AI's 14018 "Credits exhausted" on glm-5.3-flash
+	// rested the account, and its free models went nowhere). A free model
+	// the vendor refuses all the same rests on its own refusal.
+	if (why == failCredit || why == failQuota) && c.p.PaidBesideFree(c.model) {
 		id = c.restID()
 	}
 	r.Key = id
