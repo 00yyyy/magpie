@@ -517,3 +517,30 @@ func TestRTKHermesHome(t *testing.T) {
 		})
 	}
 }
+
+// Grok App is listed on the RTK tab with the switch unable to turn on:
+// rtk init has no Grok agent, so there is nothing to install.
+func TestRTKNoHookGrokApp(t *testing.T) {
+	h := sandbox(t)
+	root := filepath.Join(h, "grok-app-data")
+	t.Setenv("GROK_APP_HOME", root)
+	write(t, filepath.Join(root, "agent-home", "config.toml"), "")
+	var app *RTKAgent
+	for _, a := range ReadRTK().Agents {
+		if a.ID == "grok-app" {
+			app = &a
+		}
+	}
+	if app == nil {
+		t.Fatal("Grok App isn't listed")
+	}
+	if b, _ := json.Marshal(app); app.On || !strings.Contains(string(b), `"noHook":true`) || !strings.Contains(app.Blocked, "no Grok or Grok App agent") {
+		t.Fatalf("listed as %s", b)
+	}
+	if _, err := SetRTK("grok-app", true); err == nil || !strings.Contains(err.Error(), "Grok App") {
+		t.Fatalf("switched on: %v", err)
+	}
+	if _, err := RTKTakes("grok-app"); err == nil || !strings.Contains(err.Error(), "no Grok or Grok App agent") {
+		t.Fatalf("magpie library rtk on grok-app: %v", err)
+	}
+}

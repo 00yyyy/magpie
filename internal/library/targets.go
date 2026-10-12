@@ -254,6 +254,15 @@ func targetOf(a *agent.Agent) *Target {
 		t.MCP = &mcpFile{Path: a.Path, Format: fmtGrok}
 		t.Instructions = filepath.Join(a.Dir, "AGENTS.md")
 		t.Skills = filepath.Join(a.Dir, "skills")
+	case "grok-app":
+		// Independent mode (Use on a custom provider) starts the CLI with
+		// GROK_HOME at agent-home, beside config.toml (grok-app's
+		// providers.md). Shared mode keeps ~/.grok, which is Grok Build's
+		// row. Skills there are read as well as ~/.agents/skills.
+		home := filepath.Dir(a.Path)
+		t.MCP = &mcpFile{Path: a.Path, Format: fmtGrok}
+		t.Instructions = filepath.Join(home, "AGENTS.md")
+		t.Skills = filepath.Join(home, "skills")
 	case "droid":
 		// Droid's user-wide servers are ~/.factory/mcp.json's mcpServers,
 		// type stdio, http or sse as Claude Code's (docs.factory.ai/cli/
@@ -524,7 +533,7 @@ func Targets() []*Target {
 
 // readsShared are the agents that read ~/.agents/skills as well as their
 // own folder (each one's docs or source).
-var readsShared = []string{"codex", "gemini", "opencode", "crush", "dsh", "commandcode", "devin", "droid", "cline", "grok", "fx", "alma"}
+var readsShared = []string{"codex", "gemini", "opencode", "crush", "dsh", "commandcode", "devin", "droid", "cline", "grok", "grok-app", "fx", "alma"}
 
 // readsWith adds to each agent's SkillsAlso the agents whose folder it
 // reads skills from too: one that is the very same folder (Kimi Code's,

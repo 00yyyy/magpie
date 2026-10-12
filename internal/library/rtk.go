@@ -206,6 +206,10 @@ var rtkSpecs = map[string]rtkSpec{
 // instructions to AGENTS.md, which rewrite nothing).
 var rtkNoHook = map[string]string{
 	"dsh": "RTK has no hook for DeepSeek Harness yet: RTK works by rewriting the shell command an agent is about to run, and dsh's hooks can only allow or deny a command, not change it; rtk init has no --agent dsh either (github.com/rtk-ai/rtk/issues/3847)",
+	// rtk init's agents are claude, cursor, codex, copilot, gemini,
+	// opencode and the rest of rtkSpecs. There is no grok or grok-app,
+	// so a hook written here would have nowhere to go.
+	"grok-app": "RTK has no hook for Grok App yet: rtk init has no Grok or Grok App agent, so it cannot rewrite the shell commands Grok App runs",
 }
 
 func opencodePlugin(a *agent.Agent) string {
