@@ -62,7 +62,11 @@ That message holds the history in blocks of `historyChunk` messages, and
 magpie's one mark (Claude Code keeps three of Anthropic's four) is on the
 last whole block, else on the caller's instructions: a later run started
 anew for the same conversation within the hour reads the history up to an
-earlier run's mark, found within Anthropic's 20-block lookback.
+earlier run's mark, found within Anthropic's 20-block lookback. A
+conversation with no history (no reply that calls no tool, as a sub-agent's
+loop of tool calls that Claude Code's AgentSummary asks a summary of) has
+its every message but the last chunked instead. The turn to answer after a
+history is not chunked, and image blocks count toward the lookback.
 A turn that goes on in the run that had the last one is told only the
 messages since (`renderClaudeTurn`), and Anthropic reads the rest from the
 cache.

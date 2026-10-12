@@ -2511,6 +2511,17 @@ func renderClaudePrompt(req *Request) ([]map[string]any, error) {
 	// as one stretch of Human:/Assistant: text, the images of earlier turns
 	// read as just sent, and the model answered them again (#1365).
 	split := historyEnd(req.Messages)
+	// The history is told in chunks, each a block of its own (historyChunk).
+	// A conversation with no reply that calls no tool, as a sub-agent's
+	// loop of tool calls (Claude Code's AgentSummary asks a summary of one
+	// with its last results), has no history: its every message but the
+	// last is chunked instead, which a later request of the same loop
+	// repeats. One with a history later is told it wrapped, from its first
+	// message on, so nothing is lost there either.
+	chunked := split
+	if split == 0 {
+		chunked = len(req.Messages) - 1
+	}
 	for i, m := range req.Messages {
 		if split > 0 && i == 0 {
 			text.WriteString(historyOpen)
@@ -2525,7 +2536,7 @@ func renderClaudePrompt(req *Request) ([]map[string]any, error) {
 		text.WriteString(label + ": ")
 		blocks = renderParts(blocks, &text, m.Parts, offered)
 		text.WriteString("\n\n")
-		if i+1 <= split && (i+1)%historyChunk == 0 {
+		if i+1 <= chunked && (i+1)%historyChunk == 0 {
 			blocks = append(blocks, map[string]any{"type": "text", "text": text.String()})
 			text.Reset()
 			chunk = len(blocks) - 1
@@ -2540,6 +2551,8 @@ func renderClaudePrompt(req *Request) ([]map[string]any, error) {
 	// the same conversation, as after a change of tools or a turn that
 	// missed its run, reads the history this one wrote, found within
 	// Anthropic's 20-block lookback, instead of writing all of it again.
+	// The turn to answer is never chunked when there is a history: a later
+	// run whose history ends further on tells those messages in it.
 	if chunk >= 0 {
 		if instructions >= 0 {
 			delete(blocks[instructions], "cache_control")
