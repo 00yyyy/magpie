@@ -1189,8 +1189,15 @@ func (p Provider) cursorFastPrice(model string) (catalog.Price, bool) {
 // token, not what the model costs (#1370, maicent: the Usage page counted
 // 937K tokens of Kimi Code's kimi-for-coding at ¥0.000). No price is read
 // from them, so a call there is priced at its model's API price, as a
-// Claude or Codex account's is, or left unpriced when it has none.
-var membershipCatalogs = []string{"kimi-code-plan-global", "kimi-code-plan-cn"}
+// Claude or Codex account's is, or left unpriced when it has none. Xiaomi
+// MiMo's three Token Plan catalogs list all nine of its models at $0 too,
+// and stood before xiaomi's own prices, so a pay-as-you-go call was
+// counted at $0 (#1873, mengyianx).
+var membershipCatalogs = append(slices.Clone(kimiCodePlans), "xiaomi-token-plan-cn", "xiaomi-token-plan-sgp", "xiaomi-token-plan-ams")
+
+// kimiCodePlans are Kimi Code's membership catalogs, whose models are
+// priced as the Kimi API's (kimiCodeAPI).
+var kimiCodePlans = []string{"kimi-code-plan-global", "kimi-code-plan-cn"}
 
 // priceCatalogs are cs without the membershipCatalogs.
 func priceCatalogs(cs []string) []string {
@@ -1202,7 +1209,7 @@ var makerPriceCatalogs = sync.OnceValue(func() []string { return priceCatalogs(m
 // kimiCodeMember is whether p is served at a Kimi Code membership's
 // endpoints, by its catalog.
 func (p Provider) kimiCodeMember() bool {
-	return slices.ContainsFunc(p.Catalogs(), func(c string) bool { return slices.Contains(membershipCatalogs, c) })
+	return slices.ContainsFunc(p.Catalogs(), func(c string) bool { return slices.Contains(kimiCodePlans, c) })
 }
 
 // kimiCodeAPI is the Kimi API model a Kimi Code model id is, as Kimi
