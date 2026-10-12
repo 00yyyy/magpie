@@ -21,7 +21,9 @@ const { reach } = require("./reader.cjs");
 const assets = path.resolve(__dirname, "../assets");
 const now = new Date();
 const ago = (s) => new Date(now.getTime() - s * 1e3).toISOString();
-const ahead = (m) => new Date(now.getTime() + m * 60e3).toISOString();
+// a rest runs from when the test builds it, not from when the file loaded:
+// under load the webkit half runs minutes after, past a 3-minute rest
+const ahead = (m) => new Date(Date.now() + m * 60e3).toISOString();
 const M = "gpt-6";
 const rest = (k) => ({ why: "rate", until: ahead(3), key: k, for: 180e9 });
 const acct = (p, name, user, extra = {}) => ({ id: `${p}@${user}`, provider: p, name, who: user, kind: "account", model: M, plan: "Pro", ...extra });
