@@ -1282,8 +1282,10 @@ func codexIn(at place) *Agent {
 				// sign-in (openai_base_url), magpie its provider only while
 				// the Codex app holds the account (""); beside it always,
 				// held or not (chatgpt); or with magpie as its provider,
-				// the Codex app in its API state. Kept in the stash, where
-				// set("") leaves it.
+				// the Codex app in its API state. Codex's getAuthStatus has
+				// no token for a provider without requires_openai_auth, so
+				// its Chrome control needs ChatGPT; the api note says so
+				// (#1824). Kept in the stash, where set("") leaves it.
 				Key: "login", Label: "sign-in", Quiet: true,
 				Get: func() string { return stashLoad()[at.key("codex.login")] },
 				Set: func(v string) error {
@@ -1310,7 +1312,7 @@ func codexIn(at place) *Agent {
 					return []Option{
 						{Value: "", Label: "ChatGPT", Note: "magpie's models join Codex's own; Codex stays signed in to ChatGPT, and while the Codex app blocks its account (out of allowance, no credits left) magpie is Codex's provider, so the app still sends"},
 						{Value: "chatgpt", Label: "Always ChatGPT", Note: "as ChatGPT, and kept so while the Codex app blocks its account: magpie never becomes Codex's provider. The Codex app may then send nothing till the account has room; Codex CLI goes on through magpie"},
-						{Value: "api", Label: "magpie API", Note: "magpie is Codex's provider; the Codex app is in its API state, with magpie's models only"},
+						{Value: "api", Label: "magpie API", Note: "magpie is Codex's provider; the Codex app is in its API state, with magpie's models only. Codex's Chrome control needs the ChatGPT sign-in, so pick ChatGPT to keep it"},
 					}
 				},
 			},
