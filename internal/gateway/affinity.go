@@ -207,24 +207,40 @@ func turnOf(from provider.Protocol, body []byte) (turn int, within bool) {
 // turnIn is turnOf for a request already parsed. The last of the user's
 // messages tells whether the turn goes on: an agent may put its own notes
 // after it (Claude Code a system message after the tool results).
+//
+// A turn begins with what the user said (userSaid) or an image or file of
+// theirs. A user message the agent wrote alone — a task notification, a
+// todo nudge, an agent list, Codex's context — begins none: after an
+// answer it carries the turn on, and right after the user's own message
+// it leaves that as it was.
 func turnIn(req *Request) (turn int, within bool) {
+	answered := false
 	for _, m := range req.Messages {
+		if m.Role == "assistant" {
+			answered = true
+		}
 		if m.Role != "user" {
 			continue
 		}
-		text, result := false, false
+		said, result := userSaid(m) != "", false
 		for _, p := range m.Parts {
 			switch p.Kind {
-			case Text, Image, File:
-				text = true
+			case Image, File:
+				said = true
 			case ToolResult:
 				result = true
 			}
 		}
-		if text && !result {
+		switch {
+		case result:
+			within = true
+		case said:
 			turn++
+			within = false
+		case answered:
+			within = turn > 0
 		}
-		within = result
+		answered = false
 	}
 	return turn, within
 }

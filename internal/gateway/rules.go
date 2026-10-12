@@ -116,11 +116,24 @@ func ruleKey(g provider.Group, in http.Header, req *Request) string {
 }
 
 // firstWords tells an agent's subagents from it: they share its session
-// but not what they were asked. Only the words are taken — not how the
-// agent marked them for caching — as they stay the same for the
-// conversation's whole life.
+// but not what they were asked. Only what the user said is taken (userSaid,
+// the first user message that has any) — not how the agent marked it for
+// caching, nor what it put in beside it (instruction files, reminders,
+// Codex's context), which an agent such as ZCode changes as the
+// conversation goes on — so it stays the same for the conversation's
+// whole life. A conversation the user said nothing in yet goes by its
+// first user message's text.
 func firstWords(req *Request) string {
 	h := sha256.New()
+	for _, m := range req.Messages {
+		if m.Role != "user" {
+			continue
+		}
+		if said := userSaid(m); said != "" {
+			h.Write([]byte(said))
+			return hex.EncodeToString(h.Sum(nil)[:12])
+		}
+	}
 	for _, m := range req.Messages {
 		if m.Role != "user" {
 			continue

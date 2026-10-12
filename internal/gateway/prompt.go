@@ -636,10 +636,61 @@ func (b *promptBuilder) anthropic(body []byte) bool {
 }
 
 // userSays tells what the user said from what the agent put in for them.
-func userSays(text string) bool {
-	t := strings.TrimSpace(text)
-	return t != "" && !strings.HasPrefix(t, "<system-reminder>") && !agentsFor.MatchString(t) &&
-		!strings.HasPrefix(t, "<environment_context>") && !strings.HasPrefix(t, "<user_instructions>")
+func userSays(text string) bool { return userWords(text) != "" }
+
+var (
+	// reminders are what agents add to a user's message for the model
+	// alone: Claude Code's <system-reminder>, ZCode's with a source=.
+	reminders = regexp.MustCompile(`(?s)<system-reminder(?:\s[^>]*)?>.*?</system-reminder>`)
+	// myRequest heads what the user typed in the Codex app, after the
+	// context it puts first (# Context from my IDE setup:, <in-app-browser-context>…).
+	myRequest = regexp.MustCompile(`(?m)^## My request(?: for Codex)?:[ \t]*\n?`)
+	// injected are how a text the agent put in as the user begins, beside
+	// agentsFor and the reminders: Codex's and the Codex app's context,
+	// Claude Code's and ZCode's notices, plugin metadata, agent lists and
+	// todo nudges.
+	injected = []string{
+		"<system-reminder", "<environment_context>", "<user_instructions>", "<turn_aborted>",
+		"<user_shell_command>", "<subagent_notification>", "<in-app-browser-context",
+		"<task-notification>", "<subagent-notification>", "<plugin_reference>",
+		"Available agent types for the Agent tool:", "Available agent types and the tools they have access to:",
+		"New agent types are now available for the Agent tool:",
+		"The TodoWrite tool hasn't been used recently.", "The task tools haven't been used recently.",
+		"Conversation rewind applied.", "Workspace rewind applied.",
+	}
+)
+
+// userWords is what the user said in a text of theirs: "" for a text the
+// agent put in (an instruction file, a reminder, a notice), else the text
+// without the reminders in it, and after the Codex app's context. Routing
+// (turnIn, userText, firstWords) and the prompt's turns go by it alike.
+func userWords(text string) string {
+	t := strings.TrimSpace(reminders.ReplaceAllString(text, ""))
+	if at := myRequest.FindAllStringIndex(t, -1); len(at) > 0 {
+		t = strings.TrimSpace(t[at[len(at)-1][1]:])
+	}
+	if t == "" || agentsFor.MatchString(t) {
+		return ""
+	}
+	for _, lead := range injected {
+		if strings.HasPrefix(t, lead) {
+			return ""
+		}
+	}
+	return t
+}
+
+// userSaid is what the user said in a message: the words of its texts.
+func userSaid(m Message) string {
+	var said []string
+	for _, p := range m.Parts {
+		if p.Kind == Text {
+			if w := userWords(p.Text); w != "" {
+				said = append(said, w)
+			}
+		}
+	}
+	return strings.Join(said, "\n")
 }
 
 func (b *promptBuilder) anthropicBlock(role string, x rawBlock) {

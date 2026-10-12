@@ -3067,29 +3067,18 @@ func autoPicks(c candidate) bool {
 	return c.model == provider.CopilotAuto && c.p.Account != nil && c.p.Account.Agent == "copilot"
 }
 
-// lastUserText is the text of the request's last user turn, which
-// Copilot's Auto picks a model for.
+// lastUserText is what the user said last (userSaid), which Copilot's Auto
+// picks a model for — not a notice or reminder the agent put in after it.
 func lastUserText(from provider.Protocol, body []byte) string {
 	req, err := parse(from, body)
 	if err != nil {
 		return ""
 	}
 	for i := len(req.Messages) - 1; i >= 0; i-- {
-		m := req.Messages[i]
-		if m.Role != "user" {
-			continue
-		}
-		var b strings.Builder
-		for _, p := range m.Parts {
-			if p.Kind == Text {
-				if b.Len() > 0 {
-					b.WriteString("\n")
-				}
-				b.WriteString(p.Text)
+		if m := req.Messages[i]; m.Role == "user" {
+			if said := userSaid(m); said != "" {
+				return said
 			}
-		}
-		if b.Len() > 0 {
-			return b.String()
 		}
 	}
 	return ""
