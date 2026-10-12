@@ -22008,14 +22008,30 @@ function renderDiscovery(s) {
       : t("Read the accounts your agents are signed in to (Claude Code, Codex, Copilot, Cursor and others: their files and the Keychain) and serve them. Off, magpie reads none of them; API-key providers work as before")));
   const val = el("div", "val");
   const on = !s.noAccountDiscovery && !s.noAccountsEnv;
-  val.append(segs([["off", t("Off")], ["on", t("On")]], on ? "on" : "off", (v) => {
+  val.append(segs([["off", t("Off")], ["on", t("On")]], on ? "on" : "off", async (v) => {
     if ((v === "on") === on) return;
+    // Off takes every subscription out of magpie at once, and a click that
+    // didn't mean that left a user with none working and no word why
+    // (#1761): it asks first, naming the subscriptions that stop
+    if (v === "off" && !(await confirmAction(t("Turn off subscription accounts?"), await discoveryOffWarning(), t("Turn them off")))) {
+      renderSettings();
+      return;
+    }
     writingPrefs(api("settings/account-discovery", { off: v === "off" }))
       .then((ns) => { prefs = state.settings = ns; renderSettings(); refreshAfterSync(); })
       .catch((e) => { status(t(e.message), "err"); renderSettings(); });
   }));
   r.append(who, val);
   box.replaceChildren(r);
+}
+// what turning discovery off stops: the subscriptions signed in now, by
+// name, the Providers list read for it when no page has yet
+async function discoveryOffWarning() {
+  const list = providers || await api("providers").catch(() => null);
+  const subs = (list?.providers || []).filter((p) => p.account && !p.off).map((p) => p.name);
+  return subs.length
+    ? t("{names} stop working in magpie until this is on again: magpie reads none of the sign-ins they come from. API-key providers work as before.", { names: subs.join(", ") })
+    : t("Every subscription stops working in magpie until this is on again: magpie reads none of the sign-ins they come from. API-key providers work as before.");
 }
 
 // renderRedact: what the gateway masks before a request goes to a vendor —
