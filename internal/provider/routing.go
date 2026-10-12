@@ -213,6 +213,29 @@ func (a Allowance) For(model string, now time.Time) (used float64, renews []time
 	return used, renews
 }
 
+// Fullest is when the window For's share is of renews: the fullest that
+// counts model, the later of those as full. A display pairs the two, so
+// it names one window: a Factory account 32% into its week and 16% into
+// its month is 32% used, renewing with the week, not the month (#1778).
+// Zero when that window's reset isn't known, or has passed (it is empty
+// again then, its next reset not known).
+func (a Allowance) Fullest(model string, now time.Time) time.Time {
+	model = strings.ToLower(model)
+	used, at := -1.0, time.Time{}
+	for _, l := range a {
+		if !l.applies(model) {
+			continue
+		}
+		if !l.Resets.IsZero() && !l.Resets.After(now) {
+			l.Used, l.Resets = 0, time.Time{}
+		}
+		if l.Used > used || l.Used == used && l.Resets.After(at) {
+			used, at = l.Used, l.Resets
+		}
+	}
+	return at
+}
+
 // Count is the count of the window For's share is of — the fullest that
 // counts model — when the vendor counts it (WorkBuddy's credits): how much
 // of of is used, in unit; of is zero when it isn't counted so. A window

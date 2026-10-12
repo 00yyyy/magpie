@@ -238,6 +238,10 @@ type Weighed struct {
 	// Via: the groups in the group it is of, outermost first, when it is
 	// of a group in the group asked for
 	Via []string `json:"via,omitempty"`
+	// UsedRenews: when the window Used is the share of renews, apart
+	// from Renews' biggest first: a row says the two together, so of one
+	// window, a Factory account's week and not its month (#1778)
+	UsedRenews *time.Time `json:"usedRenews,omitempty"`
 	// Sunk: when it was rate limited with quota left, sending it to the
 	// back of an order that sinks (sink.go); nil when it didn't, or the
 	// order doesn't sink
@@ -332,6 +336,10 @@ func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from 
 	}
 	if l, ok := wg.lefts[c.allowanceKey()]; ok {
 		w.Known, w.Used, w.Renews, w.Pace = true, l.used, l.renews, l.pace
+		if !l.fullest.IsZero() {
+			ur := l.fullest
+			w.UsedRenews = &ur
+		}
 		if l.of > 0 {
 			w.Amount, w.Limit, w.Unit = l.amount, l.of, l.unit
 		}

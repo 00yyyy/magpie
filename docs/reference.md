@@ -1230,6 +1230,13 @@ each of these groups ordered by the share used.
   since they end at the same midnight on every account. A Claude account
   magpie knows nothing of yet goes first once, to learn what it has left
   from the answer; any other unknown account goes after those known.
+  An account with a month beside its week (Factory) goes by its month:
+  when the month holds less than its weeks add up to (Factory's, by
+  one user's readings, about two weeks' worth), what a week leaves isn't
+  lost at the week's reset, as the
+  month still has it to spend later. Its row
+  on the Routing page says the fullest window's share with when that
+  window renews: "32% used · renews in 3 days" is the week's.
 - **In order**: the accounts in their order. The first takes every request
   until it is used up (100%) or fails.
 - **In turn**: each turn of a conversation goes to the next account. A new

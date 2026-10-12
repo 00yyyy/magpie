@@ -758,9 +758,12 @@ func (c candidate) allowanceKey() allowanceKey {
 type left struct {
 	used   float64
 	renews []time.Time
-	soon   []time.Time // renews as Smart ranks them (Allowance.Renewal)
-	pace   float64     // weekly pace: share of its week left per hour until it renews
-	due    time.Time   // when the window that pace went by renews; zero when not known
+	// fullest: when the window used is the share of renews
+	// (Allowance.Fullest), zero when not known
+	fullest time.Time
+	soon    []time.Time // renews as Smart ranks them (Allowance.Renewal)
+	pace    float64     // weekly pace: share of its week left per hour until it renews
+	due     time.Time   // when the window that pace went by renews; zero when not known
 	// restarts: when an auto-used reset starts its windows again
 	// (Allowance.Restarts), zero when none will; dueRestart: due is that,
 	// sooner than the window renews by itself
@@ -821,7 +824,7 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 			pc, due := a.Pace(c.model, now)
 			amt, of, unit := a.Count(c.model, now)
 			rs := a.Restarts(now)
-			wg.lefts[c.allowanceKey()] = left{used: u, renews: r, soon: a.Renewal(c.model, now), pace: pc, due: due, amount: amt, of: of, unit: unit,
+			wg.lefts[c.allowanceKey()] = left{used: u, renews: r, fullest: a.Fullest(c.model, now), soon: a.Renewal(c.model, now), pace: pc, due: due, amount: amt, of: of, unit: unit,
 				restarts: rs, dueRestart: !rs.IsZero() && due.Equal(rs)} // one not known counts as unused
 		}
 	}
