@@ -252,6 +252,13 @@ type subscriptionRun struct {
 	// result, while the client ran both and sent both results back at once.
 	early map[string]mcpToolResult
 
+	// queued is the user's words sent with tool results, written to Claude
+	// Code's input as a message of their own while it waits on the calls,
+	// by the message's uuid: closed once Claude Code says it queued it
+	// (its command_lifecycle), so it is in hand before the results are
+	// (continueWith, #1878)
+	queued map[string]chan struct{}
+
 	// asked is the client's tools its reply called, and parkedAt when it
 	// began waiting on them
 	asked    []string
@@ -2112,6 +2119,10 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			RateLimitInfo json.RawMessage `json:"rate_limit_info"`
 			// Claude Code's answer to a control request (rewind)
 			Response json.RawMessage `json:"response"`
+			// a user message it took from its input, by the uuid it was
+			// given, and where it is: queued, started, completed
+			CommandUUID string `json:"command_uuid"`
+			State       string `json:"state"`
 			// an assistant message, one of its blocks at a time; raw, as
 			// a user message's content may be a string
 			Message json.RawMessage `json:"message"`
@@ -2175,6 +2186,15 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 		}
 		if envelope.Type == "control_response" {
 			r.answered(envelope.Response)
+			return
+		}
+		if envelope.Type == "command_lifecycle" {
+			r.mu.Lock()
+			if ch := r.queued[envelope.CommandUUID]; ch != nil {
+				close(ch)
+				delete(r.queued, envelope.CommandUUID)
+			}
+			r.mu.Unlock()
 			return
 		}
 		if envelope.Type == "system" && envelope.Subtype == "init" && envelope.SessionID != "" {
@@ -2598,8 +2618,20 @@ func renderClaudeTurn(msgs []Message, tools []Tool) []map[string]any {
 // renderParts writes the parts as text, a call of one of the offered tools
 // under the name the run can call it by (bridgeName). A call of a tool the
 // caller doesn't offer (its framework's own) keeps its name.
+//
+// The user's words after a tool result in the same message (Claude Code's
+// AgentSummary asks for its label that way) are the user's, not the tool's:
+// the result is closed and the words marked as the user's. Run on after the
+// tool's last line, the model read them as tool output and went on with the
+// task (#1878). Only the message's parts say where the result ends; what the
+// tool wrote stays inside it, whatever it says.
 func renderParts(blocks []map[string]any, text *strings.Builder, parts []Part, offered map[string]bool) []map[string]any {
+	open := "" // the tool result told last, not closed yet
 	for _, p := range parts {
+		if open != "" && (p.Kind == Text || p.Kind == File) {
+			fmt.Fprintf(text, "\n[end of tool result id=%s]\n\n[user message]\n", open)
+			open = ""
+		}
 		switch p.Kind {
 		case Text:
 			text.WriteString(p.Text)
@@ -2615,6 +2647,7 @@ func renderParts(blocks []map[string]any, text *strings.Builder, parts []Part, o
 			fmt.Fprintf(text, "\n[tool call %s id=%s args=%s]", name, p.ID, argsString(p))
 		case ToolResult:
 			fmt.Fprintf(text, "\n[tool result id=%s%s]\n%s", p.CallID, map[bool]string{true: " error"}[p.IsError], p.Text)
+			open = p.CallID
 			// the images the tool returned follow its text
 			for _, im := range p.Images {
 				blocks = imageBlocks(blocks, text, im)
@@ -2685,16 +2718,19 @@ func (b *subscriptionBridge) match(req *Request) (*subscriptionRun, []Part, stri
 	}
 	var fresh, loose []Part
 	for _, m := range req.Messages[i:] {
+		captions := withImages(m)
 		for _, p := range m.Parts {
 			switch {
 			case p.Kind == ToolResult:
 				p.Images = slices.Clone(p.Images)
 				fresh = append(fresh, p)
-			case p.Kind == Text && len(fresh) > 0:
-				// Claude Code puts a message the user sends while a tool is
-				// running beside that tool_result (usually as a system reminder).
-				// A resumed subscription run only receives its MCP result, so keep
-				// the adjacent text with it instead of silently dropping the turn.
+			case p.Kind == Text && len(fresh) > 0 && captions:
+				// the words of a message of the results' images, which go
+				// with the result before them: pi-ai's "Attached image(s)
+				// from tool result:" over Chat. The user's own words, in a
+				// message with no images, are not the tool's: continueWith
+				// tells them as a message of the user's (saidWithResults,
+				// #872, #1878).
 				last := &fresh[len(fresh)-1]
 				if last.Text != "" && p.Text != "" {
 					last.Text += "\n\n"
@@ -2876,12 +2912,66 @@ func (r *subscriptionRun) offers(tools []Tool) bool {
 	return true
 }
 
+// saidWithResults is the user's words after tool results in the messages
+// since the last reply: a message the user sent while a tool ran (#872),
+// or what a request forked from the conversation asks (Claude Code's
+// AgentSummary, #1878). The words of a message with images go with the
+// results (match), as before. "" when there are no results, or no words.
+func saidWithResults(msgs []Message) string {
+	i := len(msgs)
+	for i > 0 && msgs[i-1].Role != "assistant" {
+		i--
+	}
+	var said []string
+	results := false
+	for _, m := range msgs[i:] {
+		captions := withImages(m)
+		for _, p := range m.Parts {
+			switch {
+			case p.Kind == ToolResult:
+				results = true
+			case p.Kind == Text && results && !captions && strings.TrimSpace(p.Text) != "":
+				said = append(said, p.Text)
+			}
+		}
+	}
+	if !results {
+		return ""
+	}
+	return strings.Join(said, "\n\n")
+}
+
+// withImages says m has an image of its own, not in a tool result.
+func withImages(m Message) bool {
+	return slices.ContainsFunc(m.Parts, func(p Part) bool { return p.Kind == Image })
+}
+
+// queuedWait is how long continueWith waits for Claude Code to say it
+// queued the user's words before it hands over the results. One that never
+// says (a version without command_lifecycle) still has them on its input,
+// read before the results it is about to get.
+var queuedWait = 2 * time.Second
+
 // continueWith hands the agent its tool results: at once for the calls it
 // is waiting on, the others kept until it makes them. tools, when set, are
 // the agent's tools from now on, handed over with the results.
-func (r *subscriptionRun) continueWith(results []Part, tools []bridgeTool) (<-chan Event, error) {
+//
+// said, the user's words sent with the results (saidWithResults), is
+// written to Claude Code's input first, as a user message, and the results
+// handed over once Claude Code has queued it. Claude Code tells a message
+// that comes while a tool runs with that tool's result, marked as one the
+// user sent ("The user sent a new message while you were working"), in the
+// turn it is in. Handed over as part of the MCP result, the words were the
+// tool's output to the model, which went on with the task instead of
+// doing what they asked (#1878).
+func (r *subscriptionRun) continueWith(results []Part, said string, tools []bridgeTool) (<-chan Event, error) {
 	if r.timer != nil {
 		r.timer.Reset(30 * time.Minute)
+	}
+	if said != "" {
+		if err := r.queue(said); err != nil {
+			return nil, err
+		}
 	}
 	r.mu.Lock()
 	r.parkedAt = time.Time{}
@@ -2928,6 +3018,36 @@ func (r *subscriptionRun) continueWith(results []Part, tools []bridgeTool) (<-ch
 		r.resume()
 	}
 	return ch, nil
+}
+
+// queue writes said to Claude Code's input as a user message and waits,
+// at most queuedWait, for Claude Code to say it queued it.
+func (r *subscriptionRun) queue(said string) error {
+	id := newUUID()
+	got := make(chan struct{})
+	r.mu.Lock()
+	if r.queued == nil {
+		r.queued = map[string]chan struct{}{}
+	}
+	r.queued[id] = got
+	exited := r.exited
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.queued, id)
+		r.mu.Unlock()
+	}()
+	line, _ := json.Marshal(map[string]any{"type": "user", "uuid": id, "message": map[string]any{"role": "user", "content": []map[string]any{{"type": "text", "text": said}}}})
+	if err := r.tell(line); err != nil {
+		return err
+	}
+	select {
+	case <-got:
+	case <-exited: // nil before launch: never
+	case <-time.After(queuedWait):
+		log.Printf("claude: Claude Code didn't say it queued the user's words sent with tool results in %s; the results go on", queuedWait)
+	}
+	return nil
 }
 
 // mcpResult is a tool result as an MCP tools/call answers: its text, then
@@ -3593,7 +3713,7 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 			run.mu.Unlock()
 		}
 		if err == nil {
-			events, err = run.continueWith(results, more)
+			events, err = run.continueWith(results, saidWithResults(req.Messages), more)
 		}
 		if err != nil {
 			run.abort()

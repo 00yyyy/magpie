@@ -733,7 +733,7 @@ func TestClaudeBridgeSafeguardConcurrentHandoff(t *testing.T) {
 	}
 	blocked("a")
 	waiter := run.pending["a"]
-	segment, err := run.continueWith(results, nil)
+	segment, err := run.continueWith(results, "", nil)
 	if err != nil || (<-waiter).Content[0]["text"] != "A" {
 		t.Fatalf("first handoff: %v", err)
 	}
