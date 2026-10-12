@@ -110,6 +110,15 @@ const (
 	// is answered that way by magpie without asking again: an agent's
 	// reconnects don't all land on the account Google has stopped
 	verifyHold = time.Minute
+	// restrictedRest: an account its vendor restricted (WorkBuddy's 403
+	// 11140, #1849) is out until the vendor lifts it, which takes an
+	// appeal, not a wait: hours, not the minutes of a backoff, so a group
+	// stops walking every restricted account on every request. Two hours
+	// costs one refused request per account every two hours, and a
+	// restriction lifted (or a refusal read wrong) is back the same
+	// afternoon without anyone acting; the Routing page lifts it at once
+	// (Unrest) for a user whose appeal went through
+	restrictedRest = 2 * time.Hour
 )
 
 var (
@@ -206,6 +215,10 @@ const (
 	// failLoop: the reply was ended stuck in a loop (#1359) — the agent
 	// is told, and nobody rests, as the model, not the account, looped
 	failLoop = "loop"
+	// failRestricted: the vendor restricted the account itself (WorkBuddy's
+	// 403 11140, "账号存在异常行为，已被限制使用", #1849) — the next is
+	// asked, and it rests restrictedRest, until the vendor lifts it
+	failRestricted = "restricted"
 )
 
 // loopErrType is the usage log's ErrType for a reply ended for looping
@@ -260,6 +273,8 @@ func failure(status int, body []byte) string {
 	// the words are matched decoded, too
 	body = wordsOf(body)
 	switch {
+	case restrictedSaid(status, body):
+		return failRestricted
 	case overflowed(status, body):
 		// Kimi's "exceeded model token limit" is the conversation's
 		// length, not the plan's
@@ -294,7 +309,44 @@ func failureOf(c candidate, status int, body []byte) string {
 	if provider.RevokedAccount(c.p.Account) && provider.SignInRevoked(status, body) {
 		return failAuth
 	}
+	if restrictedRefused(c.p, status, body) {
+		return failRestricted
+	}
 	return failure(status, body)
+}
+
+// restrictedSaid says an error is one magpie already put in words as an
+// account its vendor restricted: WorkBuddy's 11140 as the built-in
+// translates it, or as the plugin does, both ending in
+// provider.WBRestrictedHint. magpie's own words, which no vendor says, so
+// they are read whoever answered.
+func restrictedSaid(status int, body []byte) bool {
+	return status >= 400 && bytes.Contains(body, []byte(provider.WBRestrictedHint))
+}
+
+// restrictedRefused says p's vendor restricted the account: magpie's words
+// for it (restrictedSaid), or WorkBuddy's own answer as it came — its code
+// 11140 or its displayMsg's words — from a WorkBuddy account, the
+// built-in's or the plugin's. Another vendor's code 11140 is its own, and
+// isn't read so.
+func restrictedRefused(p provider.Provider, status int, body []byte) bool {
+	if restrictedSaid(status, body) {
+		return true
+	}
+	return isWorkBuddy(p) && provider.WBRestricted(status, wordsOf(body))
+}
+
+// isWorkBuddy is whether p is a WorkBuddy account, either build's: the
+// built-in's, or the WorkBuddy plugin's.
+func isWorkBuddy(p provider.Provider) bool {
+	if p.Account == nil {
+		return false
+	}
+	id := p.PluginProvider()
+	if id == "" {
+		id = p.Account.Agent
+	}
+	return id == "workbuddy" || id == provider.WorkBuddyAIID
 }
 
 // openRouterSharedPool says an OpenRouter free model was refused by the
@@ -319,7 +371,8 @@ type Rest struct {
 	// vendor's own headers), "resets" (the time Claude Code gave), "window"
 	// (the allowance window it filled renews), "quota" (no word of when),
 	// "cooldown" (a minute), "backoff" (longer each time it fails again,
-	// or is rate limited again as soon as it is back).
+	// or is rate limited again as soon as it is back), "restricted" (the
+	// vendor restricted the account: two hours, or until lifted by hand).
 	By       string `json:"by"`
 	Failures int    `json:"failures,omitempty"` // in a row, for a backoff
 	// Key is what it rests by, for the app to lift the rest (Unrest)
@@ -526,6 +579,9 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		if c.full(now).IsZero() && !(c.isOpenRouterFree() && sharedPool) {
 			sink(c.restKey(), now)
 		}
+	case failRestricted:
+		// out until the vendor lifts it: an appeal, not a wait (#1849)
+		d, r.By = restrictedRest, "restricted"
 	case failVerify:
 		d, r.By = verifyRest, "verify"
 		// the error as the agent was given it, and the link in it
@@ -557,9 +613,9 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	}
 	// an account is kept by the agent its usage is asked of: a plugin's
 	// by the plugin's provider ("plugin:grok"), not by "plugin"
-	if a := c.p.Account; a != nil && why != failOther && why != failVerify {
+	if a := c.p.Account; a != nil && why != failOther && why != failVerify && why != failRestricted {
 		staleAllowance(a.UsageAgent(), a.User) // ask again what it has left
-	} else if a == nil && why != failOther && why != failVerify {
+	} else if a == nil && why != failOther && why != failVerify && why != failRestricted {
 		staleKeyAllowance(c.p) // a key that reads its windows, too
 	}
 	r.Until = now.Add(d)
