@@ -12842,7 +12842,7 @@ const I18N = {
     "{agent} has hooks turned off in its settings: it runs none of them until they're turned on there.": "{agent} は設定でフックをオフにしています。そこでオンにするまで、どのフックも実行しません。",
     "{agent} has no hooks magpie can write": "magpie は {agent} にフックを書き込めません",
     "{agent}'s own event": "{agent} 独自のイベント",
-    "{event} is {agent}'s own event: only it can run this hook": "{event} は {agent} 独自のイベントです。このフックを実行できるのは {agent} だけです",
+    "{event} is {agent}'s own event: only it can run this hook": "{event} は {agent} 独自のイベントです。このフックを実行できるのはそのエージェントだけです",
     "{n} hooks are off for {agents}": "{agents} で {n} 個のフックをオフにしました",
     "{n} hooks are on for {agents}": "{agents} で {n} 個のフックをオンにしました",
     "{n} hooks removed": "{n} 個のフックを削除しました",
