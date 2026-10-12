@@ -21,7 +21,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
+const { watchSettingsReads, settingsDrawn, reach } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const choices = [
@@ -342,6 +342,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await settingsDrawn(page); // rows found are the ones that stay (#1659)
           const row = page.locator("#searchList .searcher-row");
           await row.waitFor();
+          // under Image recognition's MCP address (6c1c0a747) the row is
+          // past the window's foot: the reader scrolls down to it
+          await reach(page, row.locator("button.searcher-pick"));
           // Hover retries if Settings' startup refresh replaces the row.
           await row.locator("button.searcher-pick").hover();
           assert((await row.locator(".sub").innerText()).startsWith(h.help));
