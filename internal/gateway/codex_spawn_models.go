@@ -55,9 +55,48 @@ func spawnAgentModels(r *http.Request, body []byte, lead string, codexPath bool)
 	if json.Unmarshal(body, &q) != nil {
 		return body
 	}
-	var tools []map[string]json.RawMessage
-	if json.Unmarshal(q["tools"], &tools) != nil {
+	changed := false
+	if tools, ok := moreSpawnTools(q["tools"], choices); ok {
+		q["tools"], changed = tools, true
+	}
+	// A model that can search tools is handed spawn_agent only when it
+	// searches for it: Codex defers its multi-agent V1 tools behind
+	// tool_search (codex-rs core/src/tools/spec_plan.rs, Deferred when
+	// supports_search_tool), and the tool comes back in the conversation,
+	// in a tool_search_output, not in tools (Gearclickist on Discord, after
+	// v0.1.1214). Codex sends that output as it got it on every turn, so
+	// it is widened the same way on each.
+	var input []map[string]json.RawMessage
+	if json.Unmarshal(q["input"], &input) == nil {
+		in := false
+		for _, it := range input {
+			var kind string
+			json.Unmarshal(it["type"], &kind)
+			if kind != "tool_search_output" {
+				continue
+			}
+			if tools, ok := moreSpawnTools(it["tools"], choices); ok {
+				it["tools"], in = tools, true
+			}
+		}
+		if in {
+			q["input"], changed = rawJSON(input), true
+		}
+	}
+	if !changed {
 		return body
+	}
+	return rawJSON(q)
+}
+
+// moreSpawnTools is raw, a list of tools (a request's, or the ones a
+// tool_search_output hands the model), with the spawn_agent among them,
+// on its own or in Codex's collaboration namespace, naming choices too;
+// false when there is none to widen.
+func moreSpawnTools(raw json.RawMessage, choices []spawnChoice) (json.RawMessage, bool) {
+	var tools []map[string]json.RawMessage
+	if json.Unmarshal(raw, &tools) != nil {
+		return raw, false
 	}
 	changed := false
 	for _, t := range tools {
@@ -82,10 +121,9 @@ func spawnAgentModels(r *http.Request, body []byte, lead string, codexPath bool)
 		}
 	}
 	if !changed {
-		return body
+		return raw, false
 	}
-	q["tools"] = rawJSON(tools)
-	return rawJSON(q)
+	return rawJSON(tools), true
 }
 
 // rawJSON is v encoded as it is, its < > & left as they are.
