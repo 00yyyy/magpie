@@ -180,6 +180,69 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await context.close();
     });
 
+    // WebKitGTK with compositing off crashes in a view transition, the click
+    // taking the window down (depravity_wings on X): the Linux app has none,
+    // the new layout at once
+    await t.test("Linux: at once, no transition", async () => {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 760 } });
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.addInitScript(() => {
+        Object.defineProperty(Navigator.prototype, "platform", { get: () => "Linux x86_64" });
+        window.morphs = 0;
+        const real = Document.prototype.startViewTransition;
+        if (real) Document.prototype.startViewTransition = function (...a) { window.morphs++; return real.apply(this, a); };
+      });
+      await page.route("**/*", serve("en"));
+      await page.goto("http://magpie.test/");
+      await page.waitForSelector("#nav button.on");
+      assert.ok(await page.evaluate(() => document.body.classList.contains("linux")));
+      for (const want of [false, true, false]) {
+        await page.locator("#sideToggle").click();
+        assert.equal(await side(page), want, "the other layout at once");
+        assert.equal(await page.evaluate(() => document.documentElement.classList.contains("nav-morph")), false);
+      }
+      assert.equal(await page.evaluate(() => window.morphs), 0, "no view transition started");
+      assert.ok(await page.locator(".top #nav").isVisible(), "the tabs in the header, the page answering clicks");
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    // a webview whose transition never ends anywhere else: cut short soon
+    // after its half second, so the window never stays on the old picture
+    await t.test("a transition that never ends is cut short", async () => {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 760 } });
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.addInitScript(() => {
+        window.skipped = 0;
+        Document.prototype.startViewTransition = function (change) {
+          let done;
+          const finished = new Promise((r) => { done = r; });
+          Promise.resolve().then(change);
+          return { finished, updateCallbackDone: Promise.resolve(), ready: Promise.resolve(), skipTransition() { window.skipped++; done(); } };
+        };
+      });
+      await page.route("**/*", serve("en"));
+      await page.goto("http://magpie.test/");
+      await page.waitForSelector("#nav button.on");
+      const t0 = Date.now();
+      await page.locator("#sideToggle").click();
+      await page.waitForFunction(() => document.documentElement.classList.contains("nav-morph"));
+      await page.waitForFunction(() => !document.documentElement.classList.contains("nav-morph"), null, { timeout: 5000 });
+      const took = Date.now() - t0;
+      assert.ok(took >= 1000, `not cut while it could still be playing: ${took}ms`);
+      assert.equal(await page.evaluate(() => window.skipped), 1, "skipped once");
+      assert.equal(await side(page), false);
+      // and the button works again after
+      await page.locator("#sideToggle").click();
+      await page.waitForFunction(() => document.body.classList.contains("side-nav"));
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
     await t.test("less motion: at once", async () => {
       const context = await browser.newContext({ viewport: { width: 1280, height: 760 }, reducedMotion: "reduce" });
       const page = await context.newPage();

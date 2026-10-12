@@ -23096,13 +23096,20 @@ function toggleSideNav() {
 // the two layouts trade places as one motion (app.css .nav-morph): the old
 // drawn and the new laid out, the sidebar sliding and each tab flying to
 // its place in the other; a webview without view transitions, or a reader
-// who asked for less motion, has the new at once
+// who asked for less motion, has the new at once. So does the Linux app:
+// WebKitGTK with compositing off (webkit_linux.go turns it off under
+// Wayland) crashes in a view transition, the click on the sidebar's button
+// taking the window down (depravity_wings on X). Anywhere else, a transition
+// still going well past its half second is cut short, so a webview that
+// never ends one can't leave the window on the old layout's picture
+var MORPH_MAX = 1500;
 function navMorph(change) {
-  if (navCalm() || !document.startViewTransition) { change(); return; }
+  if (navCalm() || !document.startViewTransition || document.body.classList.contains("linux")) { change(); return; }
   const root = document.documentElement;
   root.classList.add("nav-morph");
   const vt = document.startViewTransition(change);
-  vt.finished.finally(() => root.classList.remove("nav-morph"));
+  const stuck = setTimeout(() => vt.skipTransition(), MORPH_MAX);
+  vt.finished.finally(() => { clearTimeout(stuck); root.classList.remove("nav-morph"); });
 }
 // where the page shown keeps its own tabs: the sidebar lists them under it
 // and picks them there, the page's own strip hidden (app.css)
