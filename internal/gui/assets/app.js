@@ -8377,7 +8377,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, pinUpstream: !!p.pinUpstream, balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -8525,6 +8525,9 @@ function drawEditor(p, presetID) {
   // the Redaction row, shown while every address is on this computer or
   // the local network
   let showLocal = () => {};
+  // the Key header row, shown while the provider has a third-party
+  // Anthropic API, which is sent its key in both headers by default
+  let showAuth = () => {};
   if (custom) {
     name = input(draft.name, t("e.g. My Relay"));
     name.oninput = () => { draft.name = name.value; if (isNew) draft.id = slug(name.value); };
@@ -8570,6 +8573,7 @@ function drawEditor(p, presetID) {
       fillEndpoints();
       showSearch();
       showLocal();
+      showAuth();
     };
     queueMicrotask(() => slide(seg, "api"));
     url = input(draft[apiField[draft.api]], urlHint(draft.api), "url");
@@ -8577,7 +8581,7 @@ function drawEditor(p, presetID) {
     url.oninput = () => {
       draft[apiField[draft.api]] = url.value;
       if (carried) { draft[carried.from] = carried.value; carried = null; fillEndpoints(); }
-      showSearch(); showLocal();
+      showSearch(); showLocal(); showAuth();
     };
     const urlWrap = el("div", "stack");
     urlWrap.append(seg, url);
@@ -8814,6 +8818,29 @@ function drawEditor(p, presetID) {
     ed.append(...row);
   }
 
+  // which header the key goes in on a third-party Anthropic API: both by
+  // default, one alone for a service that refuses the two together (Aloha
+  // on Discord: "x-api-key 和 Authorization 不可以同时存在"), which magpie
+  // also learns from that refusal. Anthropic's, Bedrock's and Azure's own
+  // APIs take x-api-key alone already
+  const twoKeyHeaders = () => {
+    if (p?.account || vertex) return false;
+    if (p && !custom) return !!p.bothAuth;
+    const a = ((draft.anthropic ?? (isNew && pr ? pr.anthropic : "")) || "").trim();
+    if (!a) return false;
+    let host = "";
+    try { host = new URL(/^[a-z]+:\/\//i.test(a) ? a : "https://" + a).hostname.toLowerCase(); } catch { return true; }
+    return !host.endsWith("anthropic.com") && !/^bedrock-runtime\..*\.amazonaws\.com$/.test(host) && !host.endsWith(".azure.com");
+  };
+  if (!p?.account && !vertex) {
+    const seg = segs([["", t("Both")], ["x-api-key", "x-api-key"], ["bearer", "Authorization: Bearer"]], draft.authHeader || "", (v) => { draft.authHeader = v; });
+    seg.classList.add("auth-header");
+    const row = field(t("Key header"), seg, t("Which header the API key goes in on the Anthropic API. Most services take both; pick one for a service that refuses the two together. magpie also switches to one by itself when a service says so."));
+    showAuth = () => { for (const e of row) e.style.display = twoKeyHeaders() ? "" : "none"; };
+    showAuth();
+    ed.append(...row);
+  }
+
   // a model on this computer or the local network (Ollama, LM Studio, a
   // vLLM box) may be sent requests unmasked by Settings' redaction (lc on
   // Discord). Only the user can say it is local all the way: a relay run
@@ -9041,7 +9068,7 @@ function drawEditor(p, presetID) {
       const add = (label, key, ph, hint) => {
         if (apiField[draft.api] === key) return;
         const i = input(draft[key], ph, "url");
-        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); };
+        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); showAuth(); };
         eps.append(...field(t(label), i, t(hint)));
       };
       add("OpenAI URL", "chat", "https://…/v1", "if the vendor also serves chat completions");
@@ -9141,6 +9168,7 @@ function drawEditor(p, presetID) {
     if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; body.modelPrefs = modelPrefsOfDraft(); Object.assign(body, routingOfDraft(p)); }
     body.searches = !!draft.searches && searchable();
     body.pinUpstream = !!draft.pinUpstream;
+    if (twoKeyHeaders()) body.authHeader = draft.authHeader || "";
     body.unredacted = !!draft.unredacted && onLAN();
     const cx = parseContexts(draft.contexts || "");
     if (cx.error) return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn");

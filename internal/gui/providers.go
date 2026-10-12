@@ -87,6 +87,11 @@ type providerJSON struct {
 	// on this machine or the local network, set to go unmasked by
 	// Settings' redaction (provider.Unredacted)
 	Unredacted bool `json:"unredacted"`
+	// which header its key goes in on a third-party Anthropic API
+	// (provider.AuthHeader: "" both, "x-api-key", "bearer"), and whether
+	// it is one that sends both by default (provider.BothAuth)
+	AuthHeader string `json:"authHeader"`
+	BothAuth   bool   `json:"bothAuth,omitempty"`
 	// the proxy its requests go through: "" the global one, "direct"
 	// none, or an address (#237)
 	Proxy string `json:"proxy"`
@@ -498,7 +503,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Picks(), Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Unlisted: p.Unlisted, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
@@ -1054,6 +1059,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// quota left goes to the back (provider.Provider.Sink); a
 			// save that leaves it out keeps it
 			Sink *bool `json:"sink"`
+			// AuthHeader, for save: which header the key goes in on a
+			// third-party Anthropic API (provider.Provider.AuthHeader); a
+			// save that leaves it out keeps it, one learned too
+			AuthHeader *string `json:"authHeader"`
 			// Test, for test: models to send a request each, in place of
 			// one per endpoint
 			Test []string `json:"test"`
@@ -1101,6 +1110,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		if req.Sink != nil {
 			in.Sink = *req.Sink
+		}
+		if req.AuthHeader != nil {
+			in.AuthHeader = *req.AuthHeader
 		}
 		var moved []agent.Move
 		switch r.PathValue("action") {
@@ -1178,6 +1190,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				pr.Searches = in.Searches
 				pr.PinUpstream = in.PinUpstream
 				pr.Unredacted = in.Unredacted
+				pr.AuthHeader = in.AuthHeader
 				if in.Name != "" {
 					pr.Name = in.Name
 				}
@@ -1354,6 +1367,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					}
 					if req.Sink == nil {
 						in.Sink = old.Sink
+					}
+					if req.AuthHeader == nil {
+						in.AuthHeader = old.AuthHeader
 					}
 					in.KeepLogin = old.KeepLogin // set on its own, with keeplogin
 					in.KeepLoginAs = old.KeepLoginAs

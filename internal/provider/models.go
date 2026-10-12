@@ -427,7 +427,11 @@ func (p Provider) fetchOne(ctx context.Context) ([]catalog.Model, string, error)
 	if u := strings.TrimSpace(p.ModelsURL); u != "" {
 		// asked where the user said, and nowhere else: the base URLs
 		// list nothing, or the wrong thing
-		ms, err := catalog.FetchURL(ctx, u, p.Key, p.Chat == "" && p.Responses == "", p.listHeaders())
+		anthropic := p.Chat == "" && p.Responses == ""
+		if anthropic {
+			ctx = p.listAuth(ctx)
+		}
+		ms, err := catalog.FetchURL(ctx, u, p.Key, anthropic, p.listHeaders())
 		if err != nil {
 			return nil, u, err
 		}
@@ -454,7 +458,11 @@ func (p Provider) fetchOne(ctx context.Context) ([]catalog.Model, string, error)
 			}
 			continue
 		}
-		ms, at, err := catalog.FetchAt(ctx, base, p.Key, proto == Anthropic, p.listHeaders())
+		lctx := ctx
+		if proto == Anthropic {
+			lctx = p.listAuth(ctx) // a vendor that takes one key header alone
+		}
+		ms, at, err := catalog.FetchAt(lctx, base, p.Key, proto == Anthropic, p.listHeaders())
 		if err == nil {
 			if proto != Anthropic {
 				base = p.fixV1(base, at)

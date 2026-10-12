@@ -410,6 +410,13 @@ func AuthHeaders(p Provider, proto Protocol) map[string]string {
 		if strings.HasSuffix(p.Host(), "anthropic.com") || p.IsBedrock() {
 			return map[string]string{"x-api-key": p.Key}
 		}
+		// a vendor that takes one alone (AuthHeader, RetryOneAuth)
+		switch p.AuthHeader {
+		case AuthXAPIKey:
+			return map[string]string{"x-api-key": p.Key}
+		case AuthBearer:
+			return map[string]string{"Authorization": "Bearer " + p.Key}
+		}
 		return map[string]string{"x-api-key": p.Key, "Authorization": "Bearer " + p.Key}
 	}
 	return map[string]string{"Authorization": "Bearer " + p.Key}
@@ -450,6 +457,10 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 	}
 	start := time.Now()
 	res, err := p.Do(http.DefaultClient, req)
+	if err == nil && proto == Anthropic {
+		// a vendor that takes one of the two key headers alone
+		res, err = RetryOneAuth(p, req, res, func(r *http.Request) (*http.Response, error) { return p.Do(http.DefaultClient, r) })
+	}
 	r.Millis = time.Since(start).Milliseconds()
 	if err != nil {
 		r.Error = strings.TrimPrefix(err.Error(), "Post \""+url+"\": ")

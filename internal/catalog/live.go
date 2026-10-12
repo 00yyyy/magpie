@@ -237,30 +237,52 @@ func FetchURL(ctx context.Context, url, key string, anthropic bool, headers map[
 func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[string]string) ([]Model, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	auth := listAuthOf(ctx)
+	ask := func(only string) (*http.Response, []byte, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("User-Agent", "magpie")
+		if key != "" {
+			req.Header.Set("Authorization", "Bearer "+key)
+			req.Header.Set("x-api-key", key)
+			// a vendor that takes one of the two alone
+			OneAuth(req.Header, only)
+		}
+		if anthropic {
+			req.Header.Set("anthropic-version", "2023-06-01")
+		}
+		// The user's own headers, after the defaults so a private auth scheme
+		// wins. Written directly so the name keeps the exact case the user typed.
+		for k, v := range headers {
+			PutUserHeader(req.Header, k, v)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+		return res, b, nil
+	}
+	res, b, err := ask(auth.only)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "magpie")
-	if key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
-		req.Header.Set("x-api-key", key)
+	if auth.learned != nil && auth.only == "" && key != "" && BothAuthRefused(res.StatusCode, b) {
+		// refused for sending both: each alone, the one taken kept
+		for _, only := range OneAuthOrder {
+			if res, b, err = ask(only); err != nil {
+				return nil, err
+			}
+			if res.StatusCode != http.StatusUnauthorized && res.StatusCode != http.StatusForbidden {
+				auth.learned(only)
+				break
+			}
+		}
 	}
-	if anthropic {
-		req.Header.Set("anthropic-version", "2023-06-01")
-	}
-	// The user's own headers, after the defaults so a private auth scheme
-	// wins. Written directly so the name keeps the exact case the user typed.
-	for k, v := range headers {
-		PutUserHeader(req.Header, k, v)
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
 	if res.StatusCode != http.StatusOK {
 		if msg := errorMessage(b); msg != "" {
 			return nil, fmt.Errorf("%s: %s (%s)", url, res.Status, msg)

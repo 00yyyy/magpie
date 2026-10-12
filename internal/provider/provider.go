@@ -198,6 +198,15 @@ type Provider struct {
 	// DeepSeek's own keeps its prompt cache. See ClinePin.
 	PinUpstream bool `json:"pinUpstream,omitempty"`
 
+	// AuthHeader is which header the key goes in on a third-party
+	// Anthropic API, which is sent both x-api-key and Authorization:
+	// Bearer by default (AuthBoth). A vendor that refuses the two together
+	// (Aloha on Discord: "x-api-key 和 Authorization 不可以同时存在") is
+	// sent one, AuthXAPIKey or AuthBearer: picked in the editor, or
+	// learned from that refusal (RetryOneAuth). Anthropic's, Bedrock's and
+	// Azure's own APIs, which take x-api-key alone, ignore it.
+	AuthHeader string `json:"authHeader,omitempty"`
+
 	// Unredacted has requests to a provider on this machine or the local
 	// network (Ollama, LM Studio, a vLLM box) go as the agent wrote them,
 	// unmasked by Settings' redaction, which keeps secrets from vendors
@@ -1053,6 +1062,9 @@ func normalize(p Provider) Provider {
 	}
 	if !slices.Contains(Affinities, p.Affinity) {
 		p.Affinity = ""
+	}
+	if !slices.Contains(AuthChoices, p.AuthHeader) {
+		p.AuthHeader = AuthBoth
 	}
 	if p.MaxConcurrency != nil && *p.MaxConcurrency < 0 {
 		p.MaxConcurrency = new(int)

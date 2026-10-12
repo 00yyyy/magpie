@@ -3243,6 +3243,11 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		sent = provider.CodexCompressed(req, body)
 	}
 	res, err := p.Do(s.client, req)
+	if err == nil && to == provider.Anthropic {
+		// a vendor that takes the key in x-api-key or Authorization
+		// alone, refusing both (Aloha on Discord): asked again with one
+		res, err = provider.RetryOneAuth(p, req, res, func(r *http.Request) (*http.Response, error) { return p.Do(s.client, r) })
+	}
 	if err != nil {
 		return res, err
 	}
