@@ -1072,7 +1072,7 @@ func gooseIn(at place, cfg string) *Agent {
 				return ""
 			}
 			return wiringOff("Goose", provider, func(k string) (string, bool) { return edit.GetJSON(provider, k) },
-				"base_url", at.v1(), "headers.Authorization", "Bearer "+at.gwKey())
+				"base_url", at.v1(), "headers.Authorization", "Bearer "+gooseKey(at))
 		},
 		Sync: func() error { return syncGooseProvider(provider, at) },
 		// goose loads custom_providers when it starts
