@@ -58,6 +58,7 @@ type Fake struct {
 	// content type and the bare body "Forbidden" (#1619)
 	RefuseRegistration bool
 
+	refuse  bool // RefuseTokens
 	codes   map[string]codeGrant
 	secrets map[string]string // client id → secret, of those that have one
 	methods map[string]string // client id → its token_endpoint_auth_method
@@ -231,7 +232,7 @@ func New(t *testing.T) *Fake {
 func (f *Fake) mcp(w http.ResponseWriter, r *http.Request) {
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	f.mu.Lock()
-	ok := f.valid[tok]
+	ok := f.valid[tok] && !f.refuse
 	f.mu.Unlock()
 	if !ok {
 		meta := f.Server.URL + "/.well-known/oauth-protected-resource/mcp"
@@ -322,6 +323,15 @@ func SignIn(t *testing.T, name, u string) mcpauth.State {
 		t.Fatalf("sign-in %s: %s (%s)", got.State, got.Error, b)
 	}
 	return got
+}
+
+// RefuseTokens turns every token away at the MCP endpoint, one just
+// renewed too, as a server that no longer takes the sign-in does while
+// its token endpoint still renews it.
+func (f *Fake) RefuseTokens() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.refuse = true
 }
 
 // ForgetRefresh makes every refresh token given out so far unusable.

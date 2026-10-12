@@ -112,6 +112,11 @@ func (s *Server) mcpProxy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resp, err = send(fresh)
+		if err == nil && resp.StatusCode == http.StatusUnauthorized {
+			// a token just renewed and refused all the same: the sign-in
+			// has run out, as the Library then says (新v学员 on Discord)
+			mcpauth.Rejected(name, fresh)
+		}
 	}
 	if err != nil {
 		if r.Context().Err() == nil {

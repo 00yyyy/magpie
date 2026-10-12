@@ -1350,8 +1350,10 @@
       // each server is checked once a session, and again only once it
       // changed; once the rows are on the page, for them to show it. One
       // that no agent and no project has is started for nobody, so it is
-      // checked only when the reader clicks its status (#1597, xiaozhu1337)
-      const unchecked = lib.servers.filter((s) => inUse(s) && health.get(s.name)?.key !== healthKey(s));
+      // checked only when the reader clicks its status (#1597, xiaozhu1337),
+      // and again once it changed after that: a sign-in since isn't left
+      // beside "needs sign-in" (新v学员 on Discord)
+      const unchecked = lib.servers.filter((s) => (inUse(s) || health.has(s.name)) && health.get(s.name)?.key !== healthKey(s));
       queueMicrotask(() => checkHealth(unchecked));
     }
     // an agent's own servers (Codex's node_repl, added each time it starts)
@@ -1521,13 +1523,25 @@
     for (const [name, key] of keys) { health.set(name, { key, h: null }); paintHealth(name); }
     let got = {}, failed = null;
     try { got = (await api("library/mcp/check", { names: [...keys.keys()], fresh: !!fresh })).servers || {}; } catch (e) { failed = e.message; }
+    let signIns = false;
     for (const [name, key] of keys) {
       // a server changed while it was checked has been asked for again
       if (health.get(name)?.key !== key) continue;
       const h = got[name] || (failed ? { state: "error", why: "request", detail: failed } : null);
+      // the check found magpie's sign-in run out (the server refused even
+      // a renewed token): the row's tag says so, not "Signed in" beside
+      // "needs sign-in" (新v学员 on Discord)
+      const s = lib.servers.find((x) => x.name === name);
+      if (h?.signIn && s && (!!h.signIn.signedIn !== !!s.signIn?.signedIn || !!h.signIn.dead !== !!s.signIn?.dead)) {
+        s.signIn = h.signIn;
+        health.set(name, { key: healthKey(s), h });
+        signIns = true;
+        continue;
+      }
       if (h) health.set(name, { key, h }); else health.delete(name);
       paintHealth(name);
     }
+    if (signIns) render();
   }
   function healthWords(h, s) {
     if (h.state === "ok") return [h.tools === 1 ? t("1 tool") : t("{n} tools", { n: h.tools }), t("It started and listed its tools")];

@@ -336,6 +336,13 @@ func renew(ctx context.Context, name string, still func(Record) bool) (string, e
 	return t.Access, err
 }
 
+// Rejected says the server refused access, a token magpie had just
+// renewed: renewing it again won't help, so the sign-in has run out, and
+// the page says so instead of calling it signed in beside the server's
+// refusal (新v学员 on Discord). A sign-in renewed or redone meanwhile is
+// left as it is.
+func Rejected(name, access string) { markDead(name, access) }
+
 func markDead(name, access string) {
 	_ = update(func(m map[string]*Record) bool {
 		cur := m[name]
