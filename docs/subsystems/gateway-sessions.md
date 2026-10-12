@@ -31,6 +31,22 @@ is some. Their
 models, token totals, start/last timestamps and effective prices come from the
 same usage records used by Usage and stats endpoints.
 
+Claude Desktop gateway rows can have a local name even without a CLI
+transcript. [`DesktopTitles`](../../internal/sessions/desktop_titles.go) reads
+`claude-code-sessions/*/*/local_*.json` and
+`local-agent-mode-sessions/*/*/local_*.json` in Desktop's data folders
+(`DesktopDataDirs`, including Claude-3p). The metadata's `title` names its
+explicit `sessionId`, `cliSessionId`, and `priorCliSessionIds`; prior runs
+share the current name but remain separate usage identities. A current ID
+takes precedence over a prior ID, and conflicting names at the same rank
+are unknown. Missing, unreadable or incomplete metadata leaves the existing
+recorded first-prompt title or ID fallback. Metadata is read only, cached by
+file identity/size/mtime, and
+renames take effect without another model request. This lookup also names
+native Desktop sessions and Routing's `/api/gateway/session-titles` results.
+It does not grant resume or native transcript capabilities to a gateway row.
+Verification: `TestDesktopSessionTitles`, `TestDesktopSessionTitleIdentity`.
+
 A gateway projection can be deleted (lc on Discord). `sessions.DeleteGateway`
 moves its recorded text folders (`gateway-conversations/<date>/<identity hash>`)
 into magpie's session trash under `trash/sessions/gateway/`, with a note
@@ -142,15 +158,15 @@ when turns or a part's end weren't kept). A magpie that others reach as a
 remote magpie has no file of their agents' sessions, so this is the only way
 it can export them. Verification: `TestGatewaySessionExportsMarkdown`.
 
-A gateway session is titled by what it was first asked (YOU on Discord), not
-its `ses_…` id: `sessions.GatewayTitle` reads the first 8 complete turns of
+A gateway session without a saved Desktop name is titled by what it was
+first asked (YOU on Discord), not its `ses_…` id: `sessions.GatewayTitle` reads the first 8 complete turns of
 the oldest recorded file of it in the 7 days kept, takes the first user text
 part that isn't a `<…>` context tag, `# AGENTS.md` or an image, and makes it one
 line (`untagged`). A finished file's answer is cached by path; a growing
 `turns.jsonl` with no title yet is read again. With nothing recorded at all
 (the store's folder missing) it costs one stat. `gatewayListed` applies it in
 every list (`/api/sessions`, `/manage`, `/one`, the stats summaries); a session
-with no recorded text keeps its id as title.
+with no saved Desktop name or recorded text keeps its id as title.
 
 `GET /api/sessions/search?agent=&q=` finds an agent's sessions by what was said
 in them, for the Sessions page's filter. The query is lowered and its spaces
