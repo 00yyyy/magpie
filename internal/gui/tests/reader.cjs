@@ -26,6 +26,33 @@ async function inView(page, locator) {
   throw new Error("control did not come into sight: " + JSON.stringify({view:v,target:await locator.boundingBox(),scroll:await view.evaluate(e=>e.scrollTop)}));
 }
 
+// reach is inView for any page: the reader wheels the view the control is
+// in (its .view) until the control is wholly in that view and nothing drawn
+// over it (a sticky bar, the window's foot) takes the point Playwright will
+// press. Playwright's own scroll is put back by the app, as any scroll that
+// isn't the reader's, and one partly in sight it doesn't scroll at all, so
+// its press can wait on a control out of sight or under a bar till it times
+// out (in WebKit; Chromium gets through some of these by a few pixels).
+async function reach(page, locator) {
+  await locator.waitFor({ state: "visible" });
+  const id = await locator.evaluate((e) => e.closest(".view")?.id || "");
+  if (!id) return;
+  const v = await page.locator("#" + id).boundingBox();
+  await page.mouse.move(v.x + v.width / 2, v.y + v.height / 2);
+  for (let i = 0; i < 120; i++) {
+    const at = await locator.evaluate((e) => {
+      const b = e.getBoundingClientRect(), v = e.closest(".view").getBoundingClientRect();
+      const x = b.left + b.width / 2, y = b.top + b.height / 2;
+      const inside = b.top >= v.top && b.bottom <= v.bottom, hit = document.elementFromPoint(x, y);
+      return { clear: inside && !!hit && (e === hit || e.contains(hit)), down: y > v.top + v.height / 2 };
+    });
+    if (at.clear) { await page.waitForTimeout(300); return; }
+    await page.mouse.wheel(0, at.down ? 20 : -20);
+    await page.waitForTimeout(40);
+  }
+  throw new Error("control did not come clear into sight: " + JSON.stringify({ view: v, target: await locator.boundingBox() }));
+}
+
 async function click(page, locator) {
   await inView(page, locator);
   await locator.click();
@@ -67,4 +94,4 @@ async function watchSettingsReads(page) {
 // settings, with no wait between, so once it is set the read is counted.
 const settingsDrawn = (page) => page.waitForFunction(() => load.done && __settingsReads.asked === __settingsReads.drawn);
 
-module.exports = { inView, click, watchSettingsReads, settingsDrawn };
+module.exports = { inView, reach, click, watchSettingsReads, settingsDrawn };

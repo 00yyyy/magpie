@@ -16,6 +16,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { reach } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const now = new Date();
@@ -140,8 +141,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const depth = (li) => li.evaluate((x) => getComputedStyle(x).getPropertyValue("--depth").trim());
       assert.equal(await depth(fold("ChatGPT")), "1");
       assert.equal(await depth(page.locator(".rt-accts > li").nth(2)), "2");
-      // Team folded by the reader, Big opened
+      // Team folded by the reader, Big opened: with the pool open they are
+      // under the window's foot (the page beside the sidebar since
+      // 18e82adc6), and the reader scrolls down to them
+      await reach(page, fold("Team"));
       await fold("Team").click();
+      await reach(page, fold("Big"));
       await fold("Big").click();
       await page.waitForFunction(() => document.querySelectorAll(".rt-accts > li").length === 1 + 1 + 8 + 1 + 1 + 7 + 1);
 
