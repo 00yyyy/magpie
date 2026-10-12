@@ -371,7 +371,7 @@ func wbProvider(a wbAccount) Provider {
 		return nil
 	}
 	acct.explain = wbExplain
-	acct.models = func() []catalog.Model { return w.models }
+	acct.models = func() []catalog.Model { return w.textOnly(w.models) }
 	acct.fetch = func(ctx context.Context) ([]catalog.Model, error) {
 		ms, err := wbFetchModels(ctx, w, acct.sign)
 		if err != nil {

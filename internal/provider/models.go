@@ -71,6 +71,10 @@ func (p Provider) available() []catalog.Model {
 			live = withoutCursorCapacity(collapseCursorModels(withCursorContexts(live)))
 		case "devin":
 			live = withDevinContexts(devinCollapse(live, devinCached(), p.Models))
+		case WorkBuddyAIID:
+			// a list saved before its GLM models were known to drop
+			// images says they take them (wbSite.textOnly)
+			live = wbAI.textOnly(live)
 		case "antigravity":
 			// after its names are filled in, and so that a family's
 			// levels aren't taken off by a known model of its id
