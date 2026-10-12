@@ -238,6 +238,9 @@ type Weighed struct {
 	// Aside: a key made for another protocol than the keys routed over,
 	// tried only after them
 	Aside bool `json:"aside,omitempty"`
+	// NoURL: its keys are all set to this protocol, which its provider has
+	// no URL for, so it was tried on the URLs it has (#1702)
+	NoURL provider.Protocol `json:"noURL,omitempty"`
 	// Via: the groups in the group it is of, outermost first, when it is
 	// of a group in the group asked for
 	Via []string `json:"via,omitempty"`
@@ -326,7 +329,7 @@ type planned struct {
 
 func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from provider.Protocol) Weighed {
 	w := Weighed{ID: c.rest, Provider: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Model: c.model, Fixed: c.effort, Fast: c.fast,
-		Routing: p.Routing, Fallback: fallback, Shared: c.rest != p.ID, Rank: c.rank}
+		Routing: p.Routing, Fallback: fallback, Shared: c.rest != p.ID, Rank: c.rank, NoURL: c.noURL}
 	switch {
 	case c.p.Account != nil:
 		w.Kind, w.Who, w.Agent, w.Plan = "account", c.p.Account.User, c.p.Account.Agent, c.p.Account.Plan

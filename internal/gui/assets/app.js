@@ -13569,6 +13569,15 @@ function renderKeyAccounts(p) {
     if (k.on && several) row.append(keyWeight(p, k, weightOf(k), weights));
     const proto = protoPicker(p, k.protocol, (v) => accountAction("keys/protocol", { id: p.id, ref: k.id, protocol: v }));
     if (proto) row.append(proto);
+    // set to a protocol the provider has no URL for (#1702): the gateway
+    // can't send it there, so the row says so rather than the request
+    // quietly going out on another URL
+    const lacks = keyLacksURL(p, k);
+    if (lacks) {
+      const n = el("span", "key-nourl", t("No {api} URL", { api: lacks }));
+      n.title = t("This key is set to {api} only, but {name} has no {api} URL, so no request reaches {api} with it. Fill in the {api} URL, or set the key to Any protocol.", { api: lacks, name: p.name });
+      row.append(n);
+    }
     // its own models (#474), when there is another key to send the rest to
     const [amPill, amBox] = p.keyList.length > 1 || accountModelsOf(p, k.id).length ? accountModels(p, k.id, true, k.name || k.masked) : [];
     if (amPill) row.append(amPill);
@@ -13816,6 +13825,13 @@ const PROTO_OPTS = [
   { v: "chat", pill: "Chat", name: "Chat Completions", note: "OpenAI API · GPT models, most agents" },
   { v: "responses", pill: "Responses", name: "Responses", note: "OpenAI Responses API · Codex" },
 ];
+
+// keyLacksURL is the protocol a key is set to when its provider has no URL
+// for it (the pill's own name), else "".
+function keyLacksURL(p, k) {
+  if (!["anthropic", "chat", "responses"].includes(k.protocol) || p[k.protocol]) return "";
+  return t(PROTO_OPTS.find((o) => o.v === k.protocol).pill);
+}
 
 // protoPicker is the key row's protocol badge; clicking it drops a small menu
 // that says what each choice is for.

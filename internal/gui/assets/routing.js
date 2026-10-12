@@ -409,6 +409,9 @@
   // or the user set the account or key to serve other models only (#474)
   // or it is held at the usage cap the user set on the account
   const unlistedWord = (w) => w.held ? t("not an account the gateway key may use") : w.noCredits ? t("held: its allowance used up, set not to spend credits") : w.capped ? t("held at its {cap}% usage cap", { cap: w.capped }) : w.barred ? t("set to serve other models, not {model}", { model: w.model }) : w.kind === "key" ? t("{name}'s list for this key has no {model}", { name: w.name, model: w.model }) : t("its plan doesn't list {model}", { model: w.model });
+  // noURLWord: its keys are all set to a protocol its provider has no URL
+  // for, so it went out on the URLs it has (#1702)
+  const noURLWord = (w) => t("key set to {api} only, no {api} URL · sent on the others", { api: API[w.noURL] || w.noURL });
   const group = (w) => w.used >= 98 ? "spent" : w.used >= 90 ? "low" : "fine";
   const renews = (w) => (w.renews || []).map((s) => known0(s) ? at(s) : 0);
   // usedRenews is when the window w.used is the share of renews: a row
@@ -1504,6 +1507,7 @@
       else if (trying.has(id)) s = r.id !== cur.id && agents.size <= 1 ? t("answering another request…") : t("answering…");
       else if (answered.has(id)) s = agents.size > 1 ? t("answered {agent}", { agent: agentName(r.agent) }) : t("answered this request");
       else if (gave.has(id)) s = t("{status} · {fail} · passed to {agent}", { status: gave.get(id).status, fail: failWord(gave.get(id).fail), agent: agentName(r.agent) });
+      else if (w.noURL) s = noURLWord(w);
       else if (w.sunk) s = t("rate limited at {time} · at the back", { time: clock(w.sunk) });
       else if (w.known) {
         const soon = usedRenews(w);
@@ -2436,6 +2440,7 @@
       const resting = a.rest && at(a.rest.until) > n;
       if (resting) { st = `${failWord(a.rest.why)} · ${restWhen(a.rest)}`; cls = "rest"; }
       else if (w.unlisted) { st = unlistedWord(w); cls = "left"; }
+      else if (w.noURL) st = noURLWord(w);
       else if (w.known) {
         const soon = usedRenews(w);
         st = soon && soon <= n ? quota(w, "{n} used at {time}; it has renewed since", "{n} left at {time}; it has renewed since", { time: clock(a.at) })

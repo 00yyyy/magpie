@@ -49,6 +49,10 @@ type candidate struct {
 	rank int
 	// capped is set on an account left out as held at its usage cap
 	capped *capHold
+	// noURL is the protocol its provider's keys are all set to that the
+	// provider has no URL for (#1702): the provider is tried whole, on the
+	// URLs it has, and the routing trace says why
+	noURL provider.Protocol
 }
 
 // capHold is how an account is held at its usage cap: the cap of the
@@ -220,9 +224,13 @@ func perKeyBarred(p provider.Provider, model string, from provider.Protocol) (ou
 	}
 	keys := p.KeysOn()
 	var unlisted []candidate
+	var noURL provider.Protocol
 	for i, k := range keys {
 		q := p.WithKey(k)
 		if len(q.Speaks()) == 0 && !q.DecidesModel(model) {
+			if noURL == "" {
+				noURL = k.Protocol
+			}
 			continue // made for a protocol this provider has no endpoint for
 		}
 		rest := p.ID
@@ -247,7 +255,10 @@ func perKeyBarred(p provider.Provider, model string, from provider.Protocol) (ou
 		return nil, nil, nil, barred
 	}
 	if len(out) == 0 {
-		return []candidate{{p: p, model: model, rest: p.ID}}, nil, nil, nil
+		// every key is set to a protocol the provider has no URL for (or
+		// it has none on): the provider as it is, on the URLs it has,
+		// marked so Routing says so rather than sending it there quietly
+		return []candidate{{p: p, model: model, rest: p.ID, noURL: noURL}}, nil, nil, nil
 	}
 	sort.SliceStable(out, func(i, j int) bool { return keyFit(out[i].p, model, from) < keyFit(out[j].p, model, from) })
 	pool := out[:0:0]
