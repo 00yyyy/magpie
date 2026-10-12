@@ -40,6 +40,10 @@ func TestQuietWholeReplyStreamed(t *testing.T) {
 	}{
 		{"chat", "application/json", `{"id":"chatcmpl-9f2","object":"chat.completion","created":1791370000,"model":"m","system_fingerprint":"fp_1","choices":[{"index":0,"message":{"role":"assistant","content":"` + text + `","reasoning_content":"` + think + `","tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Paris\"}"}}]},"logprobs":null,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":12,"completion_tokens":9,"total_tokens":21}}`,
 			provider.Chat, "think:" + think + "|text:" + text + "|tool:get_weather " + args + "|stop:tool", 0},
+		// a call the model wrote into its text, made the call it is as a
+		// stream's would be (#1845)
+		{"chat with a call in its text", "application/json", `{"id":"chatcmpl-9f4","object":"chat.completion","created":1791370000,"model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"` + text + `\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"get_weather\">\n<｜DSML｜parameter name=\"city\" string=\"true\">Paris</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":9,"total_tokens":21}}`,
+			provider.Chat, "text:" + text + "\n|tool:get_weather " + args + "|stop:tool", 0},
 		// a reply that isn't streamed, whatever its type says
 		{"chat as text/plain", "text/plain; charset=utf-8", `{"id":"chatcmpl-9f3","object":"chat.completion","created":1791370000,"model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"` + text + `"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":2,"total_tokens":14}}`,
 			provider.Chat, "text:" + text + "|stop:stop", 0},

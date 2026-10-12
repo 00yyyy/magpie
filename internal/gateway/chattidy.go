@@ -258,10 +258,14 @@ func flattenContent(m map[string]json.RawMessage, whole bool) bool {
 
 // chatWhole mends a Chat Completions reply that came whole, not streamed:
 // a message whose content is typed parts (Mistral's thinking, #483) goes
-// on with a string content and its thinking in reasoning_content. It is
-// held until it ends; any other reply passes byte for byte.
+// on with a string content and its thinking in reasoning_content, and,
+// when the request offered tools (names), calls the model wrote into its
+// text are made the calls they are, as textCallTidy makes them in a
+// stream (#1845). It is held until it ends; any other reply passes byte
+// for byte.
 type chatWhole struct {
-	buf []byte
+	names map[string]bool
+	buf   []byte
 }
 
 func (t *chatWhole) write(b []byte) []byte {
@@ -272,7 +276,8 @@ func (t *chatWhole) write(b []byte) []byte {
 func (t *chatWhole) flush() []byte {
 	b := t.buf
 	t.buf = nil
-	if !bytes.Contains(b, contentParts) && !bytes.Contains(b, contentPartsSpace) {
+	parts := bytes.Contains(b, contentParts) || bytes.Contains(b, contentPartsSpace)
+	if !parts && !mayWriteCalls(b, t.names) {
 		return b
 	}
 	var reply map[string]json.RawMessage
@@ -286,17 +291,27 @@ func (t *chatWhole) flush() []byte {
 	changed := false
 	for _, c := range choices {
 		var msg map[string]json.RawMessage
-		if decodeJSON(c["message"], &msg) != nil || !flattenContent(msg, true) {
+		if decodeJSON(c["message"], &msg) != nil {
 			continue
 		}
-		c["message"], _ = json.Marshal(msg)
+		mended := parts && flattenContent(msg, true)
+		if wrote, called := wholeTextCalls(msg, t.names); wrote {
+			if called {
+				c["finish_reason"] = json.RawMessage(`"tool_calls"`)
+			}
+			mended = true
+		}
+		if !mended {
+			continue
+		}
+		c["message"], _ = marshalPlain(msg)
 		changed = true
 	}
 	if !changed {
 		return b
 	}
-	reply["choices"], _ = json.Marshal(choices)
-	nb, err := json.Marshal(reply)
+	reply["choices"], _ = marshalPlain(choices)
+	nb, err := marshalPlain(reply)
 	if err != nil {
 		return b
 	}

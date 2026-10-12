@@ -623,3 +623,57 @@ func (t *textCallTidy) line(line []byte) []byte {
 	}
 	return append(append(append(pre, "data: "...), nb...), line[len(body):]...)
 }
+
+// mayWriteCalls tells whether a whole Chat reply b could carry a call
+// written into its text, for a request that offered names: one of
+// textCallMarks' words is in it, however its JSON escapes the brackets.
+func mayWriteCalls(b []byte, names map[string]bool) bool {
+	return names != nil && (bytes.Contains(b, []byte("tool_call")) || bytes.Contains(b, []byte("DSML")))
+}
+
+// wholeTextCalls reads the calls written into the content of a whole Chat
+// reply's message, as textCallTidy reads a stream's: the text before the
+// first is kept, the blocks become tool_calls and what is left of their
+// tags goes. wrote is whether msg changed, called whether it now calls
+// tools. A message that made a call itself, or whose written blocks
+// aren't all calls of names with arguments that can be read, is left as
+// it came.
+func wholeTextCalls(msg map[string]json.RawMessage, names map[string]bool) (wrote, called bool) {
+	if names == nil {
+		return false, false
+	}
+	var native []json.RawMessage
+	if decodeJSON(msg["tool_calls"], &native) == nil && len(native) > 0 {
+		return false, false
+	}
+	var s string
+	if decodeJSON(msg["content"], &s) != nil {
+		return false, false
+	}
+	at, _ := textCallAt(s)
+	if at < 0 {
+		return false, false
+	}
+	calls, rest, ok := parseTextCalls(s[at:], names)
+	if !ok {
+		return false, false
+	}
+	text := s[:at] + rest
+	if len(calls) == 0 {
+		// tags and nothing else, dropped as a stream drops them
+		msg["content"], _ = marshalPlain(text)
+		return true, false
+	}
+	tcs := make([]map[string]any, len(calls))
+	for i, c := range calls {
+		tcs[i] = map[string]any{"id": textCallID(), "type": "function",
+			"function": map[string]any{"name": c.Name, "arguments": string(c.Args)}}
+	}
+	if text != "" {
+		msg["content"], _ = marshalPlain(text)
+	} else {
+		msg["content"] = json.RawMessage("null")
+	}
+	msg["tool_calls"], _ = marshalPlain(tcs)
+	return true, true
+}

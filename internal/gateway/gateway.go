@@ -3794,9 +3794,11 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if names := chatToolNames(body); proto == provider.Chat && sse && names != nil {
 		written = &textCallTidy{names: names}
 	}
+	// a reply that came whole: JSON, or one under text/plain or no type
+	// that eventStream found isn't a stream
 	var whole *chatWhole
-	if proto == provider.Chat && !sse && strings.Contains(res.Header.Get("Content-Type"), "json") {
-		whole = &chatWhole{}
+	if ct := res.Header.Get("Content-Type"); proto == provider.Chat && !sse && (strings.Contains(ct, "json") || ct == "" || strings.HasPrefix(ct, "text/plain")) {
+		whole = &chatWhole{names: chatToolNames(body)}
 	}
 	var sigs *sigTidy
 	if proto == provider.Chat && geminiCompat(p.Host(), model) {
