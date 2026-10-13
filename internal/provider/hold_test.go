@@ -218,11 +218,13 @@ func TestHeldGroupsAreTheCallers(t *testing.T) {
 		}
 	}
 	saved := Group{ID: "pair", Name: "Pair", Members: []string{"a/m", "b/big"}, Off: []string{"b/big"}, Levels: []string{"low", "high"},
-		Rules: []Rule{{Use: "a/m", Tokens: 5}, {Use: "b/big", Agents: []string{"codex"}, Time: &TimeWindow{From: "09:00", To: "18:00", Days: []string{"mon"}}}}}
+		Rules: []Rule{{Use: "a/m", Tokens: 5}, {Use: "b/big", Agents: []string{"codex"}, Folders: []string{filepath.Join(t.TempDir(), "in")}, ExceptFolders: []string{filepath.Join(t.TempDir(), "out")},
+			Time: &TimeWindow{From: "09:00", To: "18:00", Days: []string{"mon"}}}}}
 	if err := SaveGroup(saved); err != nil {
 		t.Fatal(err)
 	}
 	defer Hold()()
+	var folders, except []string
 	pair := func() Group {
 		t.Helper()
 		for _, g := range Groups() {
@@ -238,12 +240,19 @@ func TestHeldGroupsAreTheCallers(t *testing.T) {
 		g := pair()
 		if !slices.Equal(g.Members, saved.Members) || !slices.Equal(g.Off, saved.Off) || !slices.Equal(g.Levels, saved.Levels) ||
 			len(g.Rules) != 2 || g.Rules[0].Use != "a/m" || g.Rules[1].Use != "b/big" ||
-			!slices.Equal(g.Rules[1].Agents, []string{"codex"}) || g.Rules[1].Time == nil || !slices.Equal(g.Rules[1].Time.Days, []string{"mon"}) {
+			!slices.Equal(g.Rules[1].Agents, []string{"codex"}) || g.Rules[1].Time == nil || !slices.Equal(g.Rules[1].Time.Days, []string{"mon"}) ||
+			!slices.Equal(g.Rules[1].Folders, folders) || !slices.Equal(g.Rules[1].ExceptFolders, except) {
 			t.Fatalf("%s: %+v", why, g)
 		}
 	}
-	// taking a/m out, as the TUI's d does: b/big alone is off, so it fails
+	// the folders as saved, cleaned
 	g := pair()
+	folders, except = slices.Clone(g.Rules[1].Folders), slices.Clone(g.Rules[1].ExceptFolders)
+	if len(folders) != 1 || len(except) != 1 {
+		t.Fatalf("folders saved as %q, %q", folders, except)
+	}
+	// taking a/m out, as the TUI's d does: b/big alone is off, so it fails
+	g = pair()
 	g.Members = slices.DeleteFunc(g.Members, func(m string) bool { return m == "a/m" })
 	g.Rules = slices.DeleteFunc(g.Rules, func(r Rule) bool { return r.Use == "a/m" })
 	if err := SaveGroup(g); err == nil || !strings.Contains(err.Error(), "switched off") {
@@ -252,6 +261,7 @@ func TestHeldGroupsAreTheCallers(t *testing.T) {
 	same("a failed save's change is in the held groups")
 	g = pair()
 	g.Levels[0], g.Rules[1].Agents[0], g.Rules[1].Time.Days[0] = "max", "x", "sun"
+	g.Rules[1].Folders[0], g.Rules[1].ExceptFolders[0] = "/elsewhere", "/elsewhere"
 	same("a caller's change is in the held groups")
 
 	// the caller's group, cleaned for saving: as it gave it, saved or not

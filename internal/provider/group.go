@@ -368,6 +368,8 @@ func (g Group) own() Group {
 	g.Rules = slices.Clone(g.Rules)
 	for i, r := range g.Rules {
 		g.Rules[i].Agents = slices.Clone(r.Agents)
+		g.Rules[i].Folders = slices.Clone(r.Folders)
+		g.Rules[i].ExceptFolders = slices.Clone(r.ExceptFolders)
 		if r.Time != nil {
 			w := *r.Time
 			w.Days = slices.Clone(w.Days)
