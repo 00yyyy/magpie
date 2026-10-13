@@ -297,6 +297,10 @@ type Try struct {
 	// (#1418)
 	Replan   int `json:"replan,omitempty"`
 	Patience int `json:"patience,omitempty"`
+	// Gone: the agent canceled the request in the pause Again was to be
+	// waited, so nobody was asked again (#1894: the Routing page's story
+	// otherwise ended on "tried again in 1s", a retry that never came)
+	Gone bool `json:"gone,omitempty"`
 	// Queued: ms it waited for one of its key's or account's slots, the
 	// provider's MaxConcurrency out already (concurrency.go)
 	Queued int64 `json:"queued,omitempty"`

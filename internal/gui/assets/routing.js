@@ -871,6 +871,11 @@
       return r.tries[i + 1]
         ? t("{who}: the proxy magpie goes through didn't take the connection, so the request never reached the vendor and goes on to the next. Nothing is wrong with {who}, so it doesn't rest: once the proxy is up it is asked first again.", { who: name })
         : t("{who}: the proxy magpie goes through didn't take the connection, so the request never reached the vendor, and nobody is left to try: {agent} gets the error. Start the proxy, or change it in Settings.", { who: name, agent });
+    // the agent left while magpie waited to ask again (#1894): the
+    // story ends there, not on a retry that never came
+    if (tr.gone)
+      return t("{who} answered {status} · {fail}, and was to be asked again in {d}, but {agent} canceled the request before then, so nobody is asked again.",
+        { who: name, status: tr.status, fail: failWord(tr.fail), d: took(tr.again), agent });
     if (tr.replan)
       return t("{who} answered {status} · {fail}, and every member had failed with an error that may pass, so after {d} the {n} of them are asked again, in turn, before any of the reply reaches {agent}. The group waits up to {p} for one to answer.",
         { who: name, status: tr.status, fail: failWord(tr.fail), d: took(tr.again), n: tr.replan, p: took((tr.patience || 0) * 1000), agent });
@@ -1927,6 +1932,11 @@
     return t("{agent} made this call itself ({kind}), not as a turn of the conversation, and picks its model itself.", { agent, kind: kindName(r.kind) });
   }
 
+  // how a request that wasn't answered ended: its status and its last
+  // try's failure, or that its agent left in the pause before the next
+  // try (#1894)
+  const endWord = (r, last) => `${r.status} · ${failWord(last.gone ? "canceled" : last.fail)}`;
+
   // who answered a request, or what its agent got
   function outcome(r) {
     if (!r.done) {
@@ -1939,7 +1949,7 @@
     // fail. Bad is a reply that broke off, or every try failing
     if (r.status < 400 && (ok || !r.tries.length)) return [w ? `${who(w)} · ${w.model}` : r.provider, r.tries.length > 1 ? "moved" : "ok", ok];
     const last = r.tries[r.tries.length - 1];
-    return [last ? `${r.status} · ${failWord(last.fail)}` : `${r.status || ""} ${r.error || ""}`.trim(), "bad"];
+    return [last ? endWord(r, last) : `${r.status || ""} ${r.error || ""}`.trim(), "bad"];
   }
 
   // a request's row's title: the way it went, to the one that took it
@@ -2710,7 +2720,7 @@
         renderAll();
         dot.classList.add("back", "err");
         back = bird("res");
-        if (!tr.rest && !tr.again) { // that was the answer: the agent gets the error
+        if (!tr.rest && (!tr.again || tr.gone)) { // that was the answer: the agent gets the error, or has gone
           await fly(dot, back, home(row, A), 1350);
           flying.delete(dot);
           away(back);
@@ -5097,7 +5107,7 @@
     if (!r.done) to.append(el("span", "pr-where", w ? t("{who} is answering…", { who: place }) : t("routing…")));
     else if (how === "bad") {
       const last = r.tries[r.tries.length - 1];
-      to.append(el("span", "pr-where", last ? `${r.status} · ${failWord(last.fail)}` : `${r.status || ""} ${r.error || ""}`.trim()));
+      to.append(el("span", "pr-where", last ? endWord(r, last) : `${r.status || ""} ${r.error || ""}`.trim()));
     } else {
       to.append(el("span", "pr-where", place));
       const model = tr?.model || w?.model;

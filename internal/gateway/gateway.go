@@ -2645,6 +2645,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				continue
 			case <-r.Context().Done():
 				call.Status, call.Error = 499, "the agent canceled the request"
+				try.Gone = true
+				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			}
 			break
 		}
@@ -2719,6 +2721,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					continue
 				}
 				call.Status, call.Error = 499, "the agent canceled the request"
+				try.Gone = true
+				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 				break
 			}
 		}
@@ -2736,6 +2740,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				continue
 			case <-r.Context().Done():
 				call.Status, call.Error = 499, "the agent canceled the request"
+				try.Gone = true
+				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			}
 			break
 		}
