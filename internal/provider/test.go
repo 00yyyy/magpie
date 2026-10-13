@@ -477,6 +477,10 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 		// a vendor that takes one of the two key headers alone
 		res, err = RetryOneAuth(p, req, res, func(r *http.Request) (*http.Response, error) { return p.Do(http.DefaultClient, r) })
 	}
+	if err == nil && proto == Chat {
+		// a GLM Coding Plan's key at Zhipu's pay-as-you-go endpoint
+		res, err = RetryZhipuCoding(p, req, res, func(r *http.Request) (*http.Response, error) { return p.Do(http.DefaultClient, r) })
+	}
 	r.Millis = time.Since(start).Milliseconds()
 	if err != nil {
 		r.Error = strings.TrimPrefix(err.Error(), "Post \""+url+"\": ")

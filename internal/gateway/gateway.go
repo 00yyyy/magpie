@@ -3367,6 +3367,13 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// alone, refusing both (Aloha on Discord): asked again with one
 		res, err = provider.RetryOneAuth(p, req, res, func(r *http.Request) (*http.Response, error) { return p.Do(s.client, r) })
 	}
+	if err == nil && to == provider.Chat {
+		// a GLM Coding Plan's key at Zhipu's or Z.ai's pay-as-you-go
+		// endpoint, refused there for want of a balance (1113): asked at
+		// the plan's endpoint, and the provider moved there when it serves
+		// it; else the refusal says what to change (@cleverpigo on X)
+		res, err = provider.RetryZhipuCoding(p, req, res, func(r *http.Request) (*http.Response, error) { return p.Do(s.client, r) })
+	}
 	if err != nil {
 		return res, err
 	}
