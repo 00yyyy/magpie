@@ -6207,6 +6207,9 @@ function renderGatewayView() {
   page.removeAttribute("aria-busy");
   renderGateway();
   $("#gatewayKeysBlock").hidden = !providers.gateway.lan;
+  // not shared, the keys are left out; this line says where they come from,
+  // as a tunnel to loopback is refused until sharing is on (DD on Discord)
+  $("#gatewayKeysOff").hidden = !!providers.gateway.lan;
   if (!providers.gateway.lan) gatewayKeyDraft = null;
   if (gatewayKeyDraft === null && gatewayLimit === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
   renderConnect();
@@ -23357,7 +23360,7 @@ function renderLAN(s) {
     if (ns.rekeyed) status(ns.rekeyed, "err");
   })
     .catch((e) => { status(t(e.message), "err"); renderSettings(); });
-  row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models with a gateway key from Gateway"), "",
+  row(t("Share on local network"), t("Agents on other computers on this network, or through a tunnel to this one such as Cloudflare Tunnel, can use magpie’s models with a gateway key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
   if (!s.lan) return;
   let urls = s.lanURLs || [], sub = "";
@@ -24224,6 +24227,7 @@ function openSettings() {
   show("settings");
 }
 $("#prefs").onclick = () => { openSettings(); $("#prefs").blur(); };
+$("#openLanSettings").onclick = () => { openSettings(); setSetTab("network", true); };
 
 // The header's refresh reads again what the page shown draws (#844): on
 // Agents it looks for the agents on this computer again (one just installed
