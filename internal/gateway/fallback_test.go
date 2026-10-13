@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -260,6 +261,44 @@ func TestEscapedWordsReadByTheOtherDeciders(t *testing.T) {
 	}
 	if !retryable(400, []byte(`{"error":{"message":"额度已用完，请明天再试","type":"invalid_request_error"}}`)) {
 		t.Errorf("the same refusal unescaped: retryable false")
+	}
+}
+
+// The rest of the deciders whose words are Chinese read them escaped as
+// well: a conversation too long, a retired model or a shape refusal that
+// also says the quota is spent, and a size inferred only when nothing
+// else is said. Each case beside the same words unescaped.
+func TestEscapedWordsReadByEveryDecider(t *testing.T) {
+	for _, esc := range []bool{true, false} {
+		say := func(s string) []byte {
+			if !esc {
+				return []byte(`{"error":{"message":"` + s + `"}}`)
+			}
+			q, _ := json.Marshal(s)
+			// as Python's json.dumps writes it
+			var b strings.Builder
+			for _, r := range string(q) {
+				if r > 127 {
+					fmt.Fprintf(&b, `\u%04x`, r)
+				} else {
+					b.WriteRune(r)
+				}
+			}
+			return []byte(`{"error":{"message":` + b.String() + `}}`)
+		}
+		if !overflowed(400, say("上下文长度超过限制")) {
+			t.Errorf("escaped %v: 上下文长度超过限制 not overflowed", esc)
+		}
+		if modelRetired(410, say("Model m1 has been deprecated, 额度已用完")) {
+			t.Errorf("escaped %v: a retirement that says the quota is spent rests the model alone", esc)
+		}
+		if shapeRefused(400, say("Unknown parameter: 'x'. 额度已用完")) {
+			t.Errorf("escaped %v: a shape refusal that says the quota is spent rests nobody", esc)
+		}
+		p := provider.Provider{ID: "fake", Name: "Fake", Contexts: map[string]int{"m": 100}}
+		if said, ok := tooLongUnsaid(p, "m", 1000, 400, say("该模型不支持当前令牌计划")); ok {
+			t.Errorf("escaped %v: a model the plan doesn't serve told as too long: %s", esc, said)
+		}
 	}
 }
 

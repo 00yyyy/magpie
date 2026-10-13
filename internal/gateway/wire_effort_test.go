@@ -100,6 +100,9 @@ func TestTranslatedThinkingOffRefused(t *testing.T) {
 		"thinking.type `disabled` is not supported by this model Request id: 0217",
 		// Sub2API's gpt-6.1-sol reads disabled as reasoning effort none (#1465)
 		`gpt-6.1-sol does not support reasoning effort \"none\"; use low, medium, high, xhigh or max`,
+		// #699's Chinese, escaped as \uXXXX the way a relay's
+		// json.dumps sends it (#1669)
+		`\u8be5\u6a21\u578b\u59cb\u7ec8\u652f\u6301\u601d\u8003\uff0c\u4e0d\u53ef\u5173\u95ed`,
 	} {
 		t.Run(fmt.Sprint(i), func(t *testing.T) { translatedThinkingOffRefused(t, refusal) })
 	}

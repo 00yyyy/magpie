@@ -988,6 +988,8 @@ var shapeWords = regexp.MustCompile(`(?i)failed to deserialize|unknown (item |co
 // shapeRefused says a request failed over its shape alone: the next
 // member is asked, and this one doesn't rest, as nothing is wrong with it.
 func shapeRefused(status int, body []byte) bool {
+	// the words are matched decoded, too (#1669)
+	body = wordsOf(body)
 	return (status == 400 || status == 422) && shapeWords.Match(body) &&
 		!quotaWords.Match(body) && !unservedWords.Match(body) && !refusedWords.Match(body)
 }
@@ -1095,6 +1097,8 @@ func tooLongUnsaid(p provider.Provider, model string, tokens, status int, body [
 	default:
 		return "", false
 	}
+	// the words are matched decoded, too (#1669)
+	body = wordsOf(body)
 	if overflowed(status, body) || failure(status, body) != failOther || quotaWords.Match(body) ||
 		unservedWords.Match(body) || refusedWords.Match(body) || provider.EdgeBlocked(body) || regionRefused(status, body) {
 		return "", false

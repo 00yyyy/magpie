@@ -5802,7 +5802,8 @@ var tooLongRe = regexp.MustCompile(`(?i)context_length_exceeded|prompt is too lo
 // overflowed says a refused request was too long for the model — a
 // request error (400, 413, 422) whose words say so.
 func overflowed(status int, body []byte) bool {
-	return (status == 400 || status == 413 || status == 422) && tooLong(status, string(body))
+	// the words are matched decoded, too (#1669): 上下文 escaped as \uXXXX
+	return (status == 400 || status == 413 || status == 422) && tooLong(status, string(wordsOf(body)))
 }
 
 // tooLong is whether a vendor's error says the conversation no longer
