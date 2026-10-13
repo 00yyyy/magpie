@@ -695,7 +695,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		captureTitle = link != nil && isTitleKind(kind)
 		turn, scan := agentTurnOf(r, kind)
 		tools = scan
-		tr = s.trace.begin(Route{turn: turn, dirOf: dirOf(provider.Responses, body), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, callerOf(r).agent), imageProvider: imageProvider, TitleLink: link, Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Effort: effort, Provider: "openai", Subagent: subagentPickOf(r),
+		tr = s.trace.begin(Route{turn: turn, dirOf: dirOf(provider.Responses, body), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, callerOf(r).agent), imageProvider: imageProvider, TitleLink: link, Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Effort: effort, Tier: bodyTier(provider.Responses, body), Provider: "openai", Subagent: subagentPickOf(r),
 			Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Effort: effort, Start: start}}})
 		promptRead := s.inspectPrompt(tr, provider.Responses, body, body)
 		end = func(status int, msg string, tokens, out int) {
@@ -939,7 +939,9 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	rec := usage.Record{RouteID: tr.ID, Time: start, Agent: call.Agent, Provider: call.Provider, Host: provider.HostOf(base), Model: call.Model,
 		Requested: call.Model, Served: served,
 		Input: uu.Input, Output: uu.Output, CacheRead: uu.CacheRead, CacheWrite: uu.CacheWrite,
-		Reasoning: uu.Reasoning, Effort: effort, Millis: call.Millis, TTFT: call.TTFT, FirstText: call.FirstText, ReasoningHidden: call.ReasoningHidden, Flow: call.Flow, Status: call.Status, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
+		Reasoning: uu.Reasoning, Effort: effort, Millis: call.Millis,
+		// Codex's own sign-in: the request goes as Codex sent it
+		TierAsked: bodyTier(provider.Responses, body), TierSent: bodyTier(provider.Responses, body), TierServed: uu.Tier, TTFT: call.TTFT, FirstText: call.FirstText, ReasoningHidden: call.ReasoningHidden, Flow: call.Flow, Status: call.Status, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 		RequestID: requestID(res.Header), ResponseID: uu.ResponseID, Endpoint: r.URL.Path}
 	failedWith(&rec, call.Status, call.Error, errType)
 	appendUsage(r, rec)

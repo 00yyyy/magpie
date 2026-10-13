@@ -76,7 +76,19 @@ type Record struct {
 	// Effort is the reasoning the model was asked for — a routing group's
 	// pick for the turn, or the agent's own — as it takes it; "" for none
 	Effort string `json:"effort,omitempty"`
-	Millis int64  `json:"ms"`
+	// The service tier, as OpenAI's service_tier words it ("priority",
+	// "ultrafast", "flex", "default"; "fast" for Claude's speed "fast"):
+	// TierAsked what the client's request asked for, TierSent what went
+	// out to the vendor on this try, after a fast pick or a group member
+	// set Fast asked for priority and an account whose plan doesn't offer
+	// Ultrafast was asked for priority in its place, and TierServed what
+	// the vendor's reply said it ran at. Each is "" when there was none:
+	// TierServed is never taken from what was asked or sent, only from a
+	// reply that names it (#1784)
+	TierAsked  string `json:"tier_asked,omitempty"`
+	TierSent   string `json:"tier_sent,omitempty"`
+	TierServed string `json:"tier_served,omitempty"`
+	Millis     int64  `json:"ms"`
 	// TTFT: ms from the request to its reply's first content — text,
 	// reasoning or a tool call — and FirstText to its first text, counted
 	// as Millis is, so Millis-TTFT is how long the reply took to write;

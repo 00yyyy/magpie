@@ -324,6 +324,9 @@ type Usage struct {
 	// (stop_reason, finish_reason, a Responses status): "" when it said
 	// none, as a stream that just stops does (upstreamStop)
 	Stop string `json:"stop,omitempty"`
+	// Tier is the service tier the reply says it ran at (upstreamTier),
+	// "" when it says none
+	Tier string `json:"tier,omitempty"`
 }
 
 // prompt is every token the prompt came to, as OpenAI's and Gemini's
@@ -357,6 +360,9 @@ func (u *Usage) add(v Usage) {
 	}
 	if v.Upstream != "" {
 		u.Upstream = v.Upstream
+	}
+	if v.Tier != "" {
+		u.Tier = v.Tier
 	}
 	if v.RequestID != "" {
 		u.RequestID = v.RequestID

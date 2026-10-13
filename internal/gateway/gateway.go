@@ -1911,7 +1911,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if turn {
 		capture.tools = tools
 	}
-	tr := s.trace.begin(Route{turn: turn, dirOf: dirOf(from, plain), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, call.Agent), TitleLink: link, Pinned: pin, Time: start, Agent: call.Agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, call.Kind), Kind: call.Kind, For: call.For, Model: call.Model, Effort: requestEffort(from, body), Provider: p.ID, Group: group, Rule: hit, Nested: nested, SealedTask: sealedTask, LeadAccount: leadAccount, Subagent: subagent, Affinity: shown, Order: pl.order, Left: pl.left})
+	tierAsked := bodyTier(from, body) // the service tier the client asked for (#1784)
+	tr := s.trace.begin(Route{turn: turn, dirOf: dirOf(from, plain), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, call.Agent), TitleLink: link, Pinned: pin, Time: start, Agent: call.Agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, call.Kind), Kind: call.Kind, For: call.For, Model: call.Model, Effort: requestEffort(from, body), Tier: tierAsked, Provider: p.ID, Group: group, Rule: hit, Nested: nested, SealedTask: sealedTask, LeadAccount: leadAccount, Subagent: subagent, Affinity: shown, Order: pl.order, Left: pl.left})
 	if telemetry != nil {
 		telemetry.routeID = tr.ID
 	}
@@ -1926,6 +1927,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	var skipped []string
 	sent := ""       // the reasoning the last try's model was asked for
 	wentAt := ""     // and the level that went, once translated (wireEffort, #1636)
+	wentTier := ""   // the service tier the last try went out at (noteWireTier, #1784)
 	where := ""      // the last try's provider.Where, for the usage
 	again := 0       // times the last one left has been tried again
 	resealed := 0    // what of the conversation another account sealed was taken out: its reasoning, then its compaction
@@ -2318,8 +2320,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if wentAt = sent; at.set {
 			wentAt = at.effort
 		}
+		wentTier = at.tier
 		try := Try{ID: c.rest, Model: c.model, Effort: wentAt, Picked: picked, Fixed: fixed, Fast: fast, Start: began, Done: true, Status: call.Status, Millis: time.Since(began).Milliseconds(), Error: call.Error, Queued: queued,
-			Served: call.Usage.Served, Upstream: call.Usage.Upstream, Auto: autoPicked()}
+			Served: call.Usage.Served, Upstream: call.Usage.Upstream, Tier: wentTier, TierServed: call.Usage.Tier, Auto: autoPicked()}
 		if resetFirst != nil {
 			// the reset spent for it before it was asked
 			try.Reset, resetFirst = resetFirst, nil
@@ -2448,6 +2451,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					Requested: call.Model, Served: call.Usage.Served, Upstream: call.Usage.Upstream,
 					Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 					CacheWrite: call.Usage.CacheWrite, CacheWrite1h: call.Usage.CacheWrite1h, Reasoning: call.Usage.Reasoning, Effort: wentAt, Millis: time.Since(began).Milliseconds(), Status: call.Status,
+					TierAsked: tierAsked, TierSent: wentTier, TierServed: call.Usage.Tier,
 					TTFT: try.TTFT, FirstText: try.FirstText, FirstReasoning: try.FirstReasoning, ReasoningHidden: try.ReasoningHidden, Flow: try.Flow, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To, c.p, c.model), Archive: call.archiveName(), HandedOn: true}
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
@@ -2491,6 +2495,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					Requested: call.Model, Served: call.Usage.Served,
 					Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 					CacheWrite: call.Usage.CacheWrite, CacheWrite1h: call.Usage.CacheWrite1h, Reasoning: call.Usage.Reasoning, Effort: wentAt, Millis: time.Since(began).Milliseconds(), Status: call.Status,
+					TierAsked: tierAsked, TierSent: wentTier, TierServed: call.Usage.Tier,
 					TTFT: try.TTFT, FirstText: try.FirstText, FirstReasoning: try.FirstReasoning, ReasoningHidden: try.ReasoningHidden, Flow: try.Flow, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To, c.p, c.model), Archive: call.archiveName(), HandedOn: true}
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
@@ -2927,6 +2932,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			Requested: call.Model, Served: call.Usage.Served, Upstream: call.Usage.Upstream,
 			Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 			CacheWrite: call.Usage.CacheWrite, CacheWrite1h: call.Usage.CacheWrite1h, Reasoning: call.Usage.Reasoning, Effort: wentAt, Millis: call.Millis, Status: call.Status,
+			TierAsked: tierAsked, TierSent: wentTier, TierServed: call.Usage.Tier,
 			TTFT: call.TTFT, FirstText: call.FirstText, FirstReasoning: call.FirstReasoning, ReasoningHidden: call.ReasoningHidden, Flow: call.Flow, Sent: sentMs, Own: ownMs, Retried: retriedMs, Queued: queuedMs, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 			RequestID: call.Usage.RequestID, ResponseID: call.Usage.ResponseID, Endpoint: endpointOf(r, from, call.To, lastTried, model), Stop: call.Usage.Stop, Archive: call.archiveName()}
 		if tries > 1 {
@@ -3257,6 +3263,10 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// body is as it goes out when they fill in what it lacks, and
 		// before it is signed
 		body = p.WithExtraBody(body, cmp.Or(sessionOf(in), conversationID(in, body)))
+	}
+	if !countsTokens(path) {
+		// the tier it goes at, the user's own fields in it (#1784)
+		noteWireTier(ctx, to, body)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.Base(to)+path, bytes.NewReader(body))
 	if err != nil {
@@ -4882,7 +4892,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	ended := false // the upstream said its reply ended
 	see, held := written(zenSee(zen, col.add))
 	err = readSSE(rd, func(_, data string) error {
-		u.add(Usage{Upstream: upstreamOf([]byte(data))})
+		u.add(Usage{Upstream: upstreamOf([]byte(data)), Tier: upstreamTier([]byte(data))})
 		ended = ended || upstreamStop([]byte(data)) != "" ||
 			(actual == provider.Anthropic || actual == provider.Responses) && upstreamEnds(data) ||
 			geminiKin(actual) && geminiEnds([]byte(data))

@@ -475,7 +475,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				ended := false // the upstream said its reply ended
 				serr = readSSEAlive(rd, func(_, data string) error {
 					st := upstreamStop([]byte(data))
-					u.add(Usage{Upstream: upstreamOf([]byte(data)), Stop: st})
+					u.add(Usage{Upstream: upstreamOf([]byte(data)), Stop: st, Tier: upstreamTier([]byte(data))})
 					ended = ended || st != "" ||
 						(actual == provider.Anthropic || actual == provider.Responses) && upstreamEnds(data) ||
 						geminiKin(actual) && geminiEnds([]byte(data))

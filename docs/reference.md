@@ -304,8 +304,14 @@ card each count is a button for its requests in the list below (the
 Failed and Retried filters, `failed=1` and `retried=1`). A try a vendor
 refused or turned away keeps its own row, for what it billed and why, marked
 handed on, and isn't counted as a request. The CSV's last columns are
-`tries` (on the final row, when the request took more than one) and
-`handed_on`.
+`tries` (on the final row, when the request took more than one),
+`handed_on`, then `tier_asked`, `tier_sent` and `tier_served`: the
+service tier the client asked for (Claude's fast speed reads `fast`), the
+one that try went out at (a fast pick sends `priority`; Ultrafast becomes
+`priority` on an account whose plan doesn't offer it), and the one the
+vendor's reply said it ran at, empty when the reply doesn't say. The JSON
+log keeps them as `tier_asked`, `tier_sent` and `tier_served`, and each
+try in `/v1/magpie/route` has `tier` and `tier_served`.
 
 **Output speed** (tok/s on the Usage and Routing pages, `magpie usage`) is
 output tokens over the time after the first token, summed per request: the

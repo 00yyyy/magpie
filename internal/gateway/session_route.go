@@ -26,20 +26,25 @@ type SessionRoute struct {
 	Kind        string       `json:"kind,omitempty"`         // a side call's: a title, a subagent…
 	Asked       string       `json:"asked"`                  // the model as the agent asked
 	AskedEffort string       `json:"asked_effort,omitempty"` // the reasoning it asked for
+	AskedTier   string       `json:"asked_tier,omitempty"`   // the service tier it asked for
 	Group       string       `json:"group,omitempty"`        // the routing group's id, when it asked one
 	Rule        *RuleHit     `json:"rule,omitempty"`         // the group's rules, as the Routing page has them
 	Nested      []NestedRule `json:"nested,omitempty"`
 	// Model and Effort: the try under way, or the last, as provider/model
 	// and the reasoning it was sent at
-	Model  string     `json:"model,omitempty"`
-	Effort string     `json:"effort,omitempty"`
-	Served string     `json:"served,omitempty"` // the model the reply says answered
-	Tries  []RouteTry `json:"tries"`
-	Done   bool       `json:"done"`
-	Status int        `json:"status,omitempty"`
-	Error  string     `json:"error,omitempty"`
-	Millis int64      `json:"ms,omitempty"`
-	TTFT   int64      `json:"ttft_ms,omitempty"`
+	Model  string `json:"model,omitempty"`
+	Effort string `json:"effort,omitempty"`
+	// Tier and TierServed: the service tier that try went out at, and the
+	// one its reply said it ran at, when it said one (#1784)
+	Tier       string     `json:"tier,omitempty"`
+	TierServed string     `json:"tier_served,omitempty"`
+	Served     string     `json:"served,omitempty"` // the model the reply says answered
+	Tries      []RouteTry `json:"tries"`
+	Done       bool       `json:"done"`
+	Status     int        `json:"status,omitempty"`
+	Error      string     `json:"error,omitempty"`
+	Millis     int64      `json:"ms,omitempty"`
+	TTFT       int64      `json:"ttft_ms,omitempty"`
 }
 
 // RouteTry is one member trying the request: each failed one was fallen
@@ -47,14 +52,18 @@ type SessionRoute struct {
 type RouteTry struct {
 	Model  string `json:"model"` // provider/model
 	Effort string `json:"effort,omitempty"`
-	Done   bool   `json:"done"`
-	Status int    `json:"status,omitempty"`
-	Fail   string `json:"fail,omitempty"` // why it failed, as the trace tells it
-	Millis int64  `json:"ms,omitempty"`
+	// Tier: the service tier it went out at; TierServed: the one its
+	// reply said it ran at
+	Tier       string `json:"tier,omitempty"`
+	TierServed string `json:"tier_served,omitempty"`
+	Done       bool   `json:"done"`
+	Status     int    `json:"status,omitempty"`
+	Fail       string `json:"fail,omitempty"` // why it failed, as the trace tells it
+	Millis     int64  `json:"ms,omitempty"`
 }
 
 func sessionRouteOf(r Route) SessionRoute {
-	out := SessionRoute{ID: r.ID, Time: r.Time, Kind: r.Kind, Asked: r.Model, AskedEffort: r.Effort, Rule: r.Rule, Nested: r.Nested,
+	out := SessionRoute{ID: r.ID, Time: r.Time, Kind: r.Kind, Asked: r.Model, AskedEffort: r.Effort, AskedTier: r.Tier, Rule: r.Rule, Nested: r.Nested,
 		Served: r.Served, Tries: []RouteTry{}, Done: r.Done, Status: r.Status, Error: r.Error, Millis: r.Millis, TTFT: r.TTFT}
 	if r.Group != nil {
 		out.Group = r.Group.ID
@@ -75,10 +84,11 @@ func sessionRouteOf(r Route) SessionRoute {
 		if p := providerOf(t.ID); p != "" && model != "" {
 			model = p + "/" + model
 		}
-		out.Tries = append(out.Tries, RouteTry{Model: model, Effort: t.Effort, Done: t.Done, Status: t.Status, Fail: t.Fail, Millis: t.Millis})
+		out.Tries = append(out.Tries, RouteTry{Model: model, Effort: t.Effort, Tier: t.Tier, TierServed: t.TierServed, Done: t.Done, Status: t.Status, Fail: t.Fail, Millis: t.Millis})
 	}
 	if n := len(out.Tries); n > 0 {
 		out.Model, out.Effort = out.Tries[n-1].Model, out.Tries[n-1].Effort
+		out.Tier, out.TierServed = out.Tries[n-1].Tier, out.Tries[n-1].TierServed
 	}
 	return out
 }
