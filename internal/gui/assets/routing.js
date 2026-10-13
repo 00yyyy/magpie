@@ -4404,11 +4404,45 @@
     ed.append(kLab, kw);
     drawSink();
     // a member slow to begin its answer: waited for, or the next asked
-    const fHint = el("div", "hint"), fw = el("div");
-    const drawFirst = () => fHint.textContent = d.firstToken
-      ? t("A member that hasn't begun answering after {n} — no text, reasoning or tool call yet — is let go and the next one asked, before any of it reaches the agent. It doesn't rest; the last one left is always waited for. Only for streamed requests.", { n: took(d.firstToken * 1000) })
-      : t("Every member is waited for, however long it takes to begin answering.");
-    fw.append(segs(FIRST_OPTS.map(([n, l]) => [n, t(l)]), d.firstToken || 0, (v) => { d.firstToken = +v; drawFirst(); }), fHint);
+    // or after as many minutes as the user types (Kismet Alan on Discord)
+    const fHint = el("div", "hint"), fw = el("div", "ctx-wrap first-wrap");
+    const firstIn = keys(input("", t("e.g. 5")));
+    firstIn.classList.add("ctx-in", "first-in");
+    firstIn.inputMode = "decimal";
+    firstIn.setAttribute("aria-label", t("Minutes"));
+    fHint.id = "groupFirstHint";
+    firstIn.setAttribute("aria-describedby", fHint.id);
+    const firstUnit = el("span", "first-unit", t("min"));
+    const firstMins = (s) => String(+(s / 60).toFixed(2));
+    let firstMode = FIRST_OPTS.some(([n]) => n === (d.firstToken || 0)) ? d.firstToken || 0 : "custom";
+    if (firstMode === "custom") firstIn.value = firstMins(d.firstToken);
+    let firstErr = "";
+    const drawFirst = () => {
+      firstIn.hidden = firstUnit.hidden = firstMode !== "custom";
+      firstIn.setAttribute("aria-invalid", String(!!firstErr));
+      fHint.textContent = firstErr || (d.firstToken
+        ? t("A member that hasn't begun answering after {n} — no text, reasoning or tool call yet — is let go and the next one asked, before any of it reaches the agent. It doesn't rest; the last one left is always waited for. Only for streamed requests.", { n: took(d.firstToken * 1000) })
+        : t("Every member is waited for, however long it takes to begin answering."));
+    };
+    fw.append(segs([...FIRST_OPTS.map(([n, l]) => [n, t(l)]), ["custom", t("Custom")]], firstMode, (v) => {
+      firstErr = "";
+      firstMode = v;
+      if (v !== "custom") d.firstToken = +v;
+      else {
+        // starts from what was picked, or 5 minutes from Wait
+        d.firstToken = d.firstToken > 0 ? d.firstToken : 300;
+        firstIn.value = firstMins(d.firstToken);
+      }
+      drawFirst();
+      if (v === "custom") firstIn.focus();
+    }), firstIn, firstUnit, fHint);
+    firstIn.oninput = () => {
+      const v = firstIn.value.trim().replace(",", ".");
+      const n = /^\d+(?:\.\d+)?$/.test(v) ? Math.round(+v * 60) : 0;
+      firstErr = n > 0 ? "" : t("{v} is not a number of minutes", { v: firstIn.value.trim() });
+      if (n > 0) d.firstToken = n;
+      drawFirst();
+    };
     ed.append(el("label", "", t("Slow to start")), fw);
     drawFirst();
     // every member busy at once: the agent told, or the members asked
