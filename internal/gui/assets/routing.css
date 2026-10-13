@@ -387,6 +387,9 @@ button.rt-session { cursor: pointer; }
 /* a pattern the group finds models by, and how many it matches now */
 .rt-group .mem.pat code, .rt-pats code { font: var(--code-style, normal) 500 11px/1.5 var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); color: var(--fg-2); }
 .rt-group .mem.pat.none, .rt-pats .fbrow.none small { color: var(--amber); }
+/* a classifier that failed (#1929): a dot, never a stripe */
+.rt-group .mem.clsfail { color: var(--amber); }
+.rt-group .mem.clsfail .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; }
 .rt-patadd { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
 .rt-patadd input { flex: 1; min-width: 0; }
 .rt-group .tags { display: flex; gap: 4px; flex: none; }

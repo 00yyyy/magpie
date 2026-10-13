@@ -3789,6 +3789,16 @@
       line.title = p.models ? t("Every model this pattern matches is in the group, as providers list them") : t("No model magpie serves matches this pattern now");
       main.append(line);
     }
+    // its classifier couldn't say the last time it was asked (#1929,
+    // versun): said here, not only in each request's details, since its
+    // rules with an intent match nothing until it answers
+    const cf = g.classifierFailed;
+    if (cf && typeof cf.error === "string" && cf.error) {
+      const line = el("div", "mem clsfail");
+      line.append(el("i", "dot"), el("span", "", t("Classifier failed {when}: {error}", { when: ago(cf.at), error: cf.error })));
+      line.title = t("{by} couldn't say which intent or effort a turn is the last time it was asked: {error}. Until it answers, no rule with an intent matches and turns reason as the agent asked. Each request's details say what it was asked.", { by: g.classifier || t("the classifier"), error: cf.error });
+      main.append(line);
+    }
     const m = GROUP_ROUTE_OPTS.find(([id]) => id === (g.routing || "")) || ROUTE_OPTS[0];
     const tags = el("span", "tags");
     tags.append(el("span", "tag", t(m[1])));
