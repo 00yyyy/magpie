@@ -403,6 +403,17 @@ var presets = []PresetDef{
 		Chat: "https://ollama.com/v1", Anthropic: "https://ollama.com",
 		Note:    "cloud models, with an API key",
 		Website: "https://docs.ollama.com/cloud", KeysURL: "https://ollama.com/settings/keys"},
+	// Nous Research's Nous Portal (#392): its own Hermes models and other
+	// makers', at inference-api.nousresearch.com/v1, OpenAI's chat
+	// completions with a Portal API key as a Bearer (Hermes Agent's
+	// nous-api provider, NOUS_API_KEY). Its /v1/messages serves only the
+	// anthropic/* models, so Claude Code's requests are translated to chat
+	// completions for every model. Model ids are vendor/model, as its
+	// /v1/models lists them.
+	{ID: "nous", Name: "Nous Portal", Icon: "nousresearch", Kind: KindVendor, Hosts: true,
+		Chat:    "https://inference-api.nousresearch.com/v1",
+		Note:    "Nous Research · Hermes and other models",
+		Website: "https://portal.nousresearch.com", KeysURL: "https://portal.nousresearch.com"},
 
 	{ID: "openrouter", Name: "OpenRouter", Icon: "openrouter", Kind: KindRelay, Catalog: "openrouter",
 		Chat: "https://openrouter.ai/api/v1", Anthropic: "https://openrouter.ai/api",
