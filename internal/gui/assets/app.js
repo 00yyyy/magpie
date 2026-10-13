@@ -23645,6 +23645,10 @@ addEventListener("resize", () => {
   if (!v || v.hidden) return;
   relaidUntil = performance.now() + 1000;
   relaid.disconnect();
+  // the view itself too: the header growing shorter as the page zooms out
+  // makes it taller with no part of it changing size, and it was left
+  // clamped to the shorter height, 6px short of its foot
+  relaid.observe(v);
   for (const c of v.children) if (!c.classList.contains("view-room")) relaid.observe(c);
 });
 // A part that grows or shrinks as it plays (the agents' scroll unrolling
