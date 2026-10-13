@@ -51,6 +51,15 @@ type Target struct {
 
 func home() string { h, _ := os.UserHomeDir(); return h }
 
+// grokDir is where Grok Build keeps its config.toml: $GROK_HOME, else ~/.grok
+// (internal/agent/grok.go grokIn).
+func grokDir() string {
+	if d := appdir.Getenv("GROK_HOME"); d != "" {
+		return d
+	}
+	return filepath.Join(home(), ".grok")
+}
+
 func claudeDir() string { return appdir.ClaudeDirIn(home()) }
 
 // claudeJSON is where Claude Code keeps its user-wide MCP servers: beside

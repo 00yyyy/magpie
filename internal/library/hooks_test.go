@@ -11,6 +11,141 @@ import (
 	"github.com/tidwall/jsonc"
 )
 
+// grokBlocks is the [[hooks.<ev>]] blocks a Grok config.toml has, as raw text.
+// It reads the file plainly (no new symbols) so the test that uses it still
+// compiles against the code before this change and fails there with a real
+// behavior failure, not a compile error.
+func grokBlocks(t *testing.T, path, ev string) []string {
+	t.Helper()
+	var out []string
+	lines := strings.Split(read(t, path), "\n")
+	header := "[[hooks." + ev + "]]"
+	child := "[[hooks." + ev + "."
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) != header {
+			continue
+		}
+		// the block runs to the next [[hooks.*]] header of another event,
+		// skipping this event's own child tables ([[hooks.<ev>.hooks]])
+		j := i + 1
+		for j < len(lines) {
+			s := strings.TrimSpace(lines[j])
+			if strings.HasPrefix(s, "[[hooks.") && !strings.HasPrefix(s, child) {
+				break
+			}
+			j++
+		}
+		for j-1 > i && strings.TrimSpace(lines[j-1]) == "" {
+			j--
+		}
+		out = append(out, strings.Join(lines[i:j], "\n")+"\n")
+		i = j - 1
+	}
+	return out
+}
+
+// Grok Build and Grok App keep hooks as [[hooks.<Event>]] tables in their
+// config.toml. A portable hook lands in each one's own event, with the tool
+// matcher under Grok's own tool name, beside the user's own blocks, and comes
+// out of it alone leaving the rest as it was.
+func TestHooksGrokConfigTables(t *testing.T) {
+	h := sandbox(t)
+	t.Setenv("GROK_APP_HOME", filepath.Join(h, "grok-app-data"))
+	build := filepath.Join(h, ".grok/config.toml")
+	app := filepath.Join(h, "grok-app-data", "agent-home/config.toml")
+	write(t, build, "# my grok config\nmodel = \"grok-4.7\"\n\n[[hooks.Stop]]\n  [[hooks.Stop.hooks]]\n  type = \"command\"\n  command = \"say my own done\"\n")
+	write(t, app, "[models]\ndefault = \"grok-4.7\"\n")
+
+	ok(t)(SaveHook("", Hook{Name: "bark", Event: "turn-end", Command: "curl -s https://api.day.app/KEY/done", Timeout: 10,
+		Agents: []string{"grok", "grok-app"}}))
+	ok(t)(SaveHook("", Hook{Name: "fmt", Event: "after-tool", Matcher: "edit", Command: "prettier --write .",
+		Agents: []string{"grok", "grok-app"}}))
+
+	barkBlk := "[[hooks.Stop]]\n  [[hooks.Stop.hooks]]\n  type = \"command\"\n  command = \"curl -s https://api.day.app/KEY/done\"\n  timeout = 10\n"
+	// Grok Build starts with the user's own Stop block; Grok App with none
+	if got := grokBlocks(t, build, "Stop"); len(got) != 2 || got[1] != barkBlk {
+		t.Errorf("grok build Stop: %q", got)
+	}
+	if got := grokBlocks(t, app, "Stop"); len(got) != 1 || got[0] != barkBlk {
+		t.Errorf("grok app Stop: %q", got)
+	}
+	for _, p := range []string{build, app} {
+		if got := grokBlocks(t, p, "PostToolUse"); len(got) != 1 || !strings.Contains(got[0], "matcher = \"search_replace\"") ||
+			!strings.Contains(got[0], "command = \"prettier --write .\"") {
+			t.Errorf("%s PostToolUse: %q", p, got)
+		}
+	}
+	// the user's own Stop block stayed first, the comment kept
+	if s := read(t, build); !strings.HasPrefix(s, "# my grok config\n") || !strings.Contains(s, "say my own done") {
+		t.Errorf("grok build config around the hooks:\n%s", s)
+	}
+
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bark HookView
+	for _, hh := range v.Hooks {
+		if hh.Name == "bark" {
+			bark = hh
+		}
+	}
+	if bark.Native["grok"] != "Stop" || bark.Native["grok-app"] != "Stop" {
+		t.Errorf("native events: %+v", bark.Native)
+	}
+
+	ok(t)(RemoveHooks([]string{"bark", "fmt"}))
+	// the user's own Stop block in Grok Build stays; Grok App's is empty again
+	if got := grokBlocks(t, build, "Stop"); len(got) != 1 || !strings.Contains(got[0], "say my own done") {
+		t.Errorf("grok build after removal, the user's own gone: %q", got)
+	}
+	if got := grokBlocks(t, app, "Stop"); len(got) != 0 {
+		t.Errorf("grok app after removal, left: %q", got)
+	}
+	for _, p := range []string{build, app} {
+		if got := grokBlocks(t, p, "PostToolUse"); len(got) != 0 {
+			t.Errorf("%s PostToolUse left: %q", p, got)
+		}
+	}
+	if v, _ := Read(nil); len(v.Hooks) != 0 {
+		t.Errorf("left in the library: %+v", v.Hooks)
+	}
+}
+
+// An agent's own event ("grok:Notification") is given to Grok Build and Grok
+// App together, since they run the one CLI — and an own event of another agent
+// is still refused for them.
+func TestHooksGrokOwnEventBoth(t *testing.T) {
+	h := sandbox(t)
+	t.Setenv("GROK_APP_HOME", filepath.Join(h, "grok-app-data"))
+	build := filepath.Join(h, ".grok/config.toml")
+	app := filepath.Join(h, "grok-app-data", "agent-home/config.toml")
+	write(t, build, "model = \"grok-4.7\"\n")
+	write(t, app, "[models]\n")
+	res, err := SaveHook("", Hook{Name: "idle", Event: "grok:Notification", Matcher: "idle_prompt", Command: "notify", Agents: []string{"grok", "grok-app"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Problems) != 0 {
+		t.Errorf("problems: %+v", res.Problems)
+	}
+	for _, p := range []string{build, app} {
+		got := grokBlocks(t, p, "Notification")
+		if len(got) != 1 || !strings.Contains(got[0], "matcher = \"idle_prompt\"") || !strings.Contains(got[0], "command = \"notify\"") {
+			t.Errorf("%s Notification: %q", p, got)
+		}
+	}
+	if _, err := SaveHook("", Hook{Name: "bad", Event: "codex:PermissionRequest", Command: "x", Agents: []string{"grok"}}); err == nil {
+		t.Error("grok accepted Codex's own event")
+	}
+	ok(t)(RemoveHooks([]string{"idle"}))
+	for _, p := range []string{build, app} {
+		if got := grokBlocks(t, p, "Notification"); len(got) != 0 {
+			t.Errorf("%s Notification left: %q", p, got)
+		}
+	}
+}
+
 // hooksOf is the list a hooks file has under hooks.<ev>, as JSON.
 func hooksOf(t *testing.T, path, ev string) []string {
 	t.Helper()
