@@ -281,7 +281,10 @@
       if (asked.length && unknown.length === asked.length) {
         status(t("Couldn't check for updates: {error}", { error: whyText(unknown[0]) }), "err", 8000);
       } else {
-        let msg = ups ? (ups === 1 ? t("1 plugin has an update") : t("{n} plugins have updates", { n: ups })) : t("Every plugin is up to date");
+        // with some not checked, "every plugin" isn't known to be up to
+        // date: only the ones checked are (#1942)
+        let msg = ups ? (ups === 1 ? t("1 plugin has an update") : t("{n} plugins have updates", { n: ups }))
+          : unknown.length ? t("No updates for the plugins checked") : t("Every plugin is up to date");
         if (unknown.length) {
           msg += " · " + t("{n} couldn't be checked: {error}", { n: unknown.length, error: whyText(unknown[0]) });
           status(msg, "warn", 8000);
@@ -297,13 +300,23 @@
   // why npm said nothing of a plugin, in the page's words; a git one's
   // repository, in its own
   function whyText(c) {
-    if (isGit(c.spec || "")) return t("Couldn't ask {repo} for its newest commit: {error}", { repo: c.spec, error: c.error || "" });
+    if (isGit(c.spec || "")) return t("Couldn't ask {repo} for its newest commit: {error}", { repo: c.spec, error: c.limited ? limitedText(c.limited) : c.error || "" });
     switch (c.why) {
       case "offline": return t("npm couldn't be reached — check your connection or proxy");
       case "limited": return t("npm is turning requests away for now (too many); try again in a few minutes");
       case "missing": return t("npm doesn't have it");
       default: return t("npm answered with an error: {error}", { error: c.error || "" });
     }
+  }
+  // GitHub's rate limit used up, in the page's words as the library's
+  // skill check says it: when it lifts, and how a token raises it (#1942)
+  function limitedText(l) {
+    const d = l.until ? new Date(l.until) : null;
+    const time = d && !isNaN(d) ? d.toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) : "";
+    if (l.token) return time ? t("GitHub's rate limit for your GitHub token is used up until {time}", { time })
+      : t("GitHub's rate limit for your GitHub token is used up for now");
+    return time ? t("GitHub allows 60 requests an hour without a token, used up until {time}. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.", { time })
+      : t("GitHub allows 60 requests an hour without a token, used up for now. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.");
   }
   const checkedAt = () => checked ? new Date(checked.at).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) : "";
 
