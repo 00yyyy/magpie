@@ -49,6 +49,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie ls                       list detected agents and their settings
   magpie <agent>                  show one agent
   magpie <agent> <model>          set an agent's model   e.g. magpie claude deepseek/deepseek-chat
+  magpie <agent> <field>          show one field   e.g. magpie codex effort
   magpie <agent> <field> <value>  set another field   e.g. magpie codex effort high
   magpie <agent> default          take magpie out: the agent back on what it had before
   magpie <agent> <field> default  that field back to the agent's own default
@@ -388,11 +389,19 @@ func run(args []string) error {
 	case 1:
 		return list([]*agent.Agent{a}, true, -1)
 	case 2:
-		if args[1] == "default" {
+		// default is magpie's word in any case, as an agent's name and a
+		// field's are: magpie codex DEFAULT wrote model = "DEFAULT"
+		if strings.EqualFold(args[1], "default") {
 			if a.Wired() {
 				return disconnect(a)
 			}
 			return set(a, a.Fields[0].Key, "")
+		}
+		// `magpie codex model`: a field's name alone asks what it is set to,
+		// where it was set as the model (model = "model"). Claude Code's
+		// opus is a model's name as well as a tier's, and stays the model
+		if f := a.Field(args[1]); f != nil && !modelAlias(a, args[1]) {
+			return showField(a, f)
 		}
 		// `magpie codex xhigh`: a bare value that belongs to a non-model field
 		// (effort levels, for instance) is routed there; anything else is a model.
@@ -401,10 +410,11 @@ func run(args []string) error {
 		}
 		return set(a, a.Fields[0].Key, args[1])
 	case 3:
-		if args[2] == "default" {
-			args[2] = ""
+		value := args[2]
+		if strings.EqualFold(value, "default") {
+			value = ""
 		}
-		return set(a, args[1], args[2])
+		return set(a, args[1], value)
 	}
 	return fmt.Errorf("too many arguments\n\n%s", usage)
 }
@@ -417,6 +427,12 @@ func set(a *agent.Agent, key, value string) error {
 			keys = append(keys, f.Key)
 		}
 		return fmt.Errorf("%s has no field %q (fields: %s)", a.Name, key, strings.Join(keys, ", "))
+	}
+	// a field's name is no value: magpie codex subagent effort ran Codex's
+	// subagents on a model called effort. Claude Code's opus is a model's
+	// name as well as a tier's
+	if g := a.Field(value); value != "" && g != nil && !modelAlias(a, value) {
+		return fieldAsValue(a, f, g, value)
 	}
 	value, err := a.Spell(f.Key, value)
 	if err != nil {
@@ -443,6 +459,41 @@ func set(a *agent.Agent, key, value string) error {
 			fmt.Println(muted.Render("  ↻ " + n))
 		}
 	}
+	return nil
+}
+
+// modelAlias says whether a word names the agent's model, in any case,
+// though a field goes by it too: Claude Code's opus, a tier's name as well
+func modelAlias(a *agent.Agent, w string) bool {
+	return slices.ContainsFunc(a.ModelAliases, func(m string) bool { return strings.EqualFold(m, w) })
+}
+
+// fieldAsValue refuses field g's name given as field f's value, for what
+// was meant: two words that are one field's label (magpie codex subagent
+// effort), a switch, which is turned on (Claude Code's ultracode), or the
+// field, which its name alone shows.
+func fieldAsValue(a *agent.Agent, f, g *agent.Field, value string) error {
+	for _, name := range []string{f.Key + " " + value, f.Key + "_" + value} {
+		if h := a.Field(name); h != nil {
+			return fmt.Errorf("%q is one field of %s's: magpie %s %s shows it", h.Label, a.Name, a.ID, h.Key)
+		}
+	}
+	if g.Options != nil {
+		if o := g.Options(a.Values()); len(o) == 1 && o[0].Value == "on" {
+			return fmt.Errorf("%q is a switch of %s's, not a value for its %s: magpie %s %s on", value, a.Name, f.Label, a.ID, g.Key)
+		}
+	}
+	return fmt.Errorf("%q is a field of %s's, not a value for its %s: magpie %s %s shows it", value, a.Name, f.Label, a.ID, g.Key)
+}
+
+// showField is `magpie <agent> <field>`: what the field is set to, as set
+// prints it
+func showField(a *agent.Agent, f *agent.Field) error {
+	v := f.Get()
+	if v == "" {
+		v = muted.Render("default")
+	}
+	fmt.Println(bold.Render(a.Name), muted.Render(f.Label), v)
 	return nil
 }
 

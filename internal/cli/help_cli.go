@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -107,6 +108,7 @@ func agentHelp(a *agent.Agent) string {
 		return b.String()
 	}
 	fmt.Fprintf(&b, "  magpie %s <model>          set its model   (magpie models %s lists them)\n", id, id)
+	fmt.Fprintf(&b, "  magpie %s <field>          show one field\n", id)
 	fmt.Fprintf(&b, "  magpie %s <field> <value>  set another field\n", id)
 	fmt.Fprintf(&b, "  magpie %s default          take magpie out: back on what it had before\n", id)
 	fmt.Fprintf(&b, "  magpie %s <field> default  that field back to its own default\n", id)
@@ -115,6 +117,20 @@ func agentHelp(a *agent.Agent) string {
 		keys = append(keys, f.Key)
 	}
 	fmt.Fprintf(&b, "\nfields: %s\n", strings.Join(keys, ", "))
+	// Claude Code's tiers are named as its model's aliases are
+	var both []string
+	for _, f := range a.Fields {
+		if slices.Contains(a.ModelAliases, f.Key) {
+			both = append(both, f.Key)
+		}
+	}
+	if n := len(both); n > 0 {
+		names := both[0]
+		if n > 1 {
+			names = strings.Join(both[:n-1], ", ") + " and " + both[n-1]
+		}
+		fmt.Fprintf(&b, "  %s alone name the %s: magpie %s %s sets its %s to %s\n", names, a.Fields[0].Label, id, both[0], a.Fields[0].Label, both[0])
+	}
 	return b.String()
 }
 
