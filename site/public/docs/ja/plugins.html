@@ -407,6 +407,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     validate: (v) =&gt; (/^t-/.test(v) ? undefined : <span class="s">"Starts with t-"</span>) },
 ]</pre>
     </div>
+    <p><code>type: "password"</code> の質問は <code>text</code> と同じですが、入力が表示されません。アプリではマスクされた入力欄、ターミナルの <code>magpie plugin login</code> ではエコーなしです。トークンや個人アクセストークン（PAT）に使います。magpie 独自の型で、OpenCode にあるのは <code>text</code> と <code>select</code> だけです。</p>
     <h3>アカウント</h3>
     <ul>
       <li><b>保存場所。</b>ひとつのプロバイダに複数回サインインできます。最初のアカウントは OpenCode と同じくプロバイダの id で保存されます。それ以外は <code>id#xxxxxx</code> で保存されます。</li>

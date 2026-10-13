@@ -11968,7 +11968,9 @@ function renderPluginAsk(sub) {
   const own = (way.label || "").trim();
   const label = key ? (own && own.toLowerCase() !== "api key" ? own : t("{name} API key", { name: sub.name })) : q.message;
   tt.append(el("span", "n", label));
-  const inp = input(flow.value || "", key ? (way.placeholder || "") : (q.placeholder || ""), key ? "password" : "text");
+  // a key, and a question the plugin marks "password" (a token, #1982),
+  // are typed unseen
+  const inp = input(flow.value || "", key ? (way.placeholder || "") : (q.placeholder || ""), key || q.type === "password" ? "password" : "text");
   inp.setAttribute("aria-label", label);
   inp.autocomplete = "off";
   inp.disabled = !!flow.busy;

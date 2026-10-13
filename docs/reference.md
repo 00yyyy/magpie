@@ -853,7 +853,9 @@ OpenCode ignores:
   field, as OpenCode's dialog does (one that only says "API key" reads
   "<provider> API key"), and its `placeholder` is the hint inside the field
   (and after the question in `magpie plugin login`). The method's `prompts`
-  are asked first, as in OpenCode, and reach `authorize(inputs)`.
+  are asked first, as in OpenCode, and reach `authorize(inputs)`. A prompt of
+  `type: "password"` (magpie's own; OpenCode has `text` and `select`) is typed unseen:
+  a masked field in the app, no echo in `magpie plugin login` (#1982).
 
 ```js
 export const LemonPlugin = async () => ({

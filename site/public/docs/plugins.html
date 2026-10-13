@@ -407,6 +407,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     validate: (v) =&gt; (/^t-/.test(v) ? undefined : <span class="s">"Starts with t-"</span>) },
 ]</pre>
     </div>
+    <p>A <code>type: "password"</code> question is a <code>text</code> one typed unseen: a masked field in the app, and no echo in <code>magpie plugin login</code> on a terminal. Use it for a token or a personal access token. It is magpie’s own type: OpenCode’s are <code>text</code> and <code>select</code>.</p>
     <h3>Accounts</h3>
     <ul>
       <li><b>Where they are kept.</b> A provider can be signed in to more than once. The first account is kept under the provider’s id, as OpenCode keeps it. Others are kept under <code>id#xxxxxx</code>.</li>

@@ -618,7 +618,7 @@ func SignedIn(provider string) bool {
 
 // Prompt is a question a sign-in method asks before it starts.
 type Prompt struct {
-	Type        string `json:"type"` // text, select
+	Type        string `json:"type"` // text, select, password (text typed unseen, #1982)
 	Key         string `json:"key"`
 	Message     string `json:"message"`
 	Placeholder string `json:"placeholder,omitempty"`
