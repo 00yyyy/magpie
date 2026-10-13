@@ -16142,6 +16142,20 @@ function panelQuotaFocus(id) {
   requestAnimationFrame(focusQuotaCard);
 }
 
+// panelUseFocus is a total in the menu bar clicked: the Usage tab, at its
+// period
+function panelUseFocus(per) {
+  if (mode !== "panel" || !PANEL_USE_PERIODS.some(([id]) => id === per)) return;
+  const moved = per !== panelUsePeriod;
+  if (moved) {
+    panelUsePeriod = per;
+    panelUseDay = "";
+    try { localStorage.setItem("magpie.panelUsePeriod", per); } catch {}
+  }
+  setPanelTab("stats"); // which reads it again when what it read is old
+  if (moved && panelTab === "stats") loadPanelUse().catch(() => {});
+}
+
 if (mode === "panel") {
   const tabs = $("#ptabs");
   tabs.hidden = false;
@@ -22023,15 +22037,17 @@ function renderTrayUsage(s, keep) {
   $("#trayUsageRow").hidden = web;
   if (web) return;
   const mac = document.body.classList.contains("mac");
-  $("#trayUsageSub").textContent = mac ? t("Show your subscriptions' allowances beside magpie's icon in the menu bar, side by side, refreshed every few minutes")
-    : t("Show your subscriptions' allowances when pointing at magpie's tray icon, refreshed every few minutes");
+  $("#trayUsageSub").textContent = mac ? t("Show your subscriptions' allowances, or the tokens and cost of today or the last 7 days, beside magpie's icon in the menu bar, side by side, refreshed every few minutes")
+    : t("Show your subscriptions' allowances, or the tokens and cost of today or the last 7 days, when pointing at magpie's tray icon, refreshed every few minutes");
   const ids = s.trayUsages || (s.trayUsage ? [s.trayUsage] : []);
   const pill = el("button", "proto pick" + (ids.length ? " set" : ""));
   pill.type = "button";
   const paint = () => {
     const card = (quotas || []).find((q) => trayCardID(q) === ids[0] || q.provider + IN_USE === ids[0]);
-    pill.replaceChildren(el("span", "", !ids.length ? t("Off") : ids.length > 1 ? t("{n} subscriptions", { n: ids.length })
-      : card ? card.name : ids[0].split("|")[0]), svg(CHEV, 11, 1.6));
+    const total = TRAY_TOTALS.find(([v]) => v === ids[0]);
+    pill.replaceChildren(el("span", "", !ids.length ? t("Off")
+      : ids.length > 1 ? ids.some((id) => TRAY_TOTALS.some(([v]) => v === id)) ? t("{n} shown", { n: ids.length }) : t("{n} subscriptions", { n: ids.length })
+      : total ? t(total[1]) : card ? card.name : ids[0].split("|")[0]), svg(CHEV, 11, 1.6));
   };
   paint();
   if (ids.length === 1 && !quotas) loadQuotas().then(paint);
@@ -22054,6 +22070,9 @@ function renderTrayUsage(s, keep) {
         opts.push({ v: q.provider + IN_USE, name: q.name, note: "Account in use" });
       opts.push({ v: trayCardID(q), name: q.name, note: [q.plan, q.alias, q.user].filter(Boolean).join(" · ") });
     }
+    // magpie's own count of every agent's requests, as the Usage page's
+    // Overview has it: tokens over cost (#1984)
+    for (const [v, name] of TRAY_TOTALS) opts.push({ v, name, note: "Every agent's, as the Usage page counts them" });
     // one ticked that isn't there now (signed out, or not answering) stays
     // to be unticked
     for (const id of ids) if (!opts.some((o) => o.v === id)) opts.push({ v: id, name: id.split("|")[0], note: id.endsWith(IN_USE) ? "Account in use" : id.split("|")[1] || "" });
@@ -22088,6 +22107,8 @@ function renderTrayUsage(s, keep) {
     (v) => savePrefs({ ...keep, trayNoBird: v === "off" })));
 }
 const TRAY_EVERY = [1, 3, 5, 10, 30];
+// the totals the menu bar can show beside the allowances (gui.trayTotal)
+const TRAY_TOTALS = [["usage:today", "Tokens and cost today"], ["usage:7d", "Tokens and cost, last 7 days"]];
 // how often magpie checks for updates by itself, in minutes (settings.UpdateEveries)
 const UPDATE_EVERY = [30, 60, 360, 1440];
 
@@ -25419,6 +25440,9 @@ if (mode === "window" && params.get("view") === "usage") {
   // An explicit destination takes precedence over the remembered tab.
   const tab = params.get("tab");
   if (tab === "requests" || tab === "usage") usageTab = tab;
+  // a total in the menu bar opens the Overview at its period
+  const per = params.get("period");
+  if (PERIODS.some(([id]) => id === per)) period = per;
   quotaFocus = usageTab === "usage" ? (params.get("card") || params.get("provider") || "") : "";
   quotaFocusUntil = performance.now() + 5000;
   ledProvider = params.get("provider") || "";
@@ -25428,7 +25452,7 @@ if (mode === "window" && params.get("view") === "usage") {
   const v = params.get("via") || "";
   ledVia = v === "through" || v === "direct" || v === "reported" ? v : "";
   const u = new URL(location.href);
-  for (const k of ["tab", "provider", "agent", "computer", "card", "purpose", "via"]) u.searchParams.delete(k);
+  for (const k of ["tab", "provider", "agent", "computer", "card", "purpose", "via", "period"]) u.searchParams.delete(k);
   history.replaceState(null, "", u);
 }
 navHides(); // the pages built-in plugins switched off have, from boot.js
