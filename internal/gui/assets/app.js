@@ -19638,10 +19638,17 @@ function sessSums(list, key) {
 }
 
 // sessLevels grades values 0 (none) to 4 by the quartiles of those above 0,
-// as a calendar of contributions does
+// as a calendar of contributions does. Under eight such values a quartile
+// is one value or none, so two days 2% apart could be two shades apart and
+// one twice another the same (#1921): a few are graded by their share of the
+// busiest instead.
 function sessLevels(values) {
   const nz = values.filter((v) => v > 0).sort((a, b) => a - b);
   if (!nz.length) return () => 0;
+  if (nz.length < 8) {
+    const most = nz[nz.length - 1];
+    return (v) => v <= 0 ? 0 : Math.min(4, Math.max(1, Math.ceil(4 * v / most - 1e-9)));
+  }
   const q = (p) => nz[Math.min(nz.length - 1, Math.floor(p * nz.length))];
   const [a, b, c, top] = [q(0.25), q(0.5), q(0.75), nz[nz.length - 1]];
   return (v) => v <= 0 ? 0 : v >= top ? 4 : v <= a ? 1 : v <= b ? 2 : v <= c ? 3 : 4;
