@@ -1454,19 +1454,33 @@ func removeSkill(l *Library, name, stamp string) error {
 // the library's by that name for the library's: the agent's folder is kept
 // aside with the backups, and the library's linked in its place.
 func UseLibrarySkill(name, agentID string) (*Result, error) {
+	return UseLibrarySkills([]string{name}, agentID)
+}
+
+// UseLibrarySkills is UseLibrarySkill for several of one agent's skills at
+// once, as the Library's warning settles them together (#1896). Claude
+// Desktop's own skills (Anthropic's built in, or made there) aren't put
+// aside: they are listed in its manifest, not only a folder, so only
+// KeepAgentSkills settles those.
+func UseLibrarySkills(names []string, agentID string) (*Result, error) {
 	return change(func(l *Library) error {
-		s, t, err := ownSkill(l, name, agentID)
-		if err != nil {
-			return err
-		}
-		p := filepath.Join(t.Skills, name)
-		if _, err := os.Lstat(p); err == nil && !ours(p, name) && realDir(p) != realDir(skillDir(name)) {
-			if _, err := setAside(t.Agent.ID, p); err != nil {
+		for _, name := range names {
+			s, t, err := ownSkill(l, name, agentID)
+			if err != nil {
 				return err
 			}
-		}
-		if !slices.Contains(s.Agents, t.Agent.ID) && !slices.ContainsFunc(sharing(t), func(o string) bool { return slices.Contains(s.Agents, o) }) {
-			s.Agents = set(s.Agents, t.Agent.ID, true)
+			if len(t.Desktop) > 0 {
+				return fmt.Errorf("Claude Desktop keeps its own %s: it can't be put aside for the library's, only kept", name)
+			}
+			p := filepath.Join(t.Skills, name)
+			if _, err := os.Lstat(p); err == nil && !ours(p, name) && realDir(p) != realDir(skillDir(name)) {
+				if _, err := setAside(t.Agent.ID, p); err != nil {
+					return err
+				}
+			}
+			if !slices.Contains(s.Agents, t.Agent.ID) && !slices.ContainsFunc(sharing(t), func(o string) bool { return slices.Contains(s.Agents, o) }) {
+				s.Agents = set(s.Agents, t.Agent.ID, true)
+			}
 		}
 		return nil
 	})
@@ -1476,13 +1490,21 @@ func UseLibrarySkill(name, agentID string) (*Result, error) {
 // the library no longer gives it that skill (nor any agent that reads the
 // very same folder).
 func KeepAgentSkill(name, agentID string) (*Result, error) {
+	return KeepAgentSkills([]string{name}, agentID)
+}
+
+// KeepAgentSkills is KeepAgentSkill for several of one agent's skills at
+// once (#1896).
+func KeepAgentSkills(names []string, agentID string) (*Result, error) {
 	return change(func(l *Library) error {
-		s, t, err := ownSkill(l, name, agentID)
-		if err != nil {
-			return err
-		}
-		for _, id := range append(sharing(t), t.Agent.ID) {
-			s.Agents = set(s.Agents, id, false)
+		for _, name := range names {
+			s, t, err := ownSkill(l, name, agentID)
+			if err != nil {
+				return err
+			}
+			for _, id := range append(sharing(t), t.Agent.ID) {
+				s.Agents = set(s.Agents, id, false)
+			}
 		}
 		return nil
 	})

@@ -544,38 +544,88 @@
   // only its own item's, so an agent's instructions, its MCP file, a
   // project or a skill that wouldn't update were said once in a toast
   // ("see Library") and shown nowhere.
+  // Each is listed on the tab it is about; another tab says only how many
+  // wait where, with a button to go there: Claude Desktop's own skills
+  // listed one by one on the MCP servers tab read as duplicated servers
+  // (#1896). An agent's own skills in the library's way are one row for
+  // the agent, settled together, not a write that failed: Try again, which
+  // can't change them, is offered only beside a write that did fail.
   function problemsCard() {
     const list = lib.problems || [];
     if (!list.length) return null;
+    const here = list.filter((p) => !problemTab(p.what) || problemTab(p.what) === tab);
+    const away = {};
+    for (const p of list) if (!here.includes(p)) away[problemTab(p.what)] = (away[problemTab(p.what)] || 0) + 1;
+    const owns = new Map(); // agent → its own skills by the library's names
+    const rest = [];
+    for (const p of here) {
+      if (p.own && p.what.startsWith("skill:") && p.agent) {
+        if (!owns.has(p.agent)) owns.set(p.agent, []);
+        owns.get(p.agent).push(p.what.slice("skill:".length));
+      } else rest.push(p);
+    }
     const card = el("div", "lib-problems");
     card.setAttribute("role", "status");
     const ttl = el("div", "lib-problems-head");
-    const again = button(t("Try again"), "action", () => change("all/sync", {}));
-    again.title = t("Writes the library into every agent again");
-    ttl.append(el("span", "lib-problems-dot"), el("b", "", t("Some of the Library couldn't be written")), el("span", "grow"), again);
+    const failed = rest.length || list.some((p) => !here.includes(p) && !p.own);
+    ttl.append(el("span", "lib-problems-dot"), el("b", "", failed ? t("Some of the Library couldn't be written") : t("Some agents have skills of their own by the library's names")), el("span", "grow"));
+    if (failed) {
+      const again = button(t("Try again"), "action", () => change("all/sync", {}));
+      again.title = t("Writes the library into every agent again");
+      ttl.append(again);
+    }
+    card.append(ttl);
     const ul = el("ul");
-    for (const p of list) {
+    for (const p of rest) {
       const li = el("li");
       const who = p.what.startsWith("project:") ? tilde(p.agent) : p.agent ? nameOf(p.agent) : "";
       if (who) li.append(el("b", "", who), el("span", "lib-problems-sep", " · "));
-      // an agent's own skill in the library's way is settled right here:
-      // the library's in its place (the agent's kept aside), or the agent's
-      const own = p.own && p.what.startsWith("skill:") && p.agent;
-      const name = own && p.what.slice("skill:".length);
-      li.append(el("span", "", problemWhat(p.what)), el("span", "lib-problems-err", own ? t("{agent} has a skill of its own called {name}, not the same as the library's", { agent: who, name }) : p.error));
-      if (own) {
-        const fix = el("div", "lib-problems-fix");
-        const use = button(t("Use the library's"), "action", () => change("skills/use-library", { name, agent: p.agent }, t("{agent} has the library's {name} now; its own is kept with the backups", { agent: who, name })));
-        use.title = t("Sets {agent}'s own {name} aside with the backups and gives it the library's in its place", { agent: who, name });
-        const keep = button(t("Keep {agent}'s", { agent: who }), "action", () => change("skills/keep-own", { name, agent: p.agent }, t("{agent} keeps its own {name}", { agent: who, name })));
-        keep.title = t("{agent} keeps its own {name}, and the library no longer gives it this skill", { agent: who, name });
-        fix.append(use, keep);
-        li.append(fix);
-      }
+      li.append(el("span", "", problemWhat(p.what)), el("span", "lib-problems-err", p.error));
       ul.append(li);
     }
-    card.append(ttl, ul);
+    // an agent's own skills in the library's way are settled right here:
+    // the library's in their place (the agent's kept aside), or the agent's
+    for (const [id, names] of owns) {
+      const li = el("li", "lib-problems-own");
+      const who = nameOf(id), name = names.join(", ");
+      const one = names.length === 1;
+      li.append(el("b", "", who), el("span", "lib-problems-sep", " · "), el("span", "", one ? t("Skill {name}", { name }) : t("Skills {names}", { names: name })));
+      // Claude Desktop's are Anthropic's built in or made in Desktop, listed
+      // in its manifest: kept, never put aside for the library's
+      const desktop = id === "claude-desktop";
+      li.append(el("span", "lib-problems-err", desktop
+        ? (one ? t("Claude Desktop has its own {name}, so it doesn't get the library's", { name }) : t("Claude Desktop has its own of these, so it doesn't get the library's"))
+        : (one ? t("{agent} has a skill of its own called {name}, not the same as the library's", { agent: who, name }) : t("{agent} has skills of its own by these names, not the same as the library's", { agent: who }))));
+      const body = one ? { name: names[0], agent: id } : { names, agent: id };
+      const fix = el("div", "lib-problems-fix");
+      if (!desktop) {
+        const use = button(t("Use the library's"), "action", () => change("skills/use-library", body, one ? t("{agent} has the library's {name} now; its own is kept with the backups", { agent: who, name }) : t("{agent} has the library's {names} now; its own are kept with the backups", { agent: who, names: name })));
+        use.title = one ? t("Sets {agent}'s own {name} aside with the backups and gives it the library's in its place", { agent: who, name }) : t("Sets {agent}'s own {names} aside with the backups and gives it the library's in their place", { agent: who, names: name });
+        fix.append(use);
+      }
+      const keep = button(t("Keep {agent}'s", { agent: who }), "action", () => change("skills/keep-own", body, one ? t("{agent} keeps its own {name}", { agent: who, name }) : t("{agent} keeps its own {names}", { agent: who, names: name })));
+      keep.title = one ? t("{agent} keeps its own {name}, and the library no longer gives it this skill", { agent: who, name }) : t("{agent} keeps its own {names}, and the library no longer gives it these skills", { agent: who, names: name });
+      fix.append(keep);
+      li.append(fix);
+      ul.append(li);
+    }
+    if (ul.childElementCount) card.append(ul);
+    const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks") };
+    const others = Object.keys(away).filter((k) => k in tabNames);
+    if (others.length) {
+      const more = el("div", "lib-problems-away");
+      for (const k of others) {
+        const go = button(t("{tab}: {n} more", { n: away[k], tab: tabNames[k] }), "action", () => openTab(k));
+        go.dataset.tab = k;
+        more.append(go);
+      }
+      card.append(more);
+    }
     return card;
+  }
+  // the tab a problem is about; "" is one shown on every tab
+  function problemTab(what) {
+    return { instructions: "instructions", mcp: "mcp", skill: "skills", skills: "skills", project: "skills", hook: "hooks", hooks: "hooks" }[what.split(":")[0]] || "";
   }
   function problemWhat(what) {
     const [kind, ...rest] = what.split(":");
@@ -655,6 +705,16 @@
     return box;
   }
 
+  function openTab(id) {
+    tab = id;
+    try { localStorage.setItem("magpie.libTab", id); } catch {}
+    // RTK's count read afresh each time its tab is opened: an agent run
+    // since adds to it (#741); the page keeps the last one until then
+    if (id === "rtk" && rtk) loadRTK();
+    if (!lib) return page.querySelector(":scope > .lib-skel")?.replaceWith(skeleton(id));
+    render(); syncLists();
+  }
+
   // the tabs and the Library folder; without the library yet (lib is null
   // while it loads) the tabs have no counts and the folder waits
   function libHead(counts) {
@@ -666,15 +726,7 @@
       ["skills", t("Skills") + n("skills")],
       ["hooks", t("Hooks") + n("hooks")],
       ["rtk", "RTK"],
-    ], tab, (id) => {
-      tab = id;
-      try { localStorage.setItem("magpie.libTab", id); } catch {}
-      // RTK's count read afresh each time its tab is opened: an agent run
-      // since adds to it (#741); the page keeps the last one until then
-      if (id === "rtk" && rtk) loadRTK();
-      if (!lib) return page.querySelector(":scope > .lib-skel")?.replaceWith(skeleton(id));
-      render(); syncLists();
-    });
+    ], tab, openTab);
     tabs.classList.add("lib-tabs");
     head.append(tabs);
     // the buttons keep together at the end, on a line of their own when the

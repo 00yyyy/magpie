@@ -175,6 +175,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-problems-sep { color: var(--muted); }
 .lib-problems-err { display: block; color: var(--fg-2); font: var(--code-style, normal) var(--code-weight, 400) 11px var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); margin-top: 1px; }
 .lib-problems-fix { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.lib-problems-away { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0 15px; }
 
 /* agents a server or skill is given to: an icon each, lit when it has it */
 .lib-agents { display: flex; flex-wrap: wrap; gap: 3px; flex: none; justify-content: flex-end; max-width: 50%; }

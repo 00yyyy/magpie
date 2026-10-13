@@ -518,11 +518,11 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		case "skills/remove-found-some":
 			res, err = library.RemoveFoundSkills(in.Names)
 		case "skills/use-library":
-			res, err = library.UseLibrarySkill(in.Name, in.Agent)
+			res, err = library.UseLibrarySkills(oneOrMore(in.Name, in.Names), in.Agent)
 		case "skills/how":
 			res, err = library.SetSkillHow(in.Agent, in.How)
 		case "skills/keep-own":
-			res, err = library.KeepAgentSkill(in.Name, in.Agent)
+			res, err = library.KeepAgentSkills(oneOrMore(in.Name, in.Names), in.Agent)
 		case "market/server":
 			res, err = library.InstallServer(in.ID, in.Values, in.Agents)
 		case "market/skill":
@@ -563,4 +563,13 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, v)
 	})
+}
+
+// oneOrMore is the skills an agent's own are settled for: the several the
+// Library's warning sends for one agent together (#1896), or the one.
+func oneOrMore(name string, names []string) []string {
+	if len(names) > 0 {
+		return names
+	}
+	return []string{name}
 }

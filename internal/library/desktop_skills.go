@@ -296,10 +296,12 @@ func (l *Library) syncDesktopSkills(t *Target, res *Result) {
 			}
 			// one of Desktop's own (built in, or made there) by that name
 			// stays, the library's left out; magpie's own entry, its folder
-			// gone, gets the folder back
+			// gone, gets the folder back. It is the agent's own, which the
+			// page settles by keeping Desktop's (#1896), not a write that
+			// failed and might work if tried again.
 			_, err := os.Lstat(p)
 			if err == nil || manifestEntry(raw, s.Name) != "" && !slices.Contains(prior, s.Name) {
-				res.Problems = append(res.Problems, Problem{Agent: id, What: "skill:" + s.Name,
+				res.Problems = append(res.Problems, Problem{Agent: id, What: "skill:" + s.Name, Own: true,
 					Error: fmt.Sprintf("Claude Desktop already has a skill of its own called %s", s.Name)})
 				continue
 			}
