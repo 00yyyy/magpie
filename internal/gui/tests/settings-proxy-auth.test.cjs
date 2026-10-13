@@ -40,8 +40,17 @@ function server(lang, posts, proxy = "") {
   };
 }
 
+const labels = {
+  en: { user: "Username (optional)", pass: "Password (optional)", custom: "Custom", save: "Save", off: "Off", auto: "Auto", saved: "Saved" },
+  zh: { user: "用户名（可选）", pass: "密码（可选）", custom: "自定义", save: "保存", off: "关闭", auto: "自动", saved: "已保存" },
+  "zh-TW": { user: "使用者名稱（選填）", pass: "密碼（選填）", custom: "自定義", save: "儲存", off: "關閉", auto: "自動", saved: "已儲存" },
+  ja: { user: "ユーザー名（任意）", pass: "パスワード（任意）", custom: "カスタム", save: "保存", off: "オフ", auto: "自動", saved: "保存しました" },
+  de: { user: "Benutzername (optional)", pass: "Passwort (optional)", custom: "Benutzerdefiniert", save: "Speichern", off: "Aus", auto: "Automatisch", saved: "Gespeichert" },
+};
+
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const lang of ["en", "zh"]) {
+  for (const lang of Object.keys(labels)) {
+    const l = labels[lang];
     test(`${engine} ${lang}: optional SOCKS credentials in settings`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
@@ -54,19 +63,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=settings&tab=network");
       const box = page.locator("#proxySegs");
       const address = box.locator("input.proxy");
-      const user = box.getByRole("textbox", { name: lang === "zh" ? "用户名（可选）" : "Username (optional)", exact: true });
-      const pass = box.getByLabel(lang === "zh" ? "密码（可选）" : "Password (optional)", { exact: true });
+      const user = box.getByRole("textbox", { name: l.user, exact: true });
+      const pass = box.getByLabel(l.pass, { exact: true });
       const saved = async (action, want) => {
         const count = posts.length;
         const response = page.waitForResponse((r) => r.url().endsWith("/api/settings") && r.request().method() === "POST");
         await action();
         await response;
-        await page.waitForFunction(() => document.querySelector("#status")?.textContent.includes("Saved") || document.querySelector("#status")?.textContent.includes("已保存"));
+        await page.waitForFunction((word) => document.querySelector("#status")?.textContent.includes(word), l.saved);
         assert.equal(posts.length, count + 1, "save once for the whole proxy");
         assert.equal(posts.at(-1).proxy, want);
       };
 
-      await box.getByRole("button", { name: lang === "zh" ? "自定义" : "Custom", exact: true }).click();
+      await box.getByRole("button", { name: l.custom, exact: true }).click();
       await address.fill("socks5://127.0.0.1:1080");
       await user.fill("a@b:/% 用户");
       await user.press("Tab");
@@ -122,7 +131,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await address.fill("socks5://name:p%FFss@127.0.0.1:1080");
       assert.equal(await address.inputValue(), "socks5://127.0.0.1:1080");
       assert.equal(await pass.inputValue(), "p%FFss");
-      await saved(() => box.getByRole("button", { name: lang === "zh" ? "保存" : "Save", exact: true }).click(), "socks5://name:p%FFss@127.0.0.1:1080");
+      await saved(() => box.getByRole("button", { name: l.save, exact: true }).click(), "socks5://name:p%FFss@127.0.0.1:1080");
 
       // HTTP and bare addresses still work; a hidden SOCKS login isn't attached.
       await address.fill("http://127.0.0.1:7890");
@@ -134,8 +143,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await address.fill("socks5://127.0.0.1:1080");
       await user.fill("unsaved-user");
       await pass.fill("unsaved-password");
-      await saved(() => box.getByRole("button", { name: lang === "zh" ? "关闭" : "Off", exact: true }).click(), "direct");
-      await saved(() => box.getByRole("button", { name: lang === "zh" ? "自动" : "Auto", exact: true }).click(), "");
+      await saved(() => box.getByRole("button", { name: l.off, exact: true }).click(), "direct");
+      await saved(() => box.getByRole("button", { name: l.auto, exact: true }).click(), "");
       assert.deepEqual(errors, []);
     });
   }
