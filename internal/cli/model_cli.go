@@ -300,7 +300,13 @@ func modelPrice(args []string) error {
 	if len(rest) == 0 {
 		pr, ok := provider.EffectivePrice(p.ID, model)
 		if !ok {
+			// a call to it counts at no cost until one is given: say how
+			// (#2052)
 			fmt.Println(muted.Render(id), faint.Render("· no price is known for it"))
+			fmt.Println(faint.Render("  · magpie model price " + typedRef(id) +
+				" <in>,<out>,<cache read>,<cache write> sets it, in USD per 1M tokens"))
+			fmt.Println(faint.Render("  · magpie model price " + typedRef(provider.AnyPriceKey(model)) +
+				" <in>,<out>,<cache read>,<cache write> sets it from every provider"))
 			return nil
 		}
 		fmt.Println(bold.Render(perMillion(pr)), muted.Render("· "+id))
@@ -322,6 +328,8 @@ func modelPrice(args []string) error {
 			from := "what its provider lists, else its maker's on models.dev"
 			if p.RemotePriced(model) {
 				from = "what the other magpie counts it at"
+			} else if c := p.EndpointCatalog(); c != "" {
+				from = "what models.dev's " + c + " lists at its endpoint, else its maker's"
 			}
 			fmt.Println(faint.Render("  · " + from + " · magpie model price " +
 				typedRef(id) + " <in>,<out>,<cache read>,<cache write> to change it"))

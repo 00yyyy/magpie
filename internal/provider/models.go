@@ -1593,8 +1593,12 @@ func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 			names = append(names, id)
 		}
 	}
+	cats := p.Catalogs()
+	if c := p.EndpointCatalog(); c != "" {
+		cats = []string{c}
+	}
 	for _, m := range names {
-		if pr, ok := catalog.PricedBy(priceCatalogs(p.Catalogs()), m); ok {
+		if pr, ok := catalog.PricedBy(priceCatalogs(cats), m); ok {
 			return pr, true
 		}
 		if pr, ok := catalog.PricedBy(makerPriceCatalogs(), m); ok {
@@ -1602,6 +1606,40 @@ func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 		}
 	}
 	return catalog.Price{}, false
+}
+
+// EndpointCatalog is the models.dev catalog a provider the user added by
+// its endpoint alone is priced from: the one models.dev says serves its
+// models at that address, when exactly one does (#2052, mengyianx: a
+// provider at AMD's own https://developer.amd.com.cn/radeon/api/v1 had no
+// price for Qwen3.8-27B, which models.dev's amd lists at $0 there, while
+// its maker sells no such model). Only a key's provider with no catalog
+// named counts: a catalog the user or a preset gave stands, and a
+// subscription's account is priced as its own code says. A plan's catalog
+// is never one: it lists what its membership charges per token, $0, not
+// what the model costs (membershipCatalogs).
+func (p Provider) EndpointCatalog() string {
+	if p.Account != nil || len(p.Catalogs()) > 0 {
+		return ""
+	}
+	var found []string
+	// the Anthropic base is kept as its root (normalize), where models.dev
+	// writes an Anthropic API's with its /v1
+	urls := []string{p.Chat, p.Responses, p.Anthropic, p.Gemini}
+	if p.Anthropic != "" {
+		urls = append(urls, p.Anthropic+"/v1")
+	}
+	for _, u := range urls {
+		for _, id := range catalog.AtEndpoint(u) {
+			if !slices.Contains(found, id) {
+				found = append(found, id)
+			}
+		}
+	}
+	if len(found) != 1 || strings.Contains(found[0], "-plan") || slices.Contains(membershipCatalogs, found[0]) {
+		return ""
+	}
+	return found[0]
 }
 
 // cursorFast is a Cursor id of a Grok model in its fast mode, at an effort

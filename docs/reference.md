@@ -955,7 +955,11 @@ on the site's Plugins page, under Agent plugins.
 
 A call is counted at its **effective price**: what you set for that provider
 and model if you did, otherwise what the provider's own catalogue lists, and
-otherwise what models.dev lists for the model's maker. Out of the box that
+otherwise what models.dev lists for the model's maker. A provider you added by
+its address, with no catalogue named, has for its own the one models.dev
+lists at that address (its `api`), when exactly one does and it isn't a
+plan's: a provider at `https://developer.amd.com.cn/radeon/api/v1` is priced
+from models.dev's `amd`, whatever you called it. Out of the box that
 last one is the whole story, and it is the wrong number for any provider that
 does not charge list price — a relay reselling at a discount or a multiplier
 is counted at whatever the model's maker charges. Say what a provider
@@ -978,6 +982,9 @@ the reply said answered, at the same provider, when that one has a price: a
 relay that sells `kimi-k3` as `moonshot-kimi-k3` answers as `kimi-k3`, so its
 calls are counted at `relay-a/kimi-k3`'s price. A model with a price of its
 own, `0` included, keeps it whatever its reply says.
+
+`magpie model price provider/model` says where a price came from, and for a
+model with none, the two commands that give it one.
 
 A call with no price at all is left out of a total's cost, never counted as
 free: the Usage page's sum says how many calls it couldn't price beside it
