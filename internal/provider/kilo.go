@@ -36,7 +36,7 @@ func KiloClient(h http.Header, key, session string) {
 	h.Set("User-Agent", "Kilo-Code/"+KiloVersion)
 	h.Set("X-KILOCODE-EDITORNAME", "Kilo CLI "+KiloVersion)
 	if session != "" {
-		id := openCodeID("ses", session)
+		id := openCodeSession(session)
 		h.Set("x-kilocode-mode", "code")
 		h.Set("X-KILOCODE-TASKID", id)
 		h.Set("x-session-affinity", id)
