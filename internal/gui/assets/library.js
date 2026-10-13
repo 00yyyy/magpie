@@ -1191,6 +1191,7 @@
     who.append(el("div", "sub", first ? first.replace(/^#+\s*/, "") : t("Empty")));
     const tags = el("div", "lib-tags");
     if (x.active) tags.append(tag(t("In use"), "", t("The agents switched on below read this set")));
+    if (x.file) tags.append(tag(t("Your file"), "", t("Kept in {path}, not in the library: edits there reach the agents, and Save writes there", { path: tilde(x.file) })));
     if (text !== x.text) tags.append(tag(t("Not saved yet"), "warn"));
     const chev = el("span", "chev");
     chev.append(svg(CHEV_R, 11, 1.7));
@@ -1217,13 +1218,25 @@
     ta.oninput = () => { texts[x.id] = ta.value; renderSaveBars(); };
     ta.onkeydown = (e) => { e.stopPropagation(); if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); saveInstructions(); } };
     autosize(ta, 150);
-    det.append(nm, ta);
+    det.append(nm);
+    if (x.file) {
+      // a set kept in a file of the user's own (~/.agents/AGENTS.md): what
+      // the page shows is that file, and Save writes to it
+      const where = el("div", "note lib-setfile");
+      where.append(t("Kept in") + " ", pathLink(x.file));
+      det.append(where);
+      // Droid and omp read ~/.agents/AGENTS.md themselves: given it by
+      // magpie too, they'd read it twice
+      const twice = /[\\/]\.agents[\\/]AGENTS\.md$/.test(x.file) ? lib.instructions.agents.filter((a) => a.on && ["droid", "omp"].includes(a.agent)) : [];
+      if (twice.length) det.append(el("p", "lib-aside lib-twice", t(twice.length > 1 ? "{agents} read this file themselves too: switch them off below so they don't read it twice." : "{agents} reads this file itself too: switch it off below so it doesn't read it twice.", { agents: twice.map((a) => a.name).join(", ") })));
+    }
+    det.append(ta);
     const acts = el("div", "lib-acts");
     if (!x.active) acts.append(button(t("Switch the agents to this set"), "action lib-use", () => pick.onclick({ stopPropagation() {} })));
     if (x.id !== "default") {
       // its text goes with it, so a second click says so and does it
       const sure = removingSet === x.id;
-      const rm = button(sure ? t("Remove {name} and its text", { name: setName(x) }) : t("Remove"), sure ? "primary danger-fill" : "action danger", () => {
+      const rm = button(sure ? (x.file ? t("Remove {name} — the file stays", { name: setName(x) }) : t("Remove {name} and its text", { name: setName(x) })) : t("Remove"), sure ? "primary danger-fill" : "action danger", () => {
         if (!sure) { removingSet = x.id; render(); return; }
         removingSet = null;
         delete texts[x.id];
@@ -1240,7 +1253,7 @@
   }
 
   function newSetRow() {
-    const row = el("div", "row lib-row lib-set");
+    const row = el("div", "row lib-row lib-set lib-setnew");
     const nm = input("", t("Name, e.g. Work"));
     nm.dataset.lib = "newset";
     nm.className = "lib-setname grow";
@@ -1252,7 +1265,9 @@
       // library does it)
       const inUse = (iv().sets || []).find((x) => x.active);
       const said = !inUse || (inUse.text || "").trim() ? t("{name} added — switch the agents to it when it's ready", { name }) : t("{name} added — the agents read it", { name });
-      if (await change("instructions/save", { create: { id, name } }, said)) {
+      const create = { id, name };
+      if (file && file.value.trim()) create.file = file.value.trim();
+      if (await change("instructions/save", { create }, said)) {
         addingSet = false;
         openSet = id;
         render();
@@ -1261,7 +1276,20 @@
     const cancel = () => { addingSet = false; render(); };
     nm.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") create(); else if (e.key === "Escape") cancel(); };
     queueMicrotask(() => nm.focus());
-    row.append(nm, button(t("Cancel"), "", cancel), button(t("Add"), "primary", create));
+    // a set can be kept in a file of the user's own instead, one that other
+    // tools keep or read too: ~/.agents/AGENTS.md (新v学员 on Discord)
+    let file = null;
+    const link = button(t("Keep in a file…"), "action lib-setlink", () => {
+      file = input("~/.agents/AGENTS.md", t("Full path of a Markdown file"));
+      file.value = "~/.agents/AGENTS.md";
+      file.dataset.lib = "newsetfile";
+      file.className = "lib-setname lib-setfile-in grow";
+      file.onkeydown = nm.onkeydown;
+      if (!nm.value.trim()) nm.value = "AGENTS.md";
+      link.replaceWith(file);
+      file.focus();
+    });
+    row.append(nm, link, button(t("Cancel"), "", cancel), button(t("Add"), "primary", create));
     return row;
   }
 

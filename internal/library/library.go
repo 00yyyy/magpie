@@ -77,6 +77,10 @@ type Instructions struct {
 type InstrSet struct {
 	ID   string `json:"id"`
 	Name string `json:"name"` // "" for the first, which the page calls Default
+	// File is a file of the user's own the set's text is kept in instead,
+	// read each time and written when the set is saved: one shared file
+	// such as ~/.agents/AGENTS.md, kept by hand or by another tool.
+	File string `json:"file,omitempty"`
 }
 
 // Applied is what magpie last wrote into one agent.

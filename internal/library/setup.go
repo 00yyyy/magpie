@@ -221,7 +221,7 @@ func Restore(s *Setup) (*Result, error) {
 			if err := b.keep("library", p); err != nil {
 				return err
 			}
-			if err := writeText(p, text); err != nil {
+			if err := l.putText(p, text); err != nil {
 				return err
 			}
 		}
