@@ -349,16 +349,17 @@ high. A floor never mixes into a measured speed: the Speed trend and
 A group's speed (a row of the Usage page's ranking, by model, provider or
 agent, its Output speed card, and the overview's lists) says how many
 replies it is of, by one rule: with replies whose speed was measured, their
-speed and how many they are (`125 tok/s (1)`, not beside "260 requests"
-alone); with rows that tell a floor, the least those wrote at and how many
-(`≥100 tok/s (30)`); with both, both, the measured first
-(`125 tok/s (1) · ≥50 tok/s (259)`), as a few measured replies may not
-stand for the rest and a floor is no measure; with neither, nothing. The
-Output speed card shows the measured speed as its figure and the floor
-under it. The tooltip says what each is of. A ranking by speed orders and
-bars a group by its measured speed, or its floor when it has none
-(`usage.Totals` `decode_n`, `floor_out`, `floor_ms`, `floor_n`;
-`usage.Row.Floor`).
+speed and how many they are (`62 tok/s · 2 timed replies`, not beside "260
+requests" alone); with rows that tell a floor, the least those wrote at and
+how many (`≥100 tok/s · 30 replies`); with both, both, the one of more
+replies first (`≥50 tok/s · 259 replies; 125 tok/s · 1 timed reply`), as a
+few measured replies may not stand for the rest; with neither, nothing.
+Counts are words, never a bare number in parentheses. The Output speed card
+shows the first as its figure, its count beside it, the other under it, and
+the mean wait for the first token on a line of its own with how many timed
+replies it is of. The tooltip says what each is of. A ranking by speed
+orders and bars a group by the figure it shows first (`usage.Totals`
+`decode_n`, `floor_out`, `floor_ms`, `floor_n`; `usage.Row.Floor`).
 
 It lists **accounts** too: each Codex, Claude or other subscription account's
 tokens and cost, by the account that actually answered — the one that took

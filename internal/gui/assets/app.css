@@ -1062,10 +1062,14 @@ body.window .field.solo { grid-column: auto; }
    narrow for both (#1623, fanbuz: "48 token/秒（781 次）" ran past it) */
 .led-strip .v.parts { white-space: normal; }
 .led-strip .v.parts > span { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+/* a figure's count after it, as a caption: "≥67 tok/s  181 replies" */
+.led-strip .v.parts > span + span { font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--muted); padding-top: 8px; }
 .led-strip .sub { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .led-strip .sub b { font-weight: 600; color: var(--fg-2); }
 /* a count on the Requests card that lists its requests */
 .led-strip .sub.jumps { white-space: normal; overflow: visible; }
+/* the wait for the first token and its count wrap rather than cut the count off */
+.led-strip .sub.ttft { white-space: normal; }
 .led-strip .led-jump { text-align: start; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 .led-strip .led-jump.bad { color: var(--red); }
 .led-strip .led-jump:hover, .led-strip .led-jump.on { text-decoration-style: solid; }

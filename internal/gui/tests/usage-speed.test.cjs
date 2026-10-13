@@ -96,8 +96,8 @@ function server(lang) {
 }
 
 const L = {
-  en: { speed: "Speed", kpi: "Output speed", fast: "75 tok/s", slow: "10 tok/s", all: "72 tok/s", first: "first token in 600 ms on average", sent: "Sent", hint: "Sent, Effort and the cache are in each row's details" },
-  zh: { speed: "速度", kpi: "输出速度", fast: "75 token/秒", slow: "10 token/秒", all: "72 token/秒", first: "首字平均 600 毫秒", sent: "发送模型", hint: "窗口较窄：发送模型、推理强度和缓存在每行的详情里" },
+  en: { speed: "Speed", kpi: "Output speed", fast: "75 tok/s", slow: "10 tok/s", all: "72 tok/s", first: "first token in 600 ms on average · 28 timed replies", sent: "Sent", hint: "Sent, Effort and the cache are in each row's details" },
+  zh: { speed: "速度", kpi: "输出速度", fast: "75 token/秒", slow: "10 token/秒", all: "72 token/秒", first: "首字平均 600 毫秒 · 28 次计时", sent: "发送模型", hint: "窗口较窄：发送模型、推理强度和缓存在每行的详情里" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {

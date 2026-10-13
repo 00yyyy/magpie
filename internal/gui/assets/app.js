@@ -17653,36 +17653,40 @@ const ledSpeed = (x) => x?.decode_ms > 0 ? (1000 * x.decode_out) / x.decode_ms :
 const ledFloor = (x) => x?.floor_ms > 0 ? (1000 * x.floor_out) / x.floor_ms : 0;
 // a group's speed as every ranking and the Output speed card say it, by one
 // rule (Fallmonkey on Discord): with replies whose speed was measured, their
-// speed and how many they are, "125 tok/s (1)", not beside "260 requests"
-// alone; with replies read from a session file that tell the least they
-// wrote at, that floor and how many, "≥100 tok/s (30)"; with both, both,
-// the measured first, "62 tok/s (2) · ≥71 tok/s (54)", as two replies are
-// too few to stand for 56 and a floor is no measure; else nothing. The
-// Requests tab says the same of each row: "125 tok/s" or "≥100 tok/s". v is
-// the figure a speed ranking orders by and bars: the measured speed when
-// there is one, else the floor. main is the first part, floor the second.
+// speed and how many they are, "125 tok/s · 1 timed reply", not beside "260
+// requests" alone; with replies read from a session file that tell the least
+// they wrote at, that floor and how many, "≥100 tok/s · 30 replies"; with
+// both, both, the one of more replies first, "≥71 tok/s · 54 replies; 62
+// tok/s · 2 timed replies", as two replies are too few to stand for 56; else
+// nothing. Counts are words, not a bare "(2)" only its tooltip explains. The
+// Requests tab says each row's alone: "125 tok/s" or "≥100 tok/s". v is the
+// figure a speed ranking orders by and bars, the first one's; main is the
+// first, other the second ("" with one).
 function ledGroupSpeed(x) {
   const v = ledSpeed(x), f = ledFloor(x), kv = x?.decode_n || 0, kf = x?.floor_n || 0;
   if (!v && !f) return null;
-  const say = (s, k) => k ? t("{n} tok/s ({k})", { n: ledNum(Math.round(s)), k: ledNum(k) }) : t("{n} tok/s", { n: ledNum(Math.round(s)) });
-  const measured = v ? say(v, kv) : "", floor = f ? "≥" + say(f, kf) : "";
+  const tok = (s) => t("{n} tok/s", { n: ledNum(Math.round(s)) });
+  const count = (k, timed) => !k ? "" : t(timed ? (k === 1 ? "{k} timed reply" : "{k} timed replies") : (k === 1 ? "{k} reply" : "{k} replies"), { k: ledNum(k) });
   const vTitle = !v || !kv ? "" : f ? t(kv === 1 ? "Measured on {k} reply, from its first token to its end" : "Measured on {k} replies, from their first token to their end", { k: ledNum(kv) })
     : t(kv === 1 ? "Measured on {k} reply, from its first token to its end; the others tell no speed" : "Measured on {k} replies, from their first token to their end; the others tell no speed", { k: ledNum(kv) });
   const fTitle = !f || !kf ? "" : t(kf === 1 ? "At least: {k} reply read from a session file, which doesn't say when its answer began, so time before that is counted too" : "At least: {k} replies read from session files, which don't say when their answers began, so time before that is counted too", { k: ledNum(kf) });
-  // main's parts: the speed and the replies it is of, so a narrow card can
-  // put the second under the first rather than run past its edge (#1623)
-  const parts = (s, k, pre) => {
-    const whole = pre + say(s, k), head = pre + t("{n} tok/s", { n: ledNum(Math.round(s)) });
-    return k && whole.startsWith(head) && whole.length > head.length ? [head, whole.slice(head.length)] : [whole];
-  };
-  return { v: v || f, text: [measured, floor].filter(Boolean).join(" · "), main: measured || floor, mainParts: v ? parts(v, kv, "") : parts(f, kf, "≥"), floor: measured ? floor : "", title: [vTitle, fTitle].filter(Boolean).join("\n") };
+  // each figure as its speed and its count, kept apart so a narrow card can
+  // put the count under the speed rather than run past its edge (#1623); the
+  // card sets the count as a caption, with no "·" to lead a wrapped line
+  const measured = v ? { s: v, head: tok(v), count: count(kv, true), title: vTitle } : null;
+  const floor = f ? { s: f, head: "≥" + tok(f), count: count(kf, false), title: fTitle } : null;
+  // the larger sample first; a tie keeps the measured one first
+  const [a, b] = measured && floor && kf > kv ? [floor, measured] : [measured || floor, measured && floor];
+  const say = (p) => p.count ? p.head + " · " + p.count : p.head;
+  const main = say(a), other = b ? say(b) : "";
+  return { v: a.s, text: other ? t("{a}; {b}", { a: main, b: other }) : main, main, mainParts: a.count ? [a.head, " " + a.count] : [a.head], other, title: [a.title, b?.title].filter(Boolean).join("\n") };
 }
 // their mean wait for the first token, 0 for none
 const ledTTFT = (x) => x?.timed > 0 ? x.ttft_ms / x.timed : 0;
 // a metric's value of a point or a share, as the chart counts it
 const ledValue = (m, x) => m === "speed" ? ledSpeed(x) : m === "cost" ? +x.cost || 0 : m === "calls" ? +x.calls || 0 : allTokens(x);
-// of a share in the ranking: a speed is what its row says, the floor of a
-// group none of whose replies was measured (ledGroupSpeed)
+// of a share in the ranking: a speed is what its row says first, the one of
+// more replies (ledGroupSpeed)
 const ledRankValue = (m, x) => m === "speed" ? ledGroupSpeed(x)?.v || 0 : ledValue(m, x);
 // of a point's part, which has its calls, tokens, cost and speed
 const ledPart = (m, x) => m === "speed" ? ledSpeed(x) : m === "cost" ? +x.cost || 0 : m === "calls" ? +x.calls || 0 : +x.tokens || 0;
@@ -18058,12 +18062,15 @@ function renderLedgerDash(l) {
   fill.style.width = (100 * rate).toFixed(1) + "%";
   meter.append(fill);
   hit.append(meter);
-  // how fast the streamed replies wrote, and how long they took to begin (#860)
-  // a floor beside a measured speed goes under it, the card's figure kept whole
+  // how fast the streamed replies wrote, and how long they took to begin (#860):
+  // the figure of more replies, its count beside it; the other under it; the
+  // wait for the first token on a line of its own, with how many it is of
+  // (Fallmonkey on Discord)
   const gs = ledGroupSpeed(l);
-  block("Output speed", gs ? gs.mainParts : "—",
-    line(...[ledTTFT(l) ? t("first token in {ms} on average", { ms: ledTook(ledTTFT(l)) }) : t("no streamed replies timed")].concat(gs?.floor ? [" · ", gs.floor] : [])),
+  const ttft = ledTTFT(l) ? t("first token in {ms} on average", { ms: ledTook(ledTTFT(l)) }) + " · " + t(l.timed === 1 ? "{k} timed reply" : "{k} timed replies", { k: ledNum(l.timed) }) : t("no streamed replies timed");
+  const speedCard = block("Output speed", gs ? gs.mainParts : "—", gs?.other ? line(gs.other) : null,
     "", [gs?.title, t("Output tokens a second after the first, over the streamed replies") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it") + ". " + t("No answer text: speed includes reasoning only when visible reasoning streamed; hidden reasoning has no speed")].filter(Boolean).join("\n"));
+  speedCard.append(Object.assign(line(ttft), { className: "sub ttft" }));
   drawLedTrend();
 }
 
