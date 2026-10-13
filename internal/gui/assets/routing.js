@@ -1128,12 +1128,15 @@
   // hueOf is the colour an agent's requests and answers fly in, and it is
   // marked with: its maker's own where it has one, else one of the rest
   // picked by its id, so it stays the same from one request to the next.
+  // None is red: red on this page is a failure, and an agent marked in it
+  // read as one (zhouatie on X: "openai" drew rose, its dot and wire red).
+  // routing-agent-hue-not-red.test.cjs holds every colour here away from it.
   const HUES = {
     claude: "#d97757", codex: "#6366f1", gemini: "#0ea5e9", copilot: "#a855f7", cursor: "#14b8a6", opencode: "#eab308",
-    crush: "#ec4899", goose: "#84cc16", pi: "#10b981", omp: "#f43f5e", omo: "#7c3aed", dsh: "#06b6d4", commandcode: "#f97316",
+    crush: "#ec4899", goose: "#84cc16", pi: "#10b981", omp: "#d946ef", omo: "#7c3aed", dsh: "#06b6d4", commandcode: "#f97316",
     mimocode: "#3b82f6", deveco: "#3c99cc",
   };
-  const SPARE = ["#8b5cf6", "#22c55e", "#e11d48", "#0891b2", "#ca8a04", "#db2777", "#2563eb", "#65a30d"];
+  const SPARE = ["#8b5cf6", "#22c55e", "#0d9488", "#0891b2", "#ca8a04", "#db2777", "#2563eb", "#65a30d"];
   function hueOf(id) {
     if (HUES[id]) return HUES[id];
     let h = 0;
