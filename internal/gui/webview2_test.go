@@ -35,6 +35,9 @@ func TestWebView2Notice(t *testing.T) {
 		if !strings.Contains(body, "https://developer.microsoft.com/microsoft-edge/webview2/") {
 			t.Errorf("%s: no download page in %q", lang, body)
 		}
+		if !strings.Contains(body, "winget install Microsoft.EdgeWebView2Runtime") {
+			t.Errorf("%s: no winget command in %q", lang, body)
+		}
 		if !strings.Contains(body, "magpie web") || !strings.Contains(body, "magpie tui") {
 			t.Errorf("%s: doesn't say what works without it: %q", lang, body)
 		}
