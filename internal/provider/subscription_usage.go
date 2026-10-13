@@ -127,6 +127,10 @@ type SubscriptionQuota struct {
 	// Resets are the rate-limit resets a Codex account holds, nil when it
 	// holds none (codex_resets.go).
 	Resets *ResetCredits `json:"resets,omitempty"`
+	// ResetsUsed are the Codex account's resets magpie spent, newest
+	// first, by itself or by hand (codex_resets_used.go): what the card
+	// says when one is gone and the user asks where
+	ResetsUsed []ResetUse `json:"resetsUsed,omitempty"`
 	// Held is set on a ChatGPT account the Codex app sends nothing for
 	// now (codexHeld): not on a window at 100% alone, which credits get
 	// past.

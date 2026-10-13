@@ -201,8 +201,14 @@ func (o ResetOutcome) Text() string {
 // user (the one Codex is signed in to when ""), starting its current
 // usage windows again: the one that runs out first, so none that would
 // last longer goes before it. It can't be undone: callers ask first. The
-// account's usage is read afresh after.
+// account's usage is read afresh after, and the use is kept as one made by
+// hand (ResetsUsed).
 func UseCodexReset(ctx context.Context, user string) (ResetOutcome, error) {
+	return useCodexReset(ctx, user, ResetUsedByHand)
+}
+
+// useCodexReset is UseCodexReset, the use kept as made for why.
+func useCodexReset(ctx context.Context, user, why string) (ResetOutcome, error) {
 	user, tok, accountID, err := codexUserToken(ViaLogin(ctx, "codex", user), user)
 	if err != nil {
 		return ResetOutcome{}, err
@@ -226,6 +232,7 @@ func UseCodexReset(ctx context.Context, user string) (ResetOutcome, error) {
 	StaleAllowance("codex", user)
 	if out.Code == "reset" {
 		renewedNow("codex", user)
+		noteResetUsed(user, why, out)
 	}
 	subscriptionUsageCache.Lock()
 	subscriptionUsageCache.at = time.Time{}

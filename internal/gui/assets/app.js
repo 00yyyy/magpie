@@ -16761,9 +16761,34 @@ function autoResetRow(q, cls) {
   const say = el("span", "ar-say");
   say.append(el("b", "", t("Auto-use resets:")), document.createTextNode(" " + t("when the week runs out, or before one expires")));
   say.title = autoResetTitle(on);
+  const used = resetsUsedLine(q);
+  if (used) say.append(used);
   row.dataset.user = q.user;
   row.append(say, autoResetButton(q));
   return row;
+}
+
+// resetsUsedLine: the last of the account's resets magpie used, when and
+// why, on a line of its own under the say; every one kept in its title.
+// A reset gone from the card otherwise read the same whether magpie used
+// it, the user did, or it ran out (foobra12 on Discord: 我发现刚才好像不小心
+// 自动给我使用了一张). Nothing when magpie used none.
+function resetsUsedLine(q) {
+  const used = q.resetsUsed || [];
+  if (!used.length) return null;
+  const line = el("span", "ar-used");
+  const last = used[0];
+  line.textContent = t("Last reset used: {when} · {why}", { when: resetUsedWhen(last.at), why: resetUsedWhy(last.why) });
+  line.title = used.map((u) => resetUsedWhen(u.at) + " · " + resetUsedWhy(u.why)).join("\n");
+  return line;
+}
+function resetUsedWhen(at) {
+  return new Date(at).toLocaleString(intlLang(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function resetUsedWhy(why) {
+  if (why === "week") return t("by itself, its week used up");
+  if (why === "expiring") return t("by itself, before it expired");
+  return t("by hand");
 }
 function autoResetTitle(on) {
   return t(on ? "On: a reset is used by itself when this account's week is used up and no other account can answer, one a week at most, and the one about to run out is used about half an hour before it does, if the account has been used, or at once when the account is held up until after then. Otherwise the five hours running out never uses one. Click to turn it off."
@@ -16781,6 +16806,8 @@ function autoResetBrief(q) {
   if (q.resets?.count) s.append(el("span", "acct-auto-n", "↺ " + q.resets.count + " ·"));
   s.append(el("span", "acct-auto-say", t("Auto-use")), autoResetButton(q));
   s.title = (q.resets?.count ? t(q.resets.count === 1 ? "1 reset" : "{n} resets", { n: q.resets.count }) + "\n" : "") + autoResetTitle(on);
+  const used = resetsUsedLine(q);
+  if (used) s.title += "\n" + used.textContent;
   return s;
 }
 
