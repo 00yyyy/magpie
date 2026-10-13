@@ -215,7 +215,14 @@ type filming struct {
 	Model, Prompt, Seconds, Size string
 	Start                        *picture  // the first frame to animate
 	References                   []picture // images the video draws its subjects from
+	// the request's other fields, which magpie doesn't read: a provider's
+	// own videos API takes them as they came (Agnes's mode, aspect_ratio;
+	// #1399, shen-joe: "mode 不能为空")
+	Extra map[string]any
 }
+
+// filmingRead are the fields of a videos request magpie reads itself.
+var filmingRead = []string{"model", "prompt", "seconds", "size", "input_reference", "reference_images", "reference_images[]"}
 
 // readFilming reads a videos request: JSON, or the multipart form OpenAI's
 // takes, the image to start from its input_reference.
@@ -234,6 +241,14 @@ func readFilming(r *http.Request) (filming, error) {
 			return ""
 		}
 		f.Model, f.Prompt, f.Seconds, f.Size = get("model"), get("prompt"), get("seconds"), get("size")
+		for k := range m.Value {
+			if !slices.Contains(filmingRead, k) {
+				if f.Extra == nil {
+					f.Extra = map[string]any{}
+				}
+				f.Extra[k] = get(k)
+			}
+		}
 		if fhs := m.File["input_reference"]; len(fhs) > 0 {
 			pic, err := readPart(fhs[0])
 			if err != nil {
@@ -267,6 +282,16 @@ func readFilming(r *http.Request) (filming, error) {
 			return f, fmt.Errorf("the request isn't JSON: %v", err)
 		}
 		f = filming{Model: in.Model, Prompt: in.Prompt, Size: in.Size, Seconds: strings.Trim(strings.TrimSpace(string(in.Seconds)), `"`)}
+		var all map[string]any
+		json.Unmarshal(body, &all)
+		for k, v := range all {
+			if !slices.Contains(filmingRead, k) {
+				if f.Extra == nil {
+					f.Extra = map[string]any{}
+				}
+				f.Extra[k] = v
+			}
+		}
 		if f.Seconds == "null" {
 			f.Seconds = ""
 		}
@@ -551,7 +576,11 @@ func theirVideoID(vendorID string) string {
 // remoteVideoBody is f as another magpie's videos API takes it: OpenAI's,
 // the images as data URLs.
 func remoteVideoBody(model string, f filming) []byte {
-	req := map[string]any{"model": model, "prompt": f.Prompt}
+	req := map[string]any{}
+	for k, v := range f.Extra {
+		req[k] = v
+	}
+	req["model"], req["prompt"] = model, f.Prompt
 	if f.Seconds != "" {
 		req["seconds"] = f.Seconds
 	}
@@ -706,6 +735,15 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	var unmask func()
 	w, f.Prompt, unmask = redactedPrompt(w, f.Prompt)
 	defer unmask()
+	// the fields passed on as they came are masked as the prompt is: a
+	// negative_prompt is the user's text all the same
+	if n := maskStrings(f.Extra); n > 0 {
+		if _, ok := w.(*redact.Writer); !ok {
+			rw := redact.NewWriter(w)
+			w = rw
+			defer rw.Finish()
+		}
+	}
 	// another magpie is asked at its videos API, which says itself what
 	// it can't make
 	at, field := strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/generations", "request_id"
@@ -987,4 +1025,31 @@ func (s *Server) remoteVideoContent(ctx context.Context, w http.ResponseWriter, 
 	}
 	w.WriteHeader(200)
 	io.Copy(w, io.LimitReader(res.Body, maxVideoBytes))
+}
+
+// maskStrings masks every string in v (a decoded JSON value) in place as a
+// prompt is masked, and says how many values it swapped.
+func maskStrings(v any) int {
+	n := 0
+	switch x := v.(type) {
+	case map[string]any:
+		for k, e := range x {
+			if str, ok := e.(string); ok {
+				m, c := redact.Mask(str, redactionOptions())
+				x[k], n = m, n+c
+			} else {
+				n += maskStrings(e)
+			}
+		}
+	case []any:
+		for i, e := range x {
+			if str, ok := e.(string); ok {
+				m, c := redact.Mask(str, redactionOptions())
+				x[i], n = m, n+c
+			} else {
+				n += maskStrings(e)
+			}
+		}
+	}
+	return n
 }
