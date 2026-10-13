@@ -691,7 +691,9 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		fail(404, fmt.Sprintf("magpie knows no model %q to make videos with", f.Model))
 		return
 	}
-	if keyWho, held := keyHolds(r); held && named && !modelAllowed(keyWho, p, model) {
+	g, ms, isGroup := drawingGroup(f.Model, p, model)
+	keyWho, keyHeld := keyHolds(r)
+	if keyHeld && named && (isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model)) {
 		fail(403, keyModelError(keyWho, f.Model))
 		return
 	}
@@ -699,39 +701,30 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		fail(403, msg)
 		return
 	}
-	// the provider's other keys to start the video on, when the first
-	// says it doesn't serve the model
-	var keys []candidate
-	if !p.IsRemoteMagpie() && filmsCustom(p, model) {
-		// at a provider's own videos API: sent on the first key a chat
-		// for the model would go to (#1657), never one whose own list of
-		// models leaves it out, nor one the calling key may not use
-		// (#905); the video's id names the key, which it is asked after on
-		cs, code, msg := s.onKeys(r, p, model, f.Model)
-		if code != 0 {
-			fail(code, msg)
+	// the models to start the video on, the next asked while one fails: a
+	// routing group's members in its routing's order, as a drawing's
+	// (#2005), else the one
+	tries := []provider.Member{{Provider: p, Model: model}}
+	if isGroup {
+		var paused []provider.Paused
+		if ms, paused = provider.PausedOut(g.Live(), ms, agentOf(r), "", ruleClock()); len(ms) == 0 && len(paused) > 0 {
+			fail(503, pausedError(f.Model, paused))
 			return
 		}
-		p, keys = cs[0].p, cs[1:]
-	} else if keyWho, held := accountHolds(r); held {
-		// held to some accounts (#905): sent on a key the calling key may
-		// use, of those in use — not the provider's first alone, which a
-		// key held to a later one was refused by — or none, refused
-		var ok bool
-		if p, ok = allowedKey(keyWho, p, model); !ok {
-			fail(403, keyAccountsError(keyWho, f.Model))
+		var keeps map[string]bool
+		if keyHeld {
+			keeps = groupKeeps(keyWho, g, ms)
+		}
+		t := s.drawingTries(g, ms, keeps)
+		if len(t) == 0 && keeps != nil {
+			fail(403, keyModelError(keyWho, f.Model))
 			return
 		}
+		if len(t) > 0 {
+			tries = t
+		}
 	}
-	call.Provider, call.To = p.ID, provider.Chat
-	remote := p.IsRemoteMagpie()
-	custom := !remote && filmsCustom(p, model)
-	volcengine := p.Preset == "volcengine" && slices.ContainsFunc(p.PlanVideos(), func(m catalog.Model) bool { return m.ID == model })
-	// any grok-imagine-video*, not only those listed: the vendor's newer ones work before magpie names them
-	if !remote && !custom && !volcengine && (!drawsGrok(p) || !strings.HasPrefix(model, grokVideoFamily)) {
-		fail(400, fmt.Sprintf(`%s/%s can't make videos: magpie makes videos with a Grok subscription's grok-imagine-video, Volcengine Agent Plan's Seedance models, another magpie's, and a provider's models its own model list marks "kind": "video" or that you mark a Video model (right-click the model in the provider's editor: Makes…)`, p.ID, model))
-		return
-	}
+	call.To = provider.Chat
 	var unmask func()
 	w, f.Prompt, unmask = redactedPrompt(w, f.Prompt)
 	defer unmask()
@@ -744,33 +737,36 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 			defer rw.Finish()
 		}
 	}
-	// another magpie is asked at its videos API, which says itself what
-	// it can't make
-	at, field := strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/generations", "request_id"
-	var body []byte
-	switch {
-	case remote, custom:
-		// a provider's OpenAI-shaped videos API is asked as another
-		// magpie's is: OpenAI's body, its answer its own
-		at, field, body = videoBase(p)+"/videos", "id", remoteVideoBody(model, f)
-	case volcengine:
-		at, field, body = strings.TrimRight(p.Base(provider.Responses), "/")+"/contents/generations/tasks", "id", volcengineVideoBody(model, f)
-	default:
-		body, err = grokVideoBody(model, f)
-		if err != nil {
-			fail(400, err.Error())
-			return
-		}
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), drawTimeout)
 	defer cancel()
-	b, code, err := s.send(ctx, p, at, "application/json", body, true)
-	// a key answering 404 that it doesn't serve the model hands it to the
-	// next (#1657), as a drawing does; the id names the key that started it
-	for ; err != nil && len(keys) > 0 && ctx.Err() == nil && keyLacksModel(code, err); keys = keys[1:] {
-		p = keys[0].p
-		b, code, err = s.send(ctx, p, at, "application/json", body, true)
+	var (
+		v       videoStart
+		code    int
+		skipped []string
+	)
+	for i, m := range tries {
+		model = m.Model
+		v, code, err = s.startVideo(ctx, r, m.Provider, m.Model, f)
+		p, call.Provider = v.p, v.p.ID
+		// a group's next member is asked as a chat's would be: while this
+		// one can't make videos, its vendor fails, is out of quota or
+		// doesn't serve the model; a refusal of the request is the request's
+		if err == nil || ctx.Err() != nil || i+1 == len(tries) || !v.unfit && !retryable(code, []byte(err.Error())) {
+			break
+		}
+		skipped = append(skipped, m.Provider.ID+"/"+m.Model+": "+err.Error())
 	}
+	call.Fallback = strings.Join(skipped, "; ")
+	if err != nil && !v.asked {
+		// turned away before any vendor was asked: nothing was spent
+		msg := err.Error()
+		if len(skipped) > 0 {
+			msg += " (tried first: " + call.Fallback + ")"
+		}
+		fail(code, msg)
+		return
+	}
+	b, remote, custom, field := v.answer, v.remote, v.custom, v.field
 	call.Millis, call.Status = time.Since(start).Milliseconds(), code
 	var started map[string]any
 	theirs := ""
@@ -786,7 +782,11 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		call.Error = err.Error()
 		s.record(call)
-		writeError(w, provider.Chat, code, err.Error())
+		msg := err.Error()
+		if len(skipped) > 0 {
+			msg += " (tried first: " + call.Fallback + ")"
+		}
+		writeError(w, provider.Chat, code, msg)
 		return
 	}
 	s.record(call)
@@ -804,6 +804,81 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, videoObject(videoID(p, theirs, start), p.ID+"/"+model, start, videoState{}, f))
+}
+
+// videoStart is how starting a video on one model went: the key or
+// account it went out on, and where and how its answer is read.
+type videoStart struct {
+	p              provider.Provider
+	answer         []byte
+	field          string // the answer's field naming the vendor's video
+	remote, custom bool
+	asked          bool // a vendor was asked: what it answered is recorded
+	unfit          bool // the model makes no videos: none was asked
+}
+
+// startVideo starts f's video on p's model: at another magpie's videos
+// API, a provider's OpenAI-shaped one, Volcengine's tasks or Grok's. A
+// failure before any vendor is asked (the model makes no videos, a key may
+// use none of the provider's keys) has asked unset.
+func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Provider, model string, f filming) (videoStart, int, error) {
+	// the provider's other keys to start the video on, when the first
+	// says it doesn't serve the model
+	var keys []candidate
+	if !p.IsRemoteMagpie() && filmsCustom(p, model) {
+		// at a provider's own videos API: sent on the first key a chat
+		// for the model would go to (#1657), never one whose own list of
+		// models leaves it out, nor one the calling key may not use
+		// (#905); the video's id names the key, which it is asked after on
+		cs, code, msg := s.onKeys(r, p, model, f.Model)
+		if code != 0 {
+			return videoStart{p: p}, code, errors.New(msg)
+		}
+		p, keys = cs[0].p, cs[1:]
+	} else if keyWho, held := accountHolds(r); held {
+		// held to some accounts (#905): sent on a key the calling key may
+		// use, of those in use — not the provider's first alone, which a
+		// key held to a later one was refused by — or none, refused
+		var ok bool
+		if p, ok = allowedKey(keyWho, p, model); !ok {
+			return videoStart{p: p}, 403, errors.New(keyAccountsError(keyWho, f.Model))
+		}
+	}
+	v := videoStart{p: p, remote: p.IsRemoteMagpie()}
+	v.custom = !v.remote && filmsCustom(p, model)
+	volcengine := p.Preset == "volcengine" && slices.ContainsFunc(p.PlanVideos(), func(m catalog.Model) bool { return m.ID == model })
+	// any grok-imagine-video*, not only those listed: the vendor's newer ones work before magpie names them
+	if !v.remote && !v.custom && !volcengine && (!drawsGrok(p) || !strings.HasPrefix(model, grokVideoFamily)) {
+		v.unfit = true
+		return v, 400, fmt.Errorf(`%s/%s can't make videos: magpie makes videos with a Grok subscription's grok-imagine-video, Volcengine Agent Plan's Seedance models, another magpie's, and a provider's models its own model list marks "kind": "video" or that you mark a Video model (right-click the model in the provider's editor: Makes…)`, p.ID, model)
+	}
+	// another magpie is asked at its videos API, which says itself what
+	// it can't make
+	at, field := strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/generations", "request_id"
+	var body []byte
+	switch {
+	case v.remote, v.custom:
+		// a provider's OpenAI-shaped videos API is asked as another
+		// magpie's is: OpenAI's body, its answer its own
+		at, field, body = videoBase(p)+"/videos", "id", remoteVideoBody(model, f)
+	case volcengine:
+		at, field, body = strings.TrimRight(p.Base(provider.Responses), "/")+"/contents/generations/tasks", "id", volcengineVideoBody(model, f)
+	default:
+		var err error
+		if body, err = grokVideoBody(model, f); err != nil {
+			return v, 400, err
+		}
+	}
+	v.field, v.asked = field, true
+	b, code, err := s.send(ctx, p, at, "application/json", body, true)
+	// a key answering 404 that it doesn't serve the model hands it to the
+	// next (#1657), as a drawing does; the id names the key that started it
+	for ; err != nil && len(keys) > 0 && ctx.Err() == nil && keyLacksModel(code, err); keys = keys[1:] {
+		p = keys[0].p
+		b, code, err = s.send(ctx, p, at, "application/json", body, true)
+	}
+	v.p, v.answer = p, b
+	return v, code, err
 }
 
 // videoAsker is p on a key or account the calling key may use, to ask
