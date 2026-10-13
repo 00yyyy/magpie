@@ -947,7 +947,7 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 		case "catalog":
 			p.Catalog = v
 		case "models":
-			p.Models = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
+			p.Models = splitIDs(v, nil)
 		case "website":
 			p.Website = v
 		case "keys":

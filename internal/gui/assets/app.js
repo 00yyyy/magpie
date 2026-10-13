@@ -9578,7 +9578,7 @@ function drawEditor(p, presetID) {
   else if (custom) {
     const ex = input(draft.extra.join(", "), t("model ids, comma separated · e.g. gpt-5.5, claude-sonnet-5"));
     const pick = addFormModels(ex);
-    ex.oninput = () => { draft.extra = ex.value.split(/[,\s]+/).filter(Boolean); pick.draw(); };
+    ex.oninput = () => { draft.extra = typedIds(ex.value); pick.draw(); };
     ed.append(...field(t("Models"), pick.box, t("Optional: Fetch models to pick from the vendor's list, or type ids; none picked, magpie asks for the list after saving.")));
   }
 
@@ -10648,10 +10648,15 @@ function modelTestWhy(p) {
 // model still being asked is null
 const modelTests = {};
 
+// typedIds: the model ids typed in an add box or a Models field: split at
+// commas and line breaks only, since an id can hold a space ("Opus 5.5",
+// #1976)
+const typedIds = (v) => (v || "").split(/[,\n]/).map((id) => id.trim()).filter(Boolean);
+
 // chosenIds: the models picked, with the ids still in the add box, which
 // a Save takes as if Enter had been pressed on them
 function chosenIds() {
-  const typed = (draft.typed || "").split(/[,\s]+/).filter(Boolean);
+  const typed = typedIds(draft.typed);
   return [...draft.chosen, ...typed.filter((id) => !draft.chosen.includes(id))].filter((id, i, all) => all.indexOf(id) === i);
 }
 

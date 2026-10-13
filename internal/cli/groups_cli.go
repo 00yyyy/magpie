@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -189,6 +190,35 @@ func splitList(v string) []string {
 	return strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
 }
 
+// splitIDs splits a list of model ids at commas, each trimmed: an id can
+// hold a space ("Opus 5.5" on a relay, #1976), which splitList would cut in
+// two. An item with a space in it that whole doesn't take (no model the
+// group can have) is split at its spaces, as such a list was before; with
+// whole nil, never.
+func splitIDs(v string, whole func(string) bool) []string {
+	var out []string
+	for _, id := range strings.Split(v, ",") {
+		if id = strings.TrimSpace(id); id == "" {
+			continue
+		}
+		if whole != nil && strings.ContainsFunc(id, unicode.IsSpace) && !whole(id) {
+			out = append(out, strings.Fields(id)...)
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// inGroup: whether v names one of members, as pickMember finds it
+func inGroup(members []string) func(string) bool {
+	return func(v string) bool {
+		v, _ = provider.MemberFast(v)
+		_, err := pickMember(members, v)
+		return err == nil
+	}
+}
+
 // memberResolver spells a model the user typed as the catalog's
 // provider/model id: the id itself, or a bare model id one provider
 // serves — with the effort it is fixed at after it, when one was typed
@@ -332,7 +362,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 	members := func(v string) ([]string, error) {
 		var out []string
 		patterns = nil
-		for _, m := range splitList(v) {
+		for _, m := range splitIDs(v, func(m string) bool { _, err := resolve(m); return err == nil }) {
 			if provider.IsPattern(m) {
 				ps, err := provider.CleanPatterns([]string{m})
 				if err != nil {
@@ -390,7 +420,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 				}
 			}
 		case "models-", "members-", "model-":
-			for _, m := range splitList(v) {
+			for _, m := range splitIDs(v, inGroup(g.Members)) {
 				if provider.IsPattern(m) {
 					m = strings.TrimPrefix(strings.TrimSpace(m), "magpie/")
 					i := slices.Index(g.Match, m)
@@ -472,7 +502,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			// the members sent in their vendor's fast mode, as they are in
 			// the group
 			g.Fast = nil
-			for _, m := range splitList(v) {
+			for _, m := range splitIDs(v, inGroup(g.Members)) {
 				m, _ = provider.MemberFast(m)
 				id, perr := pickMember(g.Members, m)
 				if perr != nil {
@@ -486,7 +516,10 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			if strings.TrimSpace(v) == "" {
 				g.Weights = nil
 			}
-			for _, mw := range splitList(v) {
+			for _, mw := range splitIDs(v, func(mw string) bool {
+				at := strings.LastIndex(mw, "=")
+				return at > 0 && inGroup(g.Members)(mw[:at])
+			}) {
 				at := strings.LastIndex(mw, "=")
 				if at < 0 {
 					return fmt.Errorf("weight=<model>=<n>, as weight=%s=3, not %q", mw, mw)
