@@ -458,7 +458,10 @@ func set(a *agent.Agent, key, value string) error {
 	}
 	before := f.Get()
 	wired := a.Wired()
-	if err := a.Apply(f.Key, value); err != nil {
+	// a magpie model picked on an agent not connected yet connects it
+	// first, as the Agents page's picker does (#1900): the agent is wired
+	// in, and Disconnect puts back what it had before
+	if err := a.Pick(f.Key, value); err != nil {
 		return err
 	}
 	// what the config reads now, not what was asked: an agent may name the
