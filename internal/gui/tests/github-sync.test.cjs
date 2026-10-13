@@ -69,6 +69,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         }
         await page.waitForTimeout(300);
       };
+      // magpie moves the page only for the reader (scrollOnPurpose), so a
+      // row above or below the window is wheeled to, never scrolled into view
+      const toStart = async () => {
+        await page.mouse.move(width / 2, 300);
+        const top = () => page.locator("#view-settings").evaluate((v) => v.scrollTop);
+        for (let i = 0; i < 120 && (await top()) > 0.5; i++) {
+          await page.mouse.wheel(0, -80);
+          await page.waitForTimeout(15);
+        }
+        await page.waitForTimeout(300);
+      };
       await toEnd();
       assert.equal(await first.locator(".name").textContent(), tr("WebDAV, S3 or GitHub sync"));
       await first.locator(".val button").click();
@@ -94,6 +105,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(posts, [{ url: "github://alice/private/magpie-sync", branch: "", password: "fixture-token", passphrase: "correct horse", keys: true, agents: true, library: true }]);
       await page.waitForFunction((name) => document.querySelector("#syncList .row.pref .name")?.textContent === name, tr("GitHub sync"));
       assert.equal(await first.locator(".name").textContent(), tr("GitHub sync"));
+      await toStart();
       await first.locator(".val button").last().click();
       assert.equal(await box(L.repo).inputValue(), "alice/private");
       assert.equal(await box(L.token).inputValue(), "", "the saved token never returns to the browser");
@@ -120,7 +132,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await box("Branch").fill("other");
       await box("GitHub token").fill("fixture-token");
       await box("Passphrase").fill("correct horse");
-      await form.locator(".bar .primary").click();
+      await page.mouse.move(220, 300);
+      const left = () => page.locator("#view-settings").evaluate((v) => v.scrollHeight - v.clientHeight - v.scrollTop);
+      for (let i = 0; i < 120 && (await left()) > 0.5; i++) {
+        await page.mouse.wheel(0, 80);
+        await page.waitForTimeout(15);
+      }
+      await page.waitForTimeout(300);
+      await form.locator(".bar .primary").click({ timeout: 5000 });
       await page.waitForFunction((message) => document.querySelector("#syncList .row.pref .sub")?.textContent.includes(message), tr(refusal));
       assert.equal(await first.locator(".sub").textContent(), tr("Couldn't sync: {error}").replace("{error}", tr(refusal)));
       assert.equal(await first.locator(".name").textContent(), tr("GitHub sync"));
