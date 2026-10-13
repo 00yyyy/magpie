@@ -929,10 +929,15 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		} `json:"error"`
 	}
 	if err := decodeJSON([]byte(data), &ch); err != nil {
+		// an error in a shape of its own, {"error":"…"}, is still the
+		// reply's end, not a chunk to pass over (#1933)
+		if e, ok := carriedError(data); ok {
+			emit(e)
+		}
 		return nil
 	}
 	if ch.Error != nil {
-		emit(Event{Kind: KError, Text: ch.Error.Message, Code: refusedCode(data)})
+		emit(Event{Kind: KError, Text: cmp.Or(ch.Error.Message, streamErrorText(data)), Code: refusedCode(data)})
 		return nil
 	}
 	if !d.started {

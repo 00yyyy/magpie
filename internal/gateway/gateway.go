@@ -4893,9 +4893,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	see, held := written(zenSee(zen, col.add))
 	err = readSSE(rd, func(_, data string) error {
 		u.add(Usage{Upstream: upstreamOf([]byte(data)), Tier: upstreamTier([]byte(data))})
-		ended = ended || upstreamStop([]byte(data)) != "" ||
-			(actual == provider.Anthropic || actual == provider.Responses) && upstreamEnds(data) ||
-			geminiKin(actual) && geminiEnds([]byte(data))
+		ended = ended || replyEnds(actual, data, upstreamStop([]byte(data)))
 		return dec(data, see)
 	})
 	held()
