@@ -267,7 +267,7 @@ magpie claude group/opus-anywhere    <span class="c"># 使用它</span></pre>
     <h3>需要自己 export <code>OPENAI_BASE_URL</code> 或 <code>ANTHROPIC_BASE_URL</code> 吗？</h3>
     <p>不需要。对 magpie 列出的 Agent，它会把网关地址和令牌直接写进 Agent 自己的配置文件。这些环境变量只用于 magpie 不管理的、带 base URL 设置的其他工具：<span class="ui">网关</span> 标签页的 <span class="ui">接入</span> 部分有一键复制和示例代码。</p>
     <h3>magpie 必须一直开着吗？</h3>
-    <p>通过 magpie 使用的模型需要：网关随应用一起运行。关掉窗口后它仍留在菜单栏或托盘里；<code>magpie tray</code> 只启动图标（可以放进登录项），<code>magpie serve</code> 只运行网关，<code>magpie daemon install</code> 把它装成服务（Linux 上是 systemd，Mac 上是 launchd），登录或开机就启动，不需要窗口。Agent 用它自己的模型和自己的登录时，不经过 magpie。</p>
+    <p>通过 magpie 使用的模型需要：网关随应用一起运行。关掉窗口后它仍留在菜单栏或托盘里；<code>magpie tray</code> 只启动图标（可以放进登录项），<code>magpie serve</code> 只运行网关，<code>magpie daemon install</code> 把它装成服务（Linux 上是 systemd，Mac 上是 launchd），登录或开机就启动，不需要窗口；<code>magpie daemon install --web</code> 让服务同时提供浏览器页面，<code>magpie daemon status</code> 会打印页面的链接。Agent 用它自己的模型和自己的登录时，不经过 magpie。</p>
     <h3>怎么把 Agent 恢复原样？</h3>
     <p>在选择列表里选 Agent 自带的模型，或运行 <code>magpie &lt;agent&gt; default</code>。magpie 会删掉它写入的内容，并恢复被它替换掉的值，比如你原来的 <code>ANTHROPIC_BASE_URL</code>。</p>
     <h3>换了模型，Agent 还在用旧的？</h3>

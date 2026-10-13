@@ -103,9 +103,14 @@ const usage = `magpie — one place to pick every agent's model
   magpie plugin move|migrate <subscription>   run a built-in subscription's accounts on its community plugin
   magpie plugin move-back|unmigrate <subscription>   go back to the built-in, with its accounts
 
-  magpie serve                    run the gateway alone (the app runs it too)
+  magpie serve [--web[=host:port]]
+                                  run the gateway alone (the app runs it too); --web serves magpie web's page too, from the same process (127.0.0.1:3430 unless told)
   magpie daemon [install|uninstall|start|stop|restart|status]
                                   magpie serve as a service of yours, from boot or login and started again when it stops (systemd --user on Linux, launchd on the Mac)
+  magpie daemon install [--web] [--lan] [--addr host:port] [--no-web]
+                                  --web: the service serves magpie web's page too, with a key kept across restarts; installed again, it keeps what it served
+  magpie daemon web [on|off] [--lan] [--addr host:port]
+                                  the service's page: its link, or turn it on or off
   magpie healthcheck              exit 0 when the gateway answers (a container's HEALTHCHECK)
   magpie gateway-key list|add <name>|rotate <id>|remove <id>   manage the keys clients use to call a shared gateway
   magpie gateway-key limit <id> [off|reset|day|week|month|<N>d --tokens N --cost USD --cache-reads]   a key's own limit, and what it used
@@ -350,7 +355,7 @@ func run(args []string) error {
 	case "group":
 		return groupCmd(args)
 	case "serve":
-		return serve()
+		return serveCmd(args[1:])
 	case "gateway-key":
 		return gatewayKeys(args)
 	case "accounts", "account":

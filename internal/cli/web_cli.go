@@ -7,8 +7,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/yetone/magpie/internal/daemon"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/gui"
+	"github.com/yetone/magpie/internal/stats"
 )
 
 // webAddr is where `magpie web` listens unless told: beside the gateway.
@@ -41,10 +43,44 @@ func webCmd(args []string) error {
 		_, port, _ := net.SplitHostPort(webAddr)
 		addr = "0.0.0.0:" + port
 	}
+	// the service serves the page already: its own, beside the gateway
+	// it serves, is the one to open
+	if a, k := daemon.Web(); a != "" && gateway.ServedBy().Running {
+		link := webLink(a, k)
+		fmt.Println(green.Render("●"), "the magpie service serves this page:", bold.Render(link))
+		fmt.Println(muted.Render("  magpie daemon web off turns it off"))
+		if open {
+			openInBrowser(link)
+		}
+		return nil
+	}
 	w, err := gui.StartWeb(addr, version)
 	if err != nil {
 		return err
 	}
+	if !w.ServesGateway() {
+		// another magpie has the gateway (the service, magpie serve, the
+		// app): this page shows its settings and accounts, read from the
+		// same files, and takes the gateway up when that one stops
+		o := gateway.ServedBy()
+		who := "another magpie"
+		if o.Version != "" {
+			who += " (" + o.Version + ")"
+		}
+		fmt.Println(muted.Render("  the gateway on " + gateway.URL() + " is served by " + who + "; this page shows the same settings and accounts, and serves the gateway once that one stops"))
+		if st, err := daemon.Get(); err == nil && st.Running {
+			fmt.Println(muted.Render("  to have the service serve this page itself: magpie daemon web on"))
+		}
+	}
+	printWeb(w)
+	if open {
+		openInBrowser(w.Link)
+	}
+	return w.Wait()
+}
+
+// printWeb prints where a started page is, and what its link carries.
+func printWeb(w *gui.Web) {
 	fmt.Println(green.Render("●"), "magpie web on", bold.Render(w.Link))
 	host, port, _ := net.SplitHostPort(w.Addr)
 	key := w.Link[strings.Index(w.Link, "/?k="):]
@@ -55,7 +91,7 @@ func webCmd(args []string) error {
 		if gateway.ContainerAddrs() {
 			fmt.Println(muted.Render("  " + containerNote))
 		}
-		fmt.Println(amber.Render("!"), "anyone with the link can change magpie and see its keys, and the network carries it unencrypted")
+		fmt.Println(amber.Render("!"), lanWarning)
 	} else if l := proxyLink(key); l != "" {
 		fmt.Println(muted.Render("  through your proxy"), l)
 	}
@@ -64,10 +100,22 @@ func webCmd(args []string) error {
 		carries = "MAGPIE_WEB_KEY"
 	}
 	fmt.Println(muted.Render("  the link carries " + carries + " · gateway " + advertisedURL() + " · Ctrl-C to stop"))
-	if open {
-		openInBrowser(w.Link)
+}
+
+// lanWarning is said wherever the page is served on the network.
+const lanWarning = "anyone with the link can change magpie and see its keys, and the network carries it unencrypted"
+
+// webLink is the link to a page served on addr with key, from this
+// computer.
+func webLink(addr, key string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://" + addr + "/?k=" + url.QueryEscape(key)
 	}
-	return w.Wait()
+	if ip := net.ParseIP(host); host == "" || ip != nil && ip.IsUnspecified() {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/?k=" + url.QueryEscape(key)
 }
 
 // proxyLink is the page's link through a reverse proxy in front of a page
@@ -92,4 +140,42 @@ func proxyLink(key string) string {
 		return ""
 	}
 	return strings.TrimRight(u.String(), "/") + key
+}
+
+// serveCmd: magpie serve [--web[=host:port]] — the gateway, and with
+// --web magpie web's page from the same process: what the service runs
+// (`magpie daemon install --web`), so the page shows the gateway that
+// serves the agents, its routing included (HuanCheng on Discord).
+func serveCmd(args []string) error {
+	web := ""
+	for _, a := range args {
+		switch {
+		case a == "--web":
+			web = webAddr
+		case strings.HasPrefix(a, "--web="):
+			web = strings.TrimPrefix(a, "--web=")
+			if _, _, err := net.SplitHostPort(web); err != nil {
+				return fmt.Errorf("magpie serve: --web=%s isn't host:port", web)
+			}
+		default:
+			return fmt.Errorf("magpie serve: unknown %q · magpie serve [--web[=host:port]]", a)
+		}
+	}
+	if web == "" {
+		return serve()
+	}
+	go stats.Run(version, "serve")
+	w, err := gui.StartWeb(web, version)
+	if err != nil {
+		return err
+	}
+	public := advertisedURL()
+	fmt.Println(green.Render("●"), "magpie gateway on", bold.Render(gateway.URL()))
+	fmt.Println(muted.Render("  OpenAI  "), public+"/v1/chat/completions", muted.Render("·"), public+"/v1/responses")
+	fmt.Println(muted.Render("  Anthropic"), public+"/v1/messages")
+	if !w.ServesGateway() {
+		fmt.Println(amber.Render("!"), "another magpie serves the gateway there: this one serves it once that one stops")
+	}
+	printWeb(w)
+	return w.Wait()
 }

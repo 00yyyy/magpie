@@ -267,7 +267,7 @@ magpie claude group/opus-anywhere    <span class="c"># これを使う</span></p
     <h3><code>OPENAI_BASE_URL</code> や <code>ANTHROPIC_BASE_URL</code> を export する必要はありますか？</h3>
     <p>いいえ。magpie が一覧に表示するエージェントについては、ゲートウェイのアドレスとトークンをエージェント自身の設定ファイルに書き込みます。これらの変数は、ベース URL を設定できる他のツール向けです。<span class="ui">Gateway</span> タブの <span class="ui">Connect</span> セクションに、コピーボタンとスニペットとして用意されています。</p>
     <h3>magpie は起動しておく必要がありますか？</h3>
-    <p>magpie 経由のモデルを使うなら必要です。ゲートウェイはアプリと一緒に動きます。ウィンドウを閉じてもメニューバーやトレイで動き続けます。<code>magpie tray</code> はアイコンだけで起動し（ログイン項目に入れておくと便利です）、<code>magpie serve</code> はゲートウェイだけを動かし、<code>magpie daemon install</code> はそれをサービス（Linux は systemd、Mac は launchd）として登録し、ログインや起動時からウィンドウなしで動かし続けます。エージェント自身のモデルと自身のサインインで動くエージェントは、magpie を通りません。</p>
+    <p>magpie 経由のモデルを使うなら必要です。ゲートウェイはアプリと一緒に動きます。ウィンドウを閉じてもメニューバーやトレイで動き続けます。<code>magpie tray</code> はアイコンだけで起動し（ログイン項目に入れておくと便利です）、<code>magpie serve</code> はゲートウェイだけを動かし、<code>magpie daemon install</code> はそれをサービス（Linux は systemd、Mac は launchd）として登録し、ログインや起動時からウィンドウなしで動かし続けます。<code>magpie daemon install --web</code> ならブラウザのページも同じサービスが提供し、<code>magpie daemon status</code> がページのリンクを表示します。エージェント自身のモデルと自身のサインインで動くエージェントは、magpie を通りません。</p>
     <h3>エージェントを元の状態に戻すには？</h3>
     <p>ピッカーでエージェント自身のモデルを選ぶか、<code>magpie &lt;agent&gt; default</code> を実行します。magpie は自分が書き込んだものを取り除き、以前に設定していた <code>ANTHROPIC_BASE_URL</code> など、置き換えた値を元に戻します。</p>
     <h3>モデルを切り替えたのに、エージェントが古いモデルを使い続けます。</h3>

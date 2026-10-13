@@ -101,6 +101,12 @@ func StartWeb(addr, version string) (*Web, error) {
 	return w, nil
 }
 
+// ServesGateway says whether this process serves the gateway, which it
+// doesn't while another magpie (the service, the app, magpie serve) has
+// it: the page then shows that one's settings and accounts, read from the
+// same files, and this one takes the gateway up once that one is gone.
+func (w *Web) ServesGateway() bool { return served.Load() != nil }
+
 // Wait returns once the page's Quit is used. After a restart to update it
 // runs the new version in this one's place, with the same arguments and
 // key, so the page open in the browser finds it where it was.
@@ -138,19 +144,33 @@ func webKey() (key string, fixed bool, err error) {
 		}
 	}
 	if k := os.Getenv("MAGPIE_WEB_KEY"); k != "" {
-		if len(k) < webKeyMin {
-			return "", false, fmt.Errorf("MAGPIE_WEB_KEY is %d characters; it needs at least %d", len(k), webKeyMin)
-		}
-		// a cookie can't hold a space, ; " \ or a comma: the browser would
-		// be sent one that isn't the key, and turned away
-		if strings.Trim(k, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~") != "" {
-			return "", false, errors.New("MAGPIE_WEB_KEY takes letters, digits and - . _ ~ only (openssl rand -hex 16 makes one)")
+		if err := CheckWebKey(k); err != nil {
+			return "", false, err
 		}
 		return k, true, nil
 	}
+	return NewWebKey(), false, nil
+}
+
+// NewWebKey is a new random key for the page.
+func NewWebKey() string {
 	b := make([]byte, 16)
 	rand.Read(b)
-	return hex.EncodeToString(b), false, nil
+	return hex.EncodeToString(b)
+}
+
+// CheckWebKey says what is wrong with k as a MAGPIE_WEB_KEY, nil when
+// nothing is.
+func CheckWebKey(k string) error {
+	if len(k) < webKeyMin {
+		return fmt.Errorf("MAGPIE_WEB_KEY is %d characters; it needs at least %d", len(k), webKeyMin)
+	}
+	// a cookie can't hold a space, ; " \ or a comma: the browser would
+	// be sent one that isn't the key, and turned away
+	if strings.Trim(k, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~") != "" {
+		return errors.New("MAGPIE_WEB_KEY takes letters, digits and - . _ ~ only (openssl rand -hex 16 makes one)")
+	}
+	return nil
 }
 
 // webGuard lets through requests with the key: in the link's k, which it
