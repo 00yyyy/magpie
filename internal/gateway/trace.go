@@ -544,10 +544,18 @@ func swapped(sent, served string) bool { return usage.Swapped(sent, served) }
 
 // routeUsage retains only what pricing needs, without another copy of the
 // request's metadata. Unknown token counts have no price, including failures.
+// What the reply counted of earlier requests (Deferred) is priced as a tier
+// of its own before the request's, which stays last: the prompt is read
+// from the last (promptCounted), and is the request's own.
 func routeUsage(id, model string, u Usage) []RouteUsage {
-	if u.Input+u.Output == 0 {
-		return nil
+	var out []RouteUsage
+	if d := u.Deferred; d != nil && d.Input+d.Output+d.CacheRead+d.CacheWrite > 0 {
+		out = append(out, RouteUsage{Provider: id, Model: model, Input: d.Input, Output: d.Output,
+			CacheRead: d.CacheRead, CacheWrite: d.CacheWrite, Reasoning: d.Reasoning})
 	}
-	return []RouteUsage{{Provider: id, Model: model, Input: u.Input, Output: u.Output,
-		CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning}}
+	if u.Input+u.Output == 0 {
+		return out
+	}
+	return append(out, RouteUsage{Provider: id, Model: model, Input: u.Input, Output: u.Output,
+		CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning})
 }
