@@ -207,7 +207,9 @@ func howInstalled(spec cliSpec, bin string) *updater {
 			if len(spec.npm) > 0 {
 				pkg = spec.npm[0]
 			}
-			return &updater{via: "self", pkg: pkg, cmd: c, latest: spec.latest}
+			u := &updater{via: "self", pkg: pkg, cmd: c, latest: spec.latest}
+			u.path = selfPath(spec, bin, slash)
+			return u
 		}
 	}
 	// a formula of the agent's own is Homebrew's, though a Node one keeps
@@ -226,6 +228,28 @@ func howInstalled(spec cliSpec, bin string) *updater {
 		}
 	}
 	return nil
+}
+
+// selfPath is the folder to put first on PATH for a CLI's own updater, when
+// a package manager installed it in a global node_modules: the updater runs
+// that manager by its bare name (omo update runs npm i -g), and magpie's
+// PATH can find another one first, a system node's in /usr/local/bin
+// before a version manager's, whose npm then installs into a folder only
+// root may change (#2021, ggbdpq). npm's global folder follows the node
+// that runs it, so the folder holds that node too.
+func selfPath(spec cliSpec, bin, real string) string {
+	for _, pkg := range spec.npm {
+		if u := fromNodeModules(pkg, bin, real); u != nil {
+			if u.via == "npm" {
+				return u.path
+			}
+			if u.via == "bun" || u.via == "pnpm" {
+				return filepath.Dir(u.cmd[0])
+			}
+			return ""
+		}
+	}
+	return ""
 }
 
 // fromBrew is the updater of the CLI at real (forward slashes), which m,
