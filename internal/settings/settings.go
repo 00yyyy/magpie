@@ -461,6 +461,15 @@ type Settings struct {
 	// Agents list leaves out (ikunbots on X). It is that list's only: the
 	// ledger keeps their calls, and the totals and the chart count them.
 	UsageAgentsHidden []string `json:"usageAgentsHidden,omitempty"`
+	// ClientAgents counts a client magpie doesn't know as one of the agents
+	// it does, on the Usage and Sessions pages (#1958, NorethSea): a bridge
+	// that starts Codex's app-server under a name of its own
+	// ("hermes-codex-thread-bridge") is counted as Codex. Keyed by the
+	// client's name as the ledger records it, lower-cased, to the agent's
+	// id. Only what the pages report: the ledger keeps the client's own
+	// name, and routing, keys, caps and budgets go on by it. A pair taken
+	// out counts the client on its own again, the history with it.
+	ClientAgents map[string]string `json:"clientAgents,omitempty"`
 	// Visible narrows the models an agent is shown, by agent id: the
 	// families (the tag a provider or group is given), provider ids and
 	// group ids its lists hold. An agent it doesn't name is shown them all.
@@ -1189,6 +1198,7 @@ func save(s Settings, recording bool) error {
 	s.UsageOrder = ids(s.UsageOrder)
 	s.PanelUsageHidden = ids(s.PanelUsageHidden)
 	s.UsageAgentsHidden = ids(s.UsageAgentsHidden)
+	s.ClientAgents = clientAgents(s.ClientAgents)
 	s.TrayUsages = ids(s.TrayUsages)
 	for i, u := range s.CodexAutoReset {
 		s.CodexAutoReset[i] = strings.ToLower(u)
@@ -1376,4 +1386,52 @@ func ids(in []string) []string {
 		}
 	}
 	return out
+}
+
+// clientAgents is ClientAgents as kept: the clients' names lower-cased and
+// trimmed, an empty name or agent left out.
+func clientAgents(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		k, v = strings.ToLower(strings.TrimSpace(k)), strings.TrimSpace(v)
+		if k != "" && v != "" {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// ClientAgentsNow is Load().ClientAgents, parsed again only once the file
+// changed: the usage pages ask for it on every read of the ledger, which
+// the gateway does too, and the whole settings file is more to parse.
+func ClientAgentsNow() map[string]string {
+	fileMu.RLock()
+	defer fileMu.RUnlock()
+	m, err := filememo.Read("settings.clientAgents", Path(), func(b []byte) (map[string]string, error) {
+		if len(bytes.TrimSpace(b)) == 0 {
+			return nil, nil
+		}
+		var s struct {
+			ClientAgents map[string]string `json:"clientAgents"`
+		}
+		if err := json.Unmarshal(b, &s); err != nil {
+			return nil, err
+		}
+		return clientAgents(s.ClientAgents), nil
+	})
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		// what load makes of a file that doesn't parse (its last good
+		// generation), not none
+		return clientAgents(load().ClientAgents)
+	}
+	return m
 }

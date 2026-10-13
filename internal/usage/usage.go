@@ -850,7 +850,7 @@ func summarizeFrom(p Period, now time.Time, first time.Time, historicalKeys map[
 		if i >= 0 && i < len(s.Series) {
 			s.Series[i].add(r, pr)
 		}
-		id := AgentOf(r.Agent) // one kept before magpie knew the agent by name
+		id := ReportedAs(r.Agent) // one kept before magpie knew the agent by name
 		a := agents[id]
 		if a == nil {
 			a = &Group{ID: id}
@@ -976,7 +976,7 @@ func buildVias(snapshot *logSnapshot, since time.Time) map[string][]Via {
 		if r.IsRejected() || r.IsReported() || r.Session == "" || r.Model == "" {
 			return
 		}
-		k := AgentOf(r.Agent) + "|" + r.Session
+		k := ReportedAs(r.Agent) + "|" + r.Session
 		vs := out[k]
 		i := slices.IndexFunc(vs, func(v Via) bool { return v.Provider == r.Provider && v.Model == r.Model && v.Effort == r.Effort })
 		if i < 0 {

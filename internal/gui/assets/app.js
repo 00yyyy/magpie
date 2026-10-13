@@ -17593,12 +17593,24 @@ function renderUsage() {
     b.setAttribute("aria-haspopup", "menu");
     b.setAttribute("aria-label", t("Actions for {name}", { name: g.name || g.id }));
     b.append(svg(DOTS, 14, 2.2));
+    // a client magpie doesn't know can be counted as one of the agents
+    // it does (#1958, NorethSea): a bridge that starts Codex under a name
+    // of its own; the agent counting one has it put back on its own
+    const counted = Object.entries(state.settings?.clientAgents || {}).filter(([, as]) => as === g.id).map(([c]) => c);
     const menu = () => {
       const again = agentMenu?.anchor === b;
       closeAgentMenu();
       if (again) return;
-      openRowMenu(b, [{ name: "Hide from this list", icon: EYE_OFF, run: () => hideUsageAgent(g.id, true) }]);
+      openRowMenu(b, [
+        ...(countable(g.id) ? [{ name: "Count as an agent…", icon: COUNT_AS, run: () => pickCountAs(b, g) }] : []),
+        ...counted.map((c) => ({ name: t("Count {client} on its own", { client: c }), icon: OUT, run: () => countClientAs(c, "") })),
+        { name: "Hide from this list", icon: EYE_OFF, sep: countable(g.id) || counted.length > 0, run: () => hideUsageAgent(g.id, true) },
+      ]);
     };
+    if (counted.length) {
+      const sub = r.querySelector(".who .sub");
+      sub.textContent = t("with {clients}", { clients: counted.join(", ") }) + " · " + sub.textContent;
+    }
     b.onclick = (e) => { e.stopPropagation(); menu(); };
     r.oncontextmenu = (e) => { e.preventDefault(); menu(); };
     r.querySelector(".share").after(b);
@@ -17626,6 +17638,33 @@ function renderUsage() {
   // the account cards say how many of this period's requests were
   // magpie's own (ownLine), which they could only once the summary came
   if (quotas && (u.accounts?.some((g) => g.own?.calls) || $("#subscriptionUsage .quota-own"))) renderQuotas();
+}
+
+// countable is whether the Usage page's Agents list offers to count a
+// client as an agent: one magpie doesn't know, not magpie's own (#1839)
+// nor the calls that named no client.
+const COUNT_AS = "M3 3v3.5A3.5 3.5 0 0 0 6.5 10H13M10 7l3 3-3 3";
+function countable(id) {
+  return !!id && id !== "other" && !/^magpie/i.test(id) && !(state.clients || []).some((a) => a.id === id);
+}
+// pickCountAs opens the agents a client can be counted as, under its menu
+// button.
+function pickCountAs(anchor, g) {
+  const opts = (state.clients || []).filter((a) => a.id !== "magpie").map((a) => ({ v: a.id, name: a.name, literalName: true, note: "" }));
+  openProtoMenu(anchor, opts, "", (v) => countClientAs(g.id, v), "Count this client's calls as", "", "left", false, opts.length > 8 ? "Search agents…" : "");
+}
+// countClientAs counts a client's calls as an agent's on the Usage and
+// Sessions pages, or on its own again (as ""), and draws the page again
+// from the ledger read anew: the history is counted the new way too.
+async function countClientAs(client, as) {
+  try {
+    const s = await api("usage/arrange", { count: { client, as } });
+    state.settings = { ...state.settings, clientAgents: s.clientAgents || {} };
+    status(as ? t("{client} is counted as {agent}", { client, agent: (state.clients || []).find((a) => a.id === as)?.name || as }) : t("{client} is counted on its own", { client }), "ok");
+    await loadUsage();
+  } catch (e) {
+    status(e.message, "err");
+  }
 }
 
 // hideUsageAgent takes a client out of the Usage page's Agents list, or
@@ -17855,6 +17894,8 @@ function ledDetail(r, cols) {
     dl.append(el("dt", "", t("Routing")), dd);
   }
   if (r.computerName) add("Computer", r.computerName);
+  // the client's own name, for one the user counts as an agent (#1958)
+  add("Client", r.client);
   // the columns a narrow window leaves out, shown only while it does (#860)
   const opt = (name, value) => {
     if (!value) return;

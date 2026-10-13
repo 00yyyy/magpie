@@ -46,6 +46,7 @@ import (
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // cliBehind is the terminal's magpie command when it's a copied file rather
@@ -1177,6 +1178,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.PanelUsageHidden = cur.PanelUsageHidden
 		// and the clients the Usage page's Agents list leaves out, set there
 		in.UsageAgentsHidden = cur.UsageAgentsHidden
+		// and the clients it counts as agents, set there too (#1958)
+		in.ClientAgents = cur.ClientAgents
 		// how agents' lists name models, set on its own for the agents to be told
 		in.PlainNames, in.PlainOwnNames = cur.PlainNames, cur.PlainOwnNames
 		in.BareModelIDs = cur.BareModelIDs // set on its own (bare-ids below)
@@ -1772,19 +1775,30 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		writeJSON(rw, settingsState())
 	})
 	// the Usage page's order of its cards, which the tray panel's Allowances
-	// tab follows, what that tab leaves out, and the clients the page's
-	// Agents list leaves out, in magpie's settings; one not sent stays as it is
+	// tab follows, what that tab leaves out, the clients the page's Agents
+	// list leaves out, and a client it counts as one of the agents (Count,
+	// #1958; As "" counts it on its own again), in magpie's settings; one
+	// not sent stays as it is
 	mux.HandleFunc("POST /api/usage/arrange", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Order        *[]string
 			PanelHidden  *[]string
 			AgentsHidden *[]string
+			Count        *struct{ Client, As string }
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
 			return
 		}
 		s := settings.Load()
+		if in.Count != nil {
+			m, err := countClient(s.ClientAgents, in.Count.Client, in.Count.As)
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			s.ClientAgents = m
+		}
 		if in.Order != nil {
 			s.UsageOrder = *in.Order
 		}
@@ -2260,4 +2274,32 @@ func editRedactRule(rules []redact.Rule, at int, was, to redact.Rule) ([]redact.
 	next := slices.Clone(rules)
 	next[at] = tidy[0]
 	return next, nil
+}
+
+// countClient is the user's ClientAgents with client counted as the agent
+// as (#1958), or on its own again when as is "". Only a client magpie
+// doesn't know is counted as another, and only as an agent it knows: an
+// agent counted as another would be lost from its own row, and magpie's
+// own calls are kept apart from the agents' (#1839).
+func countClient(m map[string]string, client, as string) (map[string]string, error) {
+	client, as = strings.TrimSpace(client), strings.TrimSpace(as)
+	if client == "" {
+		return nil, fmt.Errorf("no client to count")
+	}
+	out := maps.Clone(m)
+	if out == nil {
+		out = map[string]string{}
+	}
+	if as == "" {
+		delete(out, strings.ToLower(client))
+		return out, nil
+	}
+	if usage.IsAgent(client) || client == "other" || usage.AgentOf(client) == "magpie" || strings.HasPrefix(strings.ToLower(client), "magpie") {
+		return nil, fmt.Errorf("%s is counted on its own", client)
+	}
+	if !usage.IsAgent(as) || as == "magpie" {
+		return nil, fmt.Errorf("%s is not an agent magpie knows", as)
+	}
+	out[strings.ToLower(client)] = as
+	return out, nil
 }

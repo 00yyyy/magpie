@@ -33,6 +33,10 @@ type Row struct {
 	// which the gateway never saw: no status, no provider, no model asked
 	// for, but what the file says of the call. "" for one the gateway logged.
 	Source string `json:"source,omitempty"`
+	// Client is the client's own name when the user counts it as another
+	// agent (settings.ClientAgents, #1958): Agent is the one it is
+	// counted as, this what the ledger recorded it as
+	Client string `json:"client,omitempty"`
 }
 
 // Failed is whether the call failed: the agent was answered an error status,
@@ -146,7 +150,7 @@ func (f Filter) keeps(r Record) bool {
 	if f.Model != "" && r.Model != f.Model {
 		return false
 	}
-	if f.Agent != "" && AgentOf(r.Agent) != f.Agent {
+	if f.Agent != "" && ReportedAs(r.Agent) != f.Agent {
 		return false
 	}
 	if f.Provider != "" && r.Provider != f.Provider {
@@ -338,7 +342,7 @@ func logRecord(c sessions.Call) Record {
 func gatewayMatches(recs []Record, logs []sessions.Call) map[int]bool {
 	gateway, local := &rowChunk{}, &rowChunk{}
 	for i, r := range recs {
-		r.Agent = AgentOf(r.Agent)
+		r.Agent = ReportedAs(r.Agent)
 		gateway.add(Row{Record: r}, "", int64(i), false)
 	}
 	for i, c := range logs {
@@ -377,7 +381,7 @@ func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessi
 	agents, providers = []string{}, []string{}
 	identities := newSessionResolver(logs)
 	add := func(r Record, pr *catalog.Price, source string) {
-		if a := AgentOf(r.Agent); !slices.Contains(agents, a) {
+		if a := ReportedAs(r.Agent); !slices.Contains(agents, a) {
 			agents = append(agents, a)
 		}
 		if r.Provider != "" && !slices.Contains(providers, r.Provider) {
@@ -394,7 +398,7 @@ func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessi
 		if pr != nil && r.Input+r.Output > 0 {
 			row.Cost, row.Priced = r.CostAt(*pr), true
 		}
-		row.Agent = AgentOf(r.Agent)
+		row.Agent, row.Client = reportedAs(r.Agent)
 		if !r.IsRejected() {
 			sum.addFrom(row, pr)
 		}
