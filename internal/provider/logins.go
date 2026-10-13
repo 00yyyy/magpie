@@ -677,7 +677,7 @@ func liveLogin(agent string) (savedLogin, bool) {
 		if l.User == "" {
 			return savedLogin{}, false
 		}
-		return l, true
+		return claudeSignInOwner(readLogins(), l), true
 	}
 	return savedLogin{}, false
 }
@@ -1356,27 +1356,47 @@ func forgetAccountCaches() {
 // runs and Usage card then were the first's (netfishx on X). The account
 // the profile names holding the sign-in already, it is that one's.
 func claudeSignInOfAnother(ls []savedLogin, l savedLogin) bool {
+	same, others := claudeHolders(ls, l)
+	return !same && len(others) > 0
+}
+
+// claudeHolders are the saved Claude accounts holding the sign-in l
+// carries: same when l's own record (sameLogin) is one of them, others the
+// rest.
+func claudeHolders(ls []savedLogin, l savedLogin) (same bool, others []savedLogin) {
 	if l.Agent != "claude" {
-		return false
+		return false, nil
 	}
 	c, ok := parseClaudeCredentials(l.Auth)
 	if !ok {
-		return false
+		return false, nil
 	}
 	holds := func(x savedLogin) bool {
 		o, ok := parseClaudeCredentials(x.Auth)
 		return ok && (c.OAuth.AccessToken != "" && o.OAuth.AccessToken == c.OAuth.AccessToken ||
 			c.OAuth.RefreshToken != "" && o.OAuth.RefreshToken == c.OAuth.RefreshToken)
 	}
-	another := false
 	for _, x := range ls {
 		if x.Agent != "claude" || !holds(x) {
 			continue
 		}
 		if sameLogin(x, l) {
-			return false
+			return true, nil
 		}
-		another = true
+		others = append(others, x)
 	}
-	return another
+	return false, others
+}
+
+// claudeSignInOwner is the account Claude Code is signed in to by its
+// sign-in, l named by its profile: when the profile is another's
+// (claudeSignInOfAnother) and one saved account alone holds the sign-in,
+// that one. Named by the profile, the account switched to was taken for
+// the one before: its /usage went through the other's proxy and was shown
+// on the other's card (#1938).
+func claudeSignInOwner(ls []savedLogin, l savedLogin) savedLogin {
+	if same, others := claudeHolders(ls, l); !same && len(others) == 1 {
+		l.User, l.Profile = others[0].User, others[0].Profile
+	}
+	return l
 }
