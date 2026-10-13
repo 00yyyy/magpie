@@ -257,6 +257,11 @@ dirty group draft; Cancel retains the draft and Discard opens the new editor.
 `newGroupWith` applies the same guard when creating a group from a model and
 waits for `show` to accept navigation before creating its draft.
 
+The Plugins page updates the npm search-results section when a search answers,
+leaving suggested plugin cards in place so a click begun before the answer still
+opens the intended plugin. `plugin-market.test.cjs` holds the search response
+between pointerdown and pointerup to check this in Chromium and WebKit.
+
 ## Verification
 
 The session readers include Cursor CLI chat stores, Cursor editor project
@@ -302,3 +307,28 @@ Apple silicon), they check a program that names its SDK in
 `LC_VERSION_MIN_MACOSX`, as go test links one for an Intel Mac. Their
 presses are sent within the test's own process, and no system setting
 changes.
+
+### Agent visibility management
+
+The Agents page's Manage button sits inside the list's footer beside the fold
+control, and stays available when nothing is folded. The tray panel keeps its
+existing fold control. The Manage agents dialog includes folded and hidden agents.
+Search matches names and IDs; select all and invert apply to the search results,
+while Select unconnected agents replaces the selection with matching agents not
+on magpie (neither wired, added nor drifting). Selection survives search changes.
+Hide selected and Unhide selected each save one arrangement through the existing
+`POST /api/agents/arrange`, preserving order and agents outside the operation.
+Only a successful save changes the list; a failure keeps the selection for retry.
+While saving, Done, Escape and the backdrop cannot close the manager and expose
+conflicting row actions. Closing is restored on either success or failure.
+A completed save invalidates older in-flight state reads for the arrangement
+fields only. Fresh reads still accept other windows' visibility changes; bulk
+unhide does not add a lasting client-side override. These races are covered by
+`agent-visibility-saving.test.cjs`.
+While the manager is open, state refreshes update its visibility labels and
+action availability in place, preserving the search, selection and keyboard focus.
+These operations never connect, disconnect or edit an agent's files. Unhiding
+still follows the existing Not set up folding rules. The dialog explains that
+restoring visibility does not pin an unconfigured agent into the main list.
+See `agent-bulk-visibility.test.cjs` for persistence, partial selection, failed
+saves, narrow layouts and all five languages in Chromium and WebKit.
