@@ -712,9 +712,13 @@ func claudeIn(at place) *Agent {
 	// groups first as viaMagpie lists them, so the user picks among them
 	// in Claude Code itself. Groups were left out, so one magpie had just
 	// made the main model and every tier wasn't in /model (#1575). One the
-	// user wrote is theirs.
+	// user wrote is theirs. One whose every row says "via magpie" is
+	// magpie's though its mark is gone (an older magpie's stash lost it),
+	// so it is kept up to date rather than left as the user's: a WSL
+	// Claude Code's /model kept a list without the models added since
+	// (#2046, cjyrainbow).
 	pickerKey := at.key("claude.model_picker")
-	pickerOurs := func() bool { return stashLoad()[pickerKey] != "" }
+	pickerOurs := func() bool { return stashLoad()[pickerKey] != "" || magpiesPicker(path) }
 	dropPicker := func() error {
 		defer forget(pickerKey)
 		if _, has := edit.GetJSON(path, "modelPicker"); has && pickerOurs() {
@@ -2078,3 +2082,28 @@ var (
 	noticeClaudeEffort    = newNotice("an open Claude Code session keeps the effort it started with — restart it to use this.")
 	noticeClaudeUltracode = newNotice("an open Claude Code session keeps the ultracode it started with — restart it to use this.")
 )
+
+// magpiesPicker says whether settings.json's modelPicker is one magpie
+// wrote: it has rows, and each one's description is magpie's, which ends
+// "via magpie" (writePicker in claudeIn).
+func magpiesPicker(path string) bool {
+	raw, has := edit.GetJSON(path, "modelPicker")
+	if !has {
+		return false
+	}
+	var p struct {
+		Options []struct {
+			Model       string `json:"model"`
+			Description string `json:"description"`
+		} `json:"options"`
+	}
+	if json.Unmarshal([]byte(raw), &p) != nil || len(p.Options) == 0 {
+		return false
+	}
+	for _, o := range p.Options {
+		if o.Model == "" || !strings.HasSuffix(o.Description, "via magpie") {
+			return false
+		}
+	}
+	return true
+}
