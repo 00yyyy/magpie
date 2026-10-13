@@ -1593,12 +1593,12 @@ func codexGatewayURL() string { return gateway.URL() + gateway.CodexPath }
 // [model_providers.magpie]'s base_url with magpie's key, that one first
 // while magpie is Codex's provider), else gateway.URL(). It is http or
 // https, on any port or the scheme's own, and may have a path before
-// magpie's: a company's reverse proxy at https://ai.corp.example/magpie
-// (#1985).
+// magpie's: a company's reverse proxy at https://ai.corp.example/magpie,
+// or one on this machine at http://127.0.0.1:8788/<route> (#1985).
 func codexKeptGateway(path string) string {
 	kept := func(u, suffix string) string {
 		base, ok := strings.CutSuffix(strings.TrimSuffix(strings.TrimSpace(u), "/"), suffix)
-		if !ok || !onAnotherMachine(base) {
+		if !ok || !onAnotherMachine(base) && !loopbackWithPath(base) {
 			return ""
 		}
 		if p, err := url.Parse(base); err != nil || p.User != nil || p.RawQuery != "" || p.Fragment != "" {

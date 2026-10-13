@@ -78,8 +78,11 @@ func keyValues(b []byte) []keyValue {
 // to move, wslMovedFrom). Where the write brings the gateway's address in
 // place of one on another machine, that one stays; where it brings magpie's
 // own key in place of another, in a file that had none of magpie's keys,
-// the other stays. An address on this machine's loopback (another port,
-// localhost) is magpie's own and follows the gateway; with more than one
+// the other stays, with the path every URL there had before magpie's (a
+// reverse proxy's /magpie). An address on this machine's loopback
+// (another port, localhost) is magpie's own and follows the gateway, but
+// for a local proxy's route, one with a path of its own where nothing but
+// magpie has answered (#1985); with more than one
 // address or key gone, which went where can't be told, and the write is
 // left as it is. magpie's own files are never the user's pointing.
 func keptAway(path string, data []byte) []byte {
@@ -91,14 +94,17 @@ func keptAway(path string, data []byte) []byte {
 	if err != nil || len(was) == 0 || bytes.Contains(was, []byte(g)) {
 		return data
 	}
-	elsewhere := false
+	elsewhere, local := false, false
 	for _, o := range originRE.FindAll(was, -1) {
 		if wslHost(string(o)) {
 			return data
 		}
 		elsewhere = elsewhere || onAnotherMachine(string(o))
 	}
-	if !elsewhere {
+	for _, u := range urlRE.FindAll(was, -1) {
+		local = local || loopbackWithPath(string(u))
+	}
+	if !elsewhere && !local {
 		return data
 	}
 	out := data
@@ -112,10 +118,21 @@ func keptAway(path string, data []byte) []byte {
 				away = s
 			}
 		}
+		p := awayPath(was, data, g, away)
+		// on this machine, a local proxy's route (#1985): one with a path
+		// of its own before magpie's, where magpie answers or hasn't been
+		// asked yet; without one it is magpie's own on an older port
 		if !onAnotherMachine(away) {
-			return data
+			if !loopbackWithPath(away + p) {
+				return data
+			}
+			if ok, known := magpieAt(away + p); known && !ok {
+				return data
+			}
 		}
-		out = replaceOrigin(data, g, away+awayPath(was, data, g, away))
+		out = replaceOrigin(data, g, away+p)
+	} else if !elsewhere {
+		return data
 	}
 
 	// the key: the one that went with the address, in place of magpie's

@@ -20,6 +20,10 @@ import (
 // path of its own before magpie's (#1985).
 const corpProxy = "https://ai.corp.example/magpie"
 
+// localProxy is the reporter's: a company-mandated compliance proxy on this
+// machine, its route before magpie's paths.
+const localProxy = "http://127.0.0.1:8788/claude-code-anthropic/cc-7f3a9e"
+
 // fakeMagpieAt answers magpieAt from answers (a base missing is no magpie),
 // as the probe would have, and says which bases were asked.
 func fakeMagpieAt(t *testing.T, answers map[string]bool) func() []string {
@@ -38,15 +42,25 @@ func fakeMagpieAt(t *testing.T, answers map[string]bool) func() []string {
 }
 
 // davisjiahao (#1985): every agent connected to magpie, then pointed by the
-// user at a company's nginx (https://ai.corp.example/magpie) that forwards
-// to the gateway, magpie's key and model kept. That is still magpie: no
-// agent's Check calls it changed, and the sync every start runs keeps the
-// proxy's address, its path included. The same address where something
-// else answers (a relay CC Switch put there) is still told, for every
-// agent but Codex, which keeps an address with magpie's key in its
-// provider table as it did for #816 and tries it (unreachable).
+// user at a proxy that forwards to the gateway, magpie's key and model
+// kept: a company's nginx (https://ai.corp.example/magpie), or the
+// reporter's own, a compliance proxy on this machine every request must go
+// through (http://127.0.0.1:8788/claude-code-anthropic/<route>). That is
+// still magpie: no agent's Check calls it changed, and the sync every
+// start runs keeps the proxy's address, its path included. The same
+// address where something else answers (a relay CC Switch put there) is
+// still told, for every agent but Codex, which keeps an address with
+// magpie's key in its provider table as it did for #816 and tries it
+// (unreachable).
 func TestReverseProxyIsStillMagpie(t *testing.T) {
+	// named so the test's folders, which carry the name, hold no address
+	t.Run("nginx", func(t *testing.T) { reverseProxyIsStillMagpie(t, corpProxy) })
+	t.Run("local", func(t *testing.T) { reverseProxyIsStillMagpie(t, localProxy) })
+}
+
+func reverseProxyIsStillMagpie(t *testing.T, proxy string) {
 	t.Setenv("MAGPIE_ADDR", "")
+	host := strings.SplitN(strings.SplitN(proxy, "://", 2)[1], "/", 2)[0]
 	home, _ := codexHome(t, "", "")
 	managed := claudeManaged
 	claudeManaged = func() string { return filepath.Join(home, "managed-settings.json") }
@@ -88,10 +102,10 @@ func TestReverseProxyIsStillMagpie(t *testing.T) {
 	}
 	for _, p := range moved {
 		b, _ := os.ReadFile(p)
-		os.WriteFile(p, []byte(strings.ReplaceAll(string(b), "http://127.0.0.1:3591", corpProxy)), 0o644)
+		os.WriteFile(p, []byte(strings.ReplaceAll(string(b), "http://127.0.0.1:3591", proxy)), 0o644)
 	}
 
-	asked := fakeMagpieAt(t, map[string]bool{corpProxy: true})
+	asked := fakeMagpieAt(t, map[string]bool{proxy: true})
 	for _, a := range agents {
 		if c := a.Check(); c != "" {
 			t.Errorf("%s behind the proxy: %s", a.ID, c)
@@ -101,7 +115,7 @@ func TestReverseProxyIsStillMagpie(t *testing.T) {
 		}
 	}
 	for _, b := range asked() {
-		if b != corpProxy {
+		if b != proxy {
 			t.Errorf("asked %s, not the proxy's own address", b)
 		}
 	}
@@ -115,7 +129,7 @@ func TestReverseProxyIsStillMagpie(t *testing.T) {
 	}
 
 	// the sync keeps the proxy, its /magpie too
-	fakeMagpieAt(t, map[string]bool{corpProxy: true})
+	fakeMagpieAt(t, map[string]bool{proxy: true})
 	if err := provider.Save(provider.Provider{ID: "fake2", Name: "Fake2", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m2"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +140,7 @@ func TestReverseProxyIsStillMagpie(t *testing.T) {
 		if strings.Contains(s, "127.0.0.1:3591") {
 			t.Errorf("%s is back on this machine's gateway", name)
 		}
-		if !strings.Contains(s, corpProxy) || strings.Count(s, "ai.corp.example") != strings.Count(s, corpProxy) {
+		if !strings.Contains(s, proxy) || strings.Count(s, host) != strings.Count(s, proxy) {
 			t.Errorf("%s lost the proxy's path:\n%s", name, s)
 		}
 	}
@@ -327,5 +341,67 @@ func TestCodexSignedInBehindReverseProxy(t *testing.T) {
 	}
 	if c := codex(home).Check(); c != "" {
 		t.Fatalf("behind the proxy: %s", c)
+	}
+}
+
+// The reporter's case (#1985, davisjiahao): Claude Code must go through a
+// compliance proxy on this machine (http://127.0.0.1:8788/<route>, which
+// forwards to the gateway). Once magpie has answered there, picking a
+// model in magpie keeps the proxy (it wrote 127.0.0.1:3425 back, bypassing
+// the proxy the company requires), as does Reconnect, which isn't offered,
+// and the sync. A relay there is magpie's to point away from on a pick.
+func TestClaudeBehindLocalProxyKeepsIt(t *testing.T) {
+	home, path := claudeSettings(t, `{}`)
+	saveDeepseek(t)
+	cl := claude(home)
+	if err := cl.Apply("model", "deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	edit.SetJSON(path, edit.KV{Path: "env.ANTHROPIC_BASE_URL", Value: localProxy})
+	fakeMagpieAt(t, map[string]bool{localProxy: true})
+	url := func() string { u, _ := edit.GetJSON(path, "env.ANTHROPIC_BASE_URL"); return u }
+
+	if d := cl.Drift(); d != nil {
+		t.Fatalf("behind the proxy: %+v", d)
+	}
+	if err := cl.Apply("model", "deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	if u := url(); u != localProxy {
+		t.Fatalf("a pick wrote %s", u)
+	}
+	if m := cl.Field("model").Get(); m != "deepseek/flash" {
+		t.Fatalf("model %q", m)
+	}
+	if d := cl.Drift(); d != nil {
+		t.Fatalf("after a pick: %+v", d)
+	}
+	// a tier given a model of its own keeps it on the next pick, as on
+	// the gateway's own address
+	edit.SetJSON(path, edit.KV{Path: "env." + tierEnv("haiku"), Value: "deepseek/pro"})
+	if err := cl.Apply("model", "deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetJSON(path, "env."+tierEnv("haiku")); v != "deepseek/pro" {
+		t.Fatalf("haiku's own model went: %q", v)
+	}
+	if err := provider.Save(provider.Provider{ID: "fake2", Name: "Fake2", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m2"}}); err != nil {
+		t.Fatal(err)
+	}
+	SyncCatalog()
+	if u := url(); u != localProxy {
+		t.Fatalf("the sync wrote %s", u)
+	}
+
+	// a relay there, not magpie: told, and a pick puts magpie back
+	fakeMagpieAt(t, map[string]bool{})
+	if d := cl.Drift(); d == nil || d.Kind != "unwired" {
+		t.Fatalf("a relay: %+v", d)
+	}
+	if err := cl.Apply("model", "deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	if u := url(); u != gateway.URL() {
+		t.Fatalf("a pick at a relay left %s", u)
 	}
 }

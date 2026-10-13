@@ -492,7 +492,15 @@ func claudeIn(at place) *Agent {
 	// Claude version dashed, which it would read as Claude Opus 4
 	spell := provider.ClaudeSpelled
 	model := jsonGet(path, "model")
-	routed := func() bool { return env("ANTHROPIC_BASE_URL") == at.gw() }
+	// routed: on magpie's gateway, or on a proxy to it where magpie has
+	// answered (#1985), which a pick keeps (gwAt)
+	routed := func() bool { u := env("ANTHROPIC_BASE_URL"); return u == at.gw() || surelyMagpie(u, at.gw()) }
+	gwAt := func() string {
+		if u := env("ANTHROPIC_BASE_URL"); u != at.gw() && surelyMagpie(u, at.gw()) {
+			return u
+		}
+		return at.gw()
+	}
 	// the main model while routed: settings.json's model, which Claude
 	// Code's /model saves, so a model picked there holds for its next
 	// sessions too (the owner: 去掉 ANTHROPIC_MODEL，让 /model 的选择对新会话也生效)
@@ -1083,8 +1091,9 @@ func claudeIn(at place) *Agent {
 				return err
 			}
 		}
+		gw := gwAt()
 		kvs := []edit.KV{
-			{Path: "env.ANTHROPIC_BASE_URL", Value: at.gw()},
+			{Path: "env.ANTHROPIC_BASE_URL", Value: gw},
 			{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: wiredKey()},
 			{Path: "env.ANTHROPIC_SMALL_FAST_MODEL", Value: spell(tiers["haiku"])},
 			{Path: "model", Value: spell(main)},
@@ -1109,7 +1118,7 @@ func claudeIn(at place) *Agent {
 		} else if err := edit.DelJSON(path, "env.CLAUDE_CODE_SUBAGENT_MODEL"); err != nil {
 			return err
 		}
-		stash(map[string]string{mainKey: main, wroteAt: at.gw()})
+		stash(map[string]string{mainKey: main, wroteAt: gw})
 		// the new model's window replaces the old one's, when magpie knows
 		// it; one the user set is theirs
 		if err := writeWindow(main, tiers); err != nil {
@@ -2016,7 +2025,7 @@ func claudeStandIn(path, model string) string { return claudeStandInAt(path, mod
 // gateway at gw.
 func claudeStandInAt(path, model, gw string) string {
 	env := func(k string) string { v, _ := edit.GetJSON(path, "env."+k); return provider.ClaudeRead(v) }
-	if env("ANTHROPIC_BASE_URL") != gw {
+	if u := env("ANTHROPIC_BASE_URL"); u != gw && !surelyMagpie(u, gw) {
 		return ""
 	}
 	// the model Claude Code is set to itself, by that id, is its own pick

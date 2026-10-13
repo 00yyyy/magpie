@@ -75,30 +75,64 @@ var magpieAt = func(base string) (ok, known bool) {
 	return probed("magpie "+base, func() bool { return magpieProbe(base) })
 }
 
-// reachesMagpie says v, the address an agent's config names where magpie
-// wrote want, still reaches magpie another way: a URL on another machine or
-// a name, such as a company's reverse proxy in front of the gateway
-// (davisjiahao, #1985: https://ai.corp.example/magpie forwarding to
-// 127.0.0.1:3425), with want's path after it (/v1 where want has it),
-// whose root answers as magpie. Until it has been tried it is taken as
-// reaching magpie, as an address not yet tried isn't unreachable either:
-// telling drift first would offer Reconnect, which writes the proxy away.
-// One on this machine's loopback is magpie's own on an older port, never
+// proxyBase is v, the address an agent's config names where magpie wrote
+// want, with want's path (/v1 where want has it) cut off its end, when
+// that can be another way to magpie: a URL on another machine or a name,
+// such as a company's reverse proxy in front of the gateway (davisjiahao,
+// #1985: https://ai.corp.example/magpie forwarding to 127.0.0.1:3425), or
+// one on this machine's loopback with a path of its own before magpie's (a
+// compliance proxy's http://127.0.0.1:8788/claude-code-anthropic/<route>).
+// One on loopback with none is magpie's own on an older port, never
 // another way to it.
-func reachesMagpie(v, want string) bool {
+func proxyBase(v, want string) (string, bool) {
 	w, err := url.Parse(want)
 	if err != nil || (w.Scheme != "http" && w.Scheme != "https") || w.Host == "" {
-		return false
+		return "", false
 	}
 	base, ok := strings.CutSuffix(strings.TrimSuffix(strings.TrimSpace(v), "/"), strings.TrimSuffix(w.Path, "/"))
-	if !ok || !onAnotherMachine(base) {
-		return false
+	if !ok || !onAnotherMachine(base) && !loopbackWithPath(base) {
+		return "", false
 	}
 	if u, err := url.Parse(base); err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", false
+	}
+	return base, true
+}
+
+// loopbackWithPath says base is an http(s) address on this machine's
+// loopback with a path: a local proxy's route, never the gateway's own
+// address, which has none.
+func loopbackWithPath(base string) bool {
+	u, err := url.Parse(base)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || onAnotherMachine(base) {
+		return false
+	}
+	return strings.Trim(u.Path, "/") != ""
+}
+
+// reachesMagpie says v reaches magpie another way (proxyBase) whose root
+// answers as magpie. Until it has been tried it is taken as reaching
+// magpie, as an address not yet tried isn't unreachable either: telling
+// drift first would offer Reconnect, which writes the proxy away.
+func reachesMagpie(v, want string) bool {
+	base, ok := proxyBase(v, want)
+	if !ok {
 		return false
 	}
 	ok, known := magpieAt(base)
 	return ok || !known
+}
+
+// surelyMagpie is reachesMagpie once magpie has answered there: what a
+// write that keeps the address waits for, so a relay not yet tried never
+// gets magpie's model or key.
+func surelyMagpie(v, want string) bool {
+	base, ok := proxyBase(v, want)
+	if !ok {
+		return false
+	}
+	ok, known := magpieAt(base)
+	return ok && known
 }
 
 var reach struct {
