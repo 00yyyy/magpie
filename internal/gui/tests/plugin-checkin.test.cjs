@@ -20,8 +20,8 @@ const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 const assets = path.resolve(__dirname, "../assets");
 test("plugin check-in saved choices take precedence over derived defaults", async () => {
   const source = await fs.readFile(path.join(assets, "app.js"), "utf8");
-  const fn = source.match(/function pluginCheckinOn\(id\) \{[\s\S]*?\n\}/)[0];
-  const on = (settings) => vm.runInNewContext(`${fn}; pluginCheckinOn("fakeco")`, { state: { settings } });
+  const fn = source.match(/const PLUGIN_CHECKIN_INHERITS = \{[\s\S]*?\n\};\nfunction pluginCheckinOn\(id\) \{[\s\S]*?\n\}/)[0];
+  const on = (settings, id = "fakeco") => vm.runInNewContext(`${fn}; pluginCheckinOn(${JSON.stringify(id)})`, { state: { settings } });
   assert.equal(on({ pluginCheckins: { fakeco: true } }), true);
   assert.equal(on({ pluginCheckins: { fakeco: false }, checkinPlugins: [{ id: "fakeco", on: true }] }), false);
   assert.equal(on({ pluginCheckins: { fakeco: true }, checkinPlugins: [{ id: "fakeco", on: false }] }), true);
@@ -29,6 +29,38 @@ test("plugin check-in saved choices take precedence over derived defaults", asyn
   assert.equal(on({ checkinPlugins: [{ id: "another", on: true }] }), false);
   assert.equal(on({}), false);
   assert.equal(on(undefined), false);
+  // a plugin that took a built-in's check-in over follows the built-in's
+  // switch until its own is set, as provider.PluginCheckinOn does, also in
+  // /api/state's shape, which has no list (#1912)
+  assert.equal(on({ traeCheckin: true }, "trae-cn"), true);
+  assert.equal(on({ traeCheckin: true, pluginCheckins: { "trae-cn": false } }, "trae-cn"), false);
+  assert.equal(on({ workbuddyCheckin: true }, "workbuddy"), true);
+  assert.equal(on({ minimaxCheckin: true }, "minimax-code-global"), true);
+  assert.equal(on({ qoderCheckin: true }, "qoder-cn"), true);
+  assert.equal(on({ traeCheckin: true }, "fakeco"), false);
+  assert.equal(on({ traeCheckin: true }, "constructor"), false);
+});
+
+// the built-ins a plugin's check-in inherits are the ones Go's
+// PluginCheckinOn names, each by the setting's own JSON key
+test("the inherited switches are provider.PluginCheckinOn's", async () => {
+  const root = path.resolve(__dirname, "../../..");
+  const go = await fs.readFile(path.join(root, "internal/provider/plugin_checkin.go"), "utf8");
+  const sw = go.match(/func PluginCheckinOn\([\s\S]*?\n\}/)[0];
+  const cases = [...sw.matchAll(/case ([^:]+):\s*return s\.(\w+)/g)].map((m) => [m[1].split(",").map((x) => x.trim()), m[2]]);
+  const ids = { "wbCN.id": "workbuddy", TraeCNID: "trae-cn", MiniMaxCodeID: "minimax-code", MiniMaxCodeGlobalID: "minimax-code-global", '"qoder"': "qoder", QoderCNID: "qoder-cn" };
+  const settings = await fs.readFile(path.join(root, "internal/settings/settings.go"), "utf8");
+  const want = {};
+  for (const [names, field] of cases) {
+    const key = settings.match(new RegExp(`\\b${field} +bool +\`json:"(\\w+)`))[1];
+    for (const n of names) {
+      assert(ids[n], "an id the test doesn't know: " + n);
+      want[ids[n]] = key;
+    }
+  }
+  const source = await fs.readFile(path.join(assets, "app.js"), "utf8");
+  const got = vm.runInNewContext(source.match(/const PLUGIN_CHECKIN_INHERITS = \{[\s\S]*?\n\};/)[0] + "; PLUGIN_CHECKIN_INHERITS");
+  assert.deepEqual({ ...got }, want);
 });
 
 const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);

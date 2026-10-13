@@ -227,7 +227,10 @@ A plugin's Usage-card Auto check-in button reads the persisted
 [`app.js`](../../internal/gui/assets/app.js)). `/api/state` returns that map
 without the derived `checkinPlugins` list included by `/api/settings`.
 An explicit saved false wins over the list; when no saved choice exists,
-the list's resolved vendor default remains the fallback. This keeps a saved
+the list's resolved vendor default remains the fallback, and without the
+list (a state refresh) the switch of the built-in check-in the plugin took
+over is (`PLUGIN_CHECKIN_INHERITS`, the ids `provider.PluginCheckinOn` names;
+a test reads both). This keeps a saved
 switch on through a focus refresh and lets the next click turn it off.
 [`plugin-checkin.test.cjs`](../../internal/gui/tests/plugin-checkin.test.cjs)
 covers both response shapes, refreshes and the subsequent toggle.

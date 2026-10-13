@@ -16712,11 +16712,22 @@ function pluginCheckin(id, name) {
     off: t("Have the {name} plugin check each account in once a day, as Settings' Daily check-in does", { name }),
   };
 }
+// the built-in check-in a plugin's provider took over, whose switch it
+// follows until its own is set: provider.PluginCheckinOn's switch
+const PLUGIN_CHECKIN_INHERITS = {
+  workbuddy: "workbuddyCheckin", "trae-cn": "traeCheckin",
+  "minimax-code": "minimaxCheckin", "minimax-code-global": "minimaxCheckin",
+  qoder: "qoderCheckin", "qoder-cn": "qoderCheckin",
+};
 function pluginCheckinOn(id) {
   // /api/state carries the saved map, without /api/settings's plugin list.
-  // An explicit false must win over the list's inherited vendor default.
+  // An explicit false must win over the list's inherited vendor default,
+  // and with neither the built-in's own switch is that default (#1912).
   const prefs = state.settings;
-  return !!(prefs?.pluginCheckins?.[id] ?? prefs?.checkinPlugins?.find((p) => p.id === id)?.on);
+  const own = prefs?.pluginCheckins?.[id] ?? prefs?.checkinPlugins?.find((p) => p.id === id)?.on;
+  if (own !== undefined) return !!own;
+  const inherits = Object.hasOwn(PLUGIN_CHECKIN_INHERITS, id) ? PLUGIN_CHECKIN_INHERITS[id] : "";
+  return !!(inherits && prefs?.[inherits]);
 }
 function checkinRow(q, first, subs) {
   const by = q.checkinBy || "";
