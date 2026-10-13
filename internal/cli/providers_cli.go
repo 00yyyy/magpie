@@ -62,9 +62,11 @@ const providerUsage = `usage:
                                           past either a request is turned away with a 429 (0: no bound)
   magpie provider rpm <id> [n|off]        how many requests each account or key sends the vendor in any minute;
                                           one more waits for room, up to 2 minutes, then is turned away with a 429
-  magpie provider quota-rest <id> [30m|6h|7d|default]
+  magpie provider quota-rest <id> [30m|6h|7d|until 08:00|until 00:00+08:00|default]
                                           how long a key sits out once the vendor says it is out of its allowance
-                                          without saying when it is back (default: 15 minutes; at most 8 days)
+                                          without saying when it is back (default: 15 minutes; at most 8 days),
+                                          or until the time of day a daily allowance comes back, on this
+                                          computer's clock or at the vendor's offset from UTC
   magpie provider listed <id> yes|no      no: its models serve only through routing groups, not in the list
   magpie provider off|on <id>             switch it off (kept, but no agent or request uses it), or on again
   magpie provider test <id> [--as codex|claude-code] [model…]
@@ -1578,26 +1580,39 @@ func rpmCmd(rest []string) error {
 // vendor says one is out of its allowance without saying when it is back
 // (#1772: Ollama Cloud's weekly limit, asked again every 15 minutes).
 func quotaRestCmd(rest []string) error {
+	usage := fmt.Errorf("magpie provider quota-rest <id> [30m|6h|7d|until 08:00|until 00:00+08:00|default]")
+	if len(rest) == 3 && (rest[1] == "until" || rest[1] == "at") {
+		rest = []string{rest[0], rest[2]}
+	}
 	if len(rest) < 1 || len(rest) > 2 {
-		return fmt.Errorf("magpie provider quota-rest <id> [30m|6h|7d|default]")
+		return usage
 	}
 	p, err := provider.Find(rest[0])
 	if err != nil {
 		return err
 	}
 	if len(rest) > 1 {
-		minutes, err := restMinutes(rest[1])
-		if err != nil {
-			return err
+		// a time of day (#2008): until the daily allowance comes back
+		if strings.Contains(rest[1], ":") {
+			err = provider.SetQuotaResetAt(p.ID, rest[1])
+		} else {
+			var minutes int
+			if minutes, err = restMinutes(rest[1]); err == nil {
+				if err = provider.SetQuotaRest(p.ID, minutes); err == nil && minutes == 0 {
+					err = provider.SetQuotaResetAt(p.ID, "")
+				}
+			}
 		}
-		if err := provider.SetQuotaRest(p.ID, minutes); err != nil {
+		if err != nil {
 			return err
 		}
 		if p, err = provider.Find(p.ID); err != nil {
 			return err
 		}
 	}
-	if d := p.QuotaRestFor(); d > 0 {
+	if t, ok := provider.NextResetAt(p.QuotaResetAt, time.Now()); ok {
+		fmt.Printf("%s · a key out of its allowance, with no word of when it is back, sits out until %s (next %s)\n", p.Name, p.QuotaResetAt, t.Local().Format("Jan 2 15:04"))
+	} else if d := p.QuotaRestFor(); d > 0 {
 		fmt.Printf("%s · a key out of its allowance, with no word of when it is back, sits out %s\n", p.Name, restWords(d))
 	} else {
 		fmt.Printf("%s · a key out of its allowance, with no word of when it is back, sits out 15 minutes (magpie's own)\n", p.Name)

@@ -1359,6 +1359,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if in.QuotaRest == 0 && old != nil {
 					in.QuotaRest = old.QuotaRest
 				}
+				// and the time of day they are back, set with `magpie
+				// provider quota-rest <id> until 08:00` (#2008)
+				if in.QuotaResetAt == "" && old != nil {
+					in.QuotaResetAt = old.QuotaResetAt
+				}
 				// and Codex's requests as sent, set with `magpie provider
 				// set <id> codex=as-sent` (#1758)
 				if !in.CodexAsSent && old != nil {

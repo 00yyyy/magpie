@@ -1371,7 +1371,11 @@ rests comes from the first of these that is known: the reset time in the
 refusal (Claude Code's `usage limit reached|<time>`, ChatGPT's
 `resets_at`), the reset of a window magpie last read as used up (98%, 100%
 In order), the vendor's `Retry-After` or rate-limit reset header (an hour
-at most), else 15 minutes. It is never longer than 8 days. The account's
+at most), else 15 minutes. A key's provider can rest longer of its own:
+`magpie provider quota-rest <id> 6h`, or `until 08:00` for an allowance
+that comes back at a time of day (`until 00:00+08:00` on the vendor's
+clock). Its own rest stands over a `Retry-After` that asked for more than
+the hour. It is never longer than 8 days. The account's
 windows are read again right away, and once a reading finds the window it
 filled started again (for Claude, a new `/usage`; for any subscription,
 its reset gone by), it is back at once, not at the time the refusal

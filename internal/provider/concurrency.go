@@ -228,6 +228,97 @@ func SetQuotaRest(id string, minutes int) error {
 		return err
 	}
 	p.QuotaRest = minutes
+	if minutes > 0 {
+		p.QuotaResetAt = "" // the one set last is the one that counts
+	}
+	return Save(*p)
+}
+
+// OwnQuotaRest is how long, from now, one of p's keys sits out of quota
+// when the vendor doesn't say when it is back: until the next QuotaResetAt
+// when one is set, else QuotaRest; 0 for the gateway's own.
+func (p Provider) OwnQuotaRest(now time.Time) time.Duration {
+	if t, ok := NextResetAt(p.QuotaResetAt, now); ok {
+		return t.Sub(now)
+	}
+	return p.QuotaRestFor()
+}
+
+// ResetAt is a time of day an allowance comes back: an hour and minute, on
+// this computer's clock (Loc nil) or at a fixed offset from UTC.
+type ResetAt struct {
+	Hour, Minute int
+	Loc          *time.Location
+}
+
+// ParseResetAt reads a time of day as QuotaResetAt keeps it: "08:00",
+// "8:30", "00:00+08:00", "16:00Z". "" is none, with no error.
+func ParseResetAt(s string) (*ResetAt, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	bad := fmt.Errorf("a time of day is HH:MM, or HH:MM+08:00 on the vendor's clock, not %q", s)
+	clock, zone := s, ""
+	if i := strings.IndexAny(s, "+-Zz"); i >= 0 {
+		clock, zone = s[:i], s[i:]
+	}
+	h, m, ok := strings.Cut(clock, ":")
+	hh, err1 := strconv.Atoi(h)
+	mm, err2 := strconv.Atoi(m)
+	if !ok || err1 != nil || err2 != nil || len(m) != 2 || hh < 0 || hh > 23 || mm < 0 || mm > 59 {
+		return nil, bad
+	}
+	r := &ResetAt{Hour: hh, Minute: mm}
+	switch {
+	case zone == "":
+	case zone == "Z" || zone == "z":
+		r.Loc = time.UTC
+	default:
+		t, err := time.Parse("-07:00", zone)
+		if err != nil {
+			return nil, bad
+		}
+		_, off := t.Zone()
+		r.Loc = time.FixedZone(zone, off)
+	}
+	return r, nil
+}
+
+// NextResetAt is the first time after now that the time of day s names
+// comes round; ok is false when s names none.
+func NextResetAt(s string, now time.Time) (time.Time, bool) {
+	r, err := ParseResetAt(s)
+	if err != nil || r == nil {
+		return time.Time{}, false
+	}
+	loc := r.Loc
+	if loc == nil {
+		loc = now.Location()
+	}
+	n := now.In(loc)
+	t := time.Date(n.Year(), n.Month(), n.Day(), r.Hour, r.Minute, 0, 0, loc)
+	if !t.After(now) {
+		t = time.Date(n.Year(), n.Month(), n.Day()+1, r.Hour, r.Minute, 0, 0, loc)
+	}
+	return t, true
+}
+
+// SetQuotaResetAt sets the time of day the provider's keys out of quota
+// are back, when the vendor doesn't say: "" for none. Setting one lets go
+// of QuotaRest, which it would stand over.
+func SetQuotaResetAt(id, at string) error {
+	if _, err := ParseResetAt(at); err != nil {
+		return err
+	}
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.QuotaResetAt = strings.TrimSpace(at)
+	if p.QuotaResetAt != "" {
+		p.QuotaRest = 0
+	}
 	return Save(*p)
 }
 
