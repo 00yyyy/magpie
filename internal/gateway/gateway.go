@@ -1808,16 +1808,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		cands, pl, leadAccount = leadFirst(leadScope, parent, cands, pl)
 	}
-	if hit != nil && hit.Use != "" && !(hit.Held && aff.Kept) {
+	if hit != nil && hit.Use != "" {
 		// the rule's member first, over whoever answered last, as a turn
-		// begins; within it, whoever answered last stays — the rule's
-		// member, or who took over when it failed
-		was := cands[0]
-		var ok bool
-		cands, pl, ok = applyRule(hit, ms, cands, pl)
-		if ok && aff.Kept && cands[0].rest != was.rest {
-			aff.Kept, aff.Why = false, "rule"
-		}
+		// begins; within it, whoever answered last stays while it is of
+		// the rule's member, the member's others behind it (#1946)
+		cands, pl = ruleOver(hit, ms, cands, pl, aff)
 	}
 	// the rules of the groups in the group, down the one that goes first
 	var nested []NestedRule
