@@ -5,7 +5,7 @@
 // the shrink left the reader at the foot of the list — rows they never clicked
 // — while the row they were editing was above the window. The row saved comes
 // back into sight instead, as near to where they were as the shorter content
-// allows. In English and Chinese, Chromium and WebKit.
+// allows. In every language, Chromium and WebKit, wide and narrow.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -27,11 +27,6 @@ const groups = [
   mk("big", "Big", models),
   ...Array.from({ length: 14 }, (_, i) => mk(`g${i}`, `G${i}`, models.slice(0, 3))),
 ];
-
-const words = {
-  en: { save: "Save", saved: "Big saved" },
-  zh: { save: "保存", saved: "已保存 Big" },
-};
 
 function serve(lang) {
   const data = () => ({ models, pools: [], deciders: [], found: false, groups });
@@ -78,18 +73,17 @@ const seen = (page) => page.evaluate(() => {
 });
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const lang of ["en", "zh"]) {
-    const w = words[lang];
-    test(`${engine} ${lang}: a group saved mid-list keeps its row in sight`, async (t) => {
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) for (const width of [1100, 420]) {
+    test(`${engine} ${lang} ${width}px: a group saved mid-list keeps its row in sight`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(async () => {
         if (process.env.ARTIFACT_DIR) {
           await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
-          await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-mid-list-after-save.png`) });
+          await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-mid-list-after-save.png`) });
         }
         await browser.close();
       });
-      const page = await (await browser.newContext({ viewport: { width: 1100, height: 640 }, reducedMotion: "reduce" })).newPage();
+      const page = await (await browser.newContext({ viewport: { width, height: 640 }, reducedMotion: "reduce" })).newPage();
       page.setDefaultTimeout(5000);
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
@@ -97,8 +91,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=routing");
       await page.locator(".rt-group[data-id=big]").waitFor();
 
-      await page.locator(".rt-group[data-id=big]").click();
-      const save = page.locator(".rt-gedit button", { hasText: new RegExp(`^${w.save}$`) });
+      // narrow, the row is below the window's foot; magpie moves the page
+      // only for the reader, so it is wheeled to as a reader would
+      const row = page.locator(".rt-group[data-id=big]");
+      const vb = await page.locator("#view-routing").boundingBox();
+      await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2);
+      for (let i = 0; i < 100; i++) {
+        const b = await row.boundingBox();
+        if (b && b.y >= vb.y && b.y + Math.min(b.height, 40) <= vb.y + vb.height) break;
+        await page.mouse.wheel(0, 80);
+        await page.waitForTimeout(20);
+      }
+      await page.waitForTimeout(200);
+      await row.click();
+      const saveText = await page.evaluate(() => t("Save"));
+      const save = page.locator(".rt-gedit button", { hasText: new RegExp(`^${saveText}$`) });
       await save.waitFor();
       const view = page.locator("#view-routing");
       const box = await view.boundingBox();
