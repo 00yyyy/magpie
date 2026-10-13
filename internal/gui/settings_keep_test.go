@@ -148,6 +148,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		UsageAgentsHidden:    []string{"curl"},
 		PlainNames:           true,
 		PlainOwnNames:        true,
+		BareModelIDs:         true,
 		CodexAgentsV1:        true,
 		CodexTitles:          "off",
 		CodexDescriptions:    "fake/m1",

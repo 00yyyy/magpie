@@ -1179,6 +1179,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.UsageAgentsHidden = cur.UsageAgentsHidden
 		// how agents' lists name models, set on its own for the agents to be told
 		in.PlainNames, in.PlainOwnNames = cur.PlainNames, cur.PlainOwnNames
+		in.BareModelIDs = cur.BareModelIDs // set on its own (bare-ids below)
 		in.CodexAgentsV1 = cur.CodexAgentsV1
 		in.FullContext = cur.FullContext // set on its own (full-context below)
 		in.CompactAt = cur.CompactAt     // and so is the threshold
@@ -1360,6 +1361,20 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			set = func() error { return provider.SetSuffixMode(in.Mode) }
 		}
 		if err := set(); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// whether the gateway's /v1/models lists each model by its id without
+	// the provider as well (settings.BareModelIDs, love1sbug on X)
+	mux.HandleFunc("POST /api/settings/bare-ids", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ On bool }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetBareModelIDs(in.On); err != nil {
 			fail(rw, err)
 			return
 		}

@@ -872,8 +872,25 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 		// shows its Fast switch on a model whose tiers hold priority
 		// (#1914). A model with none says nothing
 		tiers := codexTiers(shown)
-		for i, e := range shown {
+		// each model by its bare id as well, after the provider/model ids,
+		// when the user asked for it (settings.BareModelIDs): a client
+		// moved from another proxy asks for gpt-5.6-sol (love1sbug on X).
+		// Never for another magpie, whose provider would list each twice.
+		// Each row is the entry the bare id reaches, its label that one's.
+		rows, ids := slices.Clip(shown), map[int]string{}
+		if !magpie && provider.BareModelIDs() {
+			labels = slices.Clip(labels)
+			for _, b := range provider.BareEntries(shown) {
+				ids[len(rows)] = b.ID
+				rows = append(rows, shown[b.Of])
+				labels = append(labels, labels[b.Of])
+			}
+		}
+		for i, e := range rows {
 			m := modelObject(e)
+			if id, ok := ids[i]; ok {
+				m["id"] = id
+			}
 			if magpie {
 				if how := webSearchOf(e, searches); how != "" {
 					m["web_search"] = how
@@ -939,8 +956,16 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 	id := unprefixed(r.PathValue("id"))
-	for _, e := range keyAllowed(r, provider.Catalog()) {
+	shown := keyAllowed(r, provider.Catalog())
+	for _, e := range shown {
 		if e.ID == id {
+			writeJSON(w, 200, modelObject(e))
+			return
+		}
+	}
+	// by its bare id, as the list gives it with that setting on
+	if provider.BareModelIDs() {
+		if e, ok := provider.BareEntry(shown, id); ok {
 			writeJSON(w, 200, modelObject(e))
 			return
 		}

@@ -611,7 +611,11 @@ func GroupFor(id string) (string, bool) {
 	if id == "" || strings.Contains(id, "/") {
 		return "", false
 	}
-	all := Groups()
+	return groupForIn(Groups(), id)
+}
+
+// groupForIn is GroupFor over the groups all, read once for many ids.
+func groupForIn(all []Group, id string) (string, bool) {
 	k := Slug(sameModel(id))
 	for _, gid := range []string{strings.ToLower(id), k, "auto-" + k} {
 		if g, ok := groupOf(all, gid); ok {

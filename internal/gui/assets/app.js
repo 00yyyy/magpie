@@ -21236,6 +21236,7 @@ function renderSettings() {
   renderDiscovery(s);
   renderOTel(s, keep);
   renderPort(s);
+  renderBareIds(s);
   renderLAN(s);
   renderAllow(s);
   renderCORS(s);
@@ -23307,6 +23308,16 @@ function renderPort(s) {
   val.append(field, save);
   r.append(who, val);
   box.replaceChildren(r); // swapped whole: the list is never laid out empty
+}
+
+// renderBareIds: Model ids without the provider (settings.bareModelIDs,
+// love1sbug on X, moving from CLIProxyAPI): the gateway's /v1/models
+// lists each model by its own id as well, gpt-5.6-sol beside
+// codex/gpt-5.6-sol. Posted on its own; off by default.
+function renderBareIds(s) {
+  $("#bareIdsSegs").replaceChildren(segs([[false, t("Off")], [true, t("On")]], !!s.bareModelIDs, (on) =>
+    writingPrefs(api("settings/bare-ids", { on })).then((ns) => { prefs = state.settings = ns; renderSettings(); })
+      .catch((e) => { status(t(e.message), "err"); renderSettings(); })));
 }
 
 // renderCORS: the web pages whose scripts may call the gateway from a
