@@ -687,6 +687,9 @@ func fetch(src Source) (string, error) {
 		resp, err := source.DoOfficial(c, req)
 		return resp, token, err
 	}
+	if tooBig.has(src) {
+		return fetchSkillFiles(src)
+	}
 	resp, _, err := get(tarballURL(src.Repo, src.Ref))
 	if err != nil {
 		return "", fmt.Errorf("couldn't reach GitHub: %w", err)
@@ -731,6 +734,13 @@ func fetch(src Source) (string, error) {
 	}
 	if err := untar(resp.Body, tmp); err != nil {
 		os.RemoveAll(tmp)
+		if errors.Is(err, errTooBig) {
+			// a repository that is mostly something else (an app with its
+			// skills beside it, #1941): only the skills' folders
+			resp.Body.Close()
+			tooBig.add(src)
+			return fetchSkillFiles(src)
+		}
 		return "", err
 	}
 	return tmp, nil
@@ -766,8 +776,8 @@ func untar(r io.Reader, dst string) error {
 				return err
 			}
 		case tar.TypeReg:
-			if total += h.Size; total > 200<<20 {
-				return fmt.Errorf("the repository is too big to install skills from (over 200 MB)")
+			if total += h.Size; total > maxFetch {
+				return errTooBig
 			}
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 				return err

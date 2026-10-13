@@ -100,11 +100,17 @@ func newBase(skills []*Skill) string {
 
 // gitTree is a repository's files as GitHub's API lists them.
 type gitTree struct {
-	Truncated bool `json:"truncated"`
-	Tree      []struct {
-		Path string `json:"path"`
-		Type string `json:"type"`
-	} `json:"tree"`
+	Truncated bool       `json:"truncated"`
+	Tree      []gitEntry `json:"tree"`
+}
+
+// gitEntry is one file or folder in a gitTree.
+type gitEntry struct {
+	Path string `json:"path"`
+	Type string `json:"type"`
+	Mode string `json:"mode"`
+	SHA  string `json:"sha"`
+	Size int64  `json:"size"`
 }
 
 // skillDirsIn are the folders with a SKILL.md under base in a repository's

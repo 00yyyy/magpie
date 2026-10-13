@@ -38,10 +38,7 @@ func fakeSkillRepo(t *testing.T, files map[string]string) (asked map[string]int,
 			}
 			sort.Strings(paths)
 			for _, p := range paths {
-				tree.Tree = append(tree.Tree, struct {
-					Path string `json:"path"`
-					Type string `json:"type"`
-				}{p, "blob"})
+				tree.Tree = append(tree.Tree, gitEntry{Path: p, Type: "blob"})
 			}
 			b, _ := json.Marshal(tree)
 			etag := `"` + hashOf(b) + `"`
@@ -209,10 +206,7 @@ func TestNewBase(t *testing.T) {
 	}
 	tree := &gitTree{}
 	for _, p := range []string{"SKILL.md.bak", "skills/a/SKILL.md", "skills/a/b/SKILL.md", "skills/node_modules/x/SKILL.md", "skills/.x/SKILL.md", "skills/c/d/e/f/SKILL.md", "skills/c/d/e/f/g/SKILL.md", "other/z/SKILL.md"} {
-		tree.Tree = append(tree.Tree, struct {
-			Path string `json:"path"`
-			Type string `json:"type"`
-		}{p, "blob"})
+		tree.Tree = append(tree.Tree, gitEntry{Path: p, Type: "blob"})
 	}
 	if got := skillDirsIn(tree, "skills"); !slices.Equal(got, []string{"skills/a", "skills/c/d/e/f"}) {
 		t.Errorf("skills in the tree: %v", got)
