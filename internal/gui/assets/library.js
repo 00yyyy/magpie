@@ -2351,7 +2351,11 @@
       rh.append(el("span", "label", t("In your agents")), el("span", "grow"), el("span", "note", t("Looking through the agents' skill folders…")));
       body.append(rh);
     } else if (lib.foundSkills.length) {
-      const rh = el("div", "row-head");
+      const fnames = lib.foundSkills.map((f) => f.name);
+      if (pickFound && fnames.length < 2) endFoundPick();
+      for (const n of foundPicked) if (!fnames.includes(n)) foundPicked.delete(n);
+      for (const n of foundErrs.keys()) if (!fnames.includes(n)) foundErrs.delete(n);
+      const rh = el("div", "row-head lib-foundhead");
       rh.append(el("span", "label", t("In your agents")), el("span", "grow"), el("span", "note", t("not in the library — bring one in to give it to the others")));
       // every one at once, rather than a click for each
       if (lib.foundSkills.length > 1) {
@@ -2364,12 +2368,13 @@
           b.textContent = t("Bring in all");
         });
         all.title = t("Brings the {n} skills into the library: the agents that have them go on having them, and you can give them to the others", { n: names.length });
-        rh.append(all);
+        rh.append(foundPickButton(), all);
       }
       body.append(rh);
       const list = el("div", "list lib-list");
       for (const f of lib.foundSkills) list.append(foundSkillRow(f));
       body.append(list);
+      if (pickFound) body.append(foundPickBar());
     }
     if (lib.skills.length || lib.projects.length) renderProjects(body, "skills");
     const skip = shownAgents().filter((a) => !a.skills);
@@ -2456,6 +2461,11 @@
   let naming = false;          // the pick bar asks the name of a group to put them in
   const picked = new Set();    // the names picked
   const pickErrs = new Map();  // name → why Remove left it, as the bar's Remove said (#1852)
+  // the skills "In your agents" have a Select of their own, to take several
+  // out of the agents at once (wongxy on Discord): never with the library's
+  let pickFound = false;
+  const foundPicked = new Set();
+  const foundErrs = new Map();
   let skillQuery = "";         // what the filter over the skills holds
   let skillTimer = 0;          // the filter's redraw, waiting for typing to pause
   const unfiltered = new Set(); // groups folded while filtering, till the filter changes
@@ -2935,6 +2945,12 @@
     const skills = kind === "skills", hooks = kind === "hooks";
     b.title = picking ? (skills ? t("Stop picking skills") : hooks ? t("Stop picking hooks") : t("Stop picking servers"))
       : skills ? t("Pick some skills and turn them on or off together") : hooks ? t("Pick some hooks and turn them on or off together") : t("Pick some servers and turn them on or off together");
+    // one Select at a time, the found skills' Select's other side: ending
+    // it from here would take its bar away, scrolling the page
+    if (skills && pickFound && !picking) {
+      b.disabled = true;
+      b.title = t("Done picking the skills in your agents first");
+    }
     return b;
   }
 
@@ -2942,6 +2958,7 @@
   // pick from, ends it, and a name no longer in the list isn't picked
   function pickingFor(kind, items) {
     if (picking && (picking !== kind || items.length < 2)) { picking = ""; picked.clear(); pickErrs.clear(); }
+    if (kind !== "skills") endFoundPick();
     for (const n of picked) if (!items.some((x) => x.name === n)) picked.delete(n);
     for (const n of pickErrs.keys()) if (!items.some((x) => x.name === n)) pickErrs.delete(n);
   }
@@ -2972,32 +2989,34 @@
 
   // A box for some skills: ticked when they're all picked, half when some
   // are; a click picks them all, or none when they all were.
-  function pickBox(names) {
+  // The found skills' boxes are the same, on their own set (set, sync).
+  function pickBox(names, set = picked, sync = syncPicks) {
     const box = el("input", "lib-pickbox");
     box.type = "checkbox";
     box._names = names;
+    box._set = set;
     paintPick(box);
     box.onclick = (e) => {
       e.stopPropagation();
-      const every = names.length && names.every((n) => picked.has(n));
-      for (const n of names) if (every) picked.delete(n); else picked.add(n);
-      syncPicks();
+      const every = names.length && names.every((n) => set.has(n));
+      for (const n of names) if (every) set.delete(n); else set.add(n);
+      sync();
     };
     return box;
   }
   const pickAll = (skills) => pickBox(skills.map((s) => s.name));
   function paintPick(box) {
-    const k = box._names.filter((n) => picked.has(n)).length;
+    const k = box._names.filter((n) => box._set.has(n)).length;
     box.checked = k > 0 && k === box._names.length;
     box.indeterminate = k > 0 && k < box._names.length;
     const row = box.parentElement;
-    if (row?.classList.contains("lib-skill") || row?.classList.contains("lib-server") || row?.classList.contains("lib-hook")) row.classList.toggle("picked", box.checked);
+    if (row?.classList.contains("lib-skill") || row?.classList.contains("lib-server") || row?.classList.contains("lib-hook") || row?.classList.contains("lib-found")) row.classList.toggle("picked", box.checked);
   }
   // every box drawn, and the bar, as the picks are now
   function syncPicks() {
     if (!picked.size) naming = false;
     for (const b of page.querySelectorAll(".lib-pickbox")) paintPick(b);
-    const bar = page.querySelector(".lib-pickbar");
+    const bar = page.querySelector(".lib-pickbar:not(.lib-foundbar)");
     if (bar) bar.replaceWith(pickBar(picking === "servers" ? mcpAgents() : picking === "hooks" ? hookAgents() : skillAgents()));
   }
 
@@ -4248,7 +4267,7 @@
   }
 
   function foundSkillRow(f) {
-    const row = el("div", "row lib-row");
+    const row = el("div", "row lib-row lib-found");
     const who = el("div", "who");
     who.append(el("div", "name", f.name));
     const sub = el("div", "sub", f.description || "");
@@ -4273,8 +4292,136 @@
     const rm = button("", "lib-icon danger", () => confirmRemoveFoundSkill(f));
     rm.append(svg(GLYPH.trash, 13, 1.4));
     rm.title = t("Remove");
+    // picking, a row is its box, as Finder's are in a selection: its own
+    // buttons give way to the bar's
+    if (pickFound) return foundPickRow(row, f.name);
     row.append(b, rm);
     return row;
+  }
+
+  // ---------- some found skills, picked, out of the agents at once ----------
+
+  function endFoundPick() { pickFound = false; foundPicked.clear(); foundErrs.clear(); }
+
+  function foundPickButton() {
+    const b = button(pickFound ? t("Done") : t("Select"), "action lib-updall lib-select lib-foundselect", () => {
+      const on = !pickFound;
+      endFoundPick();
+      pickFound = on;
+      render();
+    });
+    b.dataset.alt = pickFound ? t("Select") : t("Done");
+    b.title = pickFound ? t("Stop picking skills") : t("Pick some of these skills to take them out of your agents together");
+    // one Select at a time: ending the library's from here would take its
+    // bar away above this button, moving it from under the pointer
+    if (picking === "skills" && !pickFound) {
+      b.disabled = true;
+      b.title = t("Done picking the library's skills first");
+    }
+    return b;
+  }
+
+  function foundPickRow(row, name) {
+    const box = pickBox([name], foundPicked, syncFoundPicks);
+    row.prepend(box);
+    row.classList.toggle("picked", foundPicked.has(name));
+    row.onclick = () => box.click();
+    row.title = t("Select {name}", { name });
+    const why = foundErrs.get(name), sub = why && row.querySelector(":scope > .who > .sub");
+    if (sub) {
+      row.classList.add("lib-pickfailed");
+      sub.className = "sub lib-pickerr";
+      sub.textContent = sub.title = t("Not removed: {error}", { error: why });
+    }
+    return row;
+  }
+
+  function syncFoundPicks() {
+    for (const b of page.querySelectorAll(".lib-found .lib-pickbox, .lib-foundbar .lib-pickbox")) paintPick(b);
+    const bar = page.querySelector(".lib-foundbar");
+    if (bar) bar.replaceWith(foundPickBar());
+  }
+
+  // its bar: all of them, how many are picked, Remove…, Clear and Done
+  function foundPickBar() {
+    const bar = el("div", "row lib-row lib-pickbar lib-foundbar");
+    const all = lib.foundSkills, some = all.filter((f) => foundPicked.has(f.name)), n = some.length;
+    const every = el("label", "lib-pickall");
+    every.append(pickBox(all.map((f) => f.name), foundPicked, syncFoundPicks), el("span", "", t("All {n}", { n: all.length })));
+    every.onclick = (e) => e.stopPropagation();
+    bar.append(every, el("span", "lib-pickn" + (n ? "" : " none"), n ? t("{n} selected", { n }) : t("Pick skills to take them out of your agents together")), el("span", "grow"));
+    if (n) {
+      const rm = button(t("Remove…"), "action danger lib-updall lib-pickrm", () => confirmRemoveFoundSome(some));
+      rm.title = t("Take the skills picked out of your agents");
+      const c = button(t("Clear"), "lib-updall lib-pickclear", () => { foundPicked.clear(); syncFoundPicks(); });
+      c.title = t("Unpick them all");
+      bar.append(rm, c);
+    }
+    bar.append(button(t("Done"), "action lib-updall lib-pickdone", () => { endFoundPick(); render(); }));
+    return bar;
+  }
+
+  // asked first, as a row's Remove asks: one alone is said as its row's
+  // sheet says it; several, how many and where they go
+  function confirmRemoveFoundSome(some) {
+    const names = some.map((f) => f.name), n = names.length;
+    const ed = el("div", "editor lib-editor");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.trash), el("b", "", n === 1 ? t("Remove {name}?", { name: names[0] }) : t("Remove {n} skills?", { n })));
+    ed.append(head);
+    const lines = [];
+    if (n === 1) {
+      const f = some[0], agents = [...f.agents, ...(f.copies || [])].map(nameOf).filter(Boolean);
+      lines.push(!agents.length ? t("Its folder is moved to magpie's backups.")
+        : f.link ? t("It is taken out of {agents}. The folder it was linked from stays where it is.", { agents: agents.join(", ") })
+        : t("It is taken out of {agents}, and its folder is moved to magpie's backups.", { agents: agents.join(", ") }));
+      if (f.shared) lines.push(t("Its entry in {path} goes to the backups too, so no agent reads it from there.", { path: f.shared }));
+      if (f.others?.length) lines.push(t("{agents} has another skill by this name; that one stays.", { agents: f.others.map(nameOf).join(", ") }));
+    } else {
+      const agents = [...new Set(some.flatMap((f) => [...f.agents, ...(f.copies || [])]))].map(nameOf).filter(Boolean);
+      if (agents.length) lines.push(t("They are taken out of {agents}.", { agents: agents.join(", ") }));
+      const linked = some.filter((f) => f.link).length, kept = n - linked, shared = some.filter((f) => f.shared).length;
+      const where = [];
+      if (kept) where.push(t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept }));
+      if (linked) where.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
+      lines.push(where.join(" "));
+      if (shared) lines.push(t("{n} have an entry in the shared skills folder, which goes to the backups too, so no agent reads them from there.", { n: shared }));
+      if (some.some((f) => f.others?.length)) lines.push(t("Another agent's own skill by one of these names stays."));
+    }
+    for (const l of lines) if (l) ed.append(el("p", "lib-confirm", l));
+    const bar = el("div", "bar");
+    const go = button(n === 1 ? t("Remove") : t("Remove {n}", { n }), "primary danger-fill", async () => { go.disabled = true; if (await removeFoundSome(names)) closeLibModal(true); else go.disabled = false; });
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
+    ed.append(bar);
+    modal = { save: () => go.click() };
+    openLib(ed);
+  }
+
+  // as the library's Remove… (#1852): the ones taken out leave the list and
+  // the picks; one that couldn't be stays picked and says why on its row;
+  // none taken out (the change refused) leaves the sheet open with why
+  async function removeFoundSome(names) {
+    const what = (p) => p.what.replace(/^skill:/, "");
+    try {
+      const v = await api("library/skills/remove-found-some", { names });
+      take(v);
+      const res = v.result || {}, no = res.unremoved || [];
+      foundErrs.clear();
+      for (const p of no) foundErrs.set(what(p), p.error);
+      const gone = names.filter((x) => !foundErrs.has(x));
+      for (const x of gone) foundPicked.delete(x);
+      const done = gone.length === 1 ? t("{name} removed", { name: gone[0] }) : t("{n} skills removed", { n: gone.length });
+      if (no.length) status((gone.length ? done + " · " : "") + t("{name} wasn't removed: {error}", { name: what(no[0]), error: no[0].error }) + (no.length > 1 ? " " + t("(and {n} more)", { n: no.length - 1 }) : ""), "warn", 10000);
+      else report(res, done);
+      render();
+      return true;
+    } catch (e) {
+      status(e.message, "err", 6000);
+      foundErrs.clear();
+      if (names.length === 1) foundErrs.set(names[0], e.message);
+      render();
+      return false;
+    }
   }
 
   function confirmRemoveFoundSkill(f) {
