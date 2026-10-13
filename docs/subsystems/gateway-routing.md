@@ -366,6 +366,48 @@ Covered by `TestSearchAPIAtItsOwnBaseURL`, `TestSearchKeyStaysAtItsBaseURL`,
 `TestSearchAPIBaseURLFromSettings`, `TestSearchCLI` and
 `search-api.test.cjs`.
 
+## A search API's keys
+
+A search API's `key` may hold several keys, separated by commas (#1477).
+`askSearchAPIKeys` asks them in the order `searchKeyOrder` gives
+([`search_keys.go`](../../internal/gateway/search_keys.go)), each with a
+quarter of the search's time. By default they take turns (SlouchyQuill on
+Discord, after dsh-tavily-pool): a counter per vendor moves the first key
+asked on by one each search. `pick` `order` (`provider.SearchPickOrder`,
+`magpie search add … pick=order`, In order in Settings) always starts from
+the first. Only a refusal (`searchRefused`: 401, 402, 403, 429, 432, 433)
+goes on to the next key; any other error ends the search there.
+
+A refused key rests (`searchRestFor`): 401 and 403 ten minutes ("turned
+away"), 402 an hour ("out of credit"), a rate limit its `Retry-After` held
+to 30 seconds through 10 minutes (a minute without one). 432 and 433 are
+Tavily's plan and pay-as-you-go limits, out of credit from Tavily only; from
+any other vendor they rest as a rate limit. A resting key is not dropped:
+it is asked after every key that isn't, the one back soonest first, so a
+search still has every key to fall back on. A key that answers wakes.
+Rests are held by vendor and a hash of the key (`searchKeyID`), never the
+key itself, and the vendor's error has the key masked
+(`provider.MaskSearchKey`, `tvly-…abcd`) before it is logged or returned.
+
+What each Tavily key has used is read from `GET /usage` with that key
+([`search_quota.go`](../../internal/gateway/search_quota.go),
+`readTavilyUsage`): the key's own `limit` when it has one, else its account
+plan's `plan_limit` and `plan_usage`, shared by the account's keys (a free
+account's keys have `limit` null); both null is no limit. A read that fails
+or a reply missing those fields is unknown, with why, never 0 used. A read
+is kept two minutes (Tavily allows /usage 10 times in 10 minutes) unless
+asked fresh. A key at its limit with no pay-as-you-go credit left rests an
+hour as "used up"; a later read that finds credit wakes a key resting for
+that or for being out of credit. Settings › Models › Web search shows a row
+of the keys under an API with several or with Tavily's (In turn / In order,
+each key masked with what it has used, Check again), and `magpie search`
+lists the same, read fresh.
+
+Covered by `TestReadTavilyUsage`, `TestSearchKeysTakeTurnsRoundRobin`,
+`TestSearchKeyRefusedRests`, `TestSearchRestFor`, `TestSearchQuotas`,
+`TestSearchKeyNeverInFull`, `TestSearchAPIKeysTakeTurns` and
+`search-keys.test.cjs`.
+
 ## Web search as an MCP server
 
 `SearchMCPPath`, `/mcp/magpie/web-search`, serves the same `webSearch` a

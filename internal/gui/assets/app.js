@@ -22388,6 +22388,7 @@ function renderSearch(s, keep) {
     }
     const r = row(`${n + 1}. ${a.name}`, what, ...tools);
     r.classList.add("search-api");
+    if (a.keys > 1 || a.quota) searchKeysRow(s, a, row, set);
   });
   // which goes first when both a provider and a search API can search
   // (#928); with only one of them there is nothing to choose
@@ -22403,6 +22404,70 @@ function renderSearch(s, keep) {
   const mcp = row(t("MCP server"), t("Cursor, Claude Desktop and other agents can add this search as an MCP server (Streamable HTTP) with one web_search tool. From another computer, send a gateway key as Authorization: Bearer <key>."),
     el("code", "", mcpURL), copyBtn(mcpURL, t("Address")));
   mcp.id = "searchMcpRow";
+}
+
+// searchKeysRow: under a search API with several keys, or one whose keys
+// quota magpie can read (Tavily's), a row of its keys (SlouchyQuill on
+// Discord): how a search picks among them, in turn (the default) or in
+// order, and what each has used of its limit, read once as the page is
+// drawn and again on Check again. A read that fails says unknown and why,
+// never 0; a key a search set aside lately says why and until when.
+const searchQuotaSeen = {};
+function searchKeysRow(s, a, row, set) {
+  const tools = [];
+  if (a.keys > 1) tools.push(segs([["", t("In turn")], ["order", t("In order")]], a.pick || "",
+    (v) => set({ vendor: a.vendor, pick: v || "turns" })));
+  const mine = el("div", "search-quota");
+  const seenAs = [a.key, a.url].join(" ");
+  const ask = (fresh) => {
+    searchQuotaSeen[a.vendor] = { as: seenAs, loading: true };
+    draw();
+    api("settings/search-quota", { vendor: a.vendor, fresh })
+      .then((r) => { searchQuotaSeen[a.vendor] = { as: seenAs, keys: r.keys || [] }; })
+      .catch((e) => { searchQuotaSeen[a.vendor] = { as: seenAs, err: e.message }; })
+      .finally(draw);
+  };
+  // the list in the page now: Settings may have been drawn again while
+  // the read was out
+  const draw = () => {
+    const list = document.querySelector(`.search-keys[data-vendor="${a.vendor}"] .search-quota`) || mine;
+    const seen = searchQuotaSeen[a.vendor];
+    list.replaceChildren();
+    if (!seen || seen.loading) return list.append(el("div", "faint", t("Reading what each key has used…")));
+    if (seen.err) return list.append(el("div", "err", t("Unknown: {why}", { why: seen.err })));
+    const num = (n) => Number(n).toLocaleString(intlLang());
+    for (const q of seen.keys) {
+      const line = el("div", "quota-key");
+      const said = !q.known ? t("Unknown: {why}", { why: q.err || "" })
+        : q.unlimited ? t("{used} used, no limit", { used: num(q.used) })
+        : t("{used} of {limit} used", { used: num(q.used), limit: num(q.limit) });
+      const notes = [];
+      if (q.known && q.of === "plan") notes.push(q.plan ? t("{plan} plan, shared by its account's keys", { plan: q.plan }) : t("the plan's, shared by its account's keys"));
+      if (q.paygoLeft > 0) notes.push(t("{n} pay-as-you-go left", { n: num(q.paygoLeft) }));
+      if (q.resting) notes.push(t("asked last until {time}: {why}", { time: new Date(q.restUntil).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }),
+        why: { "turned away": t("turned away"), "out of credit": t("out of credit"), "rate limited": t("rate limited"), "used up": t("used up") }[q.resting] || q.resting }));
+      const used = el("span", q.known ? (q.usedUp ? "used warn" : "used") : "used err", said);
+      line.append(el("code", "", q.key), used);
+      if (q.usedUp) line.append(el("span", "warn", t("used up")));
+      if (notes.length) line.append(el("span", "faint", notes.join(" · ")));
+      list.append(line);
+    }
+  };
+  if (a.quota) {
+    const again = el("button", "text search-quota-again", t("Check again"));
+    again.onclick = () => ask(true);
+    tools.push(again);
+  }
+  const r = row(t("Keys of {name}", { name: a.name }),
+    a.keys > 1 ? t("In turn spreads searches over the keys; in order uses the first until it is refused. A key refused lately is asked last.") : t("What the key has used of its limit"),
+    ...tools);
+  r.classList.add("search-keys");
+  r.dataset.vendor = a.vendor;
+  if (a.quota) {
+    r.querySelector(".who").append(mine);
+    if (searchQuotaSeen[a.vendor]?.as !== seenAs) ask(false);
+    else draw();
+  }
 }
 
 // renderSearcher: the provider that searches the web for a model that

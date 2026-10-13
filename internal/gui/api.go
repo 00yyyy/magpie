@@ -487,6 +487,12 @@ type searchAPIJSON struct {
 	Key    string `json:"key,omitempty"` // masked
 	URL    string `json:"url,omitempty"`
 	Ready  bool   `json:"ready"`
+	// Keys is how many keys it has, Pick how a search picks among them
+	// (provider.SearchPick*), and Quota whether what each has left can be
+	// read (gateway.SearchQuotas)
+	Keys  int    `json:"keys,omitempty"`
+	Pick  string `json:"pick,omitempty"`
+	Quota bool   `json:"quota,omitempty"`
 }
 
 // searchChoiceJSON is a provider that can search for a model that can't,
@@ -523,7 +529,7 @@ func searchState(s *settingsJSON) {
 	}
 	s.SearchAPIs, s.SearchVendors = []searchAPIJSON{}, []searchVendorJSON{}
 	for _, a := range provider.StoredSearchAPIs() {
-		j := searchAPIJSON{Vendor: a.Vendor, Name: a.Name(), URL: a.URL, Ready: a.Ready()}
+		j := searchAPIJSON{Vendor: a.Vendor, Name: a.Name(), URL: a.URL, Ready: a.Ready(), Keys: len(a.Keys()), Pick: a.Pick, Quota: gateway.CanReadSearchQuota(a)}
 		if a.Key != "" {
 			j.Key = a.MaskedKey()
 		}
@@ -2023,8 +2029,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	// a web search API added, given a new key or address, or taken away
 	mux.HandleFunc("POST /api/settings/search-api", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
-			Vendor, Key, URL string
-			Remove           bool
+			Vendor, Key, URL, Pick string
+			Remove                 bool
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -2034,7 +2040,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if in.Remove {
 			err = provider.RemoveSearchAPI(in.Vendor)
 		} else {
-			err = provider.SetSearchAPI(provider.SearchAPI{Vendor: in.Vendor, Key: in.Key, URL: in.URL})
+			err = provider.SetSearchAPI(provider.SearchAPI{Vendor: in.Vendor, Key: in.Key, URL: in.URL, Pick: in.Pick})
 		}
 		if err != nil {
 			fail(rw, err)
@@ -2053,6 +2059,29 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		for _, a := range provider.StoredSearchAPIs() {
 			if a.Vendor == in.Vendor {
 				writeJSON(rw, map[string]string{"key": a.Key})
+				return
+			}
+		}
+		fail(rw, fmt.Errorf("no search API %q", in.Vendor))
+	})
+	// what each of a search API's keys has used of its limit (SlouchyQuill
+	// on Discord), the keys masked; fresh reads again what was read lately
+	mux.HandleFunc("POST /api/settings/search-quota", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Vendor string
+			Fresh  bool
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		for _, a := range provider.StoredSearchAPIs() {
+			if a.Vendor == in.Vendor {
+				qs := gateway.SearchQuotas(r.Context(), a, in.Fresh)
+				if qs == nil {
+					qs = []gateway.SearchKeyQuota{}
+				}
+				writeJSON(rw, map[string]any{"keys": qs})
 				return
 			}
 		}

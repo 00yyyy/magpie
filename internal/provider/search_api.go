@@ -17,10 +17,21 @@ type SearchAPI struct {
 	// Key is its key, or several separated by commas (Keys), each tried
 	// when the one before is refused (#1477).
 	Key string `json:"key,omitempty"`
+	// Pick is how a search picks among several keys: "" takes them in
+	// turn (SearchPickTurns), each search the next one; SearchPickOrder
+	// asks the first until it is refused, then the next (SlouchyQuill on
+	// Discord). Either way a key refused lately is asked last.
+	Pick string `json:"pick,omitempty"`
 	// URL is where it is: a SearXNG's own, or another address for one of
 	// the others (a Firecrawl run by the user); empty is the vendor's.
 	URL string `json:"url,omitempty"`
 }
+
+// How a search picks among a search API's keys (SearchAPI.Pick).
+const (
+	SearchPickTurns = ""      // in turn, each search the next key
+	SearchPickOrder = "order" // the first until it is refused
+)
 
 // SearchVendor is a search API magpie can ask.
 type SearchVendor struct {
@@ -68,14 +79,24 @@ func (a SearchAPI) Keys() []string {
 	return out
 }
 
-// MaskedKey is Key as shown: each of its keys masked (Mask), so a list of
-// them shows no more of any one than a single key does.
+// MaskedKey is Key as shown: each of its keys masked (MaskSearchKey), so a
+// list of them shows no more of any one than a single key does.
 func (a SearchAPI) MaskedKey() string {
 	ks := a.Keys()
 	for i, k := range ks {
-		ks[i] = Mask(k)
+		ks[i] = MaskSearchKey(k)
 	}
 	return strings.Join(ks, ", ")
+}
+
+// MaskSearchKey is one search API key as shown: as Mask, but a Tavily
+// key keeps its whole "tvly-" tag (tvly-…abcd), which says what it is
+// and nothing secret of it.
+func MaskSearchKey(k string) string {
+	if strings.HasPrefix(k, "tvly-") && len(k) >= 16 {
+		return "tvly-…" + k[len(k)-4:]
+	}
+	return Mask(k)
 }
 
 // Name is the vendor's name.
@@ -123,6 +144,9 @@ func (a SearchAPI) check() error {
 			return fmt.Errorf("%s: %q has a ?query or #fragment; give its base URL alone", a.Name(), a.URL)
 		}
 	}
+	if a.Pick != SearchPickTurns && a.Pick != SearchPickOrder {
+		return fmt.Errorf("%s: pick %q is not turns or order", a.Name(), a.Pick)
+	}
 	if a.Vendor == "searxng" && a.URL == "" {
 		return fmt.Errorf("SearXNG needs its address, as url=https://…")
 	}
@@ -142,10 +166,12 @@ func SearchAPIs() []SearchAPI {
 func StoredSearchAPIs() []SearchAPI { return load().Searches }
 
 // SetSearchAPI adds a search API, last, or changes the one of its vendor
-// where it is; a change with no key keeps the key it has.
+// where it is; a change with no key keeps the key it has, and one with no
+// Pick the pick it has ("turns" puts the default back).
 func SetSearchAPI(a SearchAPI) error {
 	a.Vendor = strings.ToLower(strings.TrimSpace(a.Vendor))
 	a.Key, a.URL = strings.Join(a.Keys(), ","), strings.TrimSpace(a.URL)
+	pick := strings.ToLower(strings.TrimSpace(a.Pick))
 	f, err := read()
 	if err != nil {
 		return err
@@ -153,6 +179,14 @@ func SetSearchAPI(a SearchAPI) error {
 	i := slices.IndexFunc(f.Searches, func(x SearchAPI) bool { return x.Vendor == a.Vendor })
 	if i >= 0 && a.Key == "" {
 		a.Key = f.Searches[i].Key
+	}
+	switch {
+	case pick == "turns":
+		a.Pick = SearchPickTurns
+	case pick == "" && i >= 0:
+		a.Pick = f.Searches[i].Pick
+	default:
+		a.Pick = pick
 	}
 	if err := a.check(); err != nil {
 		return err
