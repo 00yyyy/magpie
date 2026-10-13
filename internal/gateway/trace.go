@@ -10,11 +10,13 @@ package gateway
 
 import (
 	"context"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -24,6 +26,10 @@ const traceKeep = 60
 
 // Route is one request's way through routing.
 type Route struct {
+	// callerKey: the gateway key the request came with, so a key held to
+	// a budget, models or accounts is told the routes of its own requests
+	// alone (sessionLatest, #1981)
+	callerKey     string
 	imageTurn     string
 	imageCaller   string
 	imageProvider string
@@ -426,6 +432,14 @@ func (t *trace) changed() {
 		close(t.wake)
 		t.wake = nil
 	}
+}
+
+// beginFor begins req's route, marked with the gateway key req came with.
+// Every route of a request begins here, so a held key's own routes are
+// told it: one begun without (begin alone) is told to no held key.
+func (t *trace) beginFor(req *http.Request, r Route) *Route {
+	r.callerKey = access.Caller(req.Context()).KeyID
+	return t.begin(r)
 }
 
 func (t *trace) begin(r Route) *Route {

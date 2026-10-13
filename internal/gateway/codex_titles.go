@@ -400,7 +400,7 @@ func (s *Server) sentNowhere(w http.ResponseWriter, r *http.Request, body []byte
 	kind := requestCallKind(r.Header, metadata)
 	model := modelOf(body)
 	seat := Weighed{ID: "magpie", Provider: "magpie", Name: "magpie", Who: who, Kind: "provider", Model: model}
-	tr := s.trace.begin(Route{Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, kind),
+	tr := s.trace.beginFor(r, Route{Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, kind),
 		Kind: kind, Model: model, Provider: "magpie", Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Start: start}}})
 	writeTitleReply(w, fmt.Sprintf("resp_magpie_%d", start.UnixNano()), out, nil)
 	ms := time.Since(start).Milliseconds()

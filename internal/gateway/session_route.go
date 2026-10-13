@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -98,7 +99,9 @@ func sessionRouteOf(r Route) SessionRoute {
 // session's latest route, null before it has one. With after=<seq> and
 // wait=<seconds> it waits, up to a minute, for the route to change past
 // seq. Like the quotas, it answers this machine, and another only with the
-// shared gateway's key.
+// shared gateway's key. A key held to a budget, models or accounts is told
+// only the routes of its own requests (#1981): a session id is not a
+// secret the key can be trusted to lack.
 func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 	if !local(r) && !sharedWith(r) {
 		writeError(w, provider.Chat, http.StatusForbidden, "magpie's routes are told to another machine only when magpie is shared on the local network (Settings → Share on local network) and the request carries its API key (Authorization: Bearer <key> or x-api-key: <key>)")
@@ -119,7 +122,11 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 	after, _ := strconv.ParseInt(q.Get("after"), 10, 64)
 	secs, _ := strconv.ParseFloat(q.Get("wait"), 64)
 	wait := min(time.Duration(secs*float64(time.Second)), routeWaitMax)
-	seq, route := s.trace.sessionLatest(r.Context(), session, after, wait)
+	only := ""
+	if who := access.Caller(r.Context()); heldKey(who) {
+		only = who.KeyID
+	}
+	seq, route := s.trace.sessionLatest(r.Context(), session, only, after, wait)
 	out := map[string]any{"session": session, "seq": seq, "route": nil}
 	if route != nil {
 		out["route"] = sessionRouteOf(*route)
@@ -128,8 +135,9 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 // sessionLatest is a copy of session's latest route, and its seq; with
-// wait, it waits up to that long for it to change past after.
-func (t *trace) sessionLatest(ctx context.Context, session string, after int64, wait time.Duration) (int64, *Route) {
+// wait, it waits up to that long for it to change past after. With only
+// set, the routes of the requests made with that gateway key alone.
+func (t *trace) sessionLatest(ctx context.Context, session, only string, after int64, wait time.Duration) (int64, *Route) {
 	deadline := time.NewTimer(max(wait, 0))
 	defer deadline.Stop()
 	for {
@@ -137,7 +145,7 @@ func (t *trace) sessionLatest(ctx context.Context, session string, after int64, 
 		var seq int64
 		var found *Route
 		for i := len(t.routes) - 1; i >= 0; i-- {
-			if r := t.routes[i]; r.Session == session {
+			if r := t.routes[i]; r.Session == session && (only == "" || r.callerKey == only) {
 				c := *r
 				c.Order = append([]Weighed{}, r.Order...) // [] for none: the GUI reads it as a list
 				c.Left = append([]Weighed(nil), r.Left...)

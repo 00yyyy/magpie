@@ -1608,13 +1608,23 @@ decided, before the vendor is asked. `after=<seq>&wait=<seconds>` (up to 60)
 holds the answer until the route changes past the `seq` of the last one,
 so a UI can follow a turn with one request at a time. Only the session
 named is told; like `/v1/magpie/quotas`, it answers this machine, and
-another only with the key of a gateway shared on the local network.
+another only with the key of a gateway shared on the local network. A key
+held to a budget, to some models or to some accounts is told the routes of
+its own requests alone: another key's session answers `route: null`.
 
 To show the one in use without a session, `GET /v1/magpie/quotas` (and
 `magpie quota --json`, the same list) has `lastServedAt` on each
 subscription account, plan and key that answered a request through the
 gateway in the last 30 days, and `last: true` on the latest. It is kept
 in `served.json` beside `providers.json`, so a restart keeps it.
+
+A gateway key held to a budget, to some models or to some accounts is told
+none of this magpie's accounts (#1981): `/v1/magpie/quotas`,
+`/v1/magpie/quotas/history`, `/v1/magpie/quotas/cards`,
+`POST /v1/magpie/quotas/refresh` and `/v1/magpie/concurrency` answer it
+403 with `"code": "gateway_key_held"`, from this machine or another. It
+reads its own limit from `GET /v1/magpie/limit`. Another magpie that uses
+such a key shows only that key's own card.
 
 An app of your own can read the Usage page's numbers too.
 `GET /v1/magpie/usage?period=<today|week|month|all>` is the page's summary,

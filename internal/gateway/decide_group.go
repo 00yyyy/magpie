@@ -130,7 +130,7 @@ func (s *Server) serveDecisionGroup(w http.ResponseWriter, r *http.Request, body
 		return
 	}
 	who := callerOf(r)
-	tr := s.trace.begin(Route{Time: start, Agent: who.agent, Session: sessionOf(r.Header), Model: asked, Provider: cs[0].p.ID,
+	tr := s.trace.beginFor(r, Route{Time: start, Agent: who.agent, Session: sessionOf(r.Header), Model: asked, Provider: cs[0].p.ID,
 		Group: groupRef(g, ms), Order: pl.order, Left: pl.left})
 	var skipped []string
 	for i, c := range cs {

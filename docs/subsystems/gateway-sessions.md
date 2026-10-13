@@ -235,6 +235,13 @@ summary and gets the ledger filtered to its own `CallerKey`, with its filter
 lists cut to its own rows (`usageapi.OwnPage`): the ledger's facets are drawn
 from every call in the period, so without the cut they would name other keys.
 `TestUsageOverGateway` covers both, and a red when either cut is removed.
+A held key is refused (`refuseHeld`, 403 `provider.KeyHeldCode`) the
+quotas, their history, kept cards and refresh, and `/v1/magpie/concurrency`
+(#1981); `/v1/magpie/route` tells it only routes whose `callerKey` is its
+own. `Route.callerKey` is set by `trace.beginFor` from the request's
+caller, so a route begun without it is told to no held key.
+`TestHeldKeyToldNoAccounts` covers every one of these from loopback and
+the LAN, for a key held each of the three ways and one held to nothing.
 
 ### Calls read from the agents' own files
 
