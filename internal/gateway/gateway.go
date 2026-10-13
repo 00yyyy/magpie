@@ -280,6 +280,18 @@ func ServedBy() Served {
 	return Served{Running: true, Window: info.Window, Version: info.Version}
 }
 
+// Taken reports whether anything accepts connections at the gateway's
+// address, whether or not it answers ServedBy's question in time: a
+// magpie busy starting, or slow on a small server, still holds the port.
+func Taken() bool {
+	c, err := net.DialTimeout("tcp", strings.TrimPrefix(URL(), "http://"), 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	c.Close()
+	return true
+}
+
 // Call is one request the gateway handled, for the status views.
 type Call struct {
 	// ID numbers the call in the Recent-calls ring, from 1, for the page
