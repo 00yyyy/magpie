@@ -31,7 +31,7 @@ func TestFactoryStandardOutLeavesCore(t *testing.T) {
 	// the factory plugin's limitWindows on limits(100, 1), as it answers
 	// usage (packages/factory/index.mjs, 0.1.x), its windows' ends moved
 	// to now
-	core := `["glm-5.3","glm-5.3-flash","glm-5.2","kimi-k3","deepseek-v4.1-flash","qwen3.8-max","minimax-m3","minimax-m2.7","mistral-medium-3.5","nemotron-3-ultra"]`
+	core := `["glm-5.3","glm-5.3-flash","glm-5.2","kimi-k3","deepseek-v4.1-flash","qwen3.8-max","minimax-m3","minimax-m2.7","mistral-large-4","mistral-medium-3.5","nemotron-3-ultra"]`
 	pluginUsage := func(std, coreUsed int) []byte {
 		return []byte(`{"windows":[` +
 			`{"name":"5 hours","used":` + strconv.Itoa(std) + `,"span":18000,"resetsAt":"` + soon + `","notModels":` + core + `},` +
