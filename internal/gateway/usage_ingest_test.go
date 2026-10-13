@@ -166,11 +166,13 @@ func TestUsageIngestBackfill(t *testing.T) {
 // key itself. Nor is it an answer Codex's sealed reasoning was given by.
 func TestUsageIngestTouchesNoLimit(t *testing.T) {
 	do := ingestServer(t)
+	// both calls are stamped now, not a minute ago: a minute before 00:00:37
+	// UTC is yesterday, outside the key's day, and the test went red on CI
 	now := time.Now()
 	if c, out, b := do("127.0.0.1:5000", reportedRecord("r-1", `,"session":"conv-1"`)); c != 200 || out.Accepted != 1 {
 		t.Fatal(c, b)
 	}
-	usage.Append(usage.Record{Time: now.Add(-time.Minute), Agent: "my-app", Provider: "claude", Model: "claude-opus-5-5", Input: 5000, Output: 5000, Status: 200, RequestID: "r-2", Source: usage.SourceReported, CallerKeyID: "k1", Session: "conv-1"})
+	usage.Append(usage.Record{Time: now, Agent: "my-app", Provider: "claude", Model: "claude-opus-5-5", Input: 5000, Output: 5000, Status: 200, RequestID: "r-2", Source: usage.SourceReported, CallerKeyID: "k1", Session: "conv-1"})
 	st := budget.Of(access.Key{ID: "k1", Limit: &access.Limit{Period: "day", Tokens: 700}}, now)
 	if st == nil || st.Calls != 0 || st.Tokens != 0 || st.Spent {
 		t.Fatalf("a reported call counted against the key: %+v", st)
@@ -179,7 +181,7 @@ func TestUsageIngestTouchesNoLimit(t *testing.T) {
 		t.Fatalf("a reported call answered a Codex conversation: %+v", a)
 	}
 	// the gateway's own call of the key still counts
-	usage.Append(usage.Record{Time: now.Add(-time.Minute), Agent: "my-app", Provider: "claude", Model: "claude-opus-5-5", Input: 500, Output: 500, Status: 200, CallerKeyID: "k1", Session: "conv-1"})
+	usage.Append(usage.Record{Time: now, Agent: "my-app", Provider: "claude", Model: "claude-opus-5-5", Input: 500, Output: 500, Status: 200, CallerKeyID: "k1", Session: "conv-1"})
 	if st := budget.Of(access.Key{ID: "k1", Limit: &access.Limit{Period: "day", Tokens: 700}}, now); st.Calls != 1 || !st.Spent {
 		t.Fatalf("the key's own call: %+v", st)
 	}
