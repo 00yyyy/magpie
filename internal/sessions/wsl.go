@@ -65,6 +65,7 @@ var wslAgents = []struct{ agent, dir string }{
 	{"codex", ".codex"},
 	{"pi", filepath.Join(".pi", "agent")},
 	{"omp", filepath.Join(".omp", "agent")},
+	{"kimi", ".kimi-code"},
 }
 
 // wslScan lists the session files under a distro's home.
@@ -81,6 +82,8 @@ func wslScan(home string) []file {
 			out = append(out, piFilesIn(dir, "")...)
 		case "omp":
 			out = append(out, ompFilesIn(dir)...)
+		case "kimi":
+			out = append(out, kimiFilesIn(filepath.Join(dir, "sessions"))...)
 		}
 	}
 	return out

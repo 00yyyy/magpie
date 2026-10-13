@@ -97,7 +97,7 @@ type Session struct {
 	// Gateway: seen only through magpie's gateway, with no file of the
 	// agent's on this computer (external.go)
 	Gateway bool      `json:"gateway,omitempty"`
-	Agent   string    `json:"agent"` // magpie agent id: claude, codex, opencode, pi, omp, zcode, dsh, cline, qoder, qoder-cn, grok, workbuddy, droid, cursor, hermes, alma
+	Agent   string    `json:"agent"` // magpie agent id: claude, codex, opencode, pi, omp, zcode, dsh, cline, qoder, qoder-cn, grok, workbuddy, droid, cursor, hermes, alma, kimi
 	ID      string    `json:"id"`
 	Cwd     string    `json:"cwd"`
 	Title   string    `json:"title"` // the name it was given, else the agent's own title, else the first prompt
@@ -430,8 +430,8 @@ func ccFiles(agent, dir string) []file {
 func allFiles() []file {
 	var out []file
 	for _, fs := range [][]file{callFiles(), openCodeFiles(), piFiles(),
-		wslFiles("pi", "omp"), zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
-		grokFiles(), workbuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles()} {
+		wslFiles("pi", "omp", "kimi"), zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
+		grokFiles(), workbuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles()} {
 		out = append(out, fs...)
 	}
 	return out
@@ -1084,6 +1084,8 @@ func parserFor(agent string) sessionParser {
 		return sessionParser{whole: parseCline}
 	case "grok":
 		return sessionParser{whole: parseGrok}
+	case "kimi":
+		return sessionParser{whole: parseKimi}
 	case "droid":
 		return sessionParser{whole: parseDroid}
 	case "cursor":
@@ -1396,6 +1398,8 @@ func resumeCommand(distro, agent, id, cwd, path string) string {
 		}
 	case "droid":
 		run = "droid --resume " + id
+	case "kimi":
+		run = "kimi --session " + id
 	case "cursor":
 		// its chats are looked up by the folder it runs in
 		if cwd == "" {
