@@ -75,6 +75,8 @@ var Vars = []string{
 	"REASONIX_HOME",
 	// Reasonix's state folder, where it reads REASONIX.md
 	"REASONIX_STATE_HOME",
+	// PI-Desktop's data folder, where Sessions reads its chat titles
+	"PI_DESKTOP_DATA_DIR",
 	// Mister Morph's config file
 	"MISTER_MORPH_CONFIG",
 	// T3 Code's base folder (its settings in userdata/)

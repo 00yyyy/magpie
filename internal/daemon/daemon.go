@@ -253,7 +253,7 @@ func environ() []string {
 // run runs a service manager's tool, from PATH, and gives what it printed.
 // A failure carries that text, which is what the user needs to read.
 func run(name string, args ...string) (string, error) {
-	out, err := exec.Command(name, args...).CombinedOutput()
+	out, err := proc.Command(name, args...).CombinedOutput()
 	text := strings.TrimSpace(string(out))
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
