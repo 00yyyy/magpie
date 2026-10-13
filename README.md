@@ -244,7 +244,7 @@ Find them under Plugins › Discover › Gateway middleware. See [Gateway middle
 | **Local network** | Turn on *Share on local network* and give each client a named gateway key with its own daily, weekly or monthly token and cost limit |
 | **[Remote magpie](https://usemagpie.ai/docs/remote)** | A laptop uses the providers, accounts and groups of the magpie on your desktop, and still wires its own agents |
 | **[Docker](https://usemagpie.ai/docs/docker)** | Run `ghcr.io/yetone/magpie` on a server or a NAS and manage it from the web UI |
-| **Sync** | Back up to a file, or sync machines over WebDAV (Nutstore, Nextcloud…) or S3 |
+| **Sync** | Back up to a file, or sync machines over WebDAV (Nutstore, Nextcloud…), S3, or an encrypted GitHub repository backup |
 
 ### Also
 
