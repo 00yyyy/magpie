@@ -16830,6 +16830,7 @@ function autoResetButton(q) {
       state.settings = prefs;
       status(t(on ? "{who} no longer uses a reset by itself" : "{who} uses a reset by itself when its week runs out, or before one expires", { who: q.user }), "ok");
       renderQuotas();
+      if ($("#codexAutoResetRow")) renderAutoResetOwn(prefs); // Settings › Usage says the same
     } catch (err) {
       b.disabled = false;
       status(err.message, "err");
@@ -21210,6 +21211,7 @@ function renderSettings() {
   renderWarmAt($("#claudeWarmAtSegs"), $("#claudeWarmAtSub"), warmTimes(s.claudeWarmAts, s.claudeWarmAt), s.claudeWarmup, t("Sent through Claude Code."),
     (v) => savePrefs({ ...keep, claudeWarmAts: v, claudeWarmAt: v[0] || "" }));
   renderWarmAtOwn(s);
+  renderAutoResetOwn(s);
   // WorkBuddy's daily check-in pressed for each account, its tab shown
   // while one is signed in
   $("#warmTab-wb").hidden = !s.workbuddy && !s.workbuddyCheckin;
@@ -22308,6 +22310,49 @@ function renderWarmAt(box, sub, ats, onReset, via, save) {
     box.append(list, add);
   }
   box.append(segs([["off", t("Off")], ["on", t("On")]], ats.length ? "on" : "off", (v) => save(v === "on" ? (ats.length ? ats : ["06:00"]) : [])));
+}
+
+// renderAutoResetOwn lists each ChatGPT account under Settings › Usage's
+// "Codex: auto-use resets", with its switch, the same say as on the
+// account's card (settings' codexAutoReset, the CLI's quota auto-reset).
+// Avalon on Discord, after foobra12 asked where it was: it was only on the
+// accounts' cards, and they found it from the menu bar's panel alone,
+// nothing for it in the window's Settings. The row shows while a Codex
+// account is signed in, or one is still on.
+function renderAutoResetOwn(s) {
+  const head = $("#codexAutoResetRow");
+  const list = head.parentElement;
+  list.querySelectorAll(".ar-own").forEach((r) => r.remove());
+  const on = s.codexAutoReset || [];
+  const users = [...(s.codexUsers || [])];
+  for (const u of on) if (!users.some((x) => x.toLowerCase() === u)) users.push(u);
+  head.hidden = !users.length;
+  let after = head;
+  for (const user of users) {
+    const r = el("div", "row pref ar-own");
+    r.dataset.user = user;
+    const who = el("div", "who");
+    const name = el("div", "name", user);
+    name.title = user;
+    who.append(name);
+    const was = on.includes(user.toLowerCase());
+    const pick = segs([["off", t("Off")], ["on", t("On")]], was ? "on" : "off", async (v) => {
+      try {
+        prefs = await writingPrefs(api("settings/codex-auto-reset", { user, on: v === "on" }));
+        if (state) state.settings = prefs;
+        status(t(v === "on" ? "{who} uses a reset by itself when its week runs out, or before one expires" : "{who} no longer uses a reset by itself", { who: user }), "ok");
+        renderSettings();
+        if (quotas) renderQuotas(); // the account's card says the same
+      } catch (e) {
+        status(t(e.message), "err");
+        renderSettings();
+      }
+    });
+    pick.setAttribute("aria-label", t("Auto-use resets") + " · " + user);
+    r.append(who, pick);
+    after.after(r);
+    after = r;
+  }
 }
 
 // renderWarmAtOwn gives each ChatGPT account its own row under Daily
