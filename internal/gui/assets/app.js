@@ -24025,6 +24025,8 @@ async function show(v) {
     }
   }
   view = v;
+  // the page the reader leaves is the one the window opens on next (keptView)
+  if (mode === "window") { try { localStorage.setItem("magpie.lastView", v); } catch { /* not kept */ } }
   const title = ({ agents: "Agents", providers: "Providers", gateway: "Gateway", routing: "Routing", usage: "Usage", sessions: "Sessions", library: "Library", plugins: "Plugins", settings: "Settings" })[v];
   $("#pageTitle").dataset.en = title;
   $("#pageTitle").textContent = t(title);
@@ -25090,7 +25092,21 @@ if (mode === "window" && params.get("view") === "usage") {
   for (const k of ["tab", "provider", "agent", "computer", "card", "purpose", "via"]) u.searchParams.delete(k);
   history.replaceState(null, "", u);
 }
-if (mode === "window" && ["providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"].includes(params.get("view"))) show(params.get("view"));
+// The window opens on the page the reader last left, as a Mac app comes back
+// as it was (molvqingtai, lc on Discord): a page asked for (?view=, a link
+// from the tray or a reload) first, then the one kept; a page gateway mode
+// leaves out, or one there is no longer, gives way to the first page.
+// the pages the window can open on besides the first (Agents)
+const OPEN_VIEWS = ["providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"];
+function keptView() {
+  const asked = params.get("view");
+  if (asked === "agents" || OPEN_VIEWS.includes(asked)) return asked;
+  let v = "";
+  try { v = localStorage.getItem("magpie.lastView") || ""; } catch { /* none kept */ }
+  return OPEN_VIEWS.includes(v) ? v : ""; // one gateway mode leaves out, show() makes Providers
+}
+const firstView = mode === "window" ? keptView() : "";
+if (OPEN_VIEWS.includes(firstView)) show(firstView);
 else if (mode === "window" && !gatewayMode && !sideNav()) slide($("#nav"), "nav");
 // in gateway mode the first page is Providers, Agents' tab gone
 if (gatewayMode) setGatewayMode(true);

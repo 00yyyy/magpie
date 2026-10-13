@@ -14,6 +14,7 @@ the model it is set to. Click a value, pick a model. That is the whole app.
 
 It lives in the menu bar: click the icon and a panel drops down; the same
 screen also opens as a normal window (`magpie`, or *Open magpie* in the tray menu),
+which opens on the page you last left, as a Mac app comes back as it was,
 and there is a terminal version (`magpie tui`) and a plain CLI. The
 terminal version serves the gateway while it is open when no other magpie
 (the app, `magpie web`, `magpie serve`) does, and says so on its status
