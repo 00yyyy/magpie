@@ -455,6 +455,9 @@ type settingsJSON struct {
 	// and a Qoder or Qoder CN account (its plugin's), and theirs
 	Qoder         bool                        `json:"qoder"`
 	QoderCheckins []provider.WorkBuddyCheckin `json:"qoderCheckins,omitempty"`
+	// every account each vendor's daily check-in reaches, and whether the
+	// user left it out (#1902)
+	CheckinAccounts []provider.CheckinAccount `json:"checkinAccounts,omitempty"`
 	// and the plugins' providers that check in themselves (auth.checkin),
 	// each with its switch and its accounts' last check-ins
 	CheckinPlugins []provider.PluginCheckin `json:"checkinPlugins,omitempty"`
@@ -599,6 +602,7 @@ func settingsState() settingsJSON {
 	s.MiniMax, s.MiniMaxCheckins = provider.HasMiniMax(), provider.MiniMaxCheckins()
 	s.Qoder, s.QoderCheckins = provider.HasQoder(), provider.QoderCheckins()
 	s.CheckinPlugins = provider.PluginCheckins()
+	s.CheckinAccounts = provider.CheckinAccounts()
 	s.VisionAuto, s.VisionModels, s.VisionMissing = gateway.AutoVision(), []modelRef{}, gateway.VisionMissing()
 	for _, e := range provider.Served() {
 		if e.Images && (e.ImageInput == nil || *e.ImageInput) && (e.Group != "" || e.Provider.Ready()) {
@@ -1129,6 +1133,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.FastPicks = cur.FastPicks             // switched in the agents' pickers (#954)
 		in.AgentEfforts = cur.AgentEfforts       // picked in an agent's row (#1003)
 		in.PluginCheckins = cur.PluginCheckins   // set on its own (plugin-checkin below)
+		in.CheckinOff = cur.CheckinOff           // set on its own (checkin-account below)
 		settings.CarryPerModel(&in, &cur)
 		in.LAN, in.LANKey = cur.LAN, cur.LANKey
 		in.LANKeyID = cur.LANKeyID
@@ -1633,6 +1638,36 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			s.PluginCheckins = map[string]bool{}
 		}
 		s.PluginCheckins[in.Provider] = in.On
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// and one account's daily check-in, whichever vendor's (#1902): off
+	// leaves it out while its vendor's is on
+	mux.HandleFunc("POST /api/settings/checkin-account", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Key string
+			On  bool
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if in.Key == "" {
+			fail(rw, errors.New("no account"))
+			return
+		}
+		s := settings.Load()
+		off := slices.DeleteFunc(slices.Clone(s.CheckinOff), func(k string) bool { return k == in.Key })
+		if !in.On {
+			off = append(off, in.Key)
+		}
+		if len(off) == 0 {
+			off = nil
+		}
+		s.CheckinOff = off
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return

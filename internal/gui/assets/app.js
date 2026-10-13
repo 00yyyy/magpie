@@ -16869,6 +16869,9 @@ function checkinRow(q, first, subs) {
         // why, in the row: a reason only in the tooltip read as no reason (#808)
         text = t(on ? "Check-in failed; magpie tries again later" : "Check-in failed") + (r.msg ? " · " + r.msg : "");
     }
+  } else if (q.checkinOff) {
+    // left out on its own in Settings (#1902)
+    text = [t("Auto check-in is off for this account"), last].filter(Boolean).join(" · ");
   } else {
     kind = on ? "wait" : "";
     text = [t(on ? "Not checked in yet today" : "Auto check-in is off"), last].filter(Boolean).join(" · ");
@@ -16899,7 +16902,7 @@ function checkinRow(q, first, subs) {
   };
   row.append(auto);
   // pressed now: shown while an account isn't in today and could be
-  const due = subs.filter((x) => x.checkins && (x.checkinBy || "") === by && !(x.checkin?.day === today && x.checkin.outcome !== "failed"));
+  const due = subs.filter((x) => x.checkins && !x.checkinOff && (x.checkinBy || "") === by && !(x.checkin?.day === today && x.checkin.outcome !== "failed"));
   if (due.length) {
     const now = el("button", "text ci-now", t("Check in now"));
     now.type = "button";
@@ -21114,6 +21117,11 @@ function renderSettings() {
   $("#qoderCheckinSub").textContent = [t("Claims each signed-in Qoder account's daily credits once a day"),
     ...(s.qoderCheckins || []).map(wbCheckinLine)].filter(Boolean).join(" · ");
   $("#qoderCheckinSub").title = t("As claiming the daily credits in Qoder does");
+  // and under each vendor's switch, its accounts', each on its own (#1902)
+  for (const [list, by] of [["#wbList", ""], ["#traeList", "trae"], ["#minimaxList", "minimax"], ["#qoderList", "qoder"]]) {
+    $(list).querySelectorAll(".ci-acct").forEach((x) => x.remove());
+    $(list).append(...checkinAccountRows(s, by));
+  }
   // and the plugins that check in themselves, a row each, their tab shown
   // while one is signed in
   renderPluginCheckins(s);
@@ -23527,8 +23535,34 @@ function renderPluginCheckins(s) {
       }
     }));
     row.append(who, segBox);
+    return [row, ...checkinAccountRows(s, "plugin:" + p.id)];
+  }).flat());
+}
+
+// checkinAccountRows are an Off/On row for each account vendor by checks
+// in (#1902, magicLaLa: 根据每个账号设置是否开启自动签到), under its Daily
+// check-in; none for a vendor of one account, whose switch is its own.
+function checkinAccountRows(s, by) {
+  const accts = (s.checkinAccounts || []).filter((a) => (a.by || "") === by);
+  if (accts.length < 2) return [];
+  return accts.map((a) => {
+    const row = el("div", "row pref ci-acct");
+    row.dataset.key = a.key;
+    const who = el("div", "who");
+    who.append(el("div", "name", a.user || a.key), el("div", "sub", t(a.on ? "Checked in once a day while Daily check-in is on" : "Left out of the daily check-in")));
+    const segBox = el("div");
+    segBox.append(segs([["off", t("Off")], ["on", t("On")]], a.on ? "on" : "off", async (v) => {
+      try {
+        prefs = await writingPrefs(api("settings/checkin-account", { key: a.key, on: v === "on" }));
+        state.settings = prefs;
+      } catch (err) {
+        status(t(err.message), "err");
+      }
+      renderSettings();
+    }));
+    row.append(who, segBox);
     return row;
-  }));
+  });
 }
 
 // wbCheckinLine is how an account's last WorkBuddy check-in went: today's

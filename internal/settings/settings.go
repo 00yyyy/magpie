@@ -183,6 +183,11 @@ type Settings struct {
 	// on or off, by the plugin's provider id; one not set follows its
 	// vendor's switch above, which the plugin took over, else is off.
 	PluginCheckins map[string]bool `json:"pluginCheckins,omitempty"`
+	// CheckinOff are the accounts left out of their vendor's daily
+	// check-in while it is on (#1902), each by its entry in the vendor's
+	// check-in file: "<site or provider>|<account id>" ("workbuddy|<uid>",
+	// "trae-cn|<uid>", a plugin's "<provider>|<account>").
+	CheckinOff []string `json:"checkinOff,omitempty"`
 	// MemberModel has a reply's model name the routing group's member
 	// that answered, as magpie's provider/model id (workbuddy/glm-5.3-flash),
 	// rather than the vendor's own name for it, for agents that count

@@ -223,7 +223,7 @@ func remoteCards(ctx context.Context, p Provider, fresh bool) []SubscriptionQuot
 		q.From = name
 		// what is pressed on a card acts on this computer's accounts:
 		// a Codex reset or a check-in is the other magpie's to do
-		q.Resets, q.Checkins, q.CheckinBy, q.Checkin = nil, false, "", nil
+		q.Resets, q.Checkins, q.CheckinBy, q.Checkin, q.CheckinOff = nil, false, "", nil, false
 		if q.Windows == nil {
 			q.Windows = []QuotaWindow{}
 		}

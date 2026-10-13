@@ -141,6 +141,9 @@ type SubscriptionQuota struct {
 	Checkins  bool              `json:"checkins,omitempty"`
 	CheckinBy string            `json:"checkinBy,omitempty"`
 	Checkin   *WorkBuddyCheckin `json:"checkin,omitempty"`
+	// CheckinOff is set on such an account the user left out of its
+	// vendor's check-in (settings.CheckinOff, #1902): it isn't checked in.
+	CheckinOff bool `json:"checkinOff,omitempty"`
 	// Kind is the card's kind as another magpie is told it (CachedCards):
 	// subscription, plan or balance; "" here.
 	Kind string `json:"kind,omitempty"`
