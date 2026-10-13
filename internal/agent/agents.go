@@ -47,6 +47,11 @@ func init() {
 var others = []*Agent{
 	{ID: "magpie", Name: "magpie", Icon: "magpie", UA: []string{"magpie"}},
 	{ID: "curl", Name: "curl", Icon: "curl", UA: []string{"curl"}},
+	// PI-Desktop (vastsa/PI-Desktop) runs Pi's own library, which says
+	// "pi (…)"; given a User-Agent of its own in its provider's settings
+	// ("pi-desktop/0.1.0"), it is told apart from Pi by that name, which
+	// Pi's "pi-" would take otherwise (#1966, dgmico)
+	{ID: "pi-desktop", Name: "PI-Desktop", Icon: "pi", UA: []string{"pi-desktop"}},
 }
 
 // Clients is everyone whose requests the gateway knows by name: every
