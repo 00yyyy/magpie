@@ -27,8 +27,10 @@ func fakes(t *testing.T, os_ string) (log, dir string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fakes are shell scripts")
 	}
-	prev, prevSelf, prevAuto := goos, self, autostartEnabled
-	t.Cleanup(func() { goos, self, autostartEnabled = prev, prevSelf, prevAuto })
+	prev, prevSelf, prevAuto, prevWiden := goos, self, autostartEnabled, widenPath
+	t.Cleanup(func() { goos, self, autostartEnabled, widenPath = prev, prevSelf, prevAuto, prevWiden })
+	// the login shell of whoever runs the tests is no test's PATH
+	widenPath = func() {}
 	goos = os_
 	self = func() (string, error) { return "/opt/my magpie/magpie%1", nil }
 	autostartEnabled = func() bool { return false }
@@ -378,3 +380,50 @@ func TestEnviron(t *testing.T) {
 		t.Errorf("PATH twice:\n%s", got)
 	}
 }
+
+// The service's PATH has the Node a terminal gets though the shell
+// install runs from hasn't: nvm loaded lazily, or not at all over ssh, put
+// no node on PATH, and plugins started under systemd found none (bookyue
+// on Discord). nvm's default is the one written, not its newest.
+func TestInstallFindsNvmNode(t *testing.T) {
+	log, dir := fakes(t, "linux")
+	widenPath = realWiden
+	home := filepath.Join(dir, "home")
+	t.Setenv("NVM_DIR", "")
+	t.Setenv("SHELL", filepath.Join(dir, "no-shell")) // no login shell to ask
+	for _, v := range []string{"v20.11.0", "v22.1.0"} {
+		testenv.Program(t, filepath.Join(home, ".nvm", "versions", "node", v, "bin", "node"), "#!/bin/sh\n")
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".nvm", "alias"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(home, ".nvm", "alias", "default"), "20\n")
+	if Node() != "" {
+		t.Fatal("the test's PATH has a node already")
+	}
+	if err := Install(); err != nil {
+		t.Fatal(err, calls(t, log))
+	}
+	b, err := os.ReadFile(systemd{}.file())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".nvm", "versions", "node", "v20.11.0", "bin")
+	var path string
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(line, `Environment="PATH=`) {
+			path = line
+		}
+	}
+	if !strings.Contains(path, want) || strings.Contains(path, "v22.1.0") {
+		t.Errorf("the unit's PATH has no nvm default Node (%s):\n%s", want, path)
+	}
+	if !strings.HasPrefix(path, `Environment="PATH=`+filepath.Join(dir, "bin")+":") {
+		t.Errorf("the shell's own PATH should come first:\n%s", path)
+	}
+	if Node() != filepath.Join(want, "node") {
+		t.Errorf("Node() = %q, want nvm's default", Node())
+	}
+}
+
+var realWiden = widenPath

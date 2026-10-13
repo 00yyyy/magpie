@@ -1906,7 +1906,12 @@ magpie daemon uninstall  # stop it and remove the file
 The service gets the environment `magpie daemon install` ran in: `PATH`
 (where it finds the agents' CLIs and bun), the proxy variables, `MAGPIE_*`
 settings such as `MAGPIE_ADDR`, the XDG folders and the agents' own folder
-variables (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`…). The file is readable by you
+variables (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`…). To that `PATH` it adds
+what a terminal of yours has and the shell may not: nvm's default Node
+(not its newest), the other version managers' and npm's folders, and your
+login shell's own `PATH`, so plugins and the MCP servers they start find
+`node` with nvm loaded lazily or over SSH. When no `node` is found even
+then, the install says so. The file is readable by you
 alone, since a proxy's address can hold a password. Run the install again
 after changing any of them. It runs magpie by the name it has on `PATH`
 when that is the same file (Homebrew's link stays right across updates),

@@ -62,6 +62,9 @@ func daemonCmd(args []string) error {
 		if a := daemon.Linger(); a != "" {
 			fmt.Println(amber.Render("!"), a)
 		}
+		if daemon.Node() == "" {
+			fmt.Println(amber.Render("!"), "no node on the service's PATH: plugins, and the MCP servers they start, need Node.js; install it, then run `magpie daemon install` again")
+		}
 	default:
 		fmt.Println(green.Render("✓"), "the magpie service is "+cmd+"ed")
 	}

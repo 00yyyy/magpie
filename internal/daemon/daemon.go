@@ -13,11 +13,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // Name is the service's name: magpie.service, com.yetone.magpie.serve.
@@ -85,7 +87,37 @@ func Install() error {
 	if err != nil {
 		return err
 	}
+	widenPath()
 	return m.install(exe, environ())
+}
+
+// widenPath gives PATH, before it is written into the service, the
+// folders a terminal of the user's has: nvm's default Node and the other
+// managers' folders, then the login shell's own PATH — what the app does
+// when it is opened from the Dock. The shell install is run from can lack
+// them (nvm loaded lazily, a script, ssh without a login shell), and the
+// service has only what is written: plugins and the MCP servers and agent
+// CLIs they start need node, which wasn't found (bookyue on Discord). A
+// var for the tests.
+var widenPath = func() {
+	proc.UserPath()
+	cur := filepath.SplitList(os.Getenv("PATH"))
+	for _, d := range proc.LoginPath() {
+		if d != "" && filepath.IsAbs(d) && !slices.Contains(cur, d) {
+			cur = append(cur, d)
+		}
+	}
+	os.Setenv("PATH", strings.Join(cur, string(os.PathListSeparator)))
+}
+
+// Node is the node the service finds on its PATH, "" for none: what the
+// CLI warns of after an install.
+func Node() string {
+	p, err := exec.LookPath("node")
+	if err != nil {
+		return ""
+	}
+	return p
 }
 
 // Uninstall stops the service and removes it. One not installed is left
