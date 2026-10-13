@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/wslrun"
 )
 
@@ -218,5 +219,5 @@ func (a *Agent) proxied(on Field, now string) *Drift {
 		return nil
 	}
 	base := cmp.Or(a.pointedAt(), gateway.URL())
-	return &Drift{Kind: "proxied", Field: on.Key, Now: now, Want: now, Addr: proxy, Detail: codexProxiedDetail(base, proxy, from)}
+	return &Drift{Kind: "proxied", Field: on.Key, Now: now, Want: now, Addr: netproxy.Redact(proxy), Detail: codexProxiedDetail(base, proxy, from)}
 }

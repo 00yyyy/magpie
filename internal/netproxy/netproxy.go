@@ -316,7 +316,7 @@ func Parse(s string) (*url.URL, error) {
 
 // Describe says, for the settings page, what a request to u would use.
 func Describe() (proxy, source string) {
-	defer func() { proxy = proxyAddress(proxy) }()
+	defer func() { proxy = Redact(proxy) }()
 	switch s := strings.TrimSpace(settings.Load().Proxy); s {
 	case "direct":
 		return "", "off"
@@ -334,9 +334,13 @@ func Describe() (proxy, source string) {
 	return "", "none"
 }
 
-// proxyAddress keeps credentials out of the settings status. A malformed
-// address is omitted because its userinfo cannot be safely separated.
-func proxyAddress(raw string) string {
+// Redact is a proxy address as magpie may show it: in a log line, an
+// error, a status or the GUI (#852, #1886). Its user and password are
+// left out, and the rest kept as it was written (no scheme added to one
+// written without). A malformed address is "", because its userinfo
+// cannot be safely separated. Requests still go through the address
+// itself; only what is shown of it goes through here.
+func Redact(raw string) string {
 	u, err := Parse(raw)
 	if err != nil {
 		return ""

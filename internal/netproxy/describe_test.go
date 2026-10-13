@@ -2,6 +2,7 @@ package netproxy
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/settings"
@@ -54,5 +55,42 @@ func TestDescribeHidesMalformedSystemProxy(t *testing.T) {
 	t.Cleanup(func() { sysCache.at = zero })
 	if got, from := Describe(); got != "" || from != "system" {
 		t.Fatalf("malformed proxy description = %q (%s)", got, from)
+	}
+}
+
+// #1886: Redact is what every log line, error, status and GUI text shows
+// of a proxy. The user and password are written where a user writes them:
+// http and socks5, with and without a scheme, percent-encoded, a user
+// without a password. None of it is shown; the rest is kept as written.
+func TestRedactLeavesOutUserAndPassword(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{"http://alice:s3cret@10.0.0.2:8080", "http://10.0.0.2:8080"},
+		{"https://alice:s3cret@proxy.example:443", "https://proxy.example:443"},
+		{"alice:s3cret@10.0.0.2:8080", "10.0.0.2:8080"},
+		{"socks5://alice:s3cret@127.0.0.1:1080", "socks5://127.0.0.1:1080"},
+		{"socks5h://alice:s3cret@127.0.0.1:1080", "socks5h://127.0.0.1:1080"},
+		{"http://ali%40ce:s3%3Acr%2Fet%25@10.0.0.2:8080", "http://10.0.0.2:8080"},
+		{"socks5://ali%40ce:s3%40cret@[::1]:1080", "socks5://[::1]:1080"},
+		{"ali%40ce:s3%40cret@10.0.0.2:8080", "10.0.0.2:8080"},
+		{"http://alice@10.0.0.2:8080", "http://10.0.0.2:8080"},
+		{"socks5://alice@127.0.0.1:1080", "socks5://127.0.0.1:1080"},
+		{"alice@10.0.0.2:8080", "10.0.0.2:8080"},
+		{"http://alice:@10.0.0.2:8080", "http://10.0.0.2:8080"},
+		{"socks5://alice:s3cret%zz@127.0.0.1:1080", ""},
+		{"alice:s3cret%zz@10.0.0.2:8080", ""},
+		{"http://10.0.0.2:8080", "http://10.0.0.2:8080"},
+		{"10.0.0.2:8080", "10.0.0.2:8080"},
+		{"direct", "direct"},
+		{"", ""},
+	} {
+		got := Redact(tc.raw)
+		if got != tc.want {
+			t.Errorf("Redact(%q) = %q, want %q", tc.raw, got, tc.want)
+		}
+		for _, secret := range []string{"ali", "s3"} {
+			if strings.Contains(got, secret) {
+				t.Errorf("Redact(%q) = %q shows %q", tc.raw, got, secret)
+			}
+		}
 	}
 }

@@ -296,6 +296,41 @@ func TestCodexProxiedDrift(t *testing.T) {
 	}
 }
 
+// #1886: the proxied row's address and its explanation, both shown in the
+// GUI, leave out the proxy's user and password, wherever the user wrote
+// them; the probe still goes through the proxy whole.
+func TestCodexProxiedDriftShowsNoCredentials(t *testing.T) {
+	fakeReach(t, map[string]bool{gateway.URL(): true})
+	home, _ := codexAt(t, gateway.URL())
+	for _, c := range []struct{ proxy, shown string }{
+		{"http://alice:s3cret@127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"alice:s3cret@127.0.0.1:7890", "127.0.0.1:7890"},
+		{"http://ali%40ce:s3%3Acr%2Fet@127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"http://alice@127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"socks5://alice:s3cret@127.0.0.1:7891", "socks5://127.0.0.1:7891"},
+		{"socks5h://ali%40ce:s3%40cret@127.0.0.1:7891", "socks5h://127.0.0.1:7891"},
+	} {
+		proxyAs(t, map[string]string{"ALL_PROXY": c.proxy}, netproxy.Proxy{}, "linux", nil)
+		var probed string
+		proxyProbe = func(_, p string) bool { probed = p; return false }
+		d := driftSettled(t, codex(home))
+		if d == nil || d.Kind != "proxied" {
+			t.Fatalf("%s: drift %+v", c.proxy, d)
+		}
+		if d.Addr != c.shown || !strings.Contains(d.Detail, "the proxy at "+c.shown+",") {
+			t.Errorf("%s: addr %q, detail %s; want it shown as %s", c.proxy, d.Addr, d.Detail, c.shown)
+		}
+		for _, secret := range []string{"ali", "s3"} {
+			if strings.Contains(d.Addr, secret) || strings.Contains(d.Detail, secret) {
+				t.Errorf("%s: shows %q: addr %q, detail %s", c.proxy, secret, d.Addr, d.Detail)
+			}
+		}
+		if probed != c.proxy {
+			t.Errorf("%s: probed through %q", c.proxy, probed)
+		}
+	}
+}
+
 // Leon920717 on X: with magpie quit, Codex CLI kept retrying the gateway
 // till magpie was open again. The failover base URL magpie wrote goes as
 // the magpie serving the gateway quits (EndCodexFailover), and the next

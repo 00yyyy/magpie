@@ -1,8 +1,11 @@
 package provider
 
 import (
+	"bytes"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,5 +195,50 @@ func TestClaudeAccountProxyLeavesABrokenSettings(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(settingsPath); string(b) != string(broken) {
 		t.Fatalf("settings.json changed: %s", b)
+	}
+}
+
+// claudeLog is what magpie logs while f runs.
+func claudeLog(t *testing.T, f func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	old, flags := log.Writer(), log.Flags()
+	log.SetOutput(&buf)
+	defer func() { log.SetOutput(old); log.SetFlags(flags) }()
+	f()
+	return buf.String()
+}
+
+// #1886: an account's proxy is logged without its user and password, the
+// switch's line and SOCKS's alike, while Claude Code's env still gets the
+// proxy whole. The credential is where the user writes it: with and
+// without a scheme, percent-encoded, a user alone.
+func TestClaudeAccountProxyLogsNoCredentials(t *testing.T) {
+	settingsPath := claudeTwoAccounts(t)
+	for _, c := range []struct{ proxy, env, shown string }{
+		{"http://alice:s3cret@10.0.0.9:8080", "http://alice:s3cret@10.0.0.9:8080", "http://10.0.0.9:8080"},
+		{"alice:s3cret@10.0.0.9:8080", "http://alice:s3cret@10.0.0.9:8080", "http://10.0.0.9:8080"},
+		{"http://ali%40ce:s3%3Acr%2Fet@10.0.0.9:8080", "http://ali%40ce:s3%3Acr%2Fet@10.0.0.9:8080", "http://10.0.0.9:8080"},
+		{"http://alice@10.0.0.9:8080", "http://alice@10.0.0.9:8080", "http://10.0.0.9:8080"},
+		{"socks5://alice:s3cret@127.0.0.1:1080", "", "socks5://127.0.0.1:1080"},
+		{"socks5h://ali%40ce:s3%40cret@127.0.0.1:1080", "", "socks5h://127.0.0.1:1080"},
+		{"socks5://alice@127.0.0.1:1080", "", "socks5://127.0.0.1:1080"},
+	} {
+		if err := Save(Provider{ID: "claude", AccountProxies: map[string]string{"b@example.com": c.proxy}}); err != nil {
+			t.Fatal(c.proxy, err)
+		}
+		claudeSwitch(t, "a@example.com")
+		got := claudeLog(t, func() { claudeSwitch(t, "b@example.com") })
+		if !strings.Contains(got, c.shown) {
+			t.Errorf("%s: the log doesn't name the proxy as %s:\n%s", c.proxy, c.shown, got)
+		}
+		for _, secret := range []string{"ali", "s3"} {
+			if strings.Contains(got, secret) {
+				t.Errorf("%s: the log shows %q:\n%s", c.proxy, secret, got)
+			}
+		}
+		if v := claudeEnvOf(t, settingsPath, "HTTPS_PROXY"); v != c.env {
+			t.Errorf("%s: Claude Code's HTTPS_PROXY = %q, want %q", c.proxy, v, c.env)
+		}
 	}
 }

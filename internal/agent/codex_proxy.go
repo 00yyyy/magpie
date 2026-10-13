@@ -259,7 +259,7 @@ func codexProxyOK(cfg, base string) bool {
 // how to get it there.
 func codexProxiedDetail(base, proxy, from string) string {
 	host := strings.TrimPrefix(base, "http://")
-	d := "Codex sends its requests for magpie (" + host + ") through the proxy at " + proxy + ", set in " + from + ", and that proxy doesn't pass them on to magpie: every turn fails, with 502 Bad Gateway, whichever model it is on. " +
+	d := "Codex sends its requests for magpie (" + host + ") through the proxy at " + netproxy.Redact(proxy) + ", set in " + from + ", and that proxy doesn't pass them on to magpie: every turn fails, with 502 Bad Gateway, whichever model it is on. " +
 		"Have the proxy send 127.0.0.1 direct (a DIRECT rule for 127.0.0.0/8, or rule mode rather than global), "
 	switch {
 	case strings.Contains(from, "PROXY"):

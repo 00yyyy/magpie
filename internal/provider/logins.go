@@ -30,6 +30,7 @@ import (
 	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
@@ -1039,7 +1040,7 @@ func switchLogin(agent, user string) error {
 		if p, perr := SyncClaudeProxyEnv(user); perr != nil {
 			log.Printf("claude: writing %s's proxy to settings.json: %v", user, perr)
 		} else if p != "" {
-			log.Printf("claude: Claude Code sessions started from now on go through %s's proxy %s", user, p)
+			log.Printf("claude: Claude Code sessions started from now on go through %s's proxy %s", user, netproxy.Redact(p))
 		}
 	}
 	return err

@@ -107,7 +107,7 @@ func claudeAccountProxy(user string) string {
 		return ""
 	}
 	if netproxy.IsSOCKS(u) {
-		log.Printf("claude: %s's proxy %s is SOCKS, which Claude Code can't use; its sessions go the way they did", user, v)
+		log.Printf("claude: %s's proxy %s is SOCKS, which Claude Code can't use; its sessions go the way they did", user, netproxy.Redact(v))
 		return ""
 	}
 	return u.String()
