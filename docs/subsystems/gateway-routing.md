@@ -256,6 +256,39 @@ Covered by `TestPickedSearcherIsNotHandedOn`,
 `TestSearchInPlaceOfAutoSaysWhy`, `TestSearcherFindingNothingGivesWay`,
 `search-instead.test.cjs` and `searcher-pick.test.cjs`.
 
+## How hard a side model thinks
+
+Settings › Models has a chip beside Image recognition's model and the
+searcher's (MOMO on Discord): `visionEffort` and `searcherEffort` in
+[settings](../../internal/settings/settings.go), one of `catalog.EffortRank`
+or empty. The chip offers only the model's own levels (`ModelEfforts`:
+`Efforts`, weakest first; `visionEfforts`, `searchEfforts` in the settings
+read), and none for a model whose levels aren't known. A level picked is
+fitted to the model's levels (`sideEffort`, `fitEffort`) when the call is
+made, so a saved level outlives a change of model. Empty keeps magpie's own:
+Image recognition at the least level the model has (`classifyEffort`), the
+searcher with no level at all. Only these two calls carry it
+([`side_effort.go`](../../internal/gateway/side_effort.go)):
+
+- `askVisionWith` sends Chat's `reasoning_effort`; the image cache key
+  (`describe`) has the level in it, so a new level reads the image again.
+- `searchBody` sends the searcher's Anthropic body `thinking` (`disabled` for
+  `none`, else enabled with `budgetOf`'s budget, 1024 for `minimal`) and
+  `output_config.effort` unless the vendor model is a Claude older than
+  adaptive thinking. The gateway's translation then fits it to the vendor:
+  adaptive thinking or `between_tools` for new Claude, `reasoning.effort` for
+  Responses, `thinkingLevel` for Gemini 3 on Code Assist and Antigravity.
+- A picked level raises the call's `max_tokens` by its budget
+  (`replyRoom`), so thinking doesn't spend the reply; the model's own limit
+  still caps it.
+- A provider searching for its own models (`ownSearch`, Kimi Code's search
+  service) is sent none. A fallback searcher is sent the level fitted to its
+  own model.
+
+Covered by `TestVisionEffortPicked`, `TestVisionEffortOnAnthropic`,
+`TestSearcherEffortPicked`, `TestSearcherEffortOnGemini`,
+`TestSideEffortChecked` and `side-effort.test.cjs`.
+
 ## A search API's base URL
 
 Each search API ([`provider.SearchAPI`](../../internal/provider/search_api.go))

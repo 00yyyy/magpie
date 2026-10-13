@@ -242,6 +242,11 @@ type Settings struct {
 	// it: a model's id (provider/model, group/<id>), "off" to turn such an
 	// image away, or empty for one magpie picks (see gateway.seer).
 	Vision string `json:"vision,omitempty"`
+	// VisionEffort is how hard the Image recognition model thinks as it
+	// reads an image (MOMO on Discord): a level of catalog.EffortRank,
+	// fitted to the model's own levels when it is asked, or empty for
+	// magpie's choice, the least the model has (gateway.visionEffort).
+	VisionEffort string `json:"visionEffort,omitempty"`
 	// ImageGen is the model magpie's generate_image tool draws with (the
 	// gateway's /v1/images/generations when a request names no model): a
 	// model's id, "off", or empty for one magpie picks (gateway.drawer).
@@ -254,6 +259,11 @@ type Settings struct {
 	// (gateway.searcher). "off" allows only configured search APIs.
 	// One that is gone, off or can't search gives way to magpie's pick.
 	Searcher string `json:"searcher,omitempty"`
+	// SearcherEffort is how hard the searcher's model thinks as it searches
+	// (MOMO on Discord): a level of catalog.EffortRank, fitted to the
+	// model's own levels when it is asked, or empty to send none, the
+	// model's own default (gateway.searchEffort).
+	SearcherEffort string `json:"searcherEffort,omitempty"`
 	// SearchFirst is what a model that can't search the web is searched
 	// for with first, when both a provider and a search API can (#928):
 	// SearchFirstAPI for the search APIs, the provider's search after them
@@ -1139,6 +1149,11 @@ func save(s Settings, recording bool) error {
 		return fmt.Errorf("the model for Codex's subagents must be a model's id such as codex/gpt-5.5, not %q", s.CodexSubagentModel)
 	}
 	s.Searcher = strings.TrimSpace(s.Searcher)
+	for _, e := range []*string{&s.VisionEffort, &s.SearcherEffort} {
+		if *e = strings.ToLower(strings.TrimSpace(*e)); *e != "" && !slices.Contains(catalog.EffortRank, *e) {
+			return fmt.Errorf("a model's reasoning must be one of %s, or empty for the default, not %q", strings.Join(catalog.EffortRank, ", "), *e)
+		}
+	}
 	if s.SearchFirst = strings.TrimSpace(s.SearchFirst); s.SearchFirst == SearchFirstModel {
 		s.SearchFirst = ""
 	}

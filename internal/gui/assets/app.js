@@ -22532,6 +22532,8 @@ function renderImages(s, keep) {
   onPick: (id) => { if (id !== v) savePrefs({ ...keep, vision: id }); } }, b, ev);
   const val = el("div", "val");
   val.append(b);
+  if (v !== "off") sideEffortChip(val, s.visionEfforts, s.visionEffort || "", s.visionEffortNow, "vision-effort",
+    "the least it has", (e) => savePrefs({ ...keep, visionEffort: e }));
   r.append(who, val);
   box.append(r);
   renderImageGen(s, keep, box);
@@ -22815,8 +22817,34 @@ function renderSearcher(s, keep, box) {
     onPick: (id) => { if (id !== v) savePrefs({ ...keep, searcher: id }); } }, b, ev);
   const val = el("div", "val");
   val.append(b);
+  if (!off) sideEffortChip(val, s.searchEfforts, s.searcherEffort || "", s.searchEffortNow, "searcher-effort",
+    "none sent, the model's own", (e) => savePrefs({ ...keep, searcherEffort: e }));
   r.append(who, val);
   box.append(r);
+}
+
+// sideEffortChip: beside a model magpie asks on its own (Image
+// recognition's, the searcher's), how hard it thinks (MOMO on Discord,
+// "外置模型能不能提供思考深度选项"): only the levels that model has, and
+// Default, which leaves it as magpie asks it (dflt says how). Nothing is
+// shown for a model whose levels aren't known.
+function sideEffortChip(val, levels, saved, now, cls, dflt, save) {
+  if (!levels?.length) return;
+  const b = el("button", "rt-cond on side-effort " + cls);
+  b.type = "button";
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  const shown = saved ? now || saved : "";
+  b.setAttribute("aria-label", t("Thinking") + ": " + (shown ? t(shown) : t("Default")));
+  b.title = t("How hard this model thinks");
+  b.append(effortIcon({ options: levels.map((l) => ({ value: l })), value: shown }), el("span", "", shown ? t(shown) : t("Default")));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (protoMenu?.anchor === b) { closeProtoMenu(); return; }
+    openProtoMenu(b, [{ v: "", name: "Default", note: dflt }, ...levels.map((l) => ({ v: l, name: l, note: "" }))], shown,
+      (e) => { if (e !== saved) save(e); }, "Thinking", "side-effort-menu", "right");
+  };
+  val.append(b);
 }
 
 // renderReplies: whether a reply's model names the member of magpie's
@@ -23747,7 +23775,7 @@ function prefsKeep(s) {
     codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, noStats: !!s.noStats, noUsageStats: !!s.noUsageStats,
     memberModel: !!s.memberModel, noLoopGuard: !!s.noLoopGuard, refusalRetries: s.refusalRetries ?? null,
     noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360,
-    trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, vision: s.vision || "", imageGen: s.imageGen || "", searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",
+    trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, vision: s.vision || "", visionEffort: s.visionEffort || "", searcherEffort: s.searcherEffort || "", imageGen: s.imageGen || "", searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",
     chineseUnits: !!s.chineseUnits, usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0, resetReminder: s.resetReminder || 0,
     turnDoneAlert: s.turnDoneAlert || 0 };
 }
