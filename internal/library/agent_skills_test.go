@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/agent"
 )
 
 // Every agent on the Agents page that reads skills has a place for them in
@@ -276,6 +278,64 @@ func TestSiblingInstructions(t *testing.T) {
 	write(t, filepath.Join(h, ".kimi", "config.toml"), "")
 	if tg := targetByID("kimi"); tg == nil || tg.Instructions != "" {
 		t.Fatalf("kimi-cli's instructions: %+v", tg)
+	}
+}
+
+// Qoder, Command Code, CodeBuddy Code and Reasonix read a user-wide
+// instructions file in their own folders too: Qoder's renamed by its
+// settings' context.fileName, CodeBuddy's the first of its two names there
+// is, Reasonix's in its state folder wherever that is moved.
+func TestSiblingInstructionsMore(t *testing.T) {
+	h := sandbox(t)
+	write(t, filepath.Join(h, ".qoder", "settings.json"), "{}")
+	write(t, filepath.Join(h, ".commandcode", "settings.json"), "{}")
+	write(t, filepath.Join(h, ".codebuddy", "settings.json"), "{}")
+	write(t, filepath.Join(h, ".codebuddy", "CODEBUDDY.mdc"), "# Mine\n")
+	want := map[string]string{
+		"qoder":       filepath.Join(h, ".qoder", "AGENTS.md"),
+		"commandcode": filepath.Join(h, ".commandcode", "AGENTS.md"),
+		"codebuddy":   filepath.Join(h, ".codebuddy", "CODEBUDDY.mdc"),
+	}
+	for id, inst := range want {
+		if tg := targetByID(id); tg == nil || tg.Instructions != inst {
+			t.Fatalf("%s's instructions: %+v, want %s", id, tg, inst)
+		}
+	}
+	shared := "Use tabs."
+	ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{"qoder", "commandcode", "codebuddy"}}))
+	for id, inst := range want {
+		pre := ""
+		if id == "codebuddy" {
+			pre = "# Mine\n\n"
+		}
+		if s := read(t, inst); s != pre+blockBegin+"\nUse tabs.\n"+blockEnd+"\n" {
+			t.Fatalf("%s's %s:\n%s", id, filepath.Base(inst), s)
+		}
+	}
+	if cfg := read(t, filepath.Join(h, ".qoder", "settings.json")); cfg != "{}" {
+		t.Fatalf("instructions rewrote Qoder's settings: %s", cfg)
+	}
+
+	// Qoder's context.fileName; Reasonix's [storage] state, then its variable
+	write(t, filepath.Join(h, ".qoder", "settings.json"), `{"context": {"fileName": ["QODER.md", "AGENTS.md"]}}`)
+	if tg := targetByID("qoder"); tg == nil || tg.Instructions != filepath.Join(h, ".qoder", "QODER.md") {
+		t.Fatalf("Qoder with context.fileName: %+v", tg)
+	}
+	// Reasonix Studio is found by its app alone, so its target is asked
+	// of the agent as magpie makes it
+	rx := filepath.Join(h, ".reasonix")
+	reasonix := &agent.Agent{ID: "reasonix", Dir: rx, Path: filepath.Join(rx, "config.toml")}
+	if tg := targetOf(reasonix); tg == nil || tg.Instructions != filepath.Join(rx, "REASONIX.md") {
+		t.Fatalf("Reasonix's instructions: %+v", tg)
+	}
+	write(t, reasonix.Path, "[storage]\nstate = \"~/rx-state\"\n")
+	if tg := targetOf(reasonix); tg.Instructions != filepath.Join(h, "rx-state", "REASONIX.md") {
+		t.Fatalf("Reasonix with [storage] state: %+v", tg)
+	}
+	st := filepath.Join(h, "rx-env-state")
+	t.Setenv("REASONIX_STATE_HOME", st)
+	if tg := targetOf(reasonix); tg.Instructions != filepath.Join(st, "REASONIX.md") {
+		t.Fatalf("Reasonix under REASONIX_STATE_HOME: %+v", tg)
 	}
 }
 

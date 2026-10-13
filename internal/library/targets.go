@@ -14,6 +14,7 @@ import (
 	"github.com/yetone/magpie/internal/agentplug"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/desktopdir"
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/plugin"
 )
 
@@ -288,6 +289,10 @@ func targetOf(a *agent.Agent) *Target {
 		// (docs.qoder.com/cli/mcp-reference), beside magpie's provider
 		t.MCP = &mcpFile{Path: a.Path, Format: fmtOmp}
 		t.Skills = filepath.Join(a.Dir, "skills")
+		// and AGENTS.md in its folder before every conversation, which its
+		// settings' context.fileName renames as Qwen Code's does
+		// (discoverMemoryPaths, @qoder-ai/qodercli 1.1.69's bundle)
+		t.Instructions = filepath.Join(a.Dir, contextFile(a.Path, "AGENTS.md"))
 	case "cline":
 		// Cline's CLI reads its MCP servers from settings/
 		// cline_mcp_settings.json beside providers.json, or
@@ -302,6 +307,9 @@ func targetOf(a *agent.Agent) *Target {
 		// Command Code reads ~/.commandcode/mcp.json (getUserMcpConfigPath)
 		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtCommandCode}
 		t.Skills = filepath.Join(a.Dir, "skills")
+		// and ~/.commandcode/AGENTS.md before every conversation
+		// (getUserMemoryPath, command-code 1.81.0's dist/cli.mjs)
+		t.Instructions = filepath.Join(a.Dir, "AGENTS.md")
 	case "workbuddy", "workbuddy-ai":
 		// WorkBuddy's own servers are mcp.json in its folder (WorkBuddy
 		// AI's, ~/.workbuddy-ai, for the international build)
@@ -326,6 +334,9 @@ func targetOf(a *agent.Agent) *Target {
 		// are in skills/ in its folder (getHomeSkillsDir) (#1266).
 		t.MCP = &mcpFile{Path: codebuddyMCP(a.Dir), Format: fmtClaude}
 		t.Skills = filepath.Join(a.Dir, "skills")
+		// Its user-wide instructions are CODEBUDDY.md in its folder, else
+		// CODEBUDDY.mdc there (MemoryLoader.loadUserMemories, 2.164.0)
+		t.Instructions = firstThere(a.Dir, "CODEBUDDY.md", "CODEBUDDY.mdc")
 	case "hanako", "fx":
 		// a skills folder in the agent's own: Hanako's $HANA_HOME, fx's
 		// ~/.fx — each said by its docs or source. No MCP servers:
@@ -382,7 +393,14 @@ func targetOf(a *agent.Agent) *Target {
 		// storage.ts, getMemoryFilePaths in memory/memoryDiscovery.ts,
 		// getCurrentMemoryFilename in utils/memory-constants.ts,
 		// QwenLM/qwen-code c5098a27)
-		t.Instructions = filepath.Join(a.Dir, qwenContextFile(a.Path))
+		t.Instructions = filepath.Join(a.Dir, contextFile(a.Path, "QWEN.md"))
+	case "reasonix":
+		// Reasonix reads every one there is of REASONIX.md, AGENTS.md and
+		// CLAUDE.md in its state folder; REASONIX.md is its own
+		// (DocumentNames in internal/state/instruction/resolver.go,
+		// MemoryUserDir in internal/contract/config/paths.go, esengine/
+		// DeepSeek-Reasonix d460758e)
+		t.Instructions = filepath.Join(reasonixState(a), "REASONIX.md")
 	case "zed":
 		// Zed reads its MCP servers from context_servers in the settings.json
 		// magpie sets its model in (~/.config/zed, $XDG_CONFIG_HOME/zed,
@@ -427,11 +445,12 @@ func firstThere(dir string, names ...string) string {
 	return filepath.Join(dir, names[0])
 }
 
-// qwenContextFile is the name of the file Qwen Code reads its user-wide
-// instructions from: the first of its settings' context.fileName, a name
-// or a list of them, else QWEN.md (packages/cli/src/config/config.ts sets
-// it with setMemoryFilename, which trims each name and skips an empty one).
-func qwenContextFile(settings string) string {
+// contextFile is the name of the file Qwen Code, or Qoder, reads its
+// user-wide instructions from: the first of its settings' context.fileName,
+// a name or a list of them, else def (Qwen's packages/cli/src/config/
+// config.ts sets it with setMemoryFilename, which trims each name and skips
+// an empty one).
+func contextFile(settings, def string) string {
 	raw, _ := os.ReadFile(settings)
 	v := gjson.GetBytes(jsonc.ToJSON(raw), "context.fileName")
 	names := []gjson.Result{v}
@@ -443,7 +462,29 @@ func qwenContextFile(settings string) string {
 			return name
 		}
 	}
-	return "QWEN.md"
+	return def
+}
+
+// reasonixState is Reasonix's state folder: $REASONIX_STATE_HOME, else
+// [storage] state in its config.toml, else its home (Roots.Dir in
+// internal/contract/config/storage_roots.go, readStorageDirs in
+// storage_config.go).
+func reasonixState(a *agent.Agent) string {
+	d := appdir.Getenv("REASONIX_STATE_HOME")
+	if strings.TrimSpace(d) == "" {
+		st, _ := edit.GetTOMLTable(a.Path, "storage")
+		d = st["state"]
+	}
+	if d = strings.TrimSpace(os.ExpandEnv(d)); d == "" {
+		return a.Dir
+	}
+	if d == "~" || strings.HasPrefix(d, "~/") || strings.HasPrefix(d, `~\`) {
+		d = filepath.Join(home(), strings.TrimLeft(d[1:], `/\`))
+	}
+	if abs, err := filepath.Abs(d); err == nil {
+		d = abs
+	}
+	return d
 }
 
 // pluginMCP is each MCP format an agent plugin may name
