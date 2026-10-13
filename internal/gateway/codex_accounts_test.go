@@ -159,6 +159,10 @@ func TestCodexPausedOwnAccountPassedOver(t *testing.T) {
 	if code != 200 || strings.Join(tried, ",") != "acct-2" {
 		t.Fatalf("%d %s tried %v", code, body, tried)
 	}
+	// the account a model's note names as first (#1957) is the one tried
+	if got := provider.FirstLogin("codex"); got != "spare@example.com" {
+		t.Fatalf("first %q", got)
+	}
 	// the other off: the paused one is all there is, and is used
 	if err := provider.SetLoginOn("codex", "spare@example.com", false); err != nil {
 		t.Fatal(err)
