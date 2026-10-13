@@ -1102,7 +1102,7 @@ func gooseIn(at place, cfg string) *Agent {
 		keyEnv = func(string) string { return "" }
 	}
 	return &Agent{
-		ID: "goose", Name: "Goose", Icon: "goose", Bin: "goose", Dir: filepath.Dir(path), Path: path, Spelled: prefixed,
+		ID: "goose", Name: "Goose", Icon: "goose", Bin: "goose", Dir: filepath.Dir(path), Path: path, Spelled: prefixed, NoNames: true,
 		UA: []string{"goose"},
 		Check: func() string {
 			if p, _ := gooseActive(path); p != gooseProviderID {

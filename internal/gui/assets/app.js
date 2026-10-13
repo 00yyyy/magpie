@@ -3818,6 +3818,7 @@ async function load(again) {
     tintTitleBar();
     renderAgents();
     redrawSuffix();
+    redrawNoNames();
     // Update all's outcome stays until the agents are read again
     if (cliAll && cliAll.done >= cliAll.n) cliAll = null;
     paintUpdateAll(true);
@@ -10886,6 +10887,7 @@ function renderModels(p) {
     };
     sayLabel();
     sfx.append(el("span", "", t("Provider in model names")), suffixSegs(sayLabel), sfxSaid);
+    sfx.append(noNamesLine("span", "said"));
     names.append(sfx);
     // the APIs a model can be asked on alone: those of a key's provider
     // it has a URL for, when it has more than one (01huadalang on Discord:
@@ -21721,6 +21723,38 @@ function suffixSegs(drawn) {
   seg.drawnAgain = drawn;
   return seg;
 }
+// noNamesSaid: what Provider in model names can't change, said under it:
+// the connected agents whose own lists don't name magpie's models as it
+// says (agent.NoNames: handed ids alone, or the gateway's names alone).
+// love1sbug on X found the setting seemed to do nothing; "" when none is.
+function noNamesSaid() {
+  const names = (state.agents || []).filter((a) => a.wired && a.noNames).map((a) => a.name);
+  return names.length ? t("Changes nothing in {agents}: magpie’s names don’t reach their model lists", { agents: names.join(", ") }) : "";
+}
+// noNamesLine is that line, hidden while it says nothing: a page drawn
+// before the agents are read (Routing, a provider's editor) is said again
+// once they are (redrawNoNames)
+function noNamesLine(tag, cls) {
+  const e = el(tag, cls + " no-names");
+  e.dataset.noNames = "";
+  e.textContent = noNamesSaid();
+  e.hidden = !e.textContent;
+  return e;
+}
+function redrawNoNames() {
+  for (const e of document.querySelectorAll("[data-no-names]")) {
+    e.textContent = noNamesSaid();
+    e.hidden = !e.textContent;
+  }
+  if ($("#plainNamesSegs")) sayNoNamesInSettings();
+}
+// the Settings row's name says enough on its own (1ooogle on X): a line
+// under it only for an agent it changes nothing in
+function sayNoNamesInSettings() {
+  const who = $("#plainNamesSegs").parentElement.querySelector(".who"), said = noNamesSaid();
+  who.querySelector(".no-names")?.remove();
+  if (said) who.append(el("div", "sub no-names", said));
+}
 // redrawSuffix draws each suffix choice in the page again when the
 // settings that came in say another mode than it was drawn with: a page
 // drawn before the state's first read (Routing's groups can come back
@@ -21763,6 +21797,7 @@ function renderTrayUsage(s, keep) {
     (v) => savePrefs({ ...keep, chineseUnits: v })));
   renderAlerts(s, keep);
   $("#plainNamesSegs").replaceChildren(suffixSegs());
+  sayNoNamesInSettings();
   // Codex's own models in multi-agent V1 (their subagents' tasks go as text),
   // so a GPT lead can run a subagent on magpie's other models (#141). Where
   // Codex's own multi_agent_v2 is on in the config magpie routes it wins, and

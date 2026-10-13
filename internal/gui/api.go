@@ -198,6 +198,9 @@ type agentJSON struct {
 	// Menu: its own model menu is the models picked here, no one model to
 	// start on (agent.ListsModels): ZCode's, Cursor Private Inference's
 	Menu bool `json:"menu,omitempty"`
+	// NoNames: its own list doesn't name magpie's models as Names in agents'
+	// lists says (agent.NoNames), for that setting to say so
+	NoNames bool `json:"noNames,omitempty"`
 	// Source: what an agent not connected runs on now (agent.Source), and
 	// Stale: copies of a connected one still running on the list they
 	// started with (agent.Stale), for the line under its name
@@ -2036,6 +2039,7 @@ func state() stateJSON {
 		aj := agentJSON{ID: a.ID, Name: a.Name, Icon: a.Icon, Path: tilde(a.Path), Fields: agentFields(a, vals)}
 		aj.Models = agentModelCount(a, aj.Fields)
 		aj.Menu = a.ListsModels
+		aj.NoNames = a.NoNames
 		aj.Drift = a.Drift()
 		aj.Wired = a.Wired()
 		if aj.Wired {

@@ -123,6 +123,14 @@ type Agent struct {
 	// list magpie writes into its files, magpieModels(id), where its only
 	// field puts magpie in its picker (ZCode, Pencil: #1508)
 	ListsModels bool
+	// NoNames: the agent's own list doesn't name magpie's models as
+	// Names in agents' lists says (provider.Labels): magpie hands it the
+	// models' ids alone, its format having no name for one (Goose, Hermes,
+	// jcode …), it lists no models of magpie's at all (Gemini CLI, Snow),
+	// or it reads the gateway's /v1/models itself, whose display_name is
+	// the name alone (Empryo, Cursor Private Inference). The setting says
+	// so for each one connected, rather than seeming to do nothing.
+	NoNames bool
 	// Sync, for an agent that reads magpie's models from a file of its own
 	// rather than asking the gateway, rewrites that list as the catalog is
 	// now — where magpie wrote one; nothing else changes (see SyncCatalog).

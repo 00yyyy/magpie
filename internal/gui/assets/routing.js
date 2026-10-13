@@ -3733,6 +3733,8 @@
   function drawNames() {
     const txt = el("div", "txt");
     txt.append(el("b", "", t("Names in agents’ lists")), el("small", "", t("Whether “· routing group” follows a group’s name in the agents’ lists: one setting for every group, and for the provider after each model’s name, as on Settings.")));
+    // an agent the setting can't reach is named, not left to seem broken
+    txt.append(noNamesLine("small", ""));
     // an open editor says what its group will be called: drawn again with it
     gNames.replaceChildren(txt, suffixSegs(() => renderGroups()));
   }
