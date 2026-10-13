@@ -466,7 +466,10 @@ func readClaudeCredential() (claudeCredentials, claudeCredentialLocation, bool) 
 		return claudeCredentials{}, claudeCredentialLocation{}, false
 	}
 	if i.hex {
-		saveClaudeCredential(i.loc, i.c)
+		// not through saveClaudeCredential: claudeCredential reads under
+		// claudeCacheMu, which caching would take again, and caches what
+		// this returns itself
+		writeClaudeCredential(i.loc, i.c)
 	}
 	return i.c, i.loc, true
 }
@@ -578,6 +581,15 @@ func forgetClaudeCredential() {
 }
 
 func saveClaudeCredential(loc claudeCredentialLocation, c claudeCredentials) error {
+	if err := writeClaudeCredential(loc, c); err != nil {
+		return err
+	}
+	cacheClaudeCredential(c, loc)
+	return nil
+}
+
+// writeClaudeCredential writes c where loc says, leaving the cache alone.
+func writeClaudeCredential(loc claudeCredentialLocation, c claudeCredentials) error {
 	if discoveryOff() {
 		return errAccountDiscoveryOff
 	}
@@ -609,7 +621,6 @@ func saveClaudeCredential(loc claudeCredentialLocation, c claudeCredentials) err
 			return fmt.Errorf("save Claude Code credentials: %v: %s", err, strings.TrimSpace(string(out)))
 		}
 	}
-	cacheClaudeCredential(c, loc)
 	return nil
 }
 
