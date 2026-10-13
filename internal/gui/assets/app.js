@@ -9066,7 +9066,7 @@ function drawEditor(p, presetID) {
       balPair.append(res);
       balPair.classList.add("wrap");
     }
-    inner.append(...field(t("Balance field"), balPair, t("Where the amount is in the reply, e.g. data.balance; it can be a sum with + - * / and brackets, e.g. data.total / 500000 or (1 - credits.used / 70) %; \"$\" in front adds the sign, \"%\" after it shows a percent, with a bar; several, each with a label, go apart by \";\", e.g. 5h: a.used / a.cap %; $credits.left")));
+    inner.append(...field(t("Balance field"), balPair, t("Where the amount is in the reply, e.g. data.balance; it can be a sum with + - * / and brackets, e.g. data.total / 500000 or (1 - credits.used / 70) %; \"$\" in front adds the sign, \"%\" after it shows a percent, with a bar; several, each with a label, go apart by \";\", e.g. 5h: a.used / a.cap %; $credits.left; a list's items are a.*.used, or a[status=active].used for those that match, put in sum(), max(), min() or count(); an amount the reply hasn't shows \"—\" and the others still show")));
     more.append(inner);
     ed.append(more);
   }
@@ -15876,16 +15876,19 @@ function panelBalances(bals) {
     // the others each a quiet line, a percent a meter (#420)
     const parts = q.balanceParts?.length ? q.balanceParts : [{ text: q.balance }];
     for (const [i, p] of parts.entries()) {
-      if (!i && !p.label) card.append(el("b", "pq-amt", p.text));
+      let amount;
+      if (!i && !p.label) card.append(amount = el("b", "pq-amt", p.text));
       else if (!i) {
-        const lead = el("span", "pq-lead");
-        lead.append(el("b", "pq-amt", p.text), el("span", "", p.label));
-        card.append(lead);
+        amount = el("span", "pq-lead");
+        amount.append(el("b", "pq-amt", p.text), el("span", "", p.label));
+        card.append(amount);
       } else {
-        const line = el("span", "pq-sub pq-bp");
-        line.append(el("span", "", p.label || ""), el("b", "", p.text));
-        card.append(line);
+        amount = el("span", "pq-sub pq-bp");
+        amount.append(el("span", "", p.label || ""), el("b", "", p.text));
+        card.append(amount);
       }
+      // an amount the reply hadn't, "—": why, on hover (#1993)
+      if (p.error) amount.title = p.error;
       if (p.percent != null) card.append(balanceMeter(p.percent));
     }
     // standing in for a reading that failed just now: as of when
@@ -16585,6 +16588,8 @@ function balanceRow(sub, why, when = true) {
   for (const [i, p] of (parts || []).entries()) {
     const row = el("div", "bal-part" + (i ? "" : " lead"));
     row.append(el("span", "", p.label || (i ? "" : t("Balance"))), el("b", "", p.text));
+    // an amount the reply hadn't, "—": why, on hover (#1993)
+    if (p.error) row.title = p.error;
     if (p.percent != null) row.append(balanceMeter(p.percent));
     b.append(row);
   }
