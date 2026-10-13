@@ -744,8 +744,17 @@ func claudeIn(at place) *Agent {
 				continue
 			}
 			label, note := cmp.Or(labels[o.Ref], o.Label, o.Value), o.Note
-			if by, ok := strings.CutSuffix(note, " · via magpie"); ok && label != o.Label && strings.HasSuffix(label, " · "+by) {
-				note = "via magpie"
+			// a subscription's note is its account alone, so a label left
+			// without its provider (Off, or a name the user gave) named
+			// neither in /model; the provider goes before the account then,
+			// as an API key's note says it (#1136, cjyrainbow)
+			if by, ok := strings.CutSuffix(note, " · via magpie"); ok {
+				switch {
+				case label != o.Label && strings.HasSuffix(label, " · "+by):
+					note = "via magpie"
+				case o.Group != "" && o.Group != RoutingGroups && by != o.Group && !strings.HasSuffix(label, " · "+o.Group):
+					note = o.Group + " · " + note
+				}
 			}
 			rows = append(rows, map[string]any{"model": spell(mark1M(o.Value)), "label": label, "description": note})
 		}
