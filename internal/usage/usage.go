@@ -558,7 +558,12 @@ func FormatCost(amountUSD float64, currency string, rate float64) string {
 	}
 }
 
-func (t *Totals) add(r Record, price *catalog.Price) {
+func (t *Totals) add(r Record, price *catalog.Price) { t.addFrom(Row{Record: r}, price) }
+
+// addFrom is add for a ledger row, whose speed is told as Row.Decode tells
+// it (a Codex turn of one call read from its session file, by its own rule).
+func (t *Totals) addFrom(row Row, price *catalog.Price) {
+	r := row.Record
 	t.count(r)
 	t.Input += r.Input
 	t.Output += r.Output
@@ -569,7 +574,7 @@ func (t *Totals) add(r Record, price *catalog.Price) {
 	if r.TTFT > 0 && !r.Failed() {
 		t.Timed++
 		t.TTFT += r.TTFT
-		if n, w := r.Decode(); w > 0 {
+		if n, w := row.Decode(); w > 0 {
 			t.DecodeMs += w
 			t.DecodeOut += n
 			t.DecodeN++

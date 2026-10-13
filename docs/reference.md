@@ -338,12 +338,20 @@ item to its last, never from the output of a tool the call itself ran,
 which an older rollout writes before the call's token count. OpenCode's rows
 show none.
 A call whose session file timed it (a Codex turn of one call) shows its own
-speed as before. When that call reasoned, the file has its first token but
-not its first text, so no speed is measured; it shows the least its answer
-wrote at instead: its output less the reasoning, all written after the first
-token, over the time from the first token to its end. Its whole output over
-that time would count reasoning written before the first token and read
-high. A floor never mixes into a measured speed: the Speed trend and
+speed when the time after its first token is a second or more and it wrote
+100 tokens or more in it (`usage.CodexWindowMs`, `usage.CodexBodyTokens`).
+That time can be one network push rather than the writing: a reply whose
+first token came at 6.8 s and the rest 0.2 s later read 1,900 tok/s. When
+that call reasoned, the file has its first token but not its first text, so
+no speed is measured; it shows the least its answer wrote at instead: its
+output less the reasoning, all written after the first token, over the time
+from the first token to its end, held to the same second and 100 tokens. Its
+whole output over that time would count reasoning written before the first
+token and read high. A Codex turn of one call that tells neither shows the
+least it wrote at over the whole turn, the wait for the first token in it
+(`≥54 tok/s` for 380 tokens in 7 s), of any size, as everything it wrote
+was written in that time. Gateway rows and other agents' keep their own
+speed. A floor never mixes into a measured speed: the Speed trend and
 `magpie usage` count timed calls only.
 
 A group's speed (a row of the Usage page's ranking, by model, provider or
