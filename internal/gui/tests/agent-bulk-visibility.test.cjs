@@ -57,6 +57,10 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ['chromium', 
       assert.equal(await footer.locator('.agent-more').count(), 1, 'fold and manage share the footer');
       for (const width of [1240, 360]) {
         await page.setViewportSize({width, height:760});
+        // setViewportSize can resolve before the page has laid out at the
+        // new width; measure once it has, two frames on
+        await page.waitForFunction((w) => window.innerWidth === w, width);
+        await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
         const boxes = await footer.evaluate((f) => {
           const more = f.querySelector('.agent-more').getBoundingClientRect(), manage = f.querySelector('.ag-manage-button').getBoundingClientRect();
           return {right:more.right, left:manage.left, bottom:more.bottom, top:manage.top, overflow:f.scrollWidth > f.clientWidth};
