@@ -70,6 +70,14 @@ func TestProviderAtAddress(t *testing.T) {
 	if p.Chat != "http://192.168.1.9:8000/v1" || p.Responses != "http://192.168.1.9:8000/v1" || p.Anthropic != "http://192.168.1.9:8000" {
 		t.Fatalf("moved: %q %q %q", p.Chat, p.Responses, p.Anthropic)
 	}
+	// oMLX's decision API (#1641) is the same server's: it moves too, or
+	// routing groups would ask a classifier still on this machine
+	if p.Decide != "http://192.168.1.9:8000/v1" {
+		t.Fatalf("decide not moved: %q", p.Decide)
+	}
+	if pr, err := AtAddress(*Preset("omlx"), "192.168.1.9:8000"); err != nil || pr.Decide != "http://192.168.1.9:8000/v1" {
+		t.Fatalf("the preset's decide not moved: %q, %v", pr.Decide, err)
+	}
 	if err := p.AtAddress("ftp://x"); err == nil || p.Chat != "http://192.168.1.9:8000/v1" {
 		t.Fatalf("refused address: err %v, chat %q", err, p.Chat)
 	}

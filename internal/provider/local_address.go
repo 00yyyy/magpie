@@ -13,16 +13,18 @@ import (
 // the root for Anthropic).
 
 // AtAddress is pr reached at addr: the scheme, host and port of each of its
-// URLs replaced by addr's. An empty addr leaves pr as it is.
+// URLs replaced by addr's, its decision API's (oMLX's System One, #1641)
+// among them, which the same server serves. An empty addr leaves pr as it
+// is.
 func AtAddress(pr PresetDef, addr string) (PresetDef, error) {
-	err := atAddress(addr, &pr.Chat, &pr.Responses, &pr.Anthropic)
+	err := atAddress(addr, &pr.Chat, &pr.Responses, &pr.Anthropic, &pr.Decide)
 	return pr, err
 }
 
 // AtAddress moves the provider's URLs to addr as the package's AtAddress
 // does; a refused address leaves them as they were.
 func (p *Provider) AtAddress(addr string) error {
-	return atAddress(addr, &p.Chat, &p.Responses, &p.Anthropic)
+	return atAddress(addr, &p.Chat, &p.Responses, &p.Anthropic, &p.Decide)
 }
 
 // AddressOf is the address the URLs are at, the origin of the first one

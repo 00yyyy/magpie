@@ -23,7 +23,7 @@ const presets = [
   { id: "openai", name: "OpenAI", icon: "openai", kind: "vendor", chat: "https://api.openai.com/v1", added: false },
   { id: "ollama", name: "Ollama", icon: "ollama", kind: "local", chat: "http://localhost:11434/v1", anthropic: "http://localhost:11434", noKey: true, note: "your local models", added: false },
   { id: "lmstudio", name: "LM Studio", icon: "lmstudio", kind: "local", chat: "http://localhost:1234/v1", noKey: true, note: "local server, port 1234 by default", added: true },
-  { id: "omlx", name: "oMLX", icon: "omlx", kind: "local", chat: "http://localhost:8000/v1", responses: "http://localhost:8000/v1", anthropic: "http://localhost:8000", noKey: true, note: "local server, port 8000 by default", added: true },
+  { id: "omlx", name: "oMLX", icon: "omlx", kind: "local", chat: "http://localhost:8000/v1", responses: "http://localhost:8000/v1", anthropic: "http://localhost:8000", decide: "http://localhost:8000/v1", noKey: true, note: "local server, port 8000 by default", added: true },
 ];
 const base = {
   icon: "generic", chat: "", responses: "", anthropic: "", catalog: "",
@@ -32,7 +32,7 @@ const base = {
 };
 // an oMLX on another computer, and one whose URLs were set apart (another
 // app's import): its Anthropic URL on another host than its chat one
-const studio = { ...base, id: "omlx", name: "oMLX", icon: "omlx", preset: "omlx", host: "192.168.1.5:8000", chat: "http://192.168.1.5:8000/v1", responses: "http://192.168.1.5:8000/v1", anthropic: "http://192.168.1.5:8000" };
+const studio = { ...base, id: "omlx", name: "oMLX", icon: "omlx", preset: "omlx", host: "192.168.1.5:8000", chat: "http://192.168.1.5:8000/v1", responses: "http://192.168.1.5:8000/v1", anthropic: "http://192.168.1.5:8000", decide: "http://192.168.1.5:8000/v1" };
 // an LM Studio where the preset puts it
 const home = { ...base, id: "lmstudio", name: "LM Studio", icon: "lmstudio", preset: "lmstudio", host: "localhost:1234", chat: "http://localhost:1234/v1" };
 const apart = { ...base, id: "omlx-2", name: "oMLX Apart", icon: "omlx", preset: "omlx", host: "10.0.0.2:8000", chat: "http://10.0.0.2:8000/v1", anthropic: "http://10.0.0.3:9000" };
@@ -169,11 +169,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal("address" in s, false);
           assert.equal(s.chat, "http://192.168.1.5:8000/v1");
           assert.equal(s.anthropic, "http://192.168.1.5:8000");
+          assert.equal(s.decide, "http://192.168.1.5:8000/v1");
 
           // moved: its URLs there
           await page.locator(".row.provider", { hasText: /^oMLX$|oMLX(?! Apart)/ }).first().click();
           await address.fill("https://studio.local:8001");
-          assert.equal(await eps(), "https://studio.local:8001/v1 https://studio.local:8001/v1 https://studio.local:8001");
+          // its decision API (#1641) is the same server's: it moves too
+          assert.equal(await ed.locator("input.decide-url").inputValue(), "https://studio.local:8001/v1");
+          assert.equal(await eps(), "https://studio.local:8001/v1 https://studio.local:8001/v1 https://studio.local:8001 https://studio.local:8001/v1");
           let asked = await tested();
           assert.equal(asked.chat, "https://studio.local:8001/v1");
           assert.equal(asked.responses, "https://studio.local:8001/v1");
@@ -184,6 +187,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(s.chat, "https://studio.local:8001/v1");
           assert.equal(s.responses, "https://studio.local:8001/v1");
           assert.equal(s.anthropic, "https://studio.local:8001");
+          assert.equal(s.decide, "https://studio.local:8001/v1");
+
+          // a decision endpoint typed in its own field is kept as typed
+          await page.locator(".row.provider", { hasText: /^oMLX$|oMLX(?! Apart)/ }).first().click();
+          await ed.locator("input.decide-url").fill("https://jev.example/v1");
+          await address.fill("https://studio.local:8002");
+          assert.equal(await ed.locator("input.decide-url").inputValue(), "https://jev.example/v1");
+          s = await press(w.save);
+          assert.equal(s.chat, "https://studio.local:8002/v1");
+          assert.equal(s.decide, "https://jev.example/v1");
 
           // URLs set apart, saved with the address untouched, stay apart
           await page.locator(".row.provider", { hasText: "oMLX Apart" }).click();

@@ -9202,14 +9202,22 @@ function drawEditor(p, presetID) {
     // a saved provider's URLs (or a duplicate's) start it; a new one's are
     // the preset's, sent as none unless moved, so the gateway takes them
     const own = draft.chat !== undefined;
-    draft.addressFrom ??= { chat: draft.chat ?? pr.chat ?? "", responses: draft.responses ?? pr.responses ?? "", anthropic: draft.anthropic ?? pr.anthropic ?? "" };
+    // oMLX's decision API (#1641) is the same server's, and moves with it
+    draft.addressFrom ??= { chat: draft.chat ?? pr.chat ?? "", responses: draft.responses ?? pr.responses ?? "", anthropic: draft.anthropic ?? pr.anthropic ?? "", decide: draft.decide ?? (p?.decide || pr.decide || "") };
     draft.addressWas ??= own ? originOf(draft.addressFrom) : "";
     const from = draft.addressFrom, addressWas = draft.addressWas;
     draft.address ??= addressWas;
     address = input(draft.address, originOf(pr));
     address.inputMode = "url";
     address.classList.add("address");
-    address.oninput = () => { draft.address = address.value; refreshEndpoints(); };
+    // the Jev endpoint field shows where the decision API moved to, until
+    // one is typed there
+    address.oninput = () => {
+      draft.address = address.value;
+      refreshEndpoints();
+      const du = ed.querySelector("input.decide-url");
+      if (du && draft.decide === draft.addressFrom.decide) du.value = movedURLs(draft)?.decide || draft.decide;
+    };
     const keys = address.onkeydown;
     address.onkeydown = (e) => { keys(e); if (e.key === "Enter" && isNew) save(); };
     // folded: most run where the preset says; open for one that doesn't,
@@ -9551,7 +9559,8 @@ function drawEditor(p, presetID) {
   // names the account, …/accounts/<id>/ai/run — in place of the preset's
   if (decides && !custom && (p?.preset || pr?.id) !== "remote-magpie") {
     if (draft.decide === undefined) draft.decide = p?.decide || pr?.decide || "";
-    const du = input(draft.decide, pr?.decide || "https://…", "url");
+    const du = input((address && movedURLs(draft)?.decide) || draft.decide, pr?.decide || "https://…", "url");
+    du.classList.add("decide-url");
     // Bailian's is at the host of the key's workspace (#647): its id is
     // typed on its own, the plan's address filled in with it
     if (!draft.region && pr?.regions?.some((r) => r.decide)) draft.region = (pr.regions.find((r) => r.decide && workspaceOf(r.decide, draft.decide) !== null) || pr.regions[0]).id;
@@ -14481,7 +14490,12 @@ function originOf(x) {
 function movedURLs(d) {
   if (!d?.addressFrom) return null;
   const at = localAddress(d.address);
-  return at && at !== d.addressWas ? atAddress(d.addressFrom, at) : null;
+  if (!at || at === d.addressWas) return null;
+  const out = atAddress(d.addressFrom, at);
+  // a decision endpoint typed in its own field is the user's: kept as typed
+  // (and one with none has none to move)
+  if (!out.decide || (d.decide !== undefined && d.decide !== d.addressFrom.decide)) delete out.decide;
+  return out;
 }
 // atAddress is urls each moved to origin, its path kept.
 function atAddress(urls, origin) {
