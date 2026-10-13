@@ -71,6 +71,14 @@ endpoint, by the upstream that answered (`summaryUpstream` in
 OTel attributes carry the evidence without response text. The existing burst and held-content limits in
 `DecodeOf` still apply, and hidden reasoning does not enter average speed.
 
+A streamed request's duration (`Millis`, which ends every speed window)
+ends when its last try's reply ended, not when `serve` returns: what the
+gateway writes down after an answer (`answered`'s sticks, the provider's
+last answer in `NoteServed`) goes to disk, and on a busy disk took
+seconds, which made a paced reply read as held back and tell no speed
+(#1939, `TestSpeedEndsWithTheReply`). A decision group's row is timed the
+same way.
+
 `TestVisibleReasoningSpeed`, `TestReasoningSpeedEvidence`,
 `TestReasoningSpeedThroughGateway`, `TestMixedRedactedReasoning`,
 `TestHiddenReasoningThroughTranslation`, `TestSlowReleasedReasoningIsUntimed`,

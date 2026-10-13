@@ -2001,6 +2001,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	rounds := 0            // the rounds they were asked again in
 	var waitFrom time.Time // when every member had first failed so
 	refusals := 0          // the tries the safety filter refused so
+	// ended is when the last try's reply ended: the request's ms end there,
+	// not after what magpie writes down of it once it has (#1939: sticks
+	// and the provider's last answer, saved to disk, took seconds on a busy
+	// disk, and the reply's speed counted them as its own)
+	var ended time.Time
 	for i := 0; i < len(cands); i++ {
 		c := cands[i]
 		if j := s.laneMate(cands, i, isGroup, gaveWay); j > i {
@@ -2055,6 +2060,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		providerAccount = accountOf(c.p)
 		began := time.Now()
+		ended = time.Time{}
 		if firstBegan.IsZero() {
 			firstBegan = began
 		}
@@ -2362,7 +2368,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			wentAt = at.effort
 		}
 		wentTier = at.tier
-		try := Try{ID: c.rest, Model: c.model, Effort: wentAt, Picked: picked, Fixed: fixed, Fast: fast, Start: began, Done: true, Status: call.Status, Millis: time.Since(began).Milliseconds(), Error: call.Error, Queued: queued,
+		ended = time.Now()
+		try := Try{ID: c.rest, Model: c.model, Effort: wentAt, Picked: picked, Fixed: fixed, Fast: fast, Start: began, Done: true, Status: call.Status, Millis: ended.Sub(began).Milliseconds(), Error: call.Error, Queued: queued,
 			Served: call.Usage.Served, Upstream: call.Usage.Upstream, Tier: wentTier, TierServed: call.Usage.Tier, Auto: autoPicked()}
 		if resetFirst != nil {
 			// the reset spent for it before it was asked
@@ -2500,7 +2507,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					ProviderKeyID: providerKeyID, ProviderKeyName: providerKeyName, ProviderAccount: providerAccount,
 					Requested: call.Model, Served: call.Usage.Served, Upstream: call.Usage.Upstream,
 					Input: call.Usage.billed().Input, Output: call.Usage.billed().Output, CacheRead: call.Usage.billed().CacheRead,
-					CacheWrite: call.Usage.billed().CacheWrite, CacheWrite1h: call.Usage.billed().CacheWrite1h, Reasoning: call.Usage.billed().Reasoning, Effort: wentAt, Millis: time.Since(began).Milliseconds(), Status: call.Status,
+					CacheWrite: call.Usage.billed().CacheWrite, CacheWrite1h: call.Usage.billed().CacheWrite1h, Reasoning: call.Usage.billed().Reasoning, Effort: wentAt, Millis: try.Millis, Status: call.Status,
 					TierAsked: tierAsked, TierSent: wentTier, TierServed: call.Usage.Tier,
 					TTFT: try.TTFT, FirstText: try.FirstText, FirstReasoning: try.FirstReasoning, ReasoningHidden: try.ReasoningHidden, Flow: try.Flow, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To, c.p, c.model), Archive: call.archiveName(), HandedOn: true}
@@ -2544,7 +2551,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					ProviderKeyID: providerKeyID, ProviderKeyName: providerKeyName, ProviderAccount: providerAccount,
 					Requested: call.Model, Served: call.Usage.Served,
 					Input: call.Usage.billed().Input, Output: call.Usage.billed().Output, CacheRead: call.Usage.billed().CacheRead,
-					CacheWrite: call.Usage.billed().CacheWrite, CacheWrite1h: call.Usage.billed().CacheWrite1h, Reasoning: call.Usage.billed().Reasoning, Effort: wentAt, Millis: time.Since(began).Milliseconds(), Status: call.Status,
+					CacheWrite: call.Usage.billed().CacheWrite, CacheWrite1h: call.Usage.billed().CacheWrite1h, Reasoning: call.Usage.billed().Reasoning, Effort: wentAt, Millis: try.Millis, Status: call.Status,
 					TierAsked: tierAsked, TierSent: wentTier, TierServed: call.Usage.Tier,
 					TTFT: try.TTFT, FirstText: try.FirstText, FirstReasoning: try.FirstReasoning, ReasoningHidden: try.ReasoningHidden, Flow: try.Flow, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To, c.p, c.model), Archive: call.archiveName(), HandedOn: true}
@@ -2942,6 +2949,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		call.Fallback = strings.Join(skipped, "; ")
 	}
 	call.Millis = time.Since(start).Milliseconds()
+	if !ended.IsZero() {
+		call.Millis = ended.Sub(start).Milliseconds()
+	}
 	call.Usage.ResponseID = clientResponseID
 	finishCapture()
 	// a reply the vendor gave that is no use to its caller all the same —
