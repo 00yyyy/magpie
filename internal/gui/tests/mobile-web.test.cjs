@@ -340,8 +340,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               // of its channels changes by more than 48; size changes always fail.
               const scale = before.width / width;
               if (sameSize) for (let i = 0; i < before.data.length; i += 4) {
-                const row = Math.floor(i / 4 / before.width);
+                const row = Math.floor(i / 4 / before.width), col = (i / 4) % before.width;
+                // Only the footer's own column moves: the sidebar beside the
+                // list (at 1280) stays where it was.
                 const shifted = addedFooter && row >= Math.floor(addedFooter.y * scale)
+                  && col >= Math.floor(addedFooter.x * scale) && col < Math.ceil((addedFooter.x + addedFooter.width) * scale)
                   ? Math.round(addedFooter.height * scale) : 0;
                 // Both images retain their real viewport size. The added
                 // footer pushes this last slice below the current viewport.
