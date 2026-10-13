@@ -150,7 +150,9 @@ func factorySignedInWith(ctx context.Context, t factoryTokens) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := addSideLogin(savedLogin{Agent: "factory", User: user, Auth: auth}, "", func(savedLogin) {}); err != nil {
+	if err := keepLogin(ctx, func() error {
+		return addSideLogin(savedLogin{Agent: "factory", User: user, Auth: auth}, "", func(savedLogin) {})
+	}); err != nil {
 		return "", err
 	}
 	// signed in again: whatever WorkOS refused before is over

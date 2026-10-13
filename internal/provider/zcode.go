@@ -826,7 +826,9 @@ func startZCodeSignIn(s *signInFlow, site string) error {
 			}
 			who := zcodeName(zcodeWho(got.User.Email, got.User.Name, got.User.ID), site, k, have)
 			auth, _ := json.Marshal(k)
-			if err := addSideLogin(savedLogin{Agent: "zcode", User: who, Plan: plan, Auth: auth}, ownUser, func(savedLogin) {}); err != nil {
+			if err := keepLogin(ctx, func() error {
+				return addSideLogin(savedLogin{Agent: "zcode", User: who, Plan: plan, Auth: auth}, ownUser, func(savedLogin) {})
+			}); err != nil {
 				fail(err.Error())
 				return
 			}

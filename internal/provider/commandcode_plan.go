@@ -806,7 +806,9 @@ func (s *signInFlow) commandCodeKeep(ctx context.Context, a cmdAuth, keepServer 
 	if !hasOwn {
 		ownUser = ""
 	}
-	if err := addSideLogin(savedLogin{Agent: CommandCodePlanID, User: who, Plan: plan, Auth: auth}, ownUser, func(savedLogin) {}); err != nil {
+	if err := keepLogin(ctx, func() error {
+		return addSideLogin(savedLogin{Agent: CommandCodePlanID, User: who, Plan: plan, Auth: auth}, ownUser, func(savedLogin) {})
+	}); err != nil {
 		s.finish(SignInState{State: "failed", Error: err.Error()})
 		return err
 	}

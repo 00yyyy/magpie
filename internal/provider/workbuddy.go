@@ -936,7 +936,12 @@ func startWorkBuddySignIn(s *signInFlow, w *wbSite) error {
 			return
 		}
 		c.UID = acc.UID
-		who, again, using, err := wbKeepSignIn(w, c, wbWho(acc.Nickname, acc.PhoneNumber, acc.UID))
+		var who string
+		var again, using bool
+		err := keepLogin(ctx, func() (err error) {
+			who, again, using, err = wbKeepSignIn(w, c, wbWho(acc.Nickname, acc.PhoneNumber, acc.UID))
+			return err
+		})
 		if err != nil {
 			fail(err.Error())
 			return
