@@ -312,7 +312,11 @@ one that try went out at (a fast pick sends `priority`; Ultrafast becomes
 `priority` on an account whose plan doesn't offer it), and the one the
 vendor's reply said it ran at, empty when the reply doesn't say. The JSON
 log keeps them as `tier_asked`, `tier_sent` and `tier_served`, and each
-try in `/v1/magpie/route` has `tier` and `tier_served`.
+try in `/v1/magpie/route` has `tier` and `tier_served`. The last column,
+`upstream_stop`, is why the upstream said its reply ended, in its own
+words (`stop`, `tool_calls`, `end_turn`, a Responses reply's
+`completed`), empty when it said none. A request's row on the Requests
+page shows it as Upstream stop reason.
 
 **Output speed** (tok/s on the Usage and Routing pages, `magpie usage`) is
 output tokens over the time after the first token, summed per request: the
