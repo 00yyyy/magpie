@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"io"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // historyNoon holds the history's clock at noon of a past day and returns
@@ -428,4 +431,50 @@ func TestHistoryRouteDayAndNoLock(t *testing.T) {
 	if _, ok := HistoryRoute(123, day.AddDate(0, 0, 2)); ok {
 		t.Fatal("searched outside the three-day window")
 	}
+}
+
+// A done route isn't written to disk in a test binary testenv isolated,
+// where the write, run behind the request, outlived the test that sent it
+// and put routing/ back into its config folder as that was removed
+// (#1543); outside one it is.
+func TestNoRouteWrittenInATestSandbox(t *testing.T) {
+	keepRoutes = true
+	t.Cleanup(func() { keepRoutes = false })
+	send := func() string {
+		f := &fake{t: t, ctype: "application/json", reply: `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`}
+		setup(t, provider.Chat, f)
+		rec := httptest.NewRecorder()
+		New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"fake/m1","messages":[{"role":"user","content":"hi"}]}`)))
+		if rec.Code != 200 {
+			t.Fatal(rec.Code, rec.Body)
+		}
+		return HistoryDir()
+	}
+	t.Run("sandbox", func(t *testing.T) {
+		if os.Getenv(testSandbox) == "" {
+			t.Fatal("the package's TestMain left the sandbox marker unset")
+		}
+		dir := send()
+		time.Sleep(200 * time.Millisecond) // a write begun would be on disk by now
+		if _, err := os.Stat(dir); err == nil {
+			t.Fatalf("a route was written to %s", dir)
+		}
+	})
+	t.Run("outside", func(t *testing.T) {
+		t.Setenv(testSandbox, "")
+		dir := send()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if es, _ := os.ReadDir(dir); len(es) > 0 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("no route written to %s", dir)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		// saveRoute holds the lock until its write and prune are done
+		history.mu.Lock()
+		history.mu.Unlock()
+	})
 }

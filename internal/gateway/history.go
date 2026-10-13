@@ -40,6 +40,19 @@ func HistoryDir() string { return filepath.Join(filepath.Dir(provider.Path()), "
 // routing directory back into its temporary HOME as that is removed.
 var keepRoutes = true
 
+// testSandbox is testenv.Marker, which gateway can't import outside its
+// tests: set in a test binary testenv isolated.
+const testSandbox = "MAGPIE_TEST_SANDBOX"
+
+// keepsRoutes says whether a done route is written to disk: never in a test
+// binary testenv isolated. The write runs behind the request that ended the
+// route, so one still going when its test ended put routing/ back into the
+// test's config folder as that was removed, failing its TempDir cleanup
+// with "directory not empty": internal/gui's TestContextTextAPI (#1543),
+// and any package whose tests send a request through a gateway (gui, tui,
+// agent, davsync). No test outside this package reads the history back.
+func keepsRoutes() bool { return keepRoutes && os.Getenv(testSandbox) == "" }
+
 var history struct {
 	mu     sync.Mutex
 	pruned time.Time

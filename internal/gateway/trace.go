@@ -474,7 +474,7 @@ func (t *trace) update(r *Route, f func(r *Route)) {
 			t.totals.Errors++
 		}
 		t.turns.end(r, r.Status < 400 && r.Error == "" && !r.tools.called(), time.Now())
-		if keepRoutes {
+		if keepsRoutes() {
 			c := *r
 			c.Order = append([]Weighed{}, r.Order...) // [] for none: the GUI reads it as a list
 			c.Left = append([]Weighed(nil), r.Left...)
