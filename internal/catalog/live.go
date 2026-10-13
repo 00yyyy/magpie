@@ -331,6 +331,11 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 			continue
 		}
 		name, plain := r.DisplayName, ""
+		// OpenRouter's "Anthropic: Claude …" is a vendor-prefixed name;
+		// leave it to the catalog rather than changing every display name.
+		if name == "" && !strings.Contains(r.Name, ": ") {
+			name = r.Name
+		}
 		if r.Label != "" {
 			name = r.Label
 			if r.DisplayName != "" && r.DisplayName != r.Label {
@@ -525,14 +530,15 @@ func Decorate(live []Model, known []Model) []Model {
 		byID[m.ID] = m
 	}
 	out := make([]Model, 0, len(live))
-	for _, m := range live {
+	fallback := make([]string, len(live))
+	for i, m := range live {
 		k, ok := byID[m.ID]
 		if i := strings.LastIndexByte(m.ID, '/'); !ok && i >= 0 {
 			k, ok = byID[m.ID[i+1:]] // a gateway's "deepseek/deepseek-chat"
 		}
 		if ok {
 			if m.Name == "" || m.Name == m.ID {
-				m.Name = k.Name
+				fallback[i] = k.Name
 			}
 			m.Efforts, m.Released, m.Provider = k.Efforts, k.Released, k.Provider
 			m.Reasoning = m.Reasoning || k.Reasoning
@@ -556,6 +562,7 @@ func Decorate(live []Model, known []Model) []Model {
 		}
 		out = append(out, m)
 	}
+	fillNames(out, fallback)
 	return out
 }
 
