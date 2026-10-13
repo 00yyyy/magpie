@@ -210,6 +210,33 @@ func TestHowInstalled(t *testing.T) {
 	if u := howInstalled(cliSpecs["atomcode"], atomcode); u == nil || !u.cask || !reflect.DeepEqual(u.cmd, []string{brew, "upgrade", "--cask", "atomcode"}) {
 		t.Errorf("AtomCode brew cask: %+v", u)
 	}
+	// Node formulae keep the npm package in their keg, as brew's gemini-cli
+	// 0.35.3 does on this Mac: bin/gemini → ../Cellar/gemini-cli/0.35.3/
+	// bin/gemini → ../libexec/bin/gemini → ../lib/node_modules/
+	// @google/gemini-cli/bundle/gemini.js. That is brew's, not npm's: npm
+	// install -g --prefix …/libexec would change the keg behind brew's back.
+	for _, k := range []struct{ id, formula, pkg, js, name string }{
+		{"gemini", "gemini-cli", "@google/gemini-cli", "bundle/gemini.js", "gemini"},
+		{"pi", "pi-coding-agent", "@earendil-works/pi-coding-agent", "dist/cli.js", "pi"},
+		{"cline", "cline", "cline", "bin/cline.js", "cline"},
+	} {
+		keg := filepath.Join(brewDir, "Cellar", k.formula, "1.0.0")
+		file(t, filepath.Join(keg, "libexec/lib/node_modules", k.pkg, k.js), "")
+		link(t, "../lib/node_modules/"+k.pkg+"/"+k.js, filepath.Join(keg, "libexec/bin", k.name))
+		link(t, "../libexec/bin/"+k.name, filepath.Join(keg, "bin", k.name))
+		bin := link(t, "../Cellar/"+k.formula+"/1.0.0/bin/"+k.name, filepath.Join(brewDir, "bin", k.name))
+		if u := howInstalled(cliSpecs[k.id], bin); u == nil || u.via != "brew" || u.cask || !reflect.DeepEqual(u.cmd, []string{brew, "upgrade", k.formula}) {
+			t.Errorf("%s's Node formula %s: %+v", k.id, k.formula, u)
+		}
+	}
+	// npm under a keg-only node's Cellar (node@20) is still npm's
+	nodeKeg := filepath.Join(brewDir, "Cellar/node@20/20.19.0")
+	file(t, filepath.Join(nodeKeg, "lib/node_modules/@github/copilot/npm-loader.js"), "")
+	file(t, filepath.Join(nodeKeg, "bin/npm"), "#!/bin/sh\n")
+	if u := howInstalled(cliSpecs["copilot"], link(t, "../lib/node_modules/@github/copilot/npm-loader.js", filepath.Join(nodeKeg, "bin/copilot"))); u == nil || u.via != "npm" {
+		t.Errorf("npm under node@20's keg: %+v", u)
+	}
+	os.Remove(filepath.Join(brewDir, "bin/gemini"))
 	file(t, filepath.Join(brewDir, "Cellar/something/1.0/bin/gemini"), "")
 	if u := howInstalled(cliSpecs["gemini"], link(t, "../Cellar/something/1.0/bin/gemini", filepath.Join(brewDir, "bin/gemini"))); u != nil {
 		t.Errorf("another formula: %+v", u)

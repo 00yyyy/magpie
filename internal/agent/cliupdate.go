@@ -137,11 +137,11 @@ var cliSpecs = map[string]cliSpec{
 			}
 			return nil
 		}},
-	"pi":        {npm: []string{"@earendil-works/pi-coding-agent", "@mariozechner/pi-coding-agent"}},
+	"pi":        {npm: []string{"@earendil-works/pi-coding-agent", "@mariozechner/pi-coding-agent"}, brew: []string{"pi-coding-agent"}},
 	"omp":       {npm: []string{"@oh-my-pi/pi-coding-agent"}},
 	"copilot":   {npm: []string{"@github/copilot"}, brew: []string{"copilot-cli"}},
 	"crush":     {npm: []string{"@charmland/crush"}, brew: []string{"crush"}},
-	"cline":     {npm: []string{"cline"}},
+	"cline":     {npm: []string{"cline"}, brew: []string{"cline"}},
 	"dsh":       {npm: []string{"@deepseek-ai/dsh"}},
 	"codebuddy": {npm: []string{"@tencent-ai/codebuddy-code"}},
 	"goose":     {brew: []string{"block-goose-cli"}},
@@ -207,32 +207,41 @@ func howInstalled(spec cliSpec, bin string) *updater {
 			return &updater{via: "self", pkg: pkg, cmd: c, latest: spec.latest}
 		}
 	}
-	// a package manager's before Homebrew's: npm under Homebrew's node
-	// is npm's
+	// a formula of the agent's own is Homebrew's, though a Node one keeps
+	// the npm package in its keg (Cellar/gemini-cli/<v>/libexec/lib/
+	// node_modules/@google/gemini-cli/…), where npm install -g --prefix
+	// would change the keg behind brew's back
+	m := brewPath.FindStringSubmatch(slash)
+	if m != nil && contains(spec.brew, m[2]) {
+		return fromBrew(slash, m)
+	}
+	// otherwise a package manager's before Homebrew's: npm under Homebrew's
+	// node (a keg-only node@20's Cellar/node@20/<v>/lib/node_modules) is npm's
 	for _, pkg := range spec.npm {
 		if u := fromNodeModules(pkg, bin, slash); u != nil {
 			return u
 		}
 	}
-	if m := brewPath.FindStringSubmatch(slash); m != nil {
-		if !contains(spec.brew, m[2]) {
+	return nil
+}
+
+// fromBrew is the updater of the CLI at real (forward slashes), which m,
+// brewPath's match in it, says Homebrew's formula or cask m[2] installed.
+func fromBrew(real string, m []string) *updater {
+	prefix := real[:strings.Index(real, m[0])]
+	brew := filepath.FromSlash(prefix + "/bin/brew")
+	if !isFile(brew) {
+		var err error
+		if brew, err = proc.Look("brew"); err != nil {
 			return nil
 		}
-		prefix := slash[:strings.Index(slash, m[0])]
-		brew := filepath.FromSlash(prefix + "/bin/brew")
-		if !isFile(brew) {
-			if brew, err = proc.Look("brew"); err != nil {
-				return nil
-			}
-		}
-		u := &updater{via: "brew", pkg: m[2], cask: m[1] == "Caskroom", brew: brew}
-		u.cmd = []string{brew, "upgrade", m[2]}
-		if u.cask {
-			u.cmd = []string{brew, "upgrade", "--cask", m[2]}
-		}
-		return u
 	}
-	return nil
+	u := &updater{via: "brew", pkg: m[2], cask: m[1] == "Caskroom", brew: brew}
+	u.cmd = []string{brew, "upgrade", m[2]}
+	if u.cask {
+		u.cmd = []string{brew, "upgrade", "--cask", m[2]}
+	}
+	return u
 }
 
 // fromNodeModules is the updater of a CLI the package pkg installed in a
