@@ -1364,6 +1364,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if in.QuotaResetAt == "" && old != nil {
 					in.QuotaResetAt = old.QuotaResetAt
 				}
+				// and the most they sit out while they keep failing, set
+				// with `magpie provider rest-cap` (#2008)
+				if in.RestCap == 0 && old != nil {
+					in.RestCap = old.RestCap
+				}
 				// and Codex's requests as sent, set with `magpie provider
 				// set <id> codex=as-sent` (#1758)
 				if !in.CodexAsSent && old != nil {

@@ -665,7 +665,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		routed.failures[counted]++
 		n := routed.failures[counted]
 		routed.Unlock()
-		d, r.By, r.Failures = min(fallbackCooldown<<min(n-1, 10), longestRetry), "backoff", n
+		d, r.By, r.Failures = min(fallbackCooldown<<min(n-1, 10), c.p.RestCapOr(longestRetry)), "backoff", n
 		// a subscription that failed with a window full is out of it,
 		// whatever it said; a key isn't: a relay out of accounts for
 		// everyone (sub2api's 503) says nothing of the key's own windows.
@@ -750,7 +750,7 @@ func (s *Server) rateRest(c candidate, header http.Header, body []byte, sharedPo
 		}
 	}
 	restingUntil.Unlock()
-	d, by := min(fallbackCooldown<<min(n-1, 10), longestRateRest), "cooldown"
+	d, by := min(fallbackCooldown<<min(n-1, 10), c.p.RestCapOr(longestRateRest)), "cooldown"
 	if n > 1 {
 		by = "backoff"
 	}

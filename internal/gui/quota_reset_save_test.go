@@ -11,7 +11,8 @@ import (
 
 // #2008: the editor knows nothing of the time of day a provider's daily
 // allowance comes back, set by `magpie provider quota-rest <id> until
-// 08:00`, so its save keeps it.
+// 08:00`, nor of its rest cap (`magpie provider rest-cap`), so its save
+// keeps both.
 func TestSaveKeepsQuotaResetAt(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -22,6 +23,9 @@ func TestSaveKeepsQuotaResetAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := provider.SetQuotaResetAt("reset-test", "00:00+08:00"); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetRestCap("reset-test", 240); err != nil {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
@@ -35,7 +39,7 @@ func TestSaveKeepsQuotaResetAt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.QuotaResetAt != "00:00+08:00" || got.Name != "Reset" {
-		t.Fatalf("the save dropped the reset time: %q", got.QuotaResetAt)
+	if got.QuotaResetAt != "00:00+08:00" || got.RestCap != 240 || got.Name != "Reset" {
+		t.Fatalf("the save dropped the reset time %q or the rest cap %d", got.QuotaResetAt, got.RestCap)
 	}
 }

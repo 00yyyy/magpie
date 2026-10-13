@@ -49,3 +49,31 @@ func TestQuotaRestUntil(t *testing.T) {
 		t.Fatalf("default: %q %d", p.QuotaResetAt, p.QuotaRest)
 	}
 }
+
+// #2008: `magpie provider rest-cap <id> 4h` sets where its keys' rests stop
+// doubling, and default gives it back to the gateway's own.
+func TestRestCapCmd(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := provider.Save(provider.Provider{ID: "xk", Name: "xk", Chat: "https://example.invalid/v1", Key: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	cap := func() int {
+		p, err := provider.Find("xk")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p.RestCap
+	}
+	if err := restCapCmd([]string{"xk", "4h"}); err != nil || cap() != 240 {
+		t.Fatalf("4h: %v %d", err, cap())
+	}
+	if err := restCapCmd([]string{"xk", "9d"}); err == nil || cap() != 240 {
+		t.Fatalf("9d taken: %d", cap())
+	}
+	if err := restCapCmd([]string{"xk", "default"}); err != nil || cap() != 0 {
+		t.Fatalf("default: %v %d", err, cap())
+	}
+}

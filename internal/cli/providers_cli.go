@@ -67,6 +67,10 @@ const providerUsage = `usage:
                                           without saying when it is back (default: 15 minutes; at most 8 days),
                                           or until the time of day a daily allowance comes back, on this
                                           computer's clock or at the vendor's offset from UTC
+  magpie provider rest-cap <id> [30m|6h|1d|default]
+                                          the most a key or account sits out while it keeps failing or being
+                                          rate limited, its rest doubling each time from a minute (default:
+                                          10 minutes for a failure, 30 for a rate limit; at most 8 days)
   magpie provider listed <id> yes|no      no: its models serve only through routing groups, not in the list
   magpie provider off|on <id>             switch it off (kept, but no agent or request uses it), or on again
   magpie provider test <id> [--as codex|claude-code] [model…]
@@ -560,6 +564,8 @@ func providerCmd(args []string) error {
 		return rpmCmd(rest)
 	case "quota-rest":
 		return quotaRestCmd(rest)
+	case "rest-cap":
+		return restCapCmd(rest)
 	case "listed":
 		// no: the provider's models leave the list agents see and serve
 		// only through the routing groups they are in
@@ -1616,6 +1622,36 @@ func quotaRestCmd(rest []string) error {
 		fmt.Printf("%s · a key out of its allowance, with no word of when it is back, sits out %s\n", p.Name, restWords(d))
 	} else {
 		fmt.Printf("%s · a key out of its allowance, with no word of when it is back, sits out 15 minutes (magpie's own)\n", p.Name)
+	}
+	return nil
+}
+
+// restCapCmd sets or shows the most a provider's keys and accounts sit out
+// while they keep failing or being rate limited (#2008).
+func restCapCmd(rest []string) error {
+	if len(rest) < 1 || len(rest) > 2 {
+		return fmt.Errorf("magpie provider rest-cap <id> [30m|6h|1d|default]")
+	}
+	p, err := provider.Find(rest[0])
+	if err != nil {
+		return err
+	}
+	if len(rest) > 1 {
+		minutes, err := restMinutes(rest[1])
+		if err != nil {
+			return err
+		}
+		if err := provider.SetRestCap(p.ID, minutes); err != nil {
+			return err
+		}
+		if p, err = provider.Find(p.ID); err != nil {
+			return err
+		}
+	}
+	if p.RestCap > 0 {
+		fmt.Printf("%s · a key or account that keeps failing sits out at most %s\n", p.Name, restWords(time.Duration(p.RestCap)*time.Minute))
+	} else {
+		fmt.Printf("%s · a key or account that keeps failing sits out at most 10 minutes, 30 when rate limited (magpie's own)\n", p.Name)
 	}
 	return nil
 }

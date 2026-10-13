@@ -322,6 +322,30 @@ func SetQuotaResetAt(id, at string) error {
 	return Save(*p)
 }
 
+// RestCapOr is the most one of p's keys or accounts sits out while it keeps
+// failing: the user's RestCap, else the gateway's own def.
+func (p Provider) RestCapOr(def time.Duration) time.Duration {
+	if c := min(max(p.RestCap, 0), MaxQuotaRest); c > 0 {
+		return time.Duration(c) * time.Minute
+	}
+	return def
+}
+
+// SetRestCap sets the most, in minutes, the provider's keys and accounts
+// sit out while they keep failing or being rate limited, 0 for the
+// gateway's own.
+func SetRestCap(id string, minutes int) error {
+	if minutes < 0 || minutes > MaxQuotaRest {
+		return fmt.Errorf("the longest rest is from 0 (magpie's own) to %d minutes (8 days), not %d", MaxQuotaRest, minutes)
+	}
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.RestCap = minutes
+	return Save(*p)
+}
+
 // SetRPM sets how many requests a minute each of the provider's keys or
 // accounts may send, 0 for no limit.
 func SetRPM(id string, n int) error {
