@@ -2469,12 +2469,16 @@ MAGPIE_GITHUB_MIRROR=https://gh.example magpie serve
 - `~/.config/magpie/stash.json` — values magpie replaced, restored on switch-back
 - `~/.config/magpie/plugins.json`, `plugins/` — the plugins added, and their packages
 - `~/.config/magpie/plugin-auth.json` — the plugins' sign-ins (0600)
+- `~/.config/magpie/install-id`, `stats-sent` — the [user count](#counting-users)'s
+  random id and the last day it went
 - `~/.cache/magpie/bun/<version>/magpie-bun` — the Bun plugins run on, named
   so that a proxy app's PROCESS-NAME rule can match it (`magpie-bun.exe` on
   Windows)
 - `~/.cache/magpie/models.json` — models.dev catalog (OpenCode's cache at
   `~/.cache/opencode/models.json` is used when present)
 - `~/.cache/magpie/models/<provider>.json` — model lists fetched from vendors
+- `~/.cache/magpie/partner-counts.json` — partner counts not yet sent (at most
+  14 days)
 
 `XDG_CONFIG_HOME` and `XDG_CACHE_HOME` are respected.
 
@@ -2482,8 +2486,10 @@ MAGPIE_GITHUB_MIRROR=https://gh.example magpie serve
 
 Once a day, a running magpie (the app, or `magpie serve`) sends one event to
 PostHog so we know how many people use it: a random id made up on your
-computer (`~/.config/magpie/install-id`), magpie's version, and your system
-and architecture.
+computer (`~/.config/magpie/install-id`, made the first time the event is
+sent), magpie's version, and your system and architecture. The day it last
+went is in `~/.config/magpie/stats-sent`, so a day is sent once; the
+event is tried at start and then every hour.
 
 With it goes what magpie is used with, so we know which agents, providers
 and models to look after first, by magpie's own ids only:
@@ -2502,14 +2508,17 @@ and models to look after first, by magpie's own ids only:
 - for each partner (a sponsor listed first in the add sheet), by its id, how
   many times a day the add sheet showed it, its row was opened, its key
   page was opened and a provider was added from it (at most 20 of each,
-  5 adds), sent the day after as `magpie partner` events.
+  5 adds), kept in `~/.cache/magpie/partner-counts.json` for at most 14
+  days and sent the day after as `magpie partner` events.
 
 No names, base URLs, accounts, keys, prompts or usage go. Turn that part off
 in Settings → Privacy → Share the agents, providers and models I use; the
 day's event then has the id, version and system only. Turn it all off in
 Settings → Privacy → Count me as a user, or with `DO_NOT_TRACK=1` or
 `MAGPIE_NO_STATS=1`. Builds from source never send it. The code is
-[internal/stats](../internal/stats/stats.go).
+[internal/stats](../internal/stats/stats.go). Deleting `install-id` makes a
+new one at the next send. The [Privacy page](https://usemagpie.ai/docs/privacy)
+shows a whole batch and everything else magpie sends by itself.
 
 Partners are also counted where usemagpie.ai sees them, whatever these
 settings say, as any website sees its visits. The partner list

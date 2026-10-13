@@ -48,6 +48,7 @@
     <a href="/docs/ja/plugins">プラグイン</a>
     <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
     <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
     <a href="/docs/ja/import">magpie に追加</a>
     <a href="/docs/integrate">アプリ連携</a>
     <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
@@ -277,7 +278,7 @@ magpie claude group/opus-anywhere    <span class="c"># これを使う</span></p
     <p>インストーラと <code>magpie update</code> にプロキシを渡します：<code>curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890</code>、または <code>magpie update --proxy socks5://127.0.0.1:1080</code>（http・https・socks5・socks5h に対応。<code>HTTPS_PROXY</code> と <code>ALL_PROXY</code> も使われます）。<code>--mirror &lt;prefix&gt;</code> を付けると、指定した GitHub ダウンロードミラーから <code>&lt;prefix&gt;https://github.com/…</code> としてリリースファイルを取得します。<code>magpie update mirror &lt;prefix&gt;</code> でアプリ自身の更新を含め毎回使い、<code>magpie update mirror off</code> で解除します。指定しない限りミラーは使われず、ファイルの SHA-256 はミラーではなく常に usemagpie.ai から取得するので、ミラーが書き換えたファイルはインストールされません。アプリ自身の更新は <span class="ui">Settings</span> → <span class="ui">Proxy</span> を通ります。</p>
 
     <h3 id="privacy">magpie は何を送信しますか？</h3>
-    <p>プロンプト、返答、キー、アカウントは、使っているプロバイダーにだけ送られます。間に magpie 自身のサーバーはありません。リリース版の magpie は 1 日 1 回、使われていることを知らせます。何人が使っていて、何を優先して面倒を見るべきかを知るためです。送るのは、このコンピュータで作ったランダムな ID、magpie のバージョンとシステム、そして使っているエージェント、プロバイダー、モデルを magpie 自身の ID（<code>claude</code>、<code>deepseek</code>、<code>deepseek/deepseek-v4</code>）で、それぞれの数とともに。自分で追加したプロバイダーとそのモデルは <code>custom</code> とだけ記録します。プロバイダー追加シートの先頭に載るパートナーについては、1 日に表示された回数、開かれた回数、追加された回数も送ります（回数のみ）。名前、Base URL、アカウント、キー、プロンプト、使用量は送りません。<span class="ui">設定</span> → <span class="ui">プライバシー</span> → <span class="ui">使っているエージェント、プロバイダー、モデルを共有</span> でエージェント、プロバイダー、モデルとパートナーの回数を外せます。<span class="ui">ユーザー数に含める</span>、<code>DO_NOT_TRACK=1</code>、<code>MAGPIE_NO_STATS=1</code> のどれかですべてオフになります。ソースからのビルドは送信しません。パートナーの公式サイトと「キーを取得」のリンクは <code>usemagpie.ai/go/…</code> を経由し、移動の前にクリックを 1 回数えます（どのパートナーか、どのリンクか、国）。usemagpie.ai はパートナー一覧が取得された回数も数えます。これはサーバー自身が見るもので、どの Web サイトのアクセス集計とも同じく、上の設定には左右されません。ID、IP アドレス、アカウントは記録しません。プラグイン、インポートリンク、ライブラリが示すアイコンは <code>usemagpie.ai/api/icon</code> を経由して取得するので、アイコンのあるサーバーに見えるのはあなたの IP ではなく Cloudflare のアドレスです。このサーバーは画像を中継するだけで、数えることも記録することもしません。詳しくは<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#counting-users">リファレンス</a>を。</p>
+    <p>プロンプト、返答、キー、アカウントは、使っているプロバイダーにだけ送られます。間に magpie 自身のサーバーはありません。リリース版の magpie は 1 日 1 回、使われていることを知らせます。何人が使っていて、何を優先して面倒を見るべきかを知るためです。送るのは、このコンピュータで作ったランダムな ID、magpie のバージョンとシステム、そして使っているエージェント、プロバイダー、モデルを magpie 自身の ID（<code>claude</code>、<code>deepseek</code>、<code>deepseek/deepseek-v4</code>）で、それぞれの数とともに。自分で追加したプロバイダーとそのモデルは <code>custom</code> とだけ記録します。プロバイダー追加シートの先頭に載るパートナーについては、1 日に表示された回数、開かれた回数、追加された回数も送ります（回数のみ）。名前、Base URL、アカウント、キー、プロンプト、使用量は送りません。<span class="ui">設定</span> → <span class="ui">プライバシー</span> → <span class="ui">使っているエージェント、プロバイダー、モデルを共有</span> でエージェント、プロバイダー、モデルとパートナーの回数を外せます。<span class="ui">ユーザー数に含める</span>、<code>DO_NOT_TRACK=1</code>、<code>MAGPIE_NO_STATS=1</code> のどれかですべてオフになります。ソースからのビルドは送信しません。パートナーの公式サイトと「キーを取得」のリンクは <code>usemagpie.ai/go/…</code> を経由し、移動の前にクリックを 1 回数えます（どのパートナーか、どのリンクか、国）。usemagpie.ai はパートナー一覧が取得された回数も数えます。これはサーバー自身が見るもので、どの Web サイトのアクセス集計とも同じく、上の設定には左右されません。ID、IP アドレス、アカウントは記録しません。プラグイン、インポートリンク、ライブラリが示すアイコンは <code>usemagpie.ai/api/icon</code> を経由して取得するので、アイコンのあるサーバーに見えるのはあなたの IP ではなく Cloudflare のアドレスです。このサーバーは画像を中継するだけで、数えることも記録することもしません。magpie が自分から送るものすべては、毎日のカウントの例、手元に残すファイル、各スイッチとともに<a href="/docs/ja/privacy">プライバシー</a>のページに挙げています。</p>
 
     <h3 id="proxy-loopback">エージェントが 502 を返す、または接続できず、magpie の Routing タブに何も出ない？</h3>
     <p>プロキシアプリ（Surge、Clash、mihomo など。システムプロキシ、TUN、拡張モードのいずれかが有効）が、エージェントから <code>http://127.0.0.1:3425</code> へのリクエストを横取りして別の場所へ送っているため、magpie に届いていません。除外リスト（<code>skip-proxy</code>、バイパス）に 127.0.0.1 を書くだけでは足りないことがあります。Codex など一部のエージェントは、それでもプロキシを通します。ローカルアドレスを直結にするルールを、他のルールより前に追加してください：</p>
@@ -300,6 +301,7 @@ IP-CIDR6,::1/128,DIRECT,no-resolve</pre>
     <a href="/docs/ja/plugins">プラグイン</a>
     <a href="/docs/ja/remote">リモート magpie</a>
     <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
     <a href="/docs/ja/import">magpie に追加</a>
     <a href="/docs/integrate">アプリ連携</a>
     <a href="https://github.com/yetone/magpie">GitHub</a>
