@@ -279,6 +279,13 @@ func failure(status int, body []byte) string {
 		// Kimi's "exceeded model token limit" is the conversation's
 		// length, not the plan's
 		return failOther
+	case status == 402 && usedUpWords.Match(body) && !creditWords.Match(body) && !strings.Contains(string(body), "insufficient_quota"):
+		// a 402 that says a usage limit and nothing of money is out of
+		// quota, not of credit: Factory's "You've reached your weekly
+		// standard usage limit (resets in …). Switch to Droid Core …" is
+		// Standard's pool, which counts some models only, and read as the
+		// account out of credit it rested Droid Core with it (#1979)
+		return failQuota
 	case status == 402, creditWords.Match(body) && (status != 429 || brokeWords.Match(body)) || strings.Contains(string(body), "insufficient_quota"):
 		return failCredit
 	case status == 429 && resetsWhen.Match(body):
@@ -499,7 +506,35 @@ func resetsAt(body []byte, now time.Time) time.Duration {
 	if d := resetsIn(body, now); d > 0 {
 		return d
 	}
-	return resetsWritten(body, now)
+	if d := resetsWritten(body, now); d > 0 {
+		return d
+	}
+	return resetsAfter(body)
+}
+
+// resetsInWords: a refusal that says how long until it is back in days,
+// hours and minutes, as Factory's 402 does: "You've reached your weekly
+// standard usage limit (resets in 0h 19min)" (#1979). At least one of
+// them, each a number and its unit, and nothing else between.
+var resetsInWords = regexp.MustCompile(`(?i)\bresets? in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?`)
+
+// resetsAfter is how long the refusal says until it is back (resetsInWords),
+// held to longestWritten. Zero when it doesn't say.
+func resetsAfter(body []byte) time.Duration {
+	m := resetsInWords.FindSubmatch(wordsOf(body))
+	if m == nil || len(m[1])+len(m[2])+len(m[3]) == 0 {
+		return 0
+	}
+	var d time.Duration
+	for i, unit := range []time.Duration{24 * time.Hour, time.Hour, time.Minute} {
+		if n, err := strconv.Atoi(string(m[i+1])); err == nil {
+			d += time.Duration(n) * unit
+		}
+	}
+	if d > longestWritten {
+		return 0
+	}
+	return d
 }
 
 // longestWritten is the furthest off a reset time written in words is
