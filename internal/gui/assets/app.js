@@ -10707,6 +10707,26 @@ function renderModels(p) {
       status(v ? t("{model} is asked on {api} once saved", { model: id, api: apiLabel(v) }) : t("{model} is asked as its vendor's list says once saved", { model: id }), "ok");
     }, "API this model is asked on", "model-api-menu");
   };
+  // what a model makes, said by the user for a provider whose own list
+  // doesn't (shen-joe, #1399: a relay's video model turned away as one
+  // that can't make videos): staged as its API is, made with the Save
+  const kindNow = (id) => draft.modelPrefs?.[id]?.kind ?? p.models.find((m) => m.id === id)?.kind ?? "";
+  const KIND_NAMES = { "": "Auto", image: "Image model", video: "Video model" };
+  const pickKind = (c, id) => {
+    const m = p.models.find((x) => x.id === id) || { id };
+    const opts = [{ v: "", name: "Auto", note: "As its vendor's model list and its name say" },
+      { v: "image", name: "Image model", note: "Draws at the provider's images API (/images/generations), listed under Image generation" },
+      { v: "video", name: "Video model", note: "Makes videos at the provider's videos API (POST /videos, then GET /videos/<id>)" }];
+    openProtoMenu(c, opts, kindNow(id), (v) => {
+      if (v === kindNow(id)) return;
+      const prefs = draft.modelPrefs = draft.modelPrefs || {};
+      prefs[id] = prefs[id] || {};
+      if (v === (m.kind || "")) delete prefs[id].kind; else prefs[id].kind = v;
+      if (!Object.keys(prefs[id]).length) delete prefs[id];
+      draw();
+      status(t(v === "video" ? "{model} makes videos once saved" : v === "image" ? "{model} draws images once saved" : "{model} makes what its vendor's list says once saved", { model: id }), "ok");
+    }, "What this model makes", "model-kind-menu");
+  };
   const menu = (c, id) => {
     // a decision model is asked a System One question where the server
     // says its API takes one (decideTest)
@@ -10737,6 +10757,10 @@ function renderModels(p) {
         const now = apiNow(id);
         acts.push({ name: now ? t("Asked on {api}…", { api: apiLabel(now) }) : t("Asked on: Auto…"), icon: "M2.5 5h11M2.5 11h11M10.5 2.5 13.5 5l-3 2.5M5.5 8.5 2.5 11l3 2.5", tip: t("Pick the API this model is asked on"), run: () => pickAPI(c, id) });
       }
+      if (p.marksKinds && !decidesModel(p, id)) {
+        const k = kindNow(id);
+        acts.push({ name: k ? t("Makes: {kind}…", { kind: t(KIND_NAMES[k]) }) : t("Makes: Auto…"), icon: "M2.5 4h11v8h-11zM6.5 6.25v3.5L9.5 8z", tip: t("Say this model makes images or videos, when the provider's model list doesn't"), run: () => pickKind(c, id) });
+      }
       openRowMenu(c, acts);
     };
     // the API it is asked on, when one is picked (or staged)
@@ -10744,6 +10768,12 @@ function renderModels(p) {
     if (now) {
       const tag = el("span", "badge mapi-tag", apiLabel(now));
       tag.title = t("Asked on {api} alone; right-click to change", { api: apiLabel(now) });
+      c.append(tag);
+    }
+    const kind = p.marksKinds && !decidesModel(p, id) ? kindNow(id) : "";
+    if (kind) {
+      const tag = el("span", "badge mkind-tag", t(kind === "video" ? "video" : "image"));
+      tag.title = t("{kind}, as you said; right-click to change", { kind: t(KIND_NAMES[kind]) });
       c.append(tag);
     }
   };

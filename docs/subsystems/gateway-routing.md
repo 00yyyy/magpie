@@ -173,8 +173,13 @@ receive no caller labels.
 
 A custom provider (no account, no preset plan's videos) makes videos the
 same OpenAI way (#1446, `customVideomakers`), but only with the models its
-own fetched list marks `"kind": "video"` (`catalog.LiveVideomakers`); a
-name alone never makes a model a video maker. Start, poll and content go to
+own fetched list marks `"kind": "video"` (`catalog.LiveVideomakers`) or the
+user marks a video model (settings' `ModelKinds`, `provider.SetModelKind`,
+a model chip's right-click *Makes…* in the editor, #1399); a name alone
+never makes a model a video maker. A model marked an image model is drawn
+with (`Drawers`) and leaves the video makers, and one marked a video model
+leaves the drawers; only a provider set up with a base URL can be marked
+(`MarksKinds`). Start, poll and content go to
 `videoBase` (its Chat base, else its Responses base) `+ /videos`, with
 magpie's User-Agent (or the agent's, `passUserAgent`) and no caller headers. Its ids end with the key's
 fingerprint (`customVideoID`, `markedKey`), so a poll and its download go

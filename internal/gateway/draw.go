@@ -181,8 +181,9 @@ func drawsCodex(p provider.Provider) bool {
 }
 
 // Drawers are the models a provider can draw with: its catalogs' models
-// that make images, those its own model list names that do, and those of
-// its own picks named for images; a ChatGPT account's GPT Image, a Grok
+// that make images, those its own model list names that do, those of its
+// own picks named for images, and those the user said draw (#1399), less
+// those they said make videos; a ChatGPT account's GPT Image, a Grok
 // subscription's Grok Imagine, a WorkBuddy plan's those its config lists.
 func Drawers(p provider.Provider) []catalog.Model {
 	if drawsWorkBuddy(p) {
@@ -243,7 +244,28 @@ func Drawers(p provider.Provider) []catalog.Model {
 			out = append(out, catalog.Model{ID: id, Provider: p.ID})
 		}
 	}
-	return out
+	// those the user said draw, whatever their list or name says, and
+	// none they said makes videos (#1399)
+	for _, id := range p.KindModels(provider.KindImage) {
+		if !have[id] {
+			have[id] = true
+			out = append(out, kindModel(p, id))
+		}
+	}
+	return slices.DeleteFunc(out, func(m catalog.Model) bool { return p.ModelKind(m.ID) == provider.KindVideo })
+}
+
+// kindModel is p's model id, one the user said makes images or videos
+// (provider.SetModelKind), as its list names it.
+func kindModel(p provider.Provider, id string) catalog.Model {
+	all, _ := catalog.LiveAll(p.ID)
+	for _, m := range append(p.Available(), all...) {
+		if m.ID == id {
+			m.Provider = p.ID
+			return m
+		}
+	}
+	return catalog.Model{ID: id, Provider: p.ID}
 }
 
 // AutoDrawer is the model magpie draws with when the Settings name none:

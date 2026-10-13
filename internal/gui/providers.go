@@ -49,6 +49,7 @@ type modelJSON struct {
 	Auto     []string `json:"auto,omitempty"`      // the APIs its vendor's list says it is served on, what Auto asks it on
 	Same     string   `json:"same,omitempty"`      // the model the user said it is the same as, for the groups magpie finds (#583)
 	Merge    string   `json:"merge,omitempty"`     // what those groups merge it by when the user says nothing
+	Kind     string   `json:"kind,omitempty"`      // what the user said it makes: image or video (#1399)
 	// what it costs, USD per million tokens (#819): the price the user set
 	// for it, and its list price, its vendor's else its maker's, before the
 	// provider's price rate
@@ -157,6 +158,9 @@ type providerJSON struct {
 	// System One question (provider.AsksDecideModels): a mixed
 	// provider's Jev too, beside its conversation models
 	DecideTest bool `json:"decideTest,omitempty"`
+	// MarksKinds is set when its models can be said to make images or
+	// videos (provider.MarksKinds, #1399): a chip's right-click offers it
+	MarksKinds bool `json:"marksKinds,omitempty"`
 	// Deciders explicitly identifies decision models for OpenRouter and
 	// remote magpie. An empty remote list suppresses name-based guessing.
 	Deciders *[]string `json:"deciders,omitempty"`
@@ -525,7 +529,7 @@ func presetOwnClient(pr provider.PresetDef) bool {
 func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 	out := providerJSON{
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
-		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(),
+		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(), MarksKinds: p.MarksKinds(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
 		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Picks(), Models: []modelJSON{}, Agents: []providerAgent{},
@@ -679,6 +683,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 			}
 		}
 		j.Same = sames[p.ID+"/"+m.ID]
+		j.Kind = p.ModelKind(m.ID)
 		j.Merge = provider.MergeName(m.ID)
 		if mp, ok := held.ModelPrices[p.ID+"/"+m.ID]; ok {
 			if pr, bad := mp.Price(); bad == "" {

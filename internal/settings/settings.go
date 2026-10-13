@@ -542,6 +542,12 @@ type Settings struct {
 	// than by its own id, for an id no rule of magpie's matches up
 	// (kyzhouxu, #583). Absent leaves it to its id.
 	ModelSameAs map[string]string `json:"modelSameAs,omitempty"`
+	// ModelKinds is what the user said a model makes, by "<provider
+	// id>/<model id>": "image" or "video", for a provider set up with a
+	// base URL whose own model list doesn't say so (shen-joe, #1399).
+	// Absent leaves it to the vendor's list and the model's name (see
+	// provider.SetModelKind).
+	ModelKinds map[string]string `json:"modelKinds,omitempty"`
 	// The main window's size as it last settled, width and height, so it
 	// opens at it again after a restart: the size it is restored to, kept as
 	// it was while it is maximised, and a side fitted to a smaller screen
