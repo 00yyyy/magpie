@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -129,8 +130,10 @@ var cliSpecs = map[string]cliSpec{
 	// ../downloads/grok-<platform>, and grok update to a new
 	// ../downloads/grok-<version>-<platform>; install.ps1 copies grok.exe
 	// into ~\.grok\bin itself, as grok update does again. grok is also
-	// Homebrew's regular-expression tool, hence at.
-	"grok": {at: ".grok/bin/grok", latest: grokLatest,
+	// Homebrew's regular-expression tool, hence at; its own cask, grok-build,
+	// links $HOMEBREW_PREFIX/bin/grok to Caskroom/grok-build/<v>/grok-<v>-<platform>
+	// (Will on Discord), which brew upgrade replaces (see cliBin).
+	"grok": {at: ".grok/bin/grok", latest: grokLatest, brew: []string{"grok-build"},
 		self: func(bin, real string) []string {
 			if l := strings.ToLower(real); strings.Contains(l, "/.grok/bin/") || strings.Contains(l, "/.grok/downloads/") {
 				return []string{bin, "update"}
@@ -242,6 +245,31 @@ func fromBrew(real string, m []string) *updater {
 		u.cmd = []string{brew, "upgrade", "--cask", m[2]}
 	}
 	return u
+}
+
+// brewBin is the CLI of an agent with no Bin (spec.at's name) where PATH
+// has it, when Homebrew's formula or cask of the agent's put it there: a
+// command of that name that isn't one of the agent's is another tool's
+// (Homebrew's grok formula). "" otherwise.
+func brewBin(spec cliSpec) string {
+	if spec.at == "" || len(spec.brew) == 0 {
+		return ""
+	}
+	bin := binAt(path.Base(spec.at))
+	if bin == "" {
+		return ""
+	}
+	real, err := proc.RealPath(bin)
+	if err != nil {
+		return ""
+	}
+	if m := brewPath.FindStringSubmatch(filepath.ToSlash(real)); m == nil || !contains(spec.brew, m[2]) {
+		return ""
+	}
+	if abs, err := filepath.Abs(bin); err == nil {
+		bin = abs
+	}
+	return bin
 }
 
 // fromNodeModules is the updater of a CLI the package pkg installed in a
@@ -656,6 +684,11 @@ func (a *Agent) cliBin() (string, cliSpec) {
 		return "", spec
 	}
 	if a.Bin == "" {
+		// Homebrew's, where PATH has it: what a terminal runs, before a
+		// vendor install a brew one replaced
+		if bin := brewBin(spec); bin != "" {
+			return bin, spec
+		}
 		home, err := os.UserHomeDir()
 		if spec.at == "" || err != nil {
 			return "", spec

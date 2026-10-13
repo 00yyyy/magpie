@@ -305,6 +305,11 @@ func (a *Agent) Detected() bool {
 	if a.Bin != "" && binAt(a.Bin) != "" {
 		return true
 	}
+	// one with no Bin, as its command's name is other tools' too, that
+	// Homebrew installed (Grok Build's grok-build cask) and hasn't run yet
+	if a.Bin == "" && a.WSL == "" && brewBin(cliSpecs[a.ID]) != "" {
+		return true
+	}
 	return false
 }
 
