@@ -71,6 +71,19 @@ func viaMagpie(agent, prefix string) []Option {
 	return append(groups, out...)
 }
 
+// listLabels are the names the agent's own list calls the catalog's models
+// by, by id: provider.Labels, which follows the Provider in model names
+// setting, where an Option's Label is the name alone for magpie's picker.
+func listLabels(agent string) map[string]string {
+	shown, _ := provider.CatalogFor(agent)
+	labels := provider.Labels(shown)
+	out := make(map[string]string, len(shown))
+	for i, e := range shown {
+		out[e.ID] = labels[i]
+	}
+	return out
+}
+
 // viaMagpieFor is viaMagpie without the agent's own account: Codex CLI going
 // through magpie to its own ChatGPT login would only add a hop.
 func viaMagpieFor(agentID, prefix string) []Option {
