@@ -3695,6 +3695,11 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if s.foldsRoots(p, model, proto) {
 		body, _ = objectRootsBody(proto, body)
 	}
+	// a tool's strict, to an upstream that turned it away before
+	// (strict_refused.go, #1980)
+	if !s.fits(p.ID, toolStrictRefused, proto) {
+		body, _ = withoutToolStrict(proto, body)
+	}
 	// a Grok subscription is given Codex's namespaced functions flat
 	// (grokBody), and Zed's plugin likewise (ZedBody); a call to one goes
 	// back under its namespace (#404)
@@ -3741,6 +3746,18 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// (#1271): asked once more with them folded to an object
 			if nb, changed := objectRootsBody(proto, body); changed {
 				refused = append(refused, rootUnionRefused(model))
+				body = nb
+				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
+					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+				}
+				continue
+			}
+		}
+		if len(fs) == 0 && len(ms) == 0 && toolStrictRefusal.Match(b) {
+			// a tool's strict refused, OpenCode's "strict": false (#1980):
+			// asked once more without it, and not sent it again
+			if nb, changed := withoutToolStrict(proto, body); changed {
+				refused = append(refused, toolStrictRefused)
 				body = nb
 				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
 					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
