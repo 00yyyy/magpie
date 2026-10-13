@@ -206,6 +206,7 @@
       loadMine().then(() => { draw(); window.renderPluginDot?.(); }),
       loadListings().then(draw),
       loadTagged().then(drawBody),
+      loadBuiltins(),
       providers ? null : loadProviders().then(drawBody, () => {}),
     ];
     await Promise.all(parts);
@@ -655,16 +656,19 @@
 
   function head() {
     const n = mine?.plugins?.length || 0;
-    const tabs = segs([["discover", t("Discover")], ["installed", t("Installed") + (n ? " · " + n : "")]], tab, (id) => {
+    const tabs = segs([["builtin", t("Built-in")], ["discover", t("Discover")], ["installed", t("Installed") + (n ? " · " + n : "")]], tab, (id) => {
       tab = id;
       try { localStorage.setItem("magpie.pluginTab", id); } catch {}
+      searchShown();
       drawBody();
     });
     tabs.classList.add("lib-tabs");
     q.placeholder = t("Search plugins and npm…");
     if (q.value !== query) q.value = query;
     q.setAttribute("aria-label", t("Search plugins"));
-    replaceKeeping(headBox, [tabs, el("span", "grow"), mirrorSwitch(), find]);
+    mirror = mirrorSwitch();
+    replaceKeeping(headBox, [tabs, el("span", "grow"), mirror, find]);
+    searchShown();
     headBox.classList.toggle("stuck", page.scrollTop > 0);
     return headBox;
   }
@@ -673,6 +677,13 @@
   // mirrors in China first (npmmirror, jsDelivr); none before what's
   // installed has come, which says how it is set
   let mirrorSaving = false;
+  // the built-in plugins are a short list of switches: nothing to search
+  // or fetch through a mirror
+  let mirror = null;
+  function searchShown() {
+    find.hidden = tab === "builtin";
+    if (mirror) mirror.hidden = !mine || tab === "builtin";
+  }
   function mirrorSwitch() {
     const on = !!mine?.mirror;
     const b = el("button", "pm-mirror" + (on ? " on" : ""));
@@ -734,8 +745,9 @@
     shown = key;
     // the search field keeps its focus: only the body is redrawn while
     // typing, and the GitHub section's field is kept in it
-    if (tab === "installed" || !listings) body.replaceChildren();
+    if (tab === "installed" || tab === "builtin" || !listings) body.replaceChildren();
     if (tab === "installed") return drawInstalled();
+    if (tab === "builtin") return drawBuiltin();
     if (failedList && !listings) {
       body.append(el("p", "pm-empty", t("Couldn't load the plugins: {error}", { error: failedList })));
       return;
@@ -862,6 +874,28 @@
       }
     };
     return b;
+  }
+
+  // Built-in: magpie's own plugins (Sessions, Library, routing groups…),
+  // each with a switch (renderBuiltins in app.js), read afresh each time
+  // the tab is drawn
+  let builtins = null, builtinsFailed = "";
+  async function loadBuiltins() {
+    try {
+      builtins = await api("plugins/builtin");
+      builtinsFailed = "";
+    } catch (e) {
+      builtinsFailed = e.message;
+    }
+    if (tab === "builtin") drawBody();
+  }
+  function drawBuiltin() {
+    const say = el("p", "feat-say", t("Parts of magpie not everyone needs. Switched off, a part leaves the sidebar, its pages and Settings; magpie works the same either way."));
+    const list = el("div", "list prefs");
+    list.id = "builtinList";
+    body.append(say, list);
+    if (builtinsFailed && !builtins) list.append(el("p", "pm-empty", t(builtinsFailed)));
+    else if (builtins) window.renderBuiltins(list, builtins, (next) => { builtins = next; drawBody(); });
   }
 
   function drawInstalled() {

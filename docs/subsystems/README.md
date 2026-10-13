@@ -5,6 +5,7 @@ These pages describe current responsibilities, runtime paths, state, and contrac
 | Subsystem | Reference |
 | --- | --- |
 | Built-in subscriptions moving to plugins | [Provider and plugin ownership](provider-plugins.md) |
+| Built-in plugins: registry, lifecycle, plugins.yml, presets | [Plugin runtime](plugin-runtime.md) |
 | Plugins that run on the gateway's requests and replies | [Gateway middleware](gateway-middleware.md) |
 | Claude subscription turns across Claude Code runs | [Claude subscription bridge](claude-subscription-bridge.md) |
 | How the gateway picks a provider, key or account, and falls back | [Gateway routing and fallback](gateway-routing.md) |

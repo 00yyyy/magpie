@@ -3164,6 +3164,8 @@
   // for the providers' models), so it sits over the groups rather than in
   // one group's editor (PAMI on Discord)
   const gNames = el("div", "rt-gnames");
+  // the groups go with the routing groups built-in plugin; the pools stay
+  for (const n of [gHead, gFound, gNames, gList]) n.dataset.feature = "groups";
   gsec.append(gHead, gFound, gNames, gList, pHead, pList);
   // after the requests: a request picked in the list plays on the stage,
   // so the list sits right under it

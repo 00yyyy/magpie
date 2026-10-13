@@ -342,6 +342,9 @@ type settingsJSON struct {
 	Version string `json:"version"`
 	Dir     string `json:"dir"`     // where magpie keeps its files, as shown
 	Gateway string `json:"gateway"` // the local endpoint
+	// Builtins are the built-in plugins: each one's switch, whether it
+	// runs and what of it is in use (builtins.go)
+	Builtins []builtinJSON `json:"builtins"`
 	// PublicURL is MAGPIE_PUBLIC_URL while other machines are let in
 	// (shared, or MAGPIE_ADDR on the network): where they reach the
 	// gateway, shown beside the local address agents here are pointed at
@@ -557,6 +560,7 @@ type searchFailedJSON struct {
 func settingsState() settingsJSON {
 	s := settingsJSON{Settings: settings.Load(), Version: Version, Dir: tilde(settings.Dir()), Portable: settings.Portable() != "", Gateway: gateway.URL()}
 	s.AddrEnv = os.Getenv("MAGPIE_ADDR")
+	s.Builtins = builtinsState()
 	s.OnNetwork = gateway.OnNetwork()
 	if list, env := gateway.AllowIPs(); env {
 		s.AllowIPsEnv, s.AllowIPsFromEnv = os.Getenv(gateway.AllowIPsEnv), list
@@ -778,6 +782,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if on, _ := gatewayMode(isWeb(w)); on {
 			boot["gateway"] = true
 		}
+		// and the built-in plugins it leaves out (builtins.go), gone
+		// before the first paint rather than after the settings come
+		boot["featuresOff"] = builtinsOff(builtinsState())
 		// on Omarchy the page takes its theme's look before it paints
 		if th, ok := omarchyTheme(); ok {
 			boot["omarchy"] = th
@@ -1083,6 +1090,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	cliBehindRoutes(mux)
 	gatewayFixRoutes(mux)
 	gatewayModeRoutes(mux)
+	builtinRoutes(mux)
 	mux.HandleFunc("GET /api/settings", func(rw http.ResponseWriter, r *http.Request) {
 		access.MigrateLegacyLANKeyBestEffort()
 		writeJSON(rw, settingsState())

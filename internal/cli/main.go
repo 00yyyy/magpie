@@ -21,6 +21,7 @@ import (
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/imagemcp"
 	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/pluginrt"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
@@ -221,6 +222,15 @@ func run(args []string) error {
 	update.AwaitPredecessor()
 	makeDirs()
 	settings.Migrate()
+	// a new install starts with the Essentials preset of built-in plugins
+	// (plugins.yml), one that ran before with all of them, told by no file
+	// of a magpie run before: so before anything below writes one
+	if _, err := pluginrt.Settle(!settings.RanBefore()); err != nil {
+		fmt.Fprintf(os.Stderr, "magpie: plugins.yml: %v\n", err)
+	}
+	if _, err := pluginrt.Refresh(); err != nil {
+		fmt.Fprintf(os.Stderr, "magpie: plugins.yml: %v\n", err)
+	}
 	// the providers and settings read once for every agent's fields, which
 	// the moves below look at (a write among them reads them again)
 	release := provider.Hold()

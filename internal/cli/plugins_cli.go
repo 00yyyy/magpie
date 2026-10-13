@@ -11,6 +11,7 @@ import (
 
 	"github.com/yetone/magpie/internal/middleware"
 	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/pluginrt"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -24,7 +25,10 @@ const pluginUsage = `usage: magpie plugin [list] [--json]
        magpie plugin login <provider> [<method>]   sign in to a provider a plugin adds
        magpie plugin logout <provider>             forget the sign-in
        magpie plugin move|migrate <subscription>   run a built-in subscription's accounts on its community plugin
-       magpie plugin move-back|unmigrate <subscription>   go back to the built-in, with its accounts`
+       magpie plugin move-back|unmigrate <subscription>   go back to the built-in, with its accounts
+       magpie plugin builtin [on|off <id>]         list magpie's built-in plugins (Sessions, Library, routing groups…), or turn one on or off
+       magpie plugin preset essentials|all         start the built-in plugins from the Essentials preset, or from all of them
+       magpie plugin dump [--json]                 what plugins.yml comes to: each built-in plugin, its config, and the layer each value is from`
 
 // pluginCmd: `magpie plugin …` — OpenCode's provider plugins and pi's
 // packages, which sign in to a subscription and carry its requests
@@ -157,6 +161,19 @@ func pluginCmd(args []string) error {
 		}
 		fmt.Println(green.Render("✓"), rest[0], "is built-in again")
 		return nil
+	case "builtin", "builtins", "built-in":
+		return builtinCmd(rest)
+	case "preset":
+		if len(rest) != 1 {
+			return errors.New(pluginUsage)
+		}
+		if err := pluginrt.SetPreset(rest[0]); err != nil {
+			return err
+		}
+		fmt.Println(green.Render("✓"), "built-in plugins start from", rest[0])
+		return builtinCmd(nil)
+	case "dump":
+		return dumpPlugins(len(rest) > 0 && rest[0] == "--json")
 	case "help", "-h", "--help":
 		fmt.Println(pluginUsage)
 		return nil
