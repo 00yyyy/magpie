@@ -77,14 +77,15 @@ func TestWSLSessionsListed(t *testing.T) {
 	if len(omp.Models) != 4 {
 		t.Fatalf("the subagent and advisor weren't read: %+v", omp.Models)
 	}
-	var calls int
+	calls := map[string]int{}
 	for _, c := range Calls(time.Time{}) {
-		if c.Agent == "claude" || c.Agent == "codex" {
-			calls++
-		}
+		calls[c.Agent]++
 	}
-	if calls == 0 {
-		t.Fatal("the distro's calls aren't counted")
+	// Pi's and omp's too (#1951, Elenoxe: Pi in WSL on its own provider)
+	for _, a := range []string{"claude", "codex", "pi", "omp"} {
+		if calls[a] == 0 {
+			t.Fatalf("the distro's %s calls aren't counted: %v", a, calls)
+		}
 	}
 	dirs := strings.Join(Dirs(), "\n")
 	if !strings.Contains(dirs, filepath.Join(home, ".claude")) || !strings.Contains(dirs, filepath.Join(home, ".codex")) {

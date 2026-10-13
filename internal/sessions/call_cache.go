@@ -179,6 +179,8 @@ var wholeCallReaders = map[string]func(file) (*callFile, bool){
 	// #1605
 	"minimax-code": readMiniMaxCalls,
 	"kimi":         readKimiCalls, // #1607
+	"pi":           readPiCalls,   // #1951
+	"omp":          readPiCalls,
 }
 
 func readCalls(f file) *callFile {
