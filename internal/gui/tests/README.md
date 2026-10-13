@@ -2391,3 +2391,18 @@ and 50 once Plugins › Built-in sets it. Chromium and WebKit, every language,
 ```sh
 node --test internal/gui/tests/plugin-kernel.test.cjs internal/gui/tests/builtins.test.cjs
 ```
+
+`quota-curve.test.cjs` also checks per-account historical cycle selection in
+all five languages and both engines at 440px: natural expiry, an early
+manual reset and an unscheduled refill with an unchanged deadline. The
+historical legend and pace use the selected readings; other accounts stay
+on their own cycle, missing short-window history is not invented, and
+selecting a cycle does not scroll. `MAGPIE_QUOTA_ASSETS` selects an older
+assets directory to verify the regression fails before the picker existed.
+
+Historical quota selections also update the 5-hour and weekly meters from
+the last readings inside the selected interval. The cycle menu describes
+observed duration rather than the nominal window name. Regression checks
+cover missing windows, historical end and sampling dates, Used/Left,
+restoring live values on 2 days/current cycle, and hiding live account
+controls while inspecting history.
