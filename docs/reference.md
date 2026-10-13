@@ -2101,8 +2101,14 @@ passphrase with PBKDF2-SHA256); nothing in it can be read without the
 passphrase. Restoring replaces providers with the same id and adds the rest;
 one that came without a key keeps the key already there. Agent models are set
 only for agents installed on that machine. Subscriptions are not in it: sign
-in to them on each machine. Piped in, the passphrase is the first line of
-stdin.
+in to them on each machine. Their model picks and settings come along, and
+show once signed in; the restore, and a sync's status on the other machine,
+name the ones still to sign in to. The plugins added from npm or git come
+along too and are installed where it is put back (one added from a folder
+stays on its machine; without keys, an option whose name looks like a key
+is left out); a plugin's sign-in is not carried, a plugin already there is
+left as it is, and one removed on one machine stays on the others. Piped
+in, the passphrase is the first line of stdin.
 
 ### Keeping machines in sync
 

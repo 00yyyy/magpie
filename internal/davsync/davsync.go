@@ -37,11 +37,15 @@ import (
 	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/library"
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
+
+// addPlugins is backup.AddPlugins: a var so a test installs nothing.
+var addPlugins = backup.AddPlugins
 
 // Every is how often the gateway's magpie syncs.
 const Every = 3 * time.Minute
@@ -464,6 +468,10 @@ type View struct {
 	// File is what the server holds instead of a backup, when Error is
 	// that it isn't one; File.Replace offers Upload
 	File *ServerFile `json:"serverFile,omitempty"`
+	// SignIn is the subscriptions whose settings sync brought with no
+	// account here: sync carries no sign-in, so each is to be signed in to
+	// on this computer before it is listed
+	SignIn []string `json:"signIn,omitempty"`
 }
 
 // OtherView is the other kind's server as the Settings page shows it.
@@ -497,6 +505,11 @@ func Status() View {
 		}
 		if c.Usage && st.Usage != nil {
 			v.UsageError = st.Usage.Error
+		}
+		if !st.Last.IsZero() {
+			if ps, err := provider.Stored(); err == nil {
+				v.SignIn = provider.NotSignedIn(ps)
+			}
 		}
 	}
 	v.Usage = c.Usage
@@ -781,6 +794,9 @@ func hashes(b backup.Bundle) map[string]string {
 	if len(b.GroupOrder) > 0 { // as before it, when never arranged
 		providers = append(providers, map[string][]string{"groupOrder": b.GroupOrder})
 	}
+	if b.Plugins != nil && len(*b.Plugins) > 0 { // as before them, without one
+		providers = append(providers, map[string][]plugin.Entry{"plugins": *b.Plugins})
+	}
 	return map[string]string{
 		"providers": h(providers),
 		"settings":  settingsHash,
@@ -849,6 +865,7 @@ func take(to *backup.Bundle, from backup.Bundle, part string) {
 			searches = &ss
 		}
 		to.Providers, to.Icons, to.Groups, to.Searches, to.Order, to.GroupOrder = ps, from.Icons, from.Groups, searches, from.Order, from.GroupOrder
+		to.Plugins = from.Plugins
 		to.ProvidersKeys = backup.Flag(keys || (to.ProvidersKeys != nil && *to.ProvidersKeys))
 		to.Keys = to.Keys || keys // the whole-bundle bit follows it, for a magpie that reads no per-part ones: it keeps the server's keys on its own upload then
 	case "settings":
@@ -945,6 +962,15 @@ func bring(b backup.Bundle, part string) error {
 		}
 		if err := provider.MirrorGroupOrder(b.GroupOrder); err != nil {
 			return err
+		}
+		// the plugins the providers come from, added here; never taken
+		// away, and one that can't be added is said, not a failed sync
+		if b.Plugins != nil {
+			if _, failed := addPlugins(*b.Plugins); len(failed) > 0 {
+				for spec, err := range failed {
+					log.Printf("sync: plugin %s: %s", spec, err)
+				}
+			}
 		}
 		if b.Searches == nil { // from a magpie before them: the ones here stay
 			return nil
