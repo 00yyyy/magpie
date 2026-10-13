@@ -151,8 +151,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const bar = v.locator(".lib-pickbar"), rm = bar.locator(".lib-pickrm");
         const sheet = page.locator("#modal .lib-editor");
 
-        // Select; the group's box picks its three skills
-        await press(page, v.locator(".lib-skillshead .lib-select"));
+        // Select; the group's box picks its three skills. Done is as wide
+        // as Select, so a heading on two lines doesn't carry it to the
+        // line above, from under the pointer
+        const selectAt = v.locator(".lib-skillshead .lib-select");
+        const wide = (await selectAt.boundingBox()).width;
+        await press(page, selectAt);
+        assert(Math.abs((await selectAt.boundingBox()).width - wide) < 0.5, `Select ${wide}px wide, Done ${(await selectAt.boundingBox()).width}px`);
         await bar.locator(".lib-pickn.none").waitFor();
         assert.equal(await rm.count(), 0, "Remove with nothing picked");
         await press(page, group.locator(".lib-grouphead .lib-pickbox"));

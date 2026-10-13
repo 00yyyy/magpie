@@ -527,8 +527,16 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-ag.some .ic.baked > img:not(.grey) { display: block; }
 .lib-ag.some .ic.baked > img.grey { display: none; }
 /* the skills' heading has the most on it: in a narrow window it goes on
-   to a second line rather than past the page's side */
-#view-library .row-head.lib-skillshead, #view-library .row-head.lib-serverhead { flex-wrap: wrap; row-gap: 6px; }
+   to a second line rather than past the page's side. Its first line's
+   buttons sit 1px down with one line or two: one line was centred in the
+   26px and two began at the top, so a click that unwrapped it (German's
+   Select turned Fertig) moved the button 1px, and the page was scrolled to
+   hold it there */
+#view-library .row-head.lib-skillshead, #view-library .row-head.lib-serverhead { flex-wrap: wrap; row-gap: 6px; padding-block: 1px; }
+/* Select is as wide as the Done it turns into, and Done as Select: in a
+   heading on two lines the narrower word fitted on the first, and the
+   button left the pointer for the line above (German at 420) */
+#view-library .lib-select[data-alt]::after { content: attr(data-alt); display: block; height: 0; overflow: hidden; visibility: hidden; }
 #view-library .row-head.lib-skillshead .lib-skillq { flex: 1 1 90px; max-width: 190px; }
 #view-library .row-head .lib-skillq { width: 190px; height: 24px; margin: 0; flex: 0 1 auto; min-width: 90px; }
 .lib-skillq::-webkit-search-cancel-button { -webkit-appearance: none; }

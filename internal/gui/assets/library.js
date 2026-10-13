@@ -2931,6 +2931,7 @@
       pickErrs.clear();
       render();
     });
+    b.dataset.alt = picking ? t("Select") : t("Done"); // as wide as the other, see library.css
     const skills = kind === "skills", hooks = kind === "hooks";
     b.title = picking ? (skills ? t("Stop picking skills") : hooks ? t("Stop picking hooks") : t("Stop picking servers"))
       : skills ? t("Pick some skills and turn them on or off together") : hooks ? t("Pick some hooks and turn them on or off together") : t("Pick some servers and turn them on or off together");
