@@ -289,12 +289,23 @@ func TestTaggedReposSlowRead(t *testing.T) {
 		}
 		return nil
 	}
+	cutAsked := time.Now()
 	l := TaggedRepos(ctx)
+	cutDone := time.Now()
 	if x := has(l, "someone/word-guard"); len(l) != 6 || x == nil || x.Kind != "middleware" {
 		t.Fatalf("slow package.json: %d repos, word-guard %+v", len(l), x)
 	}
 	if n := asked.Load(); n != 2 {
 		t.Fatalf("asked %d times", n)
+	}
+	// the list cut short is held for taggedRetry from when it was asked,
+	// no more and no less: bounds from the clock around the ask, so no
+	// slack a loaded runner could outgrow (#1889)
+	taggedMu.Lock()
+	until := taggedAt.Add(taggedTTL)
+	taggedMu.Unlock()
+	if until.Before(cutAsked.Add(taggedRetry)) || until.After(cutDone.Add(taggedRetry)) {
+		t.Fatalf("a list cut short held till %v, asked between %v and %v", until, cutAsked, cutDone)
 	}
 	// nor is the list cut short kept ten minutes by a magpie started again
 	if fi, err := os.Stat(taggedCache()); err != nil || time.Since(fi.ModTime()) < taggedTTL-taggedRetry-time.Second {
@@ -321,8 +332,16 @@ func TestTaggedReposSlowRead(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	// within the ten minutes, but past taggedRetry: asked again, and
-	// word-guard's package.json not read again
+	// within the ten minutes, but not yet past taggedRetry: not asked
+	// again, and word-guard's package.json not read again. The poll for
+	// the late read can take longer than taggedRetry on a loaded runner
+	// (once it did, at load ~28, #1889), and a list cut short is then
+	// asked again rightly; that it is held for taggedRetry is checked
+	// above, against the clock around the ask. Here it is marked as cut
+	// short now, as TaggedRepos marks one, and must not be asked again.
+	taggedMu.Lock()
+	taggedAt = time.Now().Add(-taggedTTL + taggedRetry)
+	taggedMu.Unlock()
 	TaggedRepos(ctx)
 	if n := asked.Load(); n != 2 {
 		t.Fatalf("asked again at once: %d", n)
