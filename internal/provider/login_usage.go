@@ -76,7 +76,8 @@ func LoginUsage(ctx context.Context, agent string) map[string]SubscriptionQuota 
 // one taken from the cache is up to a minute old already, and Allowances
 // counts its own minute from then, not from when it asked (#1295).
 func loginUsageAt(ctx context.Context, agent string) (map[string]SubscriptionQuota, time.Time) {
-	if settings.AccountDiscoveryOff() {
+	// nor of a provider switched off or removed (leftAlone)
+	if settings.AccountDiscoveryOff() || leftAlone(agent) {
 		return nil, time.Time{}
 	}
 	asked := time.Now()

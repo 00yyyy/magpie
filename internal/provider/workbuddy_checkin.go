@@ -28,6 +28,7 @@ package provider
 // Only the Chinese build has the event: WorkBuddy AI ships with it off.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -206,7 +207,7 @@ func (c wbCheckiner) checkiner() checkiner {
 			if a.creds.UID != "" {
 				key = wbCheckinKey(a)
 			}
-			out = append(out, checkinAcct{User: a.User, On: a.On, key: key, do: func(ctx context.Context) WorkBuddyCheckin { return wbCheckin(ctx, a) }})
+			out = append(out, checkinAcct{User: a.User, On: a.On, key: key, provider: cmp.Or(a.card, a.site.id), do: func(ctx context.Context) WorkBuddyCheckin { return wbCheckin(ctx, a) }})
 		}
 		return out
 	}}

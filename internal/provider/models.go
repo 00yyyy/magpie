@@ -520,6 +520,11 @@ func newDue(ps []Provider) (due, skipped []newFetch) {
 	for _, p := range ps {
 		// a list of decision models fetched before magpie kept their
 		// windows and input, or not fetched yet (ARNO on Discord)
+		// one switched off isn't asked (leftAlone): a signed-in
+		// agent's list asks its CLI or the vendor
+		if p.Off {
+			continue
+		}
 		decide := p.decideListDue()
 		if !decide && (p.Account == nil || !p.Ready()) {
 			continue

@@ -638,9 +638,13 @@ var claudeExecutable = claudecode.Find
 // still lying around (a keychain item logout left behind), so a signed-out
 // account stops showing up as a provider.
 func claudeIdentity() (user, plan string, signedOut bool) {
+	// switched off or removed, Claude Code isn't asked: what it said last
+	// is served (leftAlone)
+	quiet := leftAlone("claude")
 	claudeStatusMu.Lock()
 	defer claudeStatusMu.Unlock()
 	switch {
+	case quiet:
 	case claudeStatusAt.IsZero():
 		claudeStatusAt = time.Now()
 		if u, p, out, ok := askClaudeStatus(); ok {
