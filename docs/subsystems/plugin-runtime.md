@@ -7,7 +7,9 @@ order their services make, and disposes of what each registered when it is
 turned off. `plugins.yml` says which are on. This page describes P0 (the
 runtime, the file and the window's switch) and P1 (the window's kernel: a
 plugin's page, its error boundary, the kit it draws with and its settings
-form, with the Gateway page as the first plugin to draw its own page). OpenCode plugins (npm packages in
+form, with the Gateway page as the first plugin to draw its own page), and
+P2 so far (a page moved out of the core whole: its code, styles and words,
+starting with Sessions). OpenCode plugins (npm packages in
 the plugin host) are a different thing; see
 [provider and plugin ownership](provider-plugins.md) and
 [gateway middleware](gateway-middleware.md).
@@ -17,7 +19,7 @@ the plugin host) are a different thing; see
 | Part | What it does | Source |
 | --- | --- | --- |
 | Registry | A plugin calls `pluginrt.Register(Manifest)` from `init`. `Registered` lists them by id; two with one id panic. `plugins/all` imports every plugin, and only `main.go` imports `plugins/all`, so core code and its tests run without any. | [`pluginrt.go`](../../internal/pluginrt/pluginrt.go), [`plugins/all/all.go`](../../plugins/all/all.go) |
-| Manifest | `ID`, `API` (a caret range of the host API, `"^1"`; `pluginrt.API` is `"1.0"`), `Requires` and `Provides` (services), `Essential`, `Name`/`Sub` (English; the window translates them), `One`/`Many` (what is in use, of 1 or `{n}`), `InUse`, `Apply`, `Parts` (`{Slot, Key}`: the window's parts it is), `Defaults` (its config), `Settings` (a struct of its settings, made into `Defaults` and a schema at `Register`) and `Client` (its scripts in the window, under `internal/gui/assets/plugins/<id>/`). | [`pluginrt.go`](../../internal/pluginrt/pluginrt.go) |
+| Manifest | `ID`, `API` (a caret range of the host API, `"^1"`; `pluginrt.API` is `"1.0"`), `Requires` and `Provides` (services), `Essential`, `Name`/`Sub` (English; the window translates them), `One`/`Many` (what is in use, of 1 or `{n}`), `InUse`, `Apply`, `Parts` (`{Slot, Key}`: the window's parts it is), `Defaults` (its config), `Settings` (a struct of its settings, made into `Defaults` and a schema at `Register`) and `Client` (its files in the window, under `internal/gui/assets/plugins/<id>/`: scripts, its `i18n.js` and a `.css`). | [`pluginrt.go`](../../internal/pluginrt/pluginrt.go) |
 | Lifecycle | `Runtime.Reconcile(on, config)`. Off first: every plugin no longer wanted, and every one requiring a service one of those provided, is disposed newest first. Then on: each wanted plugin whose requirements are provided (by `Core`, `settings`, `providers`, `gateway`, `window`, or an active plugin) is applied, again and again until no more can be. States: `off`, `pending` (waiting for a service, logged), `active`, `failed` (Apply returned an error or panicked, or the API range doesn't match; what it registered before is undone), `disposed`. A failed plugin never stops the others. | [`pluginrt.go`](../../internal/pluginrt/pluginrt.go) |
 | Ctx | What `Apply` gets: `OnDispose(f)`, `Contribute(slot, key)`, `Provide(name, v)` (withdrawn when it goes), `Service(name)`, and its composed `Config`. Disposers run in reverse, each one's panic logged and the rest still run. | [`pluginrt.go`](../../internal/pluginrt/pluginrt.go) |
 | plugins.yml | `appdir.Config()/plugins.yml`: `preset` (`essentials` or `all`) and `plugins`, rows of `{id, enabled, config}` holding only what the user set. | [`config.go`](../../internal/pluginrt/config.go) |
@@ -46,8 +48,17 @@ plugins' scripts and `app.js`, all classic scripts sharing one scope. It is
   `magpie.start()` when it is set up, which mounts every page, and then each
   hook through `magpie.call(key, hook, …)`: `loading`, `draft` and `render`
   around `/api/providers` for a page that `loads: "providers"`, `open` when
-  `show` opens it. `magpie.pages()` adds the plugins' pages to the views
-  `show` and `?view=` know.
+  `show` opens it (a promise it gives back puts the reader back where they
+  were once it settles), `relang` when the language changes on it.
+  `title` is the page's header (English; `show` translates it).
+  `magpie.pages()` adds the plugins' pages to the views `show` and
+  `?view=` know.
+- **Words.** A plugin's `i18n.js` calls `magpie.strings({zh, "zh-TW", ja,
+  de})`, added to i18n.js's `I18N` before app.js translates anything. A key
+  already there is logged and not taken. `tests/strings.cjs` reads them as
+  the page does, for `gui-de`, `gui-ja`, `gui-zh-tw` and `i18n-keys`
+  (no key in two files, every key of a plugin's file in all four
+  languages).
 - **Error boundary.** A hook that throws, or whose promise fails, is caught
   in `run`: logged with `[magpie] <plugin>: <key>.<hook>`, and the page is
   replaced by a card saying "This page stopped working", the error's message
@@ -73,7 +84,24 @@ was in app.js, ending in its `magpie.plugin("gateway", …)`. Still in
 app.js and app.css: its styles, its sidebar and header buttons
 (`data-feature="gateway"` in index.html), and `decideEntry`, which the model
 info card shares. `TestBuiltinClientsLoaded` holds index.html to load every
-plugin's `Client` file between kernel.js and app.js, each with its `?v=`.
+plugin's `Client` script between kernel.js and app.js, and its stylesheet in
+the head, each with its `?v=`.
+
+## Pages moved out (P2)
+
+Each page moves in a commit of its own, whole: its code into
+`assets/plugins/<id>/client.js`, its styles beside it, and the words only it
+says from i18n.js into its `i18n.js` (a key app.js, another page, index.html
+or Go also says stays in i18n.js).
+
+- **Sessions** (`plugins/sessions`, `Client: i18n.js, sessions.css,
+  client.js`): the page that was `sessions.js`, its markup all drawn by its
+  code, so its part has no `html`. Its hooks: `open` and `relang` load it,
+  and `reveal(s, e)` is the Usage page's way in (a session's row and All
+  sessions, #752), called through `magpie.call("sessions", "reveal", …)`,
+  so with no Sessions plugin it does nothing. Still in app.js: the Usage
+  page's Sessions tab (`/api/sessions`) and Settings' session terminal row
+  (`data-feature="sessions"`).
 
 ## Source of truth and composing
 
@@ -138,6 +166,8 @@ remembering its layer (`Source`):
 - `go test ./internal/pluginrt/ -run 'TestSchemaOf|TestValidate|TestSetConfig'`.
 - `go test ./internal/gui/ -run 'TestBuiltin|TestBootSaysBuiltinsOff'`
   (`TestBuiltinConfig`, `TestBuiltinClientsLoaded`).
+- `i18n-keys`, `gui-de`, `gui-ja`, `gui-zh-tw`, and a moved page's own
+  tests (`sessions-*`, `session-*`, `sess-*`) in Chromium and WebKit.
 - `internal/gui/tests/builtins.test.cjs` (the settings form) and
   `plugin-kernel.test.cjs` (the boundary, Try again, `callsPage` from
   boot.js and from a change) in Chromium and WebKit, every language, 1100,

@@ -206,7 +206,7 @@ model match at once, adds the sessions the search found with their snippet
 searching, cut short or limited to recorded text.
 Implementation: [`internal/sessions/search.go`](../../internal/sessions/search.go),
 `searchSessions` in [`internal/gui/sessions_manage.go`](../../internal/gui/sessions_manage.go),
-[`internal/gui/assets/sessions.js`](../../internal/gui/assets/sessions.js).
+[`internal/gui/assets/plugins/sessions/client.js`](../../internal/gui/assets/plugins/sessions/client.js).
 Verification: `TestSearchSession*` (`TestSearchSessionReadsOnlyLinesWithTheWords`
 for the line filter), `TestContainsFold`, `TestMayHoldSkipsAFileWithoutTheWords`,
 `TestGatewayTitleAndSearch`, `TestSessionsSearch*`; browser

@@ -173,9 +173,10 @@ func TestBuiltinConfig(t *testing.T) {
 	}
 }
 
-// Every script a built-in plugin says it has is on disk, loaded by the
-// page after the kernel and before app.js, which looks for its pages, and
-// named with its hash so a new one isn't read from the cache.
+// Every file a built-in plugin says it has is on disk, loaded by the page
+// and named with its hash so a new one isn't read from the cache: a script
+// after the kernel and before app.js, which looks for its pages, a
+// stylesheet in the head with the others.
 func TestBuiltinClientsLoaded(t *testing.T) {
 	page, err := os.ReadFile("assets/index.html")
 	if err != nil {
@@ -183,7 +184,11 @@ func TestBuiltinClientsLoaded(t *testing.T) {
 	}
 	src := string(page)
 	at := func(name string) int {
-		i := strings.Index(src, `<script src="`+name+`"></script>`)
+		tag := `<script src="` + name + `"></script>`
+		if strings.HasSuffix(name, ".css") {
+			tag = `<link rel="stylesheet" href="` + name + `">`
+		}
+		i := strings.Index(src, tag)
 		if i < 0 {
 			t.Fatalf("index.html doesn't load %s", name)
 		}
@@ -200,10 +205,16 @@ func TestBuiltinClientsLoaded(t *testing.T) {
 			if _, err := os.Stat(filepath.Join("assets", name)); err != nil {
 				t.Errorf("%s: %v", name, err)
 			}
-			if i := at(name); i < kernel || i > app {
+			attr := "src"
+			if strings.HasSuffix(name, ".css") {
+				attr = "href"
+				if i := at(name); i > strings.Index(src, "</head>") {
+					t.Errorf("%s isn't in the head", name)
+				}
+			} else if i := at(name); i < kernel || i > app {
 				t.Errorf("%s isn't between kernel.js and app.js", name)
 			}
-			if !strings.Contains(string(versionedPage(page)), `src="`+name+`?v=`) {
+			if !strings.Contains(string(versionedPage(page)), attr+`="`+name+`?v=`) {
 				t.Errorf("%s isn't named with its hash", name)
 			}
 			n++

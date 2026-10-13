@@ -3844,7 +3844,7 @@ async function load(again) {
       again = false; // the Usage page too is drawn again, in the new language
       if (view === "library") window.loadLibrary?.();
       if (view === "plugins") window.loadPlugins?.();
-      if (view === "sessions") window.loadSessionsPage?.();
+      magpie.call(view, "relang"); // a plugin's page
     }
     // a Library drawn before the state came counted the hidden agents too
     else if (view === "library" && hiddenIds().join() !== hid) window.redrawLibrary?.();
@@ -20066,7 +20066,7 @@ function sessionItem(s) {
   const open = (e) => {
     if (window.getSelection()?.toString()) return;
     if (featuresOff.has("sessions")) return; // Sessions is switched off: there is no page to open it on
-    window.openSessionOnPage?.(s, e);
+    magpie.call("sessions", "reveal", s, e);
   };
   r.onclick = open;
   r.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(e); } };
@@ -20121,7 +20121,7 @@ function viaText(v) {
 }
 
 // All sessions: the Sessions page, on the agent picked here if one is
-$("#sessAll").onclick = (e) => window.openSessionOnPage?.(sessAgent === "all" ? {} : { agent: sessAgent }, e);
+$("#sessAll").onclick = (e) => magpie.call("sessions", "reveal", sessAgent === "all" ? {} : { agent: sessAgent }, e);
 $("#sessQ").oninput = (e) => { sessQuery = e.target.value; if (sessions) renderSessions(); };
 $("#sessQ").onkeydown = (e) => { if (e.key === "Escape" && e.target.value) { e.stopPropagation(); e.target.value = ""; sessQuery = ""; if (sessions) renderSessions(); } };
 
@@ -23931,7 +23931,7 @@ async function show(v) {
   view = v;
   // the page the reader leaves is the one the window opens on next (keptView)
   if (mode === "window") { try { localStorage.setItem("magpie.lastView", v); } catch { /* not kept */ } }
-  const title = ({ agents: "Agents", providers: "Providers", gateway: "Gateway", routing: "Routing", usage: "Usage", sessions: "Sessions", library: "Library", plugins: "Plugins", settings: "Settings" })[v];
+  const title = magpie.page(v)?.title ?? ({ agents: "Agents", providers: "Providers", routing: "Routing", usage: "Usage", library: "Library", plugins: "Plugins", settings: "Settings" })[v];
   $("#pageTitle").dataset.en = title;
   $("#pageTitle").textContent = t(title);
   if (mode === "window") {
@@ -23945,14 +23945,15 @@ async function show(v) {
   $("#prefs").classList.toggle("on", v === "settings");
   if (v === "settings") $("#prefs").setAttribute("aria-current", "page"); else $("#prefs").removeAttribute("aria-current");
   navSubs();
-  for (const id of ["agents", "providers", "routing", "usage", "sessions", "library", "plugins", "settings", ...magpie.pages()]) $("#view-" + id).hidden = v !== id;
+  for (const id of ["agents", "providers", "routing", "usage", "library", "plugins", "settings", ...magpie.pages()]) $("#view-" + id).hidden = v !== id;
   // back to where the reader was in it, and again once it has what it loads
   const back = () => backToReader($("#view-" + v));
   requestAnimationFrame(back);
   closePicker();
   closeAgentModels();
   if (v !== "providers" && editing !== null) cancelEdit(true);
-  magpie.call(v, "open");
+  // a plugin's page loads what it shows; back once it has
+  magpie.call(v, "open")?.then?.(back);
   if (v === "providers" || v === "routing" || providersPage(v)) loadProviders().then(back, (e) => status(e.message, "err"));
   // Routing's accounts show their windows as the Usage page read them
   // (#1833): what is kept, read in an ordinary way, never an asked read
@@ -23961,7 +23962,6 @@ async function show(v) {
   if (v === "settings") loadSettings().then(back, (e) => status(e.message, "err"));
   if (v === "library") window.loadLibrary?.()?.then(back);
   if (v === "plugins") window.loadPlugins?.()?.then(back);
-  if (v === "sessions") window.loadSessionsPage?.()?.then(back);
   syncTitle();
   syncURL();
   return true;
@@ -25103,7 +25103,7 @@ navHides(); // the pages built-in plugins switched off have, from boot.js
 // from the tray or a reload) first, then the one kept; a page gateway mode
 // leaves out, or one there is no longer, gives way to the first page.
 // the pages the window can open on besides the first (Agents)
-const OPEN_VIEWS = ["providers", "routing", "usage", "sessions", "library", "plugins", "settings", ...magpie.pages()];
+const OPEN_VIEWS = ["providers", "routing", "usage", "library", "plugins", "settings", ...magpie.pages()];
 function keptView() {
   const asked = params.get("view");
   if (asked === "agents" || OPEN_VIEWS.includes(asked)) return asked;
