@@ -403,7 +403,7 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 		w, d.Prompt, unmask = redactedPrompt(w, d.Prompt)
 		defer unmask()
 		call.Provider, call.To = p.ID, provider.Chat
-		ctx, cancel := context.WithTimeout(r.Context(), drawTimeout)
+		ctx, cancel := context.WithTimeout(withPrivateFetch(r.Context(), r), drawTimeout)
 		defer cancel()
 		// the account that drew, or refused last, is the one recorded
 		drew, out, code, capBack, err := s.drawOnAccounts(ctx, r, p, model, d)
@@ -1163,13 +1163,23 @@ func readImagesAnswer(p provider.Provider, url string, b []byte, code int) (draw
 }
 
 // fetchPicture downloads an image an edit was given by URL, for an images
-// API that takes only files.
+// API that takes only files. The URL is the caller's: it is fetched from
+// public addresses only (publicClient), but for a request from this
+// computer (withPrivateFetch), and what comes must be an image.
 func (s *Server) fetchPicture(ctx context.Context, url string) ([]byte, string, error) {
-	b, _, err := FetchImage(ctx, s.client, url)
+	c := publicClient
+	if privateFetchAllowed(ctx) {
+		c = s.client
+	}
+	b, _, err := FetchImage(ctx, c, url)
 	if err != nil {
 		return nil, "", fmt.Errorf("couldn't fetch the image at %s: %v", url, err)
 	}
-	return b, http.DetectContentType(b), nil
+	mt := http.DetectContentType(b)
+	if !strings.HasPrefix(mt, "image/") {
+		return nil, "", fmt.Errorf("couldn't use the image at %s: it isn't an image (it reads as %s)", url, mt)
+	}
+	return b, mt, nil
 }
 
 // inline says a response_format asks for the image itself.
