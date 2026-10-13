@@ -452,6 +452,18 @@ func (e *NoModelsError) Error() string {
 	return "Add a provider or subscription in magpie first, then connect " + e.Agent
 }
 
+// AllHiddenError is Connect's answer when magpie has models but none of
+// them is left in the agent's lists: the only ones picked for it are gone
+// with their provider, or every one is turned off for it (#1989). Saying
+// it can't be connected sent the user looking at the agent, when its model
+// list is what emptied it. The GUI says it in the reader's language by its
+// code (all_hidden).
+type AllHiddenError struct{ Agent string }
+
+func (e *AllHiddenError) Error() string {
+	return "None of magpie's models is left in " + e.Agent + "'s model list: pick one under Model list → Pick on the Agents page, then connect " + e.Agent
+}
+
 func (a *Agent) Connect() error {
 	_, err := a.ConnectHow()
 	return err
@@ -545,8 +557,17 @@ func (a *Agent) connect() (Connection, error) {
 	if f == nil {
 		// nothing to connect it to yet: no provider or subscription added,
 		// which said only that it can't be connected (Tystem on Discord)
-		if shown, hidden := provider.CatalogFor(a.ListsFor()); len(shown)+len(hidden) == 0 {
+		shown, hidden := provider.CatalogFor(a.ListsFor())
+		if len(shown)+len(hidden) == 0 {
 			return Connection{}, &NoModelsError{Agent: a.Name}
+		}
+		// magpie has models, and every one of them is taken out of the
+		// agent's lists (a picked model gone with its provider, one hidden
+		// by hand): saying the agent can't be connected sends the user
+		// looking at the agent, when its model list is what emptied it
+		// (#1989)
+		if len(shown) == 0 {
+			return Connection{}, &AllHiddenError{Agent: a.Name}
 		}
 		return Connection{}, fmt.Errorf("%s can't be connected to magpie", a.Name)
 	}

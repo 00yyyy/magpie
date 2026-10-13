@@ -2,11 +2,14 @@ package gui
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/agent"
 )
 
 // Tystem on Discord: connecting Codex with no provider or subscription in
@@ -27,6 +30,19 @@ func TestAgentConnectNoModels(t *testing.T) {
 	var out map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &out)
 	if rec.Code != 400 || out["code"] != "no_models" || out["agent"] != "Codex" || !strings.Contains(out["error"], "Add a provider or subscription") {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}
+
+// znuaibot (#1989): magpie has models, none left in the agent's lists. The
+// answer carries code all_hidden and the agent's name, which the GUI says
+// in the reader's language, pointing at the agent's Model list.
+func TestAgentConnectAllHidden(t *testing.T) {
+	rec := httptest.NewRecorder()
+	fail(rec, fmt.Errorf("connect: %w", &agent.AllHiddenError{Agent: "OpenCode"}))
+	var out map[string]string
+	json.Unmarshal(rec.Body.Bytes(), &out)
+	if rec.Code != 400 || out["code"] != "all_hidden" || out["agent"] != "OpenCode" || !strings.Contains(out["error"], "Model list → Pick") {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 }
