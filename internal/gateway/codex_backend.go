@@ -821,14 +821,15 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				}
 			}
 		}
-		if rest == "/responses" && base != codexAPIBase && res.StatusCode == http.StatusServiceUnavailable && sent >= codexDropBody && resets < lastRetries {
+		if rest == "/responses" && base != codexAPIBase && edgeMayDrop(res.StatusCode, sent) && resets < lastRetries {
 			// ChatGPT closed the connection before answering a large
-			// request, which often passes (#1628): asked again after a
-			// moment, as the accounts loop asks its last one again
+			// request, which often passes (#1628), or its front couldn't
+			// retry one that large (#2034): asked again after a moment,
+			// as the accounts loop asks its last one again
 			head, _ := io.ReadAll(io.LimitReader(res.Body, 4<<10))
 			res.Body.Close()
 			res.Body = io.NopCloser(bytes.NewReader(head))
-			if edgeReset.Match(head) {
+			if edgeSaidDrop(res.StatusCode, head) {
 				wait := retryPause << resets
 				resets++
 				select {
