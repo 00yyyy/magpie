@@ -1960,6 +1960,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	var busyNow []busyTry  // the members of this round that failed so
 	rounds := 0            // the rounds they were asked again in
 	var waitFrom time.Time // when every member had first failed so
+	refusals := 0          // the tries the safety filter refused so
 	for i := 0; i < len(cands); i++ {
 		c := cands[i]
 		if j := s.laneMate(cands, i, isGroup, gaveWay); j > i {
@@ -2432,6 +2433,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				continue
 			}
 		}
+		if hw.failed() && hw.refused {
+			refusals++
+			if !refusalAsksAgain(refusals) {
+				// asked as many times as Settings' RefusalRetries lets a
+				// refusal be: nobody else is, and the agent has it now
+				cands = cands[:i+1]
+				last = true
+			}
+		}
 		if !last && hw.failed() && hw.refused {
 			// another account or model may answer what this one refused;
 			// this one isn't set aside, as nothing is wrong with it, and
@@ -2785,7 +2795,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				w.Header().Set("Retry-After", strconv.Itoa(int((wait+time.Second-1)/time.Second)))
 			}
 		}
-		if hw.refused && !hw.passing {
+		if hw.refused && !hw.passing && from == provider.Anthropic && hw.handBack() {
+			// nobody is left, and the agent speaks Anthropic's Messages:
+			// it has the refusal as the vendor said it, stop_reason
+			// "refusal" and its stop_details, which Claude Code answers by
+			// asking its own fallback model (DD on Discord), where a 400
+			// is only an error to it
+		} else if hw.refused && !hw.passing {
 			// nobody is left: the agent is told it was refused, as a
 			// request it shouldn't send again as it is, not handed an empty
 			// reply it would ask again for, paying for each

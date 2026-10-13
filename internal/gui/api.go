@@ -1117,6 +1117,11 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if _, sent := fields["codeFont"]; !sent || isWeb(w) {
 			in.CodeFont = cur.CodeFont
 		}
+		// and pages from before it do not send how often a refusal is asked
+		// again, which null sets back to every one left
+		if _, sent := fields["refusalRetries"]; !sent {
+			in.RefusalRetries = cur.RefusalRetries
+		}
 		in.AgentOrder, in.AgentsHidden, in.AgentsShown = cur.AgentOrder, cur.AgentsHidden, cur.AgentsShown
 		in.Window, in.WindowMaximised = cur.Window, cur.WindowMaximised // the window's own, as it was last resized
 		// and what other pages keep here: which models an agent is shown, and

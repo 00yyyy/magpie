@@ -22715,7 +22715,23 @@ function renderReplies(s, keep) {
   lval.append(segs([["off", t("Off")], ["on", t("On")]], s.noLoopGuard ? "off" : "on",
     (v) => savePrefs({ ...keep, noLoopGuard: v === "off" })));
   l.append(lwho, lval);
-  box.append(r, l);
+  // how many more accounts or members a request the vendor's safety filter
+  // refused is asked of (#248): every one left unless set. Never hands the
+  // refusal back, which Claude Code answers with its own fallback model (DD
+  // on Discord)
+  const f = el("div", "row pref");
+  f.id = "refusalRetriesRow";
+  const fwho = el("div", "who");
+  fwho.append(el("div", "name", t("Ask again after a refusal")),
+    el("div", "sub wraps", t("When a vendor's safety filter refuses a request before anything is said, how many more accounts or routing group members are asked. Never ask again hands the refusal straight back: Claude Code then switches to its own fallback model, as it does on Anthropic's API")));
+  const fval = el("div", "val");
+  const counts = [["0", t("Never ask again")], ["1", "1"], ["2", "2"], ["3", "3"]];
+  const n = s.refusalRetries == null || s.refusalRetries < 0 ? "" : String(s.refusalRetries);
+  if (n && !counts.some(([id]) => id === n)) counts.push([n, n]); // set by hand in settings.json
+  fval.append(segs([...counts, ["", t("All")]], n,
+    (v) => savePrefs({ ...keep, refusalRetries: v === "" ? null : Number(v) })));
+  f.append(fwho, fval);
+  box.append(r, l, f);
 }
 
 // renderDisabledModels: the models the user turned off for every request
@@ -23600,7 +23616,7 @@ function prefsKeep(s) {
     redact: !!s.redact, redactPersonal: !!s.redactPersonal, redactKinds: s.redactKinds || {}, redactWords: s.redactWords || [], codexWarmup: s.codexWarmup || "",
     claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "",
     codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, noStats: !!s.noStats, noUsageStats: !!s.noUsageStats,
-    memberModel: !!s.memberModel, noLoopGuard: !!s.noLoopGuard,
+    memberModel: !!s.memberModel, noLoopGuard: !!s.noLoopGuard, refusalRetries: s.refusalRetries ?? null,
     noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360,
     trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, vision: s.vision || "", imageGen: s.imageGen || "", searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",
     chineseUnits: !!s.chineseUnits, usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0, resetReminder: s.resetReminder || 0,

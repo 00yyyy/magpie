@@ -198,6 +198,13 @@ type Settings struct {
 	// is stuck in a loop of the same few lines (#1359). Off, as by
 	// default, the gateway ends such a reply with an error.
 	NoLoopGuard bool `json:"noLoopGuard,omitempty"`
+	// RefusalRetries is how many more times a request the vendor's safety
+	// filter refused, with nothing said, is asked of another account or
+	// routing group member (#248), unset for every one left. 0 hands the
+	// refusal straight back: to an agent on Anthropic's Messages API as
+	// the vendor's own reply, stop_reason "refusal", which Claude Code
+	// answers by switching to its fallback model itself (DD on Discord).
+	RefusalRetries *int `json:"refusalRetries,omitempty"`
 	// NoAccountDiscovery leaves every agent's sign-in unread (#1535,
 	// MaxHaiCom): no credential file, Keychain item or agent CLI is asked
 	// who is signed in, and no subscription is offered; API-key providers

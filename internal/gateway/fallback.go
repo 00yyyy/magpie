@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 const fallbackCooldown = time.Minute
@@ -1932,6 +1933,27 @@ func (h *holdWriter) mayAskAgain() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.hold && !h.passing
+}
+
+// handBack sends a refusal held with nothing said as the vendor's own
+// reply, a 200 that ends with its stop reason, and says whether it could:
+// not a refusal said as an error status or event, which is no reply.
+func (h *holdWriter) handBack() bool {
+	if !h.refused || h.passing || h.status == 0 || h.status >= 400 || h.held.Len() == 0 {
+		return false
+	}
+	h.failure, h.failMsg = 0, ""
+	h.release()
+	return true
+}
+
+// refusalAsksAgain says whether a request refused n times by the vendor's
+// safety filter is asked of the next account or member left: as many
+// times as Settings' RefusalRetries says, every one left when it is unset
+// (#248).
+func refusalAsksAgain(n int) bool {
+	retries := settings.Load().RefusalRetries
+	return retries == nil || *retries < 0 || n <= *retries
 }
 
 // release sends a held reply after all: nobody else is left to try.
