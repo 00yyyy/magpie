@@ -10818,8 +10818,12 @@ function renderModels(p) {
       // becomes the only pick. A served one clicked used to be left out,
       // the rest of what was served picked in its place, so a click on
       // the one model wanted ticked every other (#681)
+      // once one is picked the provider serves its picks, so the last
+      // unpicked leaves none, not the vendor's list again (#1831, kchen0x:
+      // unpicking it went back to exposing every model)
       c.onclick = () => {
         draft.chosen = on ? draft.chosen.filter((x) => x !== m.id) : [...draft.chosen, m.id];
+        draft.none = true;
         draw();
       };
       chips.append(c);
@@ -10833,7 +10837,7 @@ function renderModels(p) {
       c.title = t("Added by hand");
       tested(c, id);
       menu(c, id);
-      c.onclick = () => { draft.chosen = draft.chosen.filter((x) => x !== id); draw(); };
+      c.onclick = () => { draft.chosen = draft.chosen.filter((x) => x !== id); draft.none = true; draw(); };
       chips.append(c);
     }
     if (!p.models.length && !draft.chosen.length) chips.append(el("span", "hint", t("The vendor's list is empty. Fetch models again, or type a model id.")));
@@ -10843,10 +10847,11 @@ function renderModels(p) {
     drawNames();
     drawFold();
     drawWorkOn();
+    drawServes();
     why.textContent = decideOnly(p) ? t("Agents never see them: a routing group picks one as its classifier.")
       : !draft.chosen.length && draft.none ? t("None selected: no agent or routing group uses its models. Its balance and usage still show. Click a model to pick it.")
-      : draft.unlisted ? t(draft.chosen.length ? "Agents don't see them: only the routing groups they are in use them." : "Agents don't see them: the routing groups they are in use the vendor's list, up to {n} (dashed). Select none to use none of them.", { n: 24 })
-      : t(draft.chosen.length ? "Agents see the models picked." : "None picked: agents see the vendor's list, up to {n} (dashed). Click a model to pick just it, or Select none to use none of them while its balance and usage still show.", { n: 24 });
+      : draft.unlisted ? t(draft.chosen.length ? "Agents don't see them: only the routing groups they are in use them." : "Vendor's list: agents don't see it, the routing groups its models are in use up to {n} of it (dashed). Click a model to pick just it.", { n: 24 })
+      : t(draft.chosen.length ? "Agents see the models picked." : "Vendor's list: agents see up to {n} of its models (dashed), and those it lists later. Click a model to pick just it.", { n: 24 });
     drawLost();
   };
   // those of its models in no routing group, while it is kept for groups:
@@ -11180,6 +11185,31 @@ function renderModels(p) {
     }
     names.scrollTop = top;
   };
+  // what the provider serves, said in so many words (#1831, kchen0x: with
+  // none picked it served every model, with one picked that one, and with
+  // that one unpicked every model again, while Select none served none and
+  // looked nearly the same): the vendor's list, or the models picked, none
+  // when none are. A click on a model, Select all or Select none is
+  // "Picked"; only "Vendor's list" goes back to the vendor's list
+  const serves = el("div", "segs mserves");
+  const servesOpts = [["list", "Vendor's list", "Serve the vendor's list, up to {n} of it (dashed), models it lists later too"], ["picked", "Picked only", "Serve only the models picked: none while none are, its balance and usage still shown"]].map(([v, name, tip]) => {
+    const b = el("button", "opt", t(name));
+    b.dataset.serves = v;
+    b.title = t(tip, { n: 24 });
+    b.onclick = () => {
+      if (v === "list") { draft.chosen = []; draft.typed = ""; draft.none = false; }
+      else if (!draft.chosen.length) draft.none = true;
+      draw();
+    };
+    serves.append(b);
+    return b;
+  });
+  const servesMode = () => draft.chosen.length || draft.none ? "picked" : "list";
+  const drawServes = () => {
+    const now = servesMode();
+    for (const b of servesOpts) { b.classList.toggle("on", b.dataset.serves === now); b.setAttribute("aria-pressed", b.dataset.serves === now); }
+    if (serves.isConnected) slide(serves, "serves");
+  };
   // every model at once (those the filter shows, when there is one), or none
   const bulk = el("div", "mbulk");
   const allOn = el("button", "text action", t("Select all"));
@@ -11188,6 +11218,7 @@ function renderModels(p) {
     const f = (q?.value || "").trim().toLowerCase();
     const ids = p.models.filter((m) => !f || m.id.toLowerCase().includes(f) || (m.name || "").toLowerCase().includes(f) || (m.default || "").toLowerCase().includes(f)).map((m) => m.id);
     draft.chosen = [...draft.chosen, ...ids.filter((id) => !draft.chosen.includes(id))];
+    draft.none = true;
     draw();
   };
   const allOff = el("button", "text action", t("Select none"));
@@ -11204,6 +11235,7 @@ function renderModels(p) {
     freeOn.onclick = () => {
       const f = (q?.value || "").trim().toLowerCase();
       draft.chosen = p.models.filter((m) => isFree(m) && (!f || m.id.toLowerCase().includes(f) || (m.name || "").toLowerCase().includes(f) || (m.default || "").toLowerCase().includes(f))).map((m) => m.id);
+      draft.none = true;
       draw();
     };
     bulk.append(freeOn);
@@ -11223,6 +11255,7 @@ function renderModels(p) {
     const [ids, bad] = failedPicks();
     if (!bad.length) return;
     draft.chosen = ids.filter((id) => !bad.includes(id));
+    draft.none = true;
     draw();
     status(t(bad.length === 1 ? "Unpicked 1 model that didn't answer" : "Unpicked {n} models that didn't answer", { n: bad.length }), "ok");
   };
@@ -11235,6 +11268,7 @@ function renderModels(p) {
     workOn.title = bad ? t("Unpick the models whose last test failed; those that answered, and those not tested, stay picked")
       : t("Every picked model that was tested answered");
   };
+  if (!decideOnly(p)) { box.append(serves); queueMicrotask(drawServes); }
   if (q || p.models.length > 1) {
     if (q) { q.oninput = draw; bulk.prepend(q); }
     box.append(bulk);
