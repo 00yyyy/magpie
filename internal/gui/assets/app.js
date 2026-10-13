@@ -16713,7 +16713,10 @@ function pluginCheckin(id, name) {
   };
 }
 function pluginCheckinOn(id) {
-  return !!(state.settings?.checkinPlugins || []).find((p) => p.id === id)?.on;
+  // /api/state carries the saved map, without /api/settings's plugin list.
+  // An explicit false must win over the list's inherited vendor default.
+  const prefs = state.settings;
+  return !!(prefs?.pluginCheckins?.[id] ?? prefs?.checkinPlugins?.find((p) => p.id === id)?.on);
 }
 function checkinRow(q, first, subs) {
   const by = q.checkinBy || "";

@@ -220,6 +220,18 @@ remain in the list, preserves them across summary refreshes, and offers a
 retry after a failed read. See `TestRecentCallBodiesOnDemand` and
 `recent-call-bodies.test.cjs`.
 
+### Plugin check-in switches
+
+A plugin's Usage-card Auto check-in button reads the persisted
+`settings.pluginCheckins[provider]` first (`pluginCheckinOn` in
+[`app.js`](../../internal/gui/assets/app.js)). `/api/state` returns that map
+without the derived `checkinPlugins` list included by `/api/settings`.
+An explicit saved false wins over the list; when no saved choice exists,
+the list's resolved vendor default remains the fallback. This keeps a saved
+switch on through a focus refresh and lets the next click turn it off.
+[`plugin-checkin.test.cjs`](../../internal/gui/tests/plugin-checkin.test.cjs)
+covers both response shapes, refreshes and the subsequent toggle.
+
 ### Shared UI rules
 
 - Settings → General is laid out as macOS System Settings is (1ooogle on X): a row says its name alone when that says enough (Appearance, Language, Text size, the fonts, the tray click, the Codex model rows, Open at login, Show in Dock), and keeps one short line where the setting isn't clear from its name or has a consequence (Long conversations, Lightweight mode, Prevent sleep, Session terminal, Codex subagents). A font row's line shows only while its fonts load or fail; the text size keys are the choices' tooltip. Language is one menu button showing the language picked, opened in the app's menu (`renderLangPick`). See `settings-general.test.cjs`.
