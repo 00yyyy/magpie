@@ -1620,6 +1620,17 @@ func (e *responsesEncoder) event(ev Event) {
 		e.send("response.output_item.added", map[string]any{"output_index": e.item, "item": raw})
 		e.send("response.output_item.done", map[string]any{"output_index": e.item, "item": raw})
 		e.output = append(e.output, raw)
+	case KSearch:
+		// A search arrives whole, after it ran. Tell the client its query
+		// and sources, as Anthropic's encoder does, without inventing
+		// earlier in-progress events or citation offsets in the answer.
+		e.closeItem()
+		e.item++
+		item := responsesSearchItem(ev.Text, ev.Hits)
+		e.send("response.output_item.added", map[string]any{"output_index": e.item, "item": item})
+		e.send("response.web_search_call.completed", map[string]any{"output_index": e.item, "item_id": item["id"]})
+		e.send("response.output_item.done", map[string]any{"output_index": e.item, "item": item})
+		e.output = append(e.output, item)
 	case KToolStart:
 		if ev.ID == "" {
 			ev.ID = "call_" + newID()
@@ -1680,6 +1691,21 @@ func (e *responsesEncoder) finish() {
 	e.send(typ, map[string]any{"response": e.response(status, extra)})
 }
 
+// responsesSearchItem keeps a completed search in both Responses reply forms.
+// Keep query for older clients and queries for clients using the current API.
+func responsesSearchItem(query string, hits []Hit) map[string]any {
+	sources := make([]map[string]any, 0, len(hits))
+	for _, h := range hits {
+		if h.URL != "" {
+			sources = append(sources, map[string]any{"type": "url", "url": h.URL})
+		}
+	}
+	return map[string]any{
+		"id": "ws_" + newID(), "type": "web_search_call", "status": "completed",
+		"action": map[string]any{"type": "search", "query": query, "queries": []string{query}, "sources": sources},
+	}
+}
+
 // renderResponses is the non-streaming reply.
 func renderResponses(res Result, model string, named map[string]nsTool) []byte {
 	output := []any{}
@@ -1711,6 +1737,8 @@ func renderResponses(res Result, model string, named map[string]nsTool) []byte {
 				"call_id": id, "arguments": argsString(p)}, p.Name, named)
 			item["id"] = itemPrefix(item) + newID()
 			output = append(output, item)
+		case Search:
+			output = append(output, responsesSearchItem(p.Text, p.Hits))
 		}
 	}
 	id := res.ID

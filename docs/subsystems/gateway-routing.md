@@ -239,6 +239,35 @@ results. Covered by `TestWorkBuddySearchesForItsModels` (Claude Code's
 literal WebSearch request, the real service's reply bytes) and
 `TestWorkBuddyPluginSearches`.
 
+## Search results in translated Responses replies
+
+When a search is done for a model (`searchReply`), or a Responses provider's
+search is decoded for translation, its `KSearch` event and collected
+`Search` part hold the query and pages found. [`responses.go`](../../internal/gateway/responses.go)'s
+`responsesEncoder.event` and `renderResponses` return these as completed
+`web_search_call` output items through the shared `responsesSearchItem`.
+The action says `search`, carries both `query` (older clients) and `queries`,
+and lists the nonempty source URLs in `action.sources`. An actual search
+with no sources has an empty list; a text answer alone creates no search.
+
+The stream adds and completes each search item, emits
+`response.web_search_call.completed`, and keeps the same item in the final
+response's `output`. Search events arrive after the search has run, so no
+earlier progress is fabricated. Search items keep their order among text,
+reasoning and client tool calls. They carry sources, not invented
+`url_citation` annotations: the shared search result has no citation offsets
+in the model's answer. Native Responses passthrough is unchanged. A client
+that sends the item back in its next input (Codex replays its output) loses
+nothing: `parseResponses` has no case for `web_search_call` and leaves it
+out, as before.
+
+This lets a Responses client verify search execution and display source
+links without sending a separate Anthropic Messages request. Covered by
+the `TestResponsesSearch` tests in
+[`responses_search_test.go`](../../internal/gateway/responses_search_test.go)
+and the Responses cases of `TestWebSearchForAModelThatCannot` in
+[`search_test.go`](../../internal/gateway/search_test.go).
+
 ## A searcher that fails or finds nothing
 
 `modelSearch` asks the searcher picked in Settings (or the one magpie picks)

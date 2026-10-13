@@ -195,6 +195,48 @@ func TestWebSearchForAModelThatCannot(t *testing.T) {
 	if res.Usage.Prompt != 40 || res.Usage.Completion != 12 {
 		t.Fatalf("usage %+v", res.Usage)
 	}
+
+	// Responses clients must receive the delegated search too, including
+	// its sources, without using the Messages endpoint or a search MCP.
+	for _, stream := range []bool{false, true} {
+		t.Run(map[bool]string{false: "Responses JSON", true: "Responses SSE"}[stream], func(t *testing.T) {
+			mu.Lock()
+			asked, searched = nil, nil
+			mu.Unlock()
+			body := `{"model":"deep/deep-chat","input":"What is the latest Go?","stream":` + map[bool]string{false: "false", true: "true"}[stream] + `,
+				"tools":[{"type":"function","name":"Read","parameters":{"type":"object"}},{"type":"web_search"}],"include":["web_search_call.action.sources"]}`
+			rec := httptest.NewRecorder()
+			New().Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body)))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("%d %s", rec.Code, rec.Body.String())
+			}
+			var response map[string]any
+			if stream {
+				for _, ev := range events(rec.Body.String()) {
+					if ev["type"] == "response.completed" {
+						response = ev["response"].(map[string]any)
+					}
+				}
+			} else if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			output, _ := response["output"].([]any)
+			if len(output) != 3 || output[1].(map[string]any)["type"] != "web_search_call" {
+				t.Fatalf("delegated search missing from Responses output: %v", output)
+			}
+			item := output[1].(map[string]any)
+			action := item["action"].(map[string]any)
+			sources, _ := action["sources"].([]any)
+			if item["status"] != "completed" || action["type"] != "search" || action["query"] != "latest go" || len(sources) != 1 || sources[0].(map[string]any)["url"] != "https://go.dev/dl/" {
+				t.Fatalf("delegated search lost its query or sources: %v", item)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if len(asked) != 2 || len(searched) != 1 {
+				t.Fatalf("model rounds=%d provider searches=%d", len(asked), len(searched))
+			}
+		})
+	}
 }
 
 func TestWebSearchAskedOfEachAPI(t *testing.T) {
