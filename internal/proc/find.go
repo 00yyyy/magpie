@@ -2,7 +2,6 @@ package proc
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,10 +19,14 @@ import (
 // size and time.
 func FindTool(name string) string {
 	return Unwrap(name, looked("find\x00"+name, func() lookAnswer {
-		if p, err := exec.LookPath(name); err == nil {
+		if p, err := lookPath(name); err == nil {
 			return lookAnswer{path: p}
 		}
-		return lookAnswer{path: toolIn(name, runtime.GOOS, findDirs())}
+		dirs := findDirs()
+		if !mayBeIn(name, dirs) {
+			return lookAnswer{}
+		}
+		return lookAnswer{path: toolIn(name, runtime.GOOS, dirs)}
 	}).path)
 }
 
