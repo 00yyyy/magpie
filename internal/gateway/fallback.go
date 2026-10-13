@@ -53,6 +53,10 @@ type candidate struct {
 	// provider has no URL for (#1702): the provider is tried whole, on the
 	// URLs it has, and the routing trace says why
 	noURL provider.Protocol
+	// seats are its places in the rounds of the groups routed by weight
+	// it is in (weightedUnits), for affinity to charge the member that
+	// keeps a conversation (weightedKept)
+	seats []wrrSeat
 }
 
 // capHold is how an account is held at its usage cap: the cap of the
@@ -415,10 +419,14 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		// and each group in it as one — planned by its own routing, put
 		// where the one it would try first is, the rest of it after
 		type unit struct {
-			m     provider.Member // the model, for one of its keys
-			cs    []candidate     // a group in g, or a provider routed its own way: its own order
-			order []Weighed
+			m      provider.Member // the model, for one of its keys
+			cs     []candidate     // a group in g, or a provider routed its own way: its own order
+			order  []Weighed
+			member string // as g spells it, for a unit of a group routed by weight
 		}
+		// a group routed by weight weighs its members, each whole: a
+		// model's keys in its provider's order, a group in it in its own
+		byWeight := g.Routing == provider.Weighted
 		var units []unit
 		var heads []candidate
 		at := map[string][]int{} // a head's seat → its units, in turn
@@ -438,12 +446,12 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 				pl.left = append(pl.left, sub.left...)
 				pl.capped = append(pl.capped, sub.capped...)
 				if len(cs) > 0 {
-					add(unit{cs: cs, order: sub.order}, firstAwake(cs))
+					add(unit{cs: cs, order: sub.order, member: m.Path[depth]}, firstAwake(cs))
 				}
 				i = j
 				continue
 			}
-			if ownRouting(m.Provider, g) {
+			if ownRouting(m.Provider, g) || byWeight {
 				// a provider routed its own way keeps it, as a group
 				// in the group does: weighed as one by the first it
 				// would try, and tried whole in its own order (kchen0x
@@ -457,7 +465,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 					order = append(order, w)
 				}
 				if len(cs) > 0 {
-					add(unit{cs: cs, order: order}, firstAwake(cs))
+					add(unit{cs: cs, order: order, member: m.Path[depth]}, firstAwake(cs))
 				}
 				i++
 				continue
@@ -466,6 +474,27 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 				add(unit{m: m}, c)
 			}
 			i++
+		}
+		if byWeight {
+			members := make([]string, len(units))
+			for i, u := range units {
+				members[i] = u.member
+			}
+			var out []candidate
+			for i, k := range weightedUnits(g, members, heads) {
+				u := units[k]
+				seat := wrrSeat{round: provider.GroupPrefix + g.ID, member: u.member}
+				for _, c := range u.cs {
+					c.seats = append(slices.Clip(c.seats), seat)
+					out = append(out, c)
+				}
+				order := slices.Clone(u.order)
+				if i == 0 && len(units) > 1 && len(order) > 0 {
+					order[0].Turn = true
+				}
+				pl.order = append(pl.order, order...)
+			}
+			return out
 		}
 		routing := g.Routing
 		if routing == provider.Manual {

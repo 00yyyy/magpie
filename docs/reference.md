@@ -1144,6 +1144,7 @@ magpie group add "Opus anywhere" models=claude/claude-opus-5-5,copilot/claude-op
 magpie group opus-anywhere              # one group, its models in order
 magpie group set opus-anywhere models+=openrouter/anthropic/claude-opus-5.5 routing=usage
 magpie group set opus-anywhere models-=copilot/claude-opus-5.5
+magpie group set opus-anywhere routing=weight weight=claude/claude-opus-5-5=3,copilot/claude-opus-5.5=1
 magpie group copy opus-anywhere "Opus test"  # the same models, routing and rules, to change on its own
 magpie group rm opus-anywhere           # one magpie found is hidden; magpie group restore <id> brings it back
 magpie claude group/opus-anywhere       # use it
@@ -1154,7 +1155,11 @@ spare, the one whose allowance renews soonest first), `order` (the first
 model until it can't answer, then the next), `rotate` (each turn to the next
 member), `usage` (least used first) or `pace` (weekly pace: the account with
 the most of its week left per hour until it renews first, so less of a week
-is lost at its reset). A key has no allowance to weigh, so it goes by its
+is lost at its reset) or `weight` (each model takes its share of the
+requests by its weight, smoothly interleaved: `weight=claude/claude-opus-5-5=3`
+gives it three requests for every one a model left at weight 1 takes; a
+weight is 1 to 1000, `weight=` alone clears them all, and a group in the
+group counts as one member, `weight=group/fast=2`). A key has no allowance to weigh, so it goes by its
 order or by what magpie sent it lately — except a sub2api key its owner gave
 a 5-hour, day or 7-day limit: with the provider's Balance URL set to the
 relay's `/v1/usage`, its card shows those windows and routing weighs it by

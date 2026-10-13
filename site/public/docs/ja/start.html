@@ -175,6 +175,7 @@
       <tr><td>持ち回り <code>rotate</code></td><td>各会話の次のターンを、次のメンバーのアカウントやキーに送り、負荷を分散します。</td></tr>
       <tr><td>使用量の少ない順 <code>usage</code></td><td>利用枠の残りが最も多いアカウントやキー。</td></tr>
       <tr><td>週のペース <code>pace</code></td><td>更新までの 1 時間あたりの週の枠の残りが最も多いアカウント、つまりリセット時に失う分が最も多いもの。これにより各メンバーの週の枠がリセットで無駄になりにくくなります。週の枠がなく 5 時間枠だけのアカウント（Claude Enterprise）は、更新までの 1 時間あたりの 5 時間枠の残りで判断されるので、ほぼ常に最初になります。使用率が 90% 以上のものは、他が応答できなくなるまで待ちます。キーは最近送ったトークン数で判断します。</td></tr>
+      <tr><td>重み順 <code>weight</code></td><td>グループ編集画面で各モデルの横に設定した重み（1〜1000、未設定は 1）に応じてリクエストを分けます。重み 3 のモデルは重み 1 のモデルが 1 件受けるごとに 3 件受け、まとめてではなく均等に散らします。各モデルは自分のプロバイダーのルーティングで自分のアカウントやキーを使い、グループ内のグループは 1 つとして数えます。失敗して休んでいるものはその回から外れ、失敗したときは次のモデルが代わりに答えます。</td></tr>
     </table></div>
     <div class="table-wrap"><table>
       <tr><th>維持</th><th>会話が、応答したアカウントやキーに留まる期間</th></tr>
@@ -217,6 +218,7 @@
       <pre id="ex-group">magpie groups                        <span class="c"># 自分のグループ、次に magpie が見つけたもの</span>
 magpie group add <span class="s">"Opus anywhere"</span> models=claude/claude-opus-5-5,copilot/claude-opus-5.5 routing=order stays=session
 magpie group set opus-anywhere models+=openrouter/anthropic/claude-opus-5.5
+magpie group set opus-anywhere routing=weight weight=claude/claude-opus-5-5=3  <span class="c"># 4 件に 3 件をこれに</span>
 magpie group rule add opus-anywhere use=openrouter/anthropic/claude-opus-5.5 tokens=150k  <span class="c"># 長いターンはまずこれへ</span>
 magpie group rule add opus-anywhere use=copilot/claude-opus-5.5 intent=<span class="s">"ちょっとした質問"</span> classifier=groq/llama-3.1-8b-instant
 magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash compact  <span class="c"># /compact の要約は安いモデルへ</span>
