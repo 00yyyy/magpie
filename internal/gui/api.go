@@ -1190,6 +1190,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 
 		in.CodexTitles = cur.CodexTitles             // set on its own (codex-titles below)
 		in.CodexDescriptions = cur.CodexDescriptions // set on its own (codex-descriptions below)
+		in.CodexPredictions = cur.CodexPredictions   // and codex-predictions
 		// and so is the model Codex's auto-review runs on (codex-auto-review)
 		in.CodexAutoReview = cur.CodexAutoReview
 		// and the model Codex's subagents are put on, set in Codex's row
@@ -1472,6 +1473,29 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		s := settings.Load()
 		s.CodexDescriptions = v
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// where the Codex app's request to predict the user's next message
+	// goes (#1970): "" as Codex sends it, "off", or a model's id
+	mux.HandleFunc("POST /api/settings/codex-predictions", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Model string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		v := strings.TrimSpace(in.Model)
+		if v != "" && v != "off" {
+			if _, _, ok := provider.Resolve(v); !ok {
+				fail(rw, fmt.Errorf("no model %s to write Codex's composer predictions", v))
+				return
+			}
+		}
+		s := settings.Load()
+		s.CodexPredictions = v
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return

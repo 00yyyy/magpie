@@ -21312,7 +21312,7 @@ function renderSettings() {
   // gateway mode leaves out what is written into this computer's agents'
   // files, and the alerts its desktop would show
   for (const r of [$("#plainNamesSegs").parentElement, $("#codexAgentsV1Segs").parentElement, $("#fullContextSegs").parentElement,
-    $("#codexTitlesRow"), $("#codexDescriptionsRow"), $("#codexAutoReviewRow"), $("#usageAlertRow"), $("#balanceAlertRow"), $("#resetReminderRow"), $("#turnDoneRow")]) r.hidden = gatewayMode;
+    $("#codexTitlesRow"), $("#codexDescriptionsRow"), $("#codexPredictionsRow"), $("#codexAutoReviewRow"), $("#usageAlertRow"), $("#balanceAlertRow"), $("#resetReminderRow"), $("#turnDoneRow")]) r.hidden = gatewayMode;
   // the parts' tabs, one gone whose rows are all hidden here
   setSetTab(setTab);
 }
@@ -21982,6 +21982,7 @@ function renderTrayUsage(s, keep) {
   $("#fullContextSegs").replaceChildren(compactRow);
   renderCodexTitles(s);
   renderCodexDescriptions(s);
+  renderCodexPredictions(s);
   renderCodexAutoReview(s);
   renderCodexMemories();
   const rate = s.fx?.rate;
@@ -22413,6 +22414,34 @@ function renderCodexDescriptions(s) {
     writingPrefs(api("settings/codex-descriptions", { model: id })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); });
   } }, b, ev);
   $("#codexDescriptionsPick").replaceChildren(b);
+}
+
+// renderCodexPredictions: where the Codex app's guess at the user's next
+// message goes (#1970) — as Codex sends it, on the thread's own model; off,
+// answered by magpie with no prediction; or to a model of magpie's.
+function renderCodexPredictions(s) {
+  const models = s.titleModels || [];
+  const named = (id) => {
+    const m = models.find((x) => x.id === id);
+    return m ? `${m.name || m.id} · ${m.providerName}` : id;
+  };
+  const v = s.codexPredictions || "";
+  const b = el("button", "rt-cond on");
+  b.type = "button";
+  b.setAttribute("aria-label", t("Codex composer predictions"));
+  if (v === "off") b.append(el("span", "", t("Off")));
+  else if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
+  else b.append(icon("openai"), el("span", "", t("Codex’s own (ChatGPT)")));
+  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
+  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexPredictions", label: "model", value: v, options: [
+    { value: "", label: t("Codex’s own (ChatGPT)"), note: t("as Codex sends them"), icon: "openai", reset: true },
+    { value: "off", label: t("Off"), note: t("no prediction, nothing sent"), reset: true },
+    ...models.map(opt)],
+  onPick: (id) => {
+    if (id === v) return;
+    writingPrefs(api("settings/codex-predictions", { model: id })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); });
+  } }, b, ev);
+  $("#codexPredictionsPick").replaceChildren(b);
 }
 
 // renderCodexTitles: where Codex's requests for a thread's title go (#705)

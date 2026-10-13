@@ -380,6 +380,13 @@ type Settings struct {
 	// model's id (provider/model, group/<id>) that writes it. It is not
 	// CodexTitles: a description asks for {"description"} alone.
 	CodexDescriptions string `json:"codexDescriptions,omitempty"`
+	// CodexPredictions is where the request Codex's app makes to predict
+	// the user's next message for its composer (composer_predictions: a
+	// hidden turn on a fork of the whole conversation, on the thread's own
+	// model through its ChatGPT sign-in) goes (#1970, pluo): "" as Codex
+	// sends it, "off" answered by magpie with no prediction and sent
+	// nowhere, or a model's id (provider/model, group/<id>) that writes it.
+	CodexPredictions string `json:"codexPredictions,omitempty"`
 	// CodexAutoReview is the model Codex's auto-review (approvals_reviewer
 	// = "auto_review": the guardian that decides an approval in the user's
 	// place) runs on (#938): a model's id (provider/model, group/<id>) put
@@ -1144,6 +1151,10 @@ func save(s Settings, recording bool) error {
 	s.CodexDescriptions = strings.TrimSpace(s.CodexDescriptions)
 	if s.CodexDescriptions != "" && !strings.Contains(s.CodexDescriptions, "/") {
 		return fmt.Errorf("the model for Codex's descriptions must be a model's id such as openai/gpt-5-mini, not %q", s.CodexDescriptions)
+	}
+	s.CodexPredictions = strings.TrimSpace(s.CodexPredictions)
+	if s.CodexPredictions != "" && s.CodexPredictions != "off" && !strings.Contains(s.CodexPredictions, "/") {
+		return fmt.Errorf("the model for Codex's composer predictions must be a model's id such as openai/gpt-5-mini, or off, not %q", s.CodexPredictions)
 	}
 	s.CodexAutoReview = strings.TrimSpace(s.CodexAutoReview)
 	if s.CodexAutoReview != "" && !strings.Contains(s.CodexAutoReview, "/") {
