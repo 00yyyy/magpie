@@ -1870,6 +1870,51 @@ Termux uses the Android terminal build: the installer puts it in
 `go build` or `go install`, pass `-tags nogui`; use `magpie web` or
 `magpie tui` for the interface. `magpie autostart on` requires Termux:Boot.
 
+### As a background service
+
+`magpie daemon install` runs `magpie serve` as a service of your own, with
+no window and no desktop session: a server, or a machine you reach over
+SSH. The system starts it at login (and at boot, see below) and starts it
+again when it stops with a failure.
+
+```sh
+magpie daemon install    # write the service and start it; again, to take a new PATH or proxy
+magpie daemon status     # running or not, its pid, file and logs, whether the gateway answers
+magpie daemon restart    # after updating magpie
+magpie daemon stop|start
+magpie daemon uninstall  # stop it and remove the file
+```
+
+- **Linux:** a systemd user unit, `~/.config/systemd/user/magpie.service`
+  (`$XDG_CONFIG_HOME/systemd/user` when set), run with `systemctl --user`,
+  no root. Its log: `journalctl --user -u magpie -f`. systemd starts a
+  user's units at their first login and stops them at their last, so for
+  the gateway to run from boot with no one logged in, run
+  `sudo loginctl enable-linger $USER` once; `magpie daemon status` says so
+  when it isn't on. From `su` or `sudo -u`, `systemctl --user` can't reach
+  your session: log in as the user, or set
+  `XDG_RUNTIME_DIR=/run/user/$(id -u)`. On WSL, turn systemd on first
+  (`[boot] systemd=true` in `/etc/wsl.conf`). A system without systemd is
+  told so; run `magpie serve` under the manager it has.
+- **macOS:** a launch agent, `~/Library/LaunchAgents/com.yetone.magpie.serve.plist`,
+  loaded with `launchctl bootstrap gui/$UID`. Its log:
+  `~/Library/Logs/magpie/serve.log`.
+- **Windows:** not a service; `magpie autostart on` opens magpie, which
+  serves the gateway, when you log in. Inside WSL, `magpie daemon` works as
+  on Linux.
+
+The service gets the environment `magpie daemon install` ran in: `PATH`
+(where it finds the agents' CLIs and bun), the proxy variables, `MAGPIE_*`
+settings such as `MAGPIE_ADDR`, the XDG folders and the agents' own folder
+variables (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`…). The file is readable by you
+alone, since a proxy's address can hold a password. Run the install again
+after changing any of them. It runs magpie by the name it has on `PATH`
+when that is the same file (Homebrew's link stays right across updates),
+and refuses a `go run` build. It is refused while `magpie autostart` is on:
+the app opened at login serves the gateway too, and the two would take
+turns failing on the port. The app opened by hand while the service runs
+uses the service's gateway.
+
 ### Docker
 
 `docker build` makes a server image: the terminal-only binary on

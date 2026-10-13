@@ -266,7 +266,7 @@ magpie claude group/opus-anywhere    <span class="c"># use it</span></pre>
     <h3>Do I need to export <code>OPENAI_BASE_URL</code> or <code>ANTHROPIC_BASE_URL</code>?</h3>
     <p>No. For the agents magpie lists, it writes the gateway’s address and token into the agent’s own config file. Those variables are only for other tools with a base-URL setting: the <span class="ui">Gateway</span> tab’s <span class="ui">Connect</span> section has them as copy buttons and snippets.</p>
     <h3>Does magpie have to be running?</h3>
-    <p>For a model through magpie, yes: the gateway runs with the app. Closing the window leaves it running in the menu bar or tray; <code>magpie tray</code> starts the icon alone (put it in your login items), and <code>magpie serve</code> runs just the gateway. An agent on its own model and its own sign-in doesn’t go through magpie.</p>
+    <p>For a model through magpie, yes: the gateway runs with the app. Closing the window leaves it running in the menu bar or tray; <code>magpie tray</code> starts the icon alone (put it in your login items), and <code>magpie serve</code> runs just the gateway, and <code>magpie daemon install</code> keeps it running as a service (systemd on Linux, launchd on the Mac), from login or boot, with no window. An agent on its own model and its own sign-in doesn’t go through magpie.</p>
     <h3>How do I put an agent back the way it was?</h3>
     <p>Pick one of the agent’s own models in the picker, or run <code>magpie &lt;agent&gt; default</code>. magpie removes what it wrote and restores the values it replaced, such as an <code>ANTHROPIC_BASE_URL</code> you had before.</p>
     <h3>I switched models, but my agent still uses the old one.</h3>
