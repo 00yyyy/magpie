@@ -387,13 +387,17 @@ func resolve(p string, depth int) (string, bool) {
 		if cur != "" {
 			next = filepath.Join(cur, part)
 		}
-		if to, ok := linkTarget(next); ok {
+		// one look at each part: whether it is there, and where it points
+		// when it is a link (#1771)
+		e := lookPart(next)
+		if e.link {
+			to := e.to
 			if !filepath.IsAbs(to) {
 				to = filepath.Join(filepath.Dir(next), to)
 			}
 			return resolve(filepath.Join(append([]string{to}, parts[i+1:]...)...), depth+1)
 		}
-		if _, err := os.Lstat(next); err != nil {
+		if !e.there {
 			return "", false
 		}
 		cur = next
@@ -408,18 +412,8 @@ func resolve(p string, depth int) (string, bool) {
 // or on Windows a junction (a mount point, which Go since 1.23 reports as
 // irregular, not as a symlink).
 func linkTarget(p string) (string, bool) {
-	fi, err := os.Lstat(p)
-	if err != nil {
-		return "", false
-	}
-	if !linkEntry(fi) {
-		return "", false
-	}
-	to, err := os.Readlink(p)
-	if err != nil || to == "" {
-		return "", false
-	}
-	return to, true
+	e := lookPart(p)
+	return e.to, e.link
 }
 
 // linkEntry is whether the entry is a link rather than a folder of its own:

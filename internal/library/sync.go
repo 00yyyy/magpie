@@ -313,8 +313,12 @@ func Glance(problems []Problem) (*View, error) { return readView(problems, true)
 func readView(problems []Problem, glance bool) (*View, error) {
 	mu.Lock()
 	locked := true
+	// each folder on the way to a path is looked at once while the lock
+	// is held (linkmemo.go, #1771)
+	forget := readParts()
 	defer func() {
 		if locked {
+			forget()
 			mu.Unlock()
 		}
 	}()
@@ -434,6 +438,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	// the agents' skill folders are read through without the lock, so a
 	// change made meanwhile doesn't wait on them: what they show is read
 	// from the library as it was loaded
+	forget()
 	mu.Unlock()
 	locked = false
 	behind := l.behind(targets)
