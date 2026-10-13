@@ -84,14 +84,17 @@ An older peer without the decision-list extension continues serving its
 other APIs but must be updated before its decisions can be discovered.
 See [`decide.go`](../../internal/provider/decide.go).
 
-oMLX (#1641) is such a mixed provider too: its server lists Clef, Clef-Flash
-and OpenJev among its chat models with nothing to tell them apart, so its
-decision models are the ones its `/v1/models/status` gives `model_type`
-`decision`, by the name `/v1/models` uses (its alias), kept under
+oMLX (#1641) and MLX-Serve are such mixed providers too: oMLX's server lists
+Clef, Clef-Flash and OpenJev among its chat models with nothing to tell them
+apart, so its decision models are the ones its `/v1/models/status` gives
+`model_type` `decision`, by the name `/v1/models` uses (its alias), kept under
 `<id>.decisions` like OpenRouter's (`omlxDecides`, `listedOMLXDecide` in
-[`omlx_decide.go`](../../internal/provider/omlx_decide.go)). A server with
-none lists none, and no Jev is made up for it. An oMLX provider saved
-before the preset had a decision base gets its chat base as one.
+[`omlx_decide.go`](../../internal/provider/omlx_decide.go)). MLX-Serve marks
+them in its `/v1/models` with `capabilities: ["decisions"]`, kept under
+`<id>.decisions` (`mlxServeDecides`, `listedMLXServeDecide` in
+[`mlxserve_decide.go`](../../internal/provider/mlxserve_decide.go)). A server
+with none lists none, and no Jev is made up for it. An oMLX or MLX-Serve
+provider saved before the preset had a decision base gets its chat base as one.
 
 The CLI and TUI report model-list fetch errors for remote and other mixed providers
 (such as OpenRouter, serving conversation and decision models). Only a

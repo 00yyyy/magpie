@@ -547,9 +547,12 @@ var presets = []PresetDef{
 		Chat: "http://localhost:8000/v1", Responses: "http://localhost:8000/v1", Anthropic: "http://localhost:8000",
 		Decide: "http://localhost:8000/v1",
 		Note:   "local server, port 8000 by default", Website: "https://omlx.ai"},
-	{ID: "mlx-serve", Name: "MLX-Serve", Icon: "mlx-serve", Kind: KindLocal, NoKey: true,
+	// its decision models (Clef, Clef-Flash, Kev, Laya, D1), served at
+	// /v1/systemone, are marked by capabilities in /v1/models (mlxserve_decide.go)
+	{ID: MLXServePreset, Name: "MLX-Serve", Icon: "mlx-serve", Kind: KindLocal, NoKey: true,
 		Chat: "http://localhost:11234/v1", Responses: "http://localhost:11234/v1", Anthropic: "http://localhost:11234",
-		Note: "local server, port 11234 by default", Website: "https://github.com/ddalcu/mlx-serve"},
+		Decide: "http://localhost:11234/v1",
+		Note:   "local server, port 11234 by default", Website: "https://github.com/ddalcu/mlx-serve"},
 
 	// another computer's magpie, shared on its network (remote_magpie.go):
 	// its providers, routing groups and usage stay there, each request
