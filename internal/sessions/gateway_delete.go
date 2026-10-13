@@ -3,6 +3,8 @@ package sessions
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +51,9 @@ func readHidden() []hiddenGateway {
 }
 
 func writeHidden(list []hiddenGateway) error {
+	if err := keepUnreadHidden(); err != nil {
+		return err
+	}
 	if len(list) == 0 {
 		if err := os.Remove(gatewayHiddenPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -67,6 +72,28 @@ func writeHidden(list []hiddenGateway) error {
 		return err
 	}
 	return os.Rename(tmp, gatewayHiddenPath())
+}
+
+// keepUnreadHidden copies a gateway-sessions-hidden.json that doesn't parse
+// aside before it is written over (or taken away): it holds the deletions
+// magpie made before, and a read that came back empty is unknown, not
+// nothing. A copy that can't be made stops the write.
+func keepUnreadHidden() error {
+	p := gatewayHiddenPath()
+	b, err := os.ReadFile(p)
+	if err != nil || len(b) == 0 {
+		return nil
+	}
+	var list []hiddenGateway
+	if json.Unmarshal(b, &list) == nil {
+		return nil
+	}
+	bad := p + ".bad-" + time.Now().Format("20060102-150405.000000000")
+	if err := os.WriteFile(bad, b, 0o600); err != nil {
+		return fmt.Errorf("gateway-sessions-hidden.json doesn't parse and couldn't be kept aside: %w", err)
+	}
+	log.Printf("gateway-sessions-hidden.json didn't parse; it is kept as %s", filepath.Base(bad))
+	return nil
 }
 
 // GatewayHidden says whether a gateway session was deleted: true when it
