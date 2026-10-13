@@ -1221,7 +1221,7 @@ function connectLine(a, kind) {
     // line says why, and the accounts that turn it off are a click away
     else if (a.failover) {
       say(t("Not connected · goes through magpie only to fail over to your other ChatGPT accounts"));
-      words.title = t("magpie set openai_base_url in {agent}'s config.toml, so a request the ChatGPT account {agent} is signed in to has no allowance for goes on to your other ChatGPT accounts on in magpie. {agent} keeps to its own models. To stop it, switch those accounts off under Providers › Codex; connecting {agent} adds magpie's models.", { agent: a.name });
+      words.title = t("magpie set openai_base_url in {agent}'s config.toml, so a request the ChatGPT account {agent} is signed in to has no allowance for goes on to your other ChatGPT accounts on in magpie. {agent} keeps to its own models. To stop it, tick Only switch {agent}'s sign-in under Providers › Codex, or switch those accounts off; connecting {agent} adds magpie's models.", { agent: a.name });
       const go = el("button", "ag-acc", t("ChatGPT accounts"));
       go.type = "button";
       go.title = words.title;
@@ -12655,6 +12655,20 @@ function renderAccounts(a, p) {
       }, "Account to stay signed in to", "sess-menu");
     };
     box.append(keep, as);
+    list.append(box);
+  }
+  // with more of its accounts on, magpie sends Codex's own requests through
+  // the gateway to fail over between them (#1385); this has it only switch
+  // Codex's own sign-in instead, its requests going straight to OpenAI
+  // (#1907: Codex Desktop and the CLI on their own subscription alone)
+  if (a.agent === "codex" && several && p) {
+    const box = el("div", "switch-only");
+    const [only, cb] = tick(t("Only switch {agent}'s sign-in", { agent: a.agentName }), !!p.switchOnly);
+    only.title = t("magpie signs {agent} in to the next account with room when the one it is on is used up, and back once that has room again, by writing {agent}'s own sign-in; {agent}'s requests go straight to OpenAI, never through magpie. A {agent} app or session already open stays on its account until it is opened again. Connected to magpie, {agent}'s requests go through it as before.", { agent: a.agentName });
+    cb.onchange = () => accountAction("provider/switchonly", { id: p.id, switchOnly: cb.checked }, cb.checked
+      ? t("magpie only switches {agent}'s sign-in; its requests go straight to OpenAI", { agent: a.agentName })
+      : t("{agent}'s requests go through magpie to fail over to your other accounts again", { agent: a.agentName }));
+    box.append(only);
     list.append(box);
   }
   if (a.agent === "codex" && providers?.codexDaemon) list.append(renderCodexDaemon(providers.codexDaemon));

@@ -1380,6 +1380,18 @@ agent off has every window under 90% again, it signs the agent back in to
 it. *Keep … signed in to* turns this off: the agent stays on the first
 account, or on the account you picked, whatever it has left. It changes nothing in the gateway's routing.
 
+With more than one Codex account on, magpie also sets `openai_base_url`
+in Codex's config.toml, so a request the signed-in account has no
+allowance for goes on to the others through the gateway. *Only switch
+Codex's sign-in* under Providers › Codex (or `magpie accounts switch-only
+codex on`) leaves that out: magpie only moves Codex's own sign-in
+(`auth.json`) as above, and Codex's requests go straight to OpenAI, never
+through magpie (#1907). An `openai_base_url` you wrote yourself stays. The
+Codex app and a running `codex app-server` read the sign-in when they
+start, so one already open stays on its account until it is opened again;
+a new `codex` session takes the new one. Connected to magpie, Codex's
+requests go through it as before.
+
 **How often an allowance is read.** Routing uses what was read last and
 never waits for a reading, except the first one after magpie starts (3
 seconds at most). A reading over a minute old is read again in the

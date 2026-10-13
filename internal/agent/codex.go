@@ -1679,8 +1679,13 @@ var codexUsedUp = func() bool {
 }
 
 // codexFailover reports whether Codex is signed in to a ChatGPT account
-// with more of its accounts on in magpie, behind it.
+// with more of its accounts on in magpie, behind it, and the user hasn't
+// asked magpie to only switch its sign-in (provider.SwitchOnly).
 func codexFailover() bool {
+	// the user had magpie only switch Codex's own sign-in (#1907)
+	if provider.SwitchOnly("codex") {
+		return false
+	}
 	for _, p := range provider.Accounts() {
 		if p.Account != nil && p.Account.Agent == "codex" {
 			return len(p.AlsoOn()) > 0
