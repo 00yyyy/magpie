@@ -268,6 +268,21 @@ func TestPiPackage(t *testing.T) {
 	if md["type"] != "message_delta" || md["delta"].(map[string]any)["stop_reason"] != "end_turn" || u["input_tokens"] != 11.0 || u["output_tokens"] != 7.0 || u["cache_read_input_tokens"] != 3.0 || u["cache_creation_input_tokens"] != 2.0 {
 		t.Fatalf("message_delta = %v", md)
 	}
+	// message_start tells the prompt's usage pi's start named, which
+	// Claude Code's context meter reads before message_delta (#1887)
+	if u := r.events[0]["message"].(map[string]any)["usage"].(map[string]any); u["input_tokens"] != 11.0 || u["output_tokens"] != 0.0 || u["cache_read_input_tokens"] != 3.0 || u["cache_creation_input_tokens"] != 2.0 {
+		t.Fatalf("message_start's usage = %v", u)
+	}
+	// and the prompt pi-ai's anthropic-messages counts only after its
+	// start, on the message the events after it share, which goes on being
+	// written: its output isn't the start's
+	r = piAsk(t, ctx, "fakepi", "fp-plain", map[string]any{"max_tokens": 100, "stream": true, "messages": []map[string]any{{"role": "user", "content": "late"}}})
+	if u := r.events[0]["message"].(map[string]any)["usage"].(map[string]any); u["input_tokens"] != 11.0 || u["output_tokens"] != 0.0 || u["cache_read_input_tokens"] != 3.0 || u["cache_creation_input_tokens"] != 2.0 {
+		t.Fatalf("message_start's usage, counted after pi's start = %v", u)
+	}
+	if u := r.events[len(r.events)-2]["usage"].(map[string]any); u["input_tokens"] != 11.0 || u["output_tokens"] != 7.0 || u["cache_read_input_tokens"] != 3.0 || u["cache_creation_input_tokens"] != 2.0 {
+		t.Fatalf("message_delta's usage, counted after pi's start = %v", u)
+	}
 
 	// a model that can't think less than "low" is asked to, one that
 	// doesn't think isn't

@@ -937,7 +937,15 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 	}
 	if !d.started {
 		d.started, d.tool = true, -1
-		emit(Event{Kind: KStart, MsgID: ch.ID, Model: ch.Model})
+		// most streams count the prompt only at their end, but one that
+		// counts it on its first chunk tells it at the start, as
+		// Anthropic's message_start does (#1887)
+		var prompt Usage
+		if ch.Usage != nil && ch.Usage.PromptTokens > 0 {
+			u := ch.Usage.usage()
+			prompt = Usage{Input: u.Input, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}
+		}
+		emit(Event{Kind: KStart, MsgID: ch.ID, Model: ch.Model, Usage: prompt})
 	}
 	for _, c := range ch.Choices {
 		// Translation has one reply: lock onto the first readable choice
