@@ -142,7 +142,9 @@ func TestSkillsFromATooBigRepository(t *testing.T) {
 	for _, c := range p.Candidates {
 		names = append(names, c.Path)
 	}
-	if want := []string{"skills/hindsight-docs", "skills/hindsight-local", "hindsight-integrations/cursor/skills/hindsight-recall"}; strings.Join(names, " ") != strings.Join(want, " ") {
+	// ship-it is the repository's own, in .claude/skills, which the skills
+	// CLI lists too (#1964)
+	if want := []string{"skills/hindsight-docs", "skills/hindsight-local", "hindsight-integrations/cursor/skills/hindsight-recall", ".claude/skills/ship-it"}; strings.Join(names, " ") != strings.Join(want, " ") {
 		t.Fatalf("candidates %v, want %v", names, want)
 	}
 	ok(t)(InstallSkills("https://github.com/vectorize-io/hindsight", []string{"skills/hindsight-docs", "skills/hindsight-local"}, []string{"claude"}))

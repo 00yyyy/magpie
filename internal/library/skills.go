@@ -815,7 +815,11 @@ func untar(r io.Reader, dst string) error {
 }
 
 // candidates are the skills under root/sub: a folder with a SKILL.md,
-// looked for a few folders deep, and not inside another skill.
+// looked for a few folders deep, and not inside another skill. A hidden
+// folder is an agent's own (.claude, .agents) and is looked in only for its
+// skills folder: some repositories keep their skill only in
+// .claude/skills (#1964, UFO404). A skill found there that the repository
+// also has outside a hidden folder is that one, listed once.
 func candidates(root, sub string) []Candidate {
 	base := filepath.Join(root, filepath.FromSlash(sub))
 	var out []Candidate
@@ -835,17 +839,46 @@ func candidates(root, sub string) []Candidate {
 		es, _ := os.ReadDir(dir)
 		for _, e := range es {
 			n := e.Name()
-			if strings.HasPrefix(n, ".") || n == "node_modules" {
+			if n == "node_modules" {
 				continue
 			}
-			p := filepath.Join(dir, n)
+			p, d := filepath.Join(dir, n), depth-1
+			if strings.HasPrefix(n, ".") {
+				if d == 0 {
+					continue
+				}
+				p, d = filepath.Join(p, "skills"), d-1
+			}
 			if fi, err := os.Stat(p); err == nil && fi.IsDir() {
-				walk(p, depth-1)
+				walk(p, d)
 			}
 		}
 	}
 	walk(base, 4)
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return unhiddenFirst(out, func(c Candidate) string { return c.Path }, func(a, b Candidate) bool {
+		return a.Name == b.Name || lastPart(a.Path) == lastPart(b.Path)
+	})
+}
+
+// inHidden is whether a skill's path, from the repository's top, goes
+// through a hidden folder.
+func inHidden(path string) bool {
+	return slices.ContainsFunc(strings.Split(path, "/"), func(p string) bool { return strings.HasPrefix(p, ".") })
+}
+
+// unhiddenFirst drops a skill in a hidden folder that is the same skill as
+// one outside every hidden folder, or as a hidden one listed before it: an
+// agent's folder often holds a copy of the repository's own skills.
+func unhiddenFirst[T any](list []T, path func(T) string, same func(a, b T) bool) []T {
+	out := make([]T, 0, len(list))
+	for i, c := range list {
+		if inHidden(path(c)) && (slices.ContainsFunc(list, func(o T) bool { return !inHidden(path(o)) && same(o, c) }) ||
+			slices.ContainsFunc(list[:i], func(o T) bool { return inHidden(path(o)) && same(o, c) })) {
+			continue
+		}
+		out = append(out, c)
+	}
 	return out
 }
 
