@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/yetone/magpie/internal/appdir"
@@ -492,8 +493,13 @@ func store(f file) error {
 func All() []Provider {
 	held := heldOf("all", allProviders)
 	out := make([]Provider, 0, len(held))
+	// asked once, from the settings a held look has read already: asked for
+	// each account, settings.json was parsed for every account of every
+	// model's price (agent.magpieModels, the GUI's drift every 15s and dsh's
+	// round every 30s), most of an idle magpie's CPU (xsw on Discord)
+	off := sync.OnceValue(func() bool { return settings.AccountDiscoveryOffIn(heldSettings()) })
 	for _, p := range held {
-		if p.Account != nil && settings.AccountDiscoveryOff() {
+		if p.Account != nil && off() {
 			continue
 		}
 		out = append(out, p.clone()) // callers change theirs, Keys[i] and Headers included

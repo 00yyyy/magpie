@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
@@ -935,7 +936,9 @@ func loadChecked() (Settings, error) {
 		}
 		return s.normal(), fmt.Errorf("could not read settings at %s: %w", Path(), err)
 	}
-	// parsed once: this runs for every model of every agent
+	// parsed on every call: a caller that asks many times in one look holds
+	// what it read (provider.Hold's heldSettings) rather than asking again
+	parses.Add(1)
 	if perr := json.Unmarshal(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")), &s); perr != nil {
 		// one left all zero by a crash (#1505) is its last good generation
 		bak, ferr := lastgood.Fallback(Path(), b, validSettings)
@@ -948,6 +951,14 @@ func loadChecked() (Settings, error) {
 	}
 	return s.normal(), err
 }
+
+// parses counts settings.json's parses (Parses).
+var parses atomic.Int64
+
+// Parses is how many times settings.json has been parsed in this process,
+// for a test that a look holding the settings doesn't read them again for
+// each thing it looks at.
+func Parses() int64 { return parses.Load() }
 
 // validSettings is settings.json's contents read as Settings.
 func validSettings(b []byte) bool {
