@@ -428,6 +428,17 @@ func Told() {
 	telling.Unlock()
 }
 
+// Answered is whether what Cached gives now is the plugins' own answer,
+// rather than what was kept from before they were last asked. A page that
+// would otherwise read "signs in to nothing" out of an empty list can say
+// so only when this holds: an empty list before the answer arrives means
+// "not asked yet", not "none" (#1112).
+func Answered() bool {
+	provMu.Lock()
+	defer provMu.Unlock()
+	return provGood
+}
+
 // Settle waits for Cached's refreshes to end, stops the host, waits for
 // the hooks told of a change (Told) and forgets the plugins (UseCached
 // nil): for tests, whose folders the host runs in go when they end, so
