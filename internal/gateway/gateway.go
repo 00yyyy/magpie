@@ -3563,6 +3563,14 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		if effortInOutputConfig.MatchString(model) {
 			body = withOutputEffort(body, p.Efforts(model))
 		}
+		if !s.fits(p.ID, offRefused(model), proto) {
+			// a model that refused thinking turned off before (below):
+			// left to the model from the start, not refused again on
+			// every request (auto mode's classifier asks on every action)
+			if nb, ok := withoutThinkingOff(body); ok {
+				body = nb
+			}
+		}
 	}
 	// the effort as the agent sent it, fitted to the model's levels: Qoder's
 	// permission check asks "none", which Command Code turns away; and
@@ -3777,7 +3785,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	if proto == provider.Anthropic && res.StatusCode == http.StatusBadRequest {
 		// a model that always thinks refuses thinking turned off: asked
-		// again with it left to the model
+		// again with it left to the model, and so from then on
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
@@ -3787,7 +3795,8 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(nb), r.Header); err != nil {
 				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 			}
-		} else if nb, ok := withoutThinkingOff(body); ok && (alwaysThinks.Match(b) || mandatoryReasoning.Match(b) || thinkingOffRefused.Match(b)) {
+		} else if nb, ok := withoutThinkingOff(body); ok && refusesThinkingOff(b) {
+			s.markUnfit(p.ID, offRefused(model), proto)
 			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(nb), r.Header); err != nil {
 				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 			}
@@ -4265,8 +4274,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			req = &r
 			continue
 		}
-		if to == provider.Anthropic && req.ThinkOff && res.StatusCode == http.StatusBadRequest &&
-			(alwaysThinks.Match(b) || mandatoryReasoning.Match(b) || thinkingOffRefused.Match(b)) {
+		if to == provider.Anthropic && req.ThinkOff && res.StatusCode == http.StatusBadRequest && refusesThinkingOff(b) {
 			// a vendor's model that always thinks (GLM-5.3, #699) refuses
 			// the thinking off a client asked for (#1636): asked again
 			// thinking at its least, as it was before, and so from then on
@@ -5490,8 +5498,12 @@ var effortLevelsNamed = regexp.MustCompile(`(?i)\blow\b\W+(?:medium|high)\b`)
 // quote comes escaped), so a "None" in a sentence isn't it.
 var otherOffNamed = map[string]*regexp.Regexp{
 	"none":    regexp.MustCompile(`(?i)['"]minimal\\?['"]`),
-	"minimal": regexp.MustCompile(`(?i)['"]none\\?['"]`),
+	"minimal": noneQuoted,
 }
+
+// noneQuoted is reasoning effort none named in an error, quoted, as
+// errors listing levels quote them (in JSON a double quote comes escaped).
+var noneQuoted = regexp.MustCompile(`(?i)['"]none\\?['"]`)
 
 // bodyEffort is the reasoning effort a Chat or Responses request asks for,
 // or an Anthropic one in its output_config.

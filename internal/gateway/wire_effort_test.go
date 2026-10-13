@@ -98,6 +98,8 @@ func TestTranslatedThinkingOffRefused(t *testing.T) {
 		// MiniMax's and Volcengine Ark's wordings (#1141)
 		`invalid params, model \"MiniMax-M3.1-Flash-Preview\" requires adaptive thinking; thinking.type=\"disabled\" (including reasoning.effort=none) is not allowed (2013)`,
 		"thinking.type `disabled` is not supported by this model Request id: 0217",
+		// Sub2API's gpt-6.1-sol reads disabled as reasoning effort none (#1465)
+		`gpt-6.1-sol does not support reasoning effort \"none\"; use low, medium, high, xhigh or max`,
 	} {
 		t.Run(fmt.Sprint(i), func(t *testing.T) { translatedThinkingOffRefused(t, refusal) })
 	}

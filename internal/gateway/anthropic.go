@@ -357,6 +357,18 @@ var anthropicModel = regexp.MustCompile(`(?i)(?:^|[/.:-])claude-`)
 // (#1141).
 var alwaysThinks = regexp.MustCompile(`(?i)always engages in thinking|thinking (?:can ?not|can't) be (?:disabled|turned off)|enable_thinking[^"]{0,60}restricted to true|始终(?:支持|开启|启用)?思考|思考[^"]{0,20}(?:不可|无法|不能)关闭|requires adaptive thinking\W+thinking\.type\W+disabled\W+\(including reasoning\.effort=none\) is not allowed|thinking\.type \x60disabled\x60 is not supported by this model`)
 
+// refusesThinkingOff is an Anthropic endpoint turning away a request
+// with thinking turned off (thinking.type disabled): a model that always
+// thinks (alwaysThinks), OpenRouter's mandatory reasoning, a Claude that
+// takes no disabled (thinkingOffRefused), or a relay reading disabled as
+// reasoning effort none and turning that level away by naming the ones
+// it takes: Sub2API's gpt-6.1-sol, "gpt-6.1-sol does not support reasoning
+// effort \"none\"; use low, medium, high, xhigh or max" (#1465).
+func refusesThinkingOff(b []byte) bool {
+	return alwaysThinks.Match(b) || mandatoryReasoning.Match(b) || thinkingOffRefused.Match(b) ||
+		effortLevelsNamed.Match(b) && noneQuoted.Match(b)
+}
+
 // ThinksOnlyWhenAsked is a model that takes thinking turned off on the
 // Messages API whatever its levels: one of Anthropic's own (anthropicModel,
 // or a relay's opus-5.5). Another vendor's model there takes it off only
