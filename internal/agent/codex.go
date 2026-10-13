@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -261,7 +261,10 @@ func codexIn(at place) *Agent {
 		}
 	}
 	asProvider := func() bool { return get("model_provider") == magpieID }
-	viaBase := func() bool { return isCodexGatewayOn(get("openai_base_url"), at.host()) }
+	viaBase := func() bool {
+		u := get("openai_base_url")
+		return isCodexGatewayOn(u, at.host()) || strings.TrimSuffix(u, "/") == at.codexURL()
+	}
 	routed := func() bool { return asProvider() || viaBase() }
 	// joined: connected by Join, on a model of Codex's own (its last pick)
 	// with magpie's beside it, by the base URL
@@ -1588,20 +1591,20 @@ func codexGatewayURL() string { return gateway.URL() + gateway.CodexPath }
 // address its config names when that is magpie's gateway on a host other
 // than this one's loopback (openai_base_url at the Codex path, or
 // [model_providers.magpie]'s base_url with magpie's key, that one first
-// while magpie is Codex's provider), else gateway.URL().
+// while magpie is Codex's provider), else gateway.URL(). It is http or
+// https, on any port or the scheme's own, and may have a path before
+// magpie's: a company's reverse proxy at https://ai.corp.example/magpie
+// (#1985).
 func codexKeptGateway(path string) string {
 	kept := func(u, suffix string) string {
-		u = strings.TrimSuffix(strings.TrimSpace(u), "/")
-		rest, ok := strings.CutPrefix(u, "http://")
-		if !ok || !strings.HasSuffix(rest, suffix) {
+		base, ok := strings.CutSuffix(strings.TrimSuffix(strings.TrimSpace(u), "/"), suffix)
+		if !ok || !onAnotherMachine(base) {
 			return ""
 		}
-		hp := strings.TrimSuffix(rest, suffix)
-		h, _, err := net.SplitHostPort(hp)
-		if err != nil || h == "" || h == "127.0.0.1" || h == "localhost" || h == "::1" {
+		if p, err := url.Parse(base); err != nil || p.User != nil || p.RawQuery != "" || p.Fragment != "" {
 			return ""
 		}
-		return "http://" + hp
+		return base
 	}
 	base, _ := edit.GetTOMLTop(path, "openai_base_url")
 	var table string

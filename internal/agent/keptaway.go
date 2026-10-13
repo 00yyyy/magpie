@@ -115,7 +115,7 @@ func keptAway(path string, data []byte) []byte {
 		if !onAnotherMachine(away) {
 			return data
 		}
-		out = replaceOrigin(data, g, away)
+		out = replaceOrigin(data, g, away+awayPath(was, data, g, away))
 	}
 
 	// the key: the one that went with the address, in place of magpie's
@@ -147,6 +147,46 @@ func keptAway(path string, data []byte) []byte {
 		out = append(out[:kv.start:kv.start], append([]byte(v), out[kv.end:]...)...)
 	}
 	return out
+}
+
+// urlRE is an http(s) URL with its path, as it is written in a file.
+var urlRE = regexp.MustCompile(`https?://[^\s"'<>,{}\[\]\\]+`)
+
+// awayPath is the path before magpie's own that the address away keeps in
+// was, the file before a sync wrote data with the gateway's address g: the
+// /magpie of https://ai.corp.example/magpie/v1, a reverse proxy's (#1985),
+// where data has g/v1. It is the shortest that every one of was's URLs at
+// away starts with; "" when one is at away itself, or none fits.
+func awayPath(was, data []byte, g, away string) string {
+	var tails []string
+	for _, d := range urlRE.FindAll(data, -1) {
+		if t, ok := strings.CutPrefix(strings.TrimSuffix(string(d), "/"), g); ok {
+			tails = append(tails, t)
+		}
+	}
+	var ws []string
+	for _, w := range urlRE.FindAll(was, -1) {
+		if s := strings.TrimSuffix(string(w), "/"); s == away || strings.HasPrefix(s, away+"/") {
+			ws = append(ws, s)
+		}
+	}
+	best, found := "", false
+	for _, w := range ws {
+		for _, t := range tails {
+			p, ok := strings.CutSuffix(strings.TrimPrefix(w, away), t)
+			if !ok || found && len(p) >= len(best) {
+				continue
+			}
+			all := true
+			for _, o := range ws {
+				all = all && (o == away+p || strings.HasPrefix(o, away+p+"/"))
+			}
+			if all {
+				best, found = p, true
+			}
+		}
+	}
+	return best
 }
 
 // keyCounts are the values of the keys keyName takes in b, "Bearer " left
