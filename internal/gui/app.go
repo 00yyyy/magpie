@@ -157,7 +157,7 @@ func inDock(s settings.Settings, shown, fullscreen bool) bool {
 func (h *host) Quit()                        { h.app.Quit() }
 func (h *host) OpenURL(url string)           { _ = h.app.Browser.OpenURL(url) }
 func (h *host) OpenFolder(path string) error { return openFolder(h.app, path) }
-func (h *host) Copy(text string) bool        { return h.app.Clipboard.SetText(text) }
+func (h *host) Copy(text string) bool        { return copyText(h.app, text) }
 func (h *host) ChooseFolder(title string) (string, error) {
 	d := h.app.Dialog.OpenFile().CanChooseDirectories(true).CanChooseFiles(false).CanCreateDirectories(true).SetTitle(title)
 	if w := application.InvokeSyncWithResult(func() *application.WebviewWindow { return h.main }); w != nil {
