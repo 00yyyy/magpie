@@ -213,6 +213,12 @@
 .rt-req .to .said.split { display: flex; }
 .rt-req .to .said .who { flex: 0 1000 auto; min-width: 2.5em; }
 .rt-req .to .said .mdl { flex: none; max-width: calc(100% - 2.5em); white-space: pre; }
+/* on a phone the account keeps a few letters, not a sliver of one (40px,
+   where phone-rows.test.cjs calls a text cut to a sliver) */
+@media (max-width: 600px) {
+  .rt-req .to .said .who { min-width: 40px; }
+  .rt-req .to .said .mdl { max-width: calc(100% - 40px); }
+}
 .rt-req .to i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
 .rt-req.moved .to i { background: var(--accent); }
 .rt-req.bad .to { color: var(--red); }
