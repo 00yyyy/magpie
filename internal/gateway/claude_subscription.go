@@ -3859,7 +3859,7 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 				// the status Claude Code got, else a guess from the words
 				if head[n-1].Status >= 400 {
 					code = head[n-1].Status
-				} else if quotaWords.MatchString(msg) {
+				} else if quotaSaid(msg) {
 					code = 429
 				}
 			}
@@ -3920,7 +3920,7 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		usage.add(Usage{ErrType: col.errCode})
 		if col.errStatus >= 400 {
 			code = col.errStatus
-		} else if quotaWords.MatchString(col.err) {
+		} else if quotaSaid(col.err) {
 			code = 429
 		}
 		return writeError(w, from, code, name+": "+col.err), col.err
