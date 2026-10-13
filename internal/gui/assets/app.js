@@ -113,7 +113,7 @@ async function api(path, body, heads, signal) {
   const text = await res.text();
   let data;
   try { data = text ? JSON.parse(text) : null; } catch {
-    throw new Error(text.trim().slice(0, 200) || `${res.status} ${res.statusText}`);
+    throw new Error(notJSON(res, text));
   }
   if (!res.ok) {
     const err = new Error(data?.error || `${res.status} ${res.statusText}`);
@@ -164,6 +164,23 @@ async function api(path, body, heads, signal) {
   // session's or a library's words aren't looked through
   if (data && typeof data === "object" && !/^(sessions|library|skills|plugins|market)/.test(path)) noteAccounts(data);
   return data;
+}
+
+// notJSON is what an answer that isn't magpie's JSON says. A web page is
+// a proxy's or a tunnel's own, not magpie's: magpie web behind Cloudflare
+// got its 524 page when an install outlasted Cloudflare's 100 seconds,
+// shown as "<!DOCTYPE html> <!--[if lt IE 7]>…" (precisionz, #2032). It is
+// said by its title, and a timeout says magpie may still be finishing.
+function notJSON(res, text) {
+  const body = text.trim();
+  const html = /text\/html/i.test(res.headers.get("content-type") || "") || /^<(!doctype|html|head|body)\b/i.test(body);
+  if (!html) return body.slice(0, 200) || `${res.status} ${res.statusText}`;
+  let title = "";
+  try { title = new DOMParser().parseFromString(body, "text/html").title.replace(/\s+/g, " ").trim(); } catch {}
+  const what = title || `${res.status} ${res.statusText}`.trim();
+  // 504 and Cloudflare's 524: it stopped waiting, magpie didn't stop
+  if (res.status === 504 || res.status === 524) return t("A proxy in front of magpie stopped waiting; magpie may still be finishing, check again in a minute ({what})", { what });
+  return t("A proxy in front of magpie answered, not magpie ({what})", { what });
 }
 
 function el(tag, cls, text) {
