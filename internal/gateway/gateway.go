@@ -623,6 +623,12 @@ func (s *Server) quotas(w http.ResponseWriter, r *http.Request) {
 	if refuseHeld(w, r, heldRefused) {
 		return
 	}
+	// ?kept=1: what was last read, no vendor asked (magpie statusline,
+	// run on every message, #1997)
+	if r.URL.Query().Get("kept") == "1" {
+		writeJSON(w, 200, map[string]any{"object": "list", "data": provider.KeptQuotaReport(time.Now())})
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
 	writeJSON(w, 200, map[string]any{"object": "list", "data": provider.QuotaReport(ctx, time.Now())})

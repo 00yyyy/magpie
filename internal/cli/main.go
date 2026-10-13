@@ -121,6 +121,7 @@ const usage = `magpie — one place to pick every agent's model
                                   block until that subscription (any of its accounts) or account has allowance again
   magpie quota history [<provider|account>] [--days N] [--json]
                                   each window's readings over time, kept 45 days
+  magpie statusline [<provider|account>]   one line for Claude Code's status line: the session's model and each account's windows
   magpie sync                     refresh the model catalog and vendor model lists
   magpie agents                   list every supported agent
   magpie update [check] [--proxy <url>] [--mirror <prefix>]
@@ -360,6 +361,8 @@ func run(args []string) error {
 		return sessionsCmd(args)
 	case "quota", "quotas":
 		return quotaCmd(args)
+	case "statusline":
+		return statuslineCmd(args)
 	case "update":
 		return updateCmd(args)
 	case "library", "lib":

@@ -110,6 +110,24 @@ func QuotaReport(ctx context.Context, now time.Time) []Quota {
 	return withServed(quotaReport(subs, plans, balances, now), LastServed())
 }
 
+// KeptQuotaReport is QuotaReport from what was last read (CachedCards),
+// asking no vendor: for a status line, which Claude Code runs again on
+// every message (#1997), so it must neither wait for a read nor start one.
+func KeptQuotaReport(now time.Time) []Quota {
+	var subs, plans, balances []SubscriptionQuota
+	for _, q := range CachedCards(now) {
+		switch q.Kind {
+		case "plan":
+			plans = append(plans, q)
+		case "balance":
+			balances = append(balances, q)
+		default:
+			subs = append(subs, q)
+		}
+	}
+	return withServed(quotaReport(subs, plans, balances, now), LastServed())
+}
+
 // quotaReport assembles the cards from readings the tests feed directly.
 func quotaReport(subs, plans, balances []SubscriptionQuota, now time.Time) []Quota {
 	out := []Quota{}

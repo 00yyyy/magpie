@@ -1633,6 +1633,24 @@ subscription account, plan and key that answered a request through the
 gateway in the last 30 days, and `last: true` on the latest. It is kept
 in `served.json` beside `providers.json`, so a restart keeps it.
 
+`GET /v1/magpie/quotas?kept=1` answers the same list from what magpie last
+read, asking no vendor and never waiting for a read, for something that asks
+often. `magpie statusline` is built on it for Claude Code's status line
+(#1997): Claude Code runs it on every message with the session's JSON on
+stdin, and it prints one line, the model the session's latest turn went to
+(from `/v1/magpie/route`), then each subscription and plan with its windows'
+use, `*` on the one that answered last:
+`→ claude/claude-opus-5-5 | claude a@example.com* 5h 62% 7d 41% | claude B 5h 8% 7d 30%`.
+The accounts that answered through the gateway in the last 30 days are
+shown, every one when none has; `magpie statusline claude` (a provider, or
+an account's email, login or name) keeps only those. It works however Claude
+Code signs in to the gateway, unlike the `anthropic-ratelimit-*` headers,
+which Claude Code reads only while signed in to claude.ai. magpie doesn't
+write it into Claude Code's settings, where another status line may be;
+add it to `~/.claude/settings.json` yourself:
+`"statusLine": {"type": "command", "command": "magpie statusline"}`. With
+the gateway not running it prints an empty line.
+
 A gateway key held to a budget, to some models or to some accounts is told
 none of this magpie's accounts (#1981): `/v1/magpie/quotas`,
 `/v1/magpie/quotas/history`, `/v1/magpie/quotas/cards`,
