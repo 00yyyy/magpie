@@ -171,6 +171,45 @@ func TestDroidGrokInstructions(t *testing.T) {
 	}
 }
 
+// Qwen Code reads QWEN.md in its folder ($QWEN_HOME, else ~/.qwen) before
+// every conversation (wongxy on Discord): the library's instructions reach
+// it there, after what the user wrote, which stays; its settings'
+// context.fileName, a JSONC list whose first non-empty name Qwen Code
+// writes itself, names another file.
+func TestQwenInstructions(t *testing.T) {
+	h := sandbox(t)
+	dir := filepath.Join(h, ".qwen")
+	write(t, filepath.Join(dir, "settings.json"), "{\n  \"model\": {\"name\": \"qwen3.8-max\"}\n}\n")
+	inst := filepath.Join(dir, "QWEN.md")
+	write(t, inst, "# Mine\n")
+	if tg := targetByID("qwen"); tg == nil || tg.Instructions != inst {
+		t.Fatalf("Qwen Code's instructions: %+v", tg)
+	}
+	if id, err := Takes("qwen-code", "instructions"); err != nil || id != "qwen" {
+		t.Fatalf("Takes(qwen-code): %q %v", id, err)
+	}
+	shared := "Use tabs."
+	ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{"qwen"}}))
+	if s := read(t, inst); s != "# Mine\n\n"+blockBegin+"\nUse tabs.\n"+blockEnd+"\n" {
+		t.Fatalf("QWEN.md:\n%s", s)
+	}
+	if cfg := read(t, filepath.Join(dir, "settings.json")); !strings.Contains(cfg, "qwen3.8-max") {
+		t.Fatalf("instructions rewrote the settings:\n%s", cfg)
+	}
+
+	// $QWEN_HOME moves the folder, and context.fileName renames the file
+	q := filepath.Join(h, "qwen-home")
+	t.Setenv("QWEN_HOME", q)
+	write(t, filepath.Join(q, "settings.json"), "{\n  // mine\n  \"context\": {\"fileName\": [\"  \", \" AGENTS.md \", \"QWEN.md\"]},\n}\n")
+	if tg := targetByID("qwen"); tg == nil || tg.Instructions != filepath.Join(q, "AGENTS.md") {
+		t.Fatalf("Qwen Code under QWEN_HOME with context.fileName: %+v", tg)
+	}
+	write(t, filepath.Join(q, "settings.json"), "{\"context\": {\"fileName\": \"MY.md\"}}")
+	if tg := targetByID("qwen"); tg == nil || tg.Instructions != filepath.Join(q, "MY.md") {
+		t.Fatalf("context.fileName as one name: %+v", tg)
+	}
+}
+
 // Grok App's independent home (Use on a custom provider) reads AGENTS.md
 // and skills beside agent-home/config.toml, not Grok Build's ~/.grok.
 func TestGrokAppInstructions(t *testing.T) {

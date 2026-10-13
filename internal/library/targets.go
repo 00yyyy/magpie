@@ -7,6 +7,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/jsonc"
+
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/agentplug"
 	"github.com/yetone/magpie/internal/appdir"
@@ -333,6 +336,15 @@ func targetOf(a *agent.Agent) *Target {
 		t.Instructions = filepath.Join(a.Dir, "ATOMCODE.md")
 		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtOmp}
 		t.Skills = filepath.Join(a.Dir, "skills")
+	case "qwen":
+		// Qwen Code reads QWEN.md (and AGENTS.md) in its global folder,
+		// $QWEN_HOME else ~/.qwen, before every conversation; its settings'
+		// context.fileName renames them, the first name being the one it
+		// writes itself (getGlobalQwenDir in packages/core/src/config/
+		// storage.ts, getMemoryFilePaths in memory/memoryDiscovery.ts,
+		// getCurrentMemoryFilename in utils/memory-constants.ts,
+		// QwenLM/qwen-code c5098a27)
+		t.Instructions = filepath.Join(a.Dir, qwenContextFile(a.Path))
 	case "zed":
 		// Zed reads its MCP servers from context_servers in the settings.json
 		// magpie sets its model in (~/.config/zed, $XDG_CONFIG_HOME/zed,
@@ -364,6 +376,25 @@ func targetOf(a *agent.Agent) *Target {
 		return nil
 	}
 	return t
+}
+
+// qwenContextFile is the name of the file Qwen Code reads its user-wide
+// instructions from: the first of its settings' context.fileName, a name
+// or a list of them, else QWEN.md (packages/cli/src/config/config.ts sets
+// it with setMemoryFilename, which trims each name and skips an empty one).
+func qwenContextFile(settings string) string {
+	raw, _ := os.ReadFile(settings)
+	v := gjson.GetBytes(jsonc.ToJSON(raw), "context.fileName")
+	names := []gjson.Result{v}
+	if v.IsArray() {
+		names = v.Array()
+	}
+	for _, n := range names {
+		if name := strings.TrimSpace(n.String()); n.Type == gjson.String && name != "" {
+			return name
+		}
+	}
+	return "QWEN.md"
 }
 
 // pluginMCP is each MCP format an agent plugin may name
@@ -460,7 +491,7 @@ func wslTargetOf(a *agent.Agent) *Target {
 var ownFolder = map[string]bool{
 	"hermes": true, "omp": true, "opencode": true, "mimocode": true, "droid": true,
 	"grok": true, "commandcode": true, "atomcode": true, "qoder": true, "qoder-cn": true,
-	"minimax-code": true, "fx": true, "dsh": true,
+	"minimax-code": true, "fx": true, "dsh": true, "qwen": true,
 }
 
 // wslOwnFolder is the target of a, an agent in a running WSL distro that
