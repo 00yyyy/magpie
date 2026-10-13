@@ -418,8 +418,9 @@ var refreshing sync.WaitGroup
 // host left running: for tests that watch the providers' list on disk.
 func Refreshed() { refreshing.Wait() }
 
-// Told waits for the hooks told of a change (OnChange) to end: for tests,
-// so that a change one test made is not told in the next.
+// Told waits for the hooks told of a change or a sign-in (OnChange,
+// OnSignIn) to end: for tests, so that a change one test made is not told
+// in the next, nor written into its folder as it goes.
 func Told() {
 	telling.Lock()
 	for telling.n > 0 {
@@ -446,6 +447,12 @@ func Answered() bool {
 // ask is bounded and the retries are few, so this waits a bounded time
 // even for a host that never answers.
 func Settle() {
+	refreshing.Wait()
+	Restart()
+	// what the host said of a sign-in is written before the folder goes
+	// (#1935); a hook that read the providers to know the account's
+	// started a host again, which goes too
+	Told()
 	refreshing.Wait()
 	Restart()
 	// and no host goes on finishing its calls in a folder going away
