@@ -210,6 +210,75 @@ func TestQwenInstructions(t *testing.T) {
 	}
 }
 
+// Kimi Code 2.x, fx, Prime Agent, StepCode and jcode each read one
+// user-wide instructions file of their own, which the library writes into
+// with the user's own text kept; Prime Agent and StepCode read only the
+// first of their names there is, and StepCode its AGENTS.override.md
+// instead of any.
+func TestSiblingInstructions(t *testing.T) {
+	h := sandbox(t)
+	write(t, filepath.Join(h, ".kimi-code", "config.toml"), "default_model = \"k3\"\n")
+	write(t, filepath.Join(h, ".fx", "settings.json"), "{}")
+	write(t, filepath.Join(h, ".prime", "agent", "settings.json"), "{}")
+	write(t, filepath.Join(h, ".stepcode", "config.toml"), "defaultModel = \"step-3\"\n")
+	write(t, filepath.Join(h, ".jcode", "config.toml"), "")
+	// a user's own CLAUDE.md is the one Prime Agent reads, not a new AGENTS.md
+	write(t, filepath.Join(h, ".prime", "agent", "CLAUDE.md"), "# Mine\n")
+	want := map[string]string{
+		"kimi":        filepath.Join(h, ".kimi-code", "AGENTS.md"),
+		"fx":          filepath.Join(h, ".fx", "AGENTS.md"),
+		"prime-agent": filepath.Join(h, ".prime", "agent", "CLAUDE.md"),
+		"stepcode":    filepath.Join(h, ".stepcode", "agent", "AGENTS.md"),
+		"jcode":       filepath.Join(h, ".jcode", "prompt-overlay.md"),
+	}
+	for id, inst := range want {
+		if tg := targetByID(id); tg == nil || tg.Instructions != inst {
+			t.Fatalf("%s's instructions: %+v, want %s", id, tg, inst)
+		}
+		if got, err := Takes(id, "instructions"); err != nil || got != id {
+			t.Fatalf("Takes(%s): %q %v", id, got, err)
+		}
+	}
+	if tg := targetByID("stepcode"); tg.Override != filepath.Join(h, ".stepcode", "agent", "AGENTS.override.md") {
+		t.Fatalf("StepCode's override: %q", tg.Override)
+	}
+	shared := "Use tabs."
+	ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{"kimi", "fx", "prime-agent", "stepcode", "jcode"}}))
+	for id, inst := range want {
+		pre := ""
+		if id == "prime-agent" {
+			pre = "# Mine\n\n"
+		}
+		if s := read(t, inst); s != pre+blockBegin+"\nUse tabs.\n"+blockEnd+"\n" {
+			t.Fatalf("%s's %s:\n%s", id, filepath.Base(inst), s)
+		}
+	}
+
+	// variables move them: $JCODE_HOME, $STEP_CODING_AGENT_DIR
+	j := filepath.Join(h, "jhome")
+	t.Setenv("JCODE_HOME", j)
+	write(t, filepath.Join(j, "config.toml"), "")
+	if tg := targetByID("jcode"); tg == nil || tg.Instructions != filepath.Join(j, "prompt-overlay.md") {
+		t.Fatalf("jcode under JCODE_HOME: %+v", tg)
+	}
+	s := filepath.Join(h, "step", "my-agent")
+	t.Setenv("STEP_CODING_AGENT_DIR", s)
+	write(t, filepath.Join(h, "step", "config.toml"), "")
+	if tg := targetByID("stepcode"); tg == nil || tg.Instructions != filepath.Join(s, "AGENTS.md") || tg.Override != filepath.Join(s, "AGENTS.override.md") {
+		t.Fatalf("StepCode under STEP_CODING_AGENT_DIR: %+v", tg)
+	}
+
+	// the old kimi-cli reads no user-wide instructions
+	t.Setenv("KIMI_CODE_HOME", "")
+	if err := os.RemoveAll(filepath.Join(h, ".kimi-code")); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(h, ".kimi", "config.toml"), "")
+	if tg := targetByID("kimi"); tg == nil || tg.Instructions != "" {
+		t.Fatalf("kimi-cli's instructions: %+v", tg)
+	}
+}
+
 // Grok App's independent home (Use on a custom provider) reads AGENTS.md
 // and skills beside agent-home/config.toml, not Grok Build's ~/.grok.
 func TestGrokAppInstructions(t *testing.T) {

@@ -219,6 +219,11 @@ func targetOf(a *agent.Agent) *Target {
 		// kimi-cli (fastmcp's MCPConfig) and the new Kimi Code read alike.
 		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtKimi}
 		if _, legacy := agent.KimiDir(h); !legacy {
+			// the new Kimi Code reads AGENTS.md in its folder ($KIMI_CODE_HOME,
+			// else ~/.kimi-code) before every conversation; kimi-cli reads no
+			// user-wide one (loadAgentsMdForRoots in packages/agent-core-v2/
+			// src/agent/profile/context.ts, MoonshotAI/kimi-code afd95f64)
+			t.Instructions = filepath.Join(a.Dir, "AGENTS.md")
 			t.Skills = sharedSkillsDir()
 		} else if d := filepath.Join(h, ".config", "agents", "skills"); isDir(d) {
 			t.Skills = d
@@ -328,6 +333,39 @@ func targetOf(a *agent.Agent) *Target {
 		// tool, and fx's mcp.json, which one entry it refuses makes it read
 		// none of, isn't one magpie could try.
 		t.Skills = filepath.Join(a.Dir, "skills")
+		if a.ID == "fx" {
+			// fx reads ~/.fx/AGENTS.md before a project's own
+			// (src/builtins/context.zig, vercel-labs/fx c3b4b926)
+			t.Instructions = filepath.Join(a.Dir, "AGENTS.md")
+		}
+	case "prime-agent":
+		// Prime Agent reads the first there is of AGENTS.md, AGENTS.MD,
+		// CLAUDE.md and CLAUDE.MD in its agent folder
+		// ($PRIME_AGENT_CODING_AGENT_DIR, else ~/.prime/agent)
+		// (CONTEXT_FILE_CANDIDATES in crates/pa-core/src/resources/mod.rs,
+		// prime-agent d592d5e7)
+		t.Instructions = firstThere(a.Dir, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
+	case "stepcode":
+		// StepCode reads AGENTS.override.md in its agent folder
+		// ($STEP_CODING_AGENT_DIR, else agent/ in its config folder) when
+		// it is there, else the first there is of AGENTS.md, AGENTS.MD,
+		// CLAUDE.md and CLAUDE.MD (resolveStepAgentDir in step/
+		// environment.ts, loadContextFileFromDir in core/resource-loader.ts,
+		// stepfun-ai/Step-Code 3ba89e0c)
+		d := strings.TrimSpace(appdir.Getenv("STEP_CODING_AGENT_DIR"))
+		if !filepath.IsAbs(d) {
+			d = filepath.Join(a.Dir, "agent")
+		}
+		t.Instructions = firstThere(d, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
+		t.Override = filepath.Join(d, "AGENTS.override.md")
+	case "jcode":
+		// jcode's own user-wide file is prompt-overlay.md in its folder
+		// ($JCODE_HOME, else ~/.jcode), added to every conversation's
+		// prompt; the AGENTS.md it also reads is the one in the home folder
+		// itself, which isn't jcode's (load_prompt_overlay_files_from_dir in
+		// crates/jcode-base/src/prompt.rs, jcode_dir in crates/jcode-storage,
+		// 1jehuang/jcode 0d240f1d)
+		t.Instructions = filepath.Join(a.Dir, "prompt-overlay.md")
 	case "atomcode":
 		// AtomCode reads ~/.atomcode/ATOMCODE.md before every conversation
 		// (its ATOMCODE.md, beside AGENTS.md and CLAUDE.md), its MCP servers
@@ -376,6 +414,17 @@ func targetOf(a *agent.Agent) *Target {
 		return nil
 	}
 	return t
+}
+
+// firstThere is the first of names in dir that is there, as an agent that
+// reads only the first of them finds it; the first name when none is.
+func firstThere(dir string, names ...string) string {
+	for _, n := range names {
+		if _, err := os.Stat(filepath.Join(dir, n)); err == nil {
+			return filepath.Join(dir, n)
+		}
+	}
+	return filepath.Join(dir, names[0])
 }
 
 // qwenContextFile is the name of the file Qwen Code reads its user-wide
