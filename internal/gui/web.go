@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"html"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -153,28 +155,89 @@ func webKey() (key string, fixed bool, err error) {
 
 // webGuard lets through requests with the key: in the link's k, which it
 // trades for a cookie (kept for keep, or the browser session when 0) and
-// a clean address, or in that cookie.
+// a clean address, or in that cookie. A page opened without it gets a
+// form to paste the key into (webSignIn), which says why it was turned
+// away, so a bookmark doesn't send anyone back to the start-up log.
 func webGuard(cookie, key string, keep time.Duration, next http.Handler) http.Handler {
 	same := func(v string) bool { return subtle.ConstantTimeCompare([]byte(v), []byte(key)) == 1 }
+	signIn := func(rw http.ResponseWriter, r *http.Request, back string) {
+		// Priority=High (Chrome's): the page's host is often an address
+		// other services share on other ports, and a browser keeps a
+		// limited number of cookies for one host, all ports together;
+		// past it Chrome drops the low and medium ones first (#2033)
+		rw.Header().Add("Set-Cookie", (&http.Cookie{Name: cookie, Value: key, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: int(keep / time.Second)}).String()+"; Priority=High")
+		http.Redirect(rw, r, back, http.StatusSeeOther)
+	}
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if q := r.URL.Query(); q.Has("k") {
 			if !same(q.Get("k")) {
 				http.Error(rw, "this link's key is not this magpie web's: use the link it printed when it started", http.StatusUnauthorized)
 				return
 			}
-			http.SetCookie(rw, &http.Cookie{Name: cookie, Value: key, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: int(keep / time.Second)})
 			q.Del("k")
 			u := *r.URL
 			u.RawQuery = q.Encode()
-			http.Redirect(rw, r, u.RequestURI(), http.StatusSeeOther)
+			signIn(rw, r, u.RequestURI())
 			return
 		}
-		if c, err := r.Cookie(cookie); err != nil || !same(c.Value) {
-			http.Error(rw, "open the link magpie web printed when it started: it carries the key", http.StatusUnauthorized)
+		if r.URL.Path == webSignInPath && r.Method == http.MethodPost {
+			r.Body = http.MaxBytesReader(rw, r.Body, 4096)
+			back := localPath(r.PostFormValue("back"))
+			if !same(r.PostFormValue("key")) {
+				webTurnedAway(rw, r, back, "That key is not this magpie web's.")
+				return
+			}
+			signIn(rw, r, back)
 			return
 		}
-		next.ServeHTTP(rw, r)
+		// A browser can hold more than one cookie of this name (one set
+		// for another path or domain, an old run's): any that carries
+		// the key will do, not only the first sent.
+		sent := r.CookiesNamed(cookie)
+		for _, c := range sent {
+			if same(c.Value) {
+				next.ServeHTTP(rw, r)
+				return
+			}
+		}
+		why, short := "This browser sent no sign-in cookie for this address. A browser keeps cookies per host, not per port, so another service on this host's other ports can take it away: by clearing its site data (a sign-out often does), or by filling the host's cookie limit. A page opened at another address than the one signed in at (an IP instead of a name) has none either.", "no cookie sent"
+		if len(sent) > 0 {
+			why, short = "This browser's sign-in cookie holds a key that isn't this magpie web's: the key changed after it signed in (MAGPIE_WEB_KEY changed, or a start without it made a new one).", "its cookie holds another key"
+		}
+		if r.Method != http.MethodGet || !strings.Contains(r.Header.Get("Accept"), "text/html") {
+			http.Error(rw, "open the link magpie web printed when it started: it carries the key. "+why, http.StatusUnauthorized)
+			return
+		}
+		log.Printf("magpie web: turned away %s from %s: %s", r.URL.Path, r.RemoteAddr, short)
+		webTurnedAway(rw, r, r.URL.RequestURI(), why)
 	})
+}
+
+// webSignInPath takes the key pasted into the form a page turned away shows.
+const webSignInPath = "/_magpie/sign-in"
+
+// localPath is back when it is a path on this server, else "/": the form's
+// return address never leads to another site, nor to the form's own.
+func localPath(back string) string {
+	u, err := url.Parse(back)
+	if err != nil || u.Scheme != "" || u.Host != "" || !strings.HasPrefix(back, "/") || strings.HasPrefix(back, "//") || strings.HasPrefix(back, "/\\") || u.Path == webSignInPath {
+		return "/"
+	}
+	return back
+}
+
+// webTurnedAway is the 401 page a browser opening the page without the key
+// sees: why, and a field for the key that signs it in and comes back to
+// back. The key itself is never on it.
+func webTurnedAway(rw http.ResponseWriter, r *http.Request, back, why string) {
+	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.WriteHeader(http.StatusUnauthorized)
+	fmt.Fprintf(rw, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>magpie web</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:32em;margin:12vh auto;padding:0 16px;color:#222;background:#fafafa}@media(prefers-color-scheme:dark){body{color:#ddd;background:#1c1c1e}}input,button{font:inherit;padding:.4em .6em}input{width:100%%;box-sizing:border-box;margin:.5em 0}</style></head>
+<body><h1>magpie web</h1><p>%s</p><p>Paste the key (MAGPIE_WEB_KEY, or the k= in the link magpie web printed when it started):</p>
+<form method="post" action="%s"><input type="hidden" name="back" value="%s"><input type="password" name="key" autocomplete="current-password" autofocus required><button type="submit">Sign in</button></form></body></html>`,
+		html.EscapeString(why), webSignInPath, html.EscapeString(back))
 }
 
 // NetworkLinks are the links to the page, served on port, that other
