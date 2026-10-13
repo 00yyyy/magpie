@@ -25305,13 +25305,16 @@ window.noteAccounts = noteAccounts;
     return find;
   }
   // a name found inside a longer word ("dev" in "developer") isn't the
-  // account; an address always is
-  const WORD = /[A-Za-z0-9_]/;
+  // account, nor one in a word joined by a hyphen or a dot: the project
+  // lingting-react-ui on Usage's Sessions is no account lingting (#1973);
+  // an address always is
+  const WORD = /[A-Za-z0-9_]/, JOIN = /[-.]/;
+  const joined = (s, i, step) => WORD.test(s[i] || "") || (JOIN.test(s[i] || "") && WORD.test(s[i + step] || ""));
   function* hits(s, re) {
     re.lastIndex = 0; // matchAll starts where the pattern's last test ended
     for (const m of s.matchAll(re)) {
-      const name = !m[0].includes("@");
-      if (name && ((WORD.test(m[0][0]) && WORD.test(s[m.index - 1] || "")) || (WORD.test(m[0].at(-1)) && WORD.test(s[m.index + m[0].length] || "")))) continue;
+      const name = !m[0].includes("@"), end = m.index + m[0].length;
+      if (name && ((WORD.test(m[0][0]) && joined(s, m.index - 1, -1)) || (WORD.test(m[0].at(-1)) && joined(s, end, 1)))) continue;
       yield m;
     }
   }
@@ -25319,6 +25322,12 @@ window.noteAccounts = noteAccounts;
   // itself watched, so it can't set itself off again
   const OBS = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["title"] };
   const SKIP = new Set(["SCRIPT", "STYLE", "OPTION", "TEXTAREA"]);
+  // Usage's Sessions and Context are read from the agents' own logs, which
+  // name no account (their answers aren't looked through for one, see api):
+  // a project, a session or a prompt there that has an account's name in
+  // it is no account, so only an address is hidden there (#1973: the
+  // project lingting-react-ui with the account lingting)
+  const NAMELESS = "#sessionsPane, #contextPane";
   // chosen is the Hide accounts choice made on this computer; until one is,
   // the accounts are hidden while Privacy masks personal data, which is
   // where one who wants them kept out of sight turns it on (inaction on
@@ -25332,17 +25341,18 @@ window.noteAccounts = noteAccounts;
     const view = $(v), btn = b && $(b);
     if (!view) return () => {};
     function mask() {
-      const re = finder();
+      const all = finder(), reOf = (e) => e?.closest(NAMELESS) ? EMAIL : all;
       const walk = document.createTreeWalker(view, NodeFilter.SHOW_TEXT), found = [];
       for (let n; (n = walk.nextNode());) {
         if (n.data.length < 2 || SKIP.has(n.parentElement?.tagName) || n.parentElement?.closest(".pii")) continue;
+        const re = reOf(n.parentElement);
         re.lastIndex = 0;
         if (re.test(n.data)) found.push(n);
       }
       for (const n of found) {
         const bits = [];
         let last = 0;
-        for (const m of hits(n.data, re)) {
+        for (const m of hits(n.data, reOf(n.parentElement))) {
           if (m.index > last) bits.push(n.data.slice(last, m.index));
           const s = el("span", "pii", dots(m[0]));
           s.dataset.raw = m[0];
@@ -25360,7 +25370,7 @@ window.noteAccounts = noteAccounts;
         // one masked already reads as an account too, its stars and all
         if ("piiTitle" in e.dataset || !e.title) continue;
         let out = "", last = 0;
-        for (const m of hits(e.title, re)) {
+        for (const m of hits(e.title, reOf(e))) {
           out += e.title.slice(last, m.index) + m[0].replace(m[0].includes("@") ? /[^@.]/g : /./gu, "•"); // a tooltip can't blur
           last = m.index + m[0].length;
         }
