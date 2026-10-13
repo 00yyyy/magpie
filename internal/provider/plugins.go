@@ -371,6 +371,10 @@ func pluginProvider(pp plugin.Provider, l pluginLogin) Provider {
 		// couldn't be reached (#1514)
 		p.Decide = pluginBase + pp.ID + "/v1"
 	}
+	// a plugin in front of Anthropic's or OpenAI's API says its upstream
+	// searches, as a relay is said to (#2027): its client's web_search goes
+	// to it as sent, on the APIs it has an address for (searchesItself)
+	p.Searches = pp.Searches
 	return p
 }
 

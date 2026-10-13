@@ -288,6 +288,9 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     </div>
     <p>モデルには、プロバイダとは別の API やアドレスを使うための <code>provider: { npm, api }</code>、<code>headers</code>、<code>options</code>、そして非表示にするための <code>disabled: true</code> も指定できます。</p>
 
+        <h3 id="searches">自分でウェブ検索する上流</h3>
+    <p>プラグインが Anthropic や OpenAI 自身の API（ホスト型のウェブ検索ツールを自分で実行する）の前に立つ場合は、<code>config</code> フックでプロバイダに <code>searches: true</code> を設定します。するとクライアントのウェブ検索（Claude Code の WebSearch、Codex の <code>web_search</code>）は、そのプロバイダの Anthropic または Responses のモデルでは送られたまま <code>fetch</code> に届き、magpie 自身の検索を通りません。Chat のモデルは変わりません。magpie が他のモデルのために自動でこれを使って検索することはありませんが、設定で検索モデルとして指定できます。</p>
+
         <h3 id="decide">判定 API（System One）</h3>
     <p>プラグインは自分のプロバイダ向けに TypeSafe の System One API を提供でき、そのモデルを<a href="/docs/ja/intent">ルーティンググループの分類器</a>にできます。<code>config</code> フックでプロバイダに <code>decide: true</code> を、会話ではなく質問に答えるモデルごとに <code>decides: true</code> を設定します（<code>config</code> フックでも <code>models</code> フックのリストでも構いません）。すると magpie は各質問を <code>POST {baseURL}/systemone</code> としてローダーの <code>fetch</code> に送ります。アカウントのサインイン情報は他のリクエストと同じく付きます。本文は <code>{"model", "questions", "state"}</code>、返答は <code>{"model", "answers": {"&lt;質問&gt;": {"choice", "score", "confidence"}}}</code> です。</p>
     <p><code>decides</code> を付けたモデルと <code>jev-*</code> という名前のモデルは分類器として提示され、エージェントには見せません。それらへのチャットリクエストは拒否されます。プロバイダに <code>decide: true</code> がなければ <code>decides</code> は無視され、どのモデルも普通にチャットに使えます。</p>

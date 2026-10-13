@@ -87,6 +87,9 @@ export const FakePlugin = async ({ client }) => ({
     if (process.env.FAKE_GROK) cfg.provider[ID].models["grok-4.7"] = { name: "Grok 4.7", provider: { npm: "@ai-sdk/openai" }, limit: { context: 4000, output: 400 } }
     // $FAKE_DEEPSEEK: a DeepSeek model, as Cline's cline-pass/deepseek-v4-pro
     if (process.env.FAKE_DEEPSEEK) cfg.provider[ID].models["deepseek-v4-pro"] = { name: "DeepSeek V4 Pro", limit: { context: 1000, output: 100 } }
+    // $FAKE_SEARCHES: the provider's upstream searches by itself (#2027),
+    // as a plugin in front of Claude's API says
+    if (process.env.FAKE_SEARCHES) cfg.provider[ID].searches = true
     // $FAKE_DECIDE: the provider serves a decision API too (#1514), asked
     // at its base /systemone through the loader's fetch: fake-clef is a
     // decision model it marks, jev-9 one magpie knows by its name.

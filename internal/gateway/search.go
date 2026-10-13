@@ -93,14 +93,18 @@ func searchFor(ctx context.Context) *CallFor {
 // searchesItself says whether the provider searches the web by itself when
 // asked on this API.
 func searchesItself(p provider.Provider, proto provider.Protocol) bool {
+	// a relay said to search (#359), and a plugin whose config hook says
+	// its upstream does (#2027), on an API it has an address for: one with
+	// only a Chat address would be sent no search tool at all. Another
+	// sign-in's Searches is never read.
+	saidTo := p.Searches && (proto == provider.Anthropic || proto == provider.Responses) && p.Base(proto) != ""
 	if p.Account != nil {
 		// Grok by its id: moved to its plugin, its account is the plugin's;
 		// its plugin beside the built-in (grok-plugin) by the plugin's id
-		return (p.Account.Agent == "codex" || p.ID == "grok" || p.PluginProvider() == "grok") && proto == provider.Responses
+		return (p.Account.Agent == "codex" || p.ID == "grok" || p.PluginProvider() == "grok") && proto == provider.Responses ||
+			p.IsPlugin() && saidTo
 	}
-	// a relay said to search (#359), on an API it has an address for: one
-	// with only a Chat address would be sent no search tool at all
-	if p.Searches && (proto == provider.Anthropic || proto == provider.Responses) && p.Base(proto) != "" {
+	if saidTo {
 		return true
 	}
 	return slices.Contains(searchHosts[proto], provider.HostOf(p.Base(proto)))

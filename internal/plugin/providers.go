@@ -107,7 +107,12 @@ type Provider struct {
 	// One) for this provider: its config hook set decide on it. magpie
 	// posts the questions to the provider's own base, at /systemone,
 	// through the plugin's fetch (#1514).
-	Decide    bool    `json:"decide,omitempty"`
+	Decide bool `json:"decide,omitempty"`
+	// Searches says the provider's upstream answers a web search tool
+	// offered on its Anthropic or Responses API by itself, as a custom
+	// provider's Searches does (#825): its config hook set searches on it
+	// (#2027), for a plugin in front of Claude's or Codex's API.
+	Searches  bool    `json:"searches,omitempty"`
 	SignedIn  bool    `json:"signedIn"`
 	AuthType  string  `json:"authType"`
 	AccountID string  `json:"accountId"`

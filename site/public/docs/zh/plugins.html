@@ -288,6 +288,9 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     </div>
     <p>模型还可以写 <code>provider: { npm, api }</code>，使用和供应商不同的 API 或地址；也可以写 <code>headers</code>、<code>options</code>，以及用 <code>disabled: true</code> 隐藏它。</p>
 
+        <h3 id="searches">自己能联网搜索的上游</h3>
+    <p>如果插件转发的是 Anthropic 或 OpenAI 官方 API（它们自己执行托管的联网搜索工具），在 <code>config</code> 钩子里给提供商设 <code>searches: true</code>。之后客户端的联网搜索（Claude Code 的 WebSearch、Codex 的 <code>web_search</code>）会原样发到你的 <code>fetch</code>，只作用于该提供商走 Anthropic 或 Responses 的模型，不再经过 magpie 自己的代搜；Chat 模型不受影响。magpie 不会自动用它替其他模型搜索，但可以在设置里手动指定它为搜索模型。</p>
+
         <h3 id="decide">决策 API（System One）</h3>
     <p>插件可以为自己的提供商提供 TypeSafe 的 System One API，这样它的模型就能当<a href="/docs/zh/intent">路由组的分类器</a>。在 <code>config</code> 钩子里给提供商设 <code>decide: true</code>，并给每个只回答问题、不用来对话的模型设 <code>decides: true</code>（写在 <code>config</code> 钩子里或 <code>models</code> 钩子的列表上都行）。之后 magpie 会把每个问题以 <code>POST {baseURL}/systemone</code> 发给 loader 的 <code>fetch</code>，带上账号的登录信息，和其他请求一样。请求体是 <code>{"model", "questions", "state"}</code>；回答 <code>{"model", "answers": {"&lt;问题&gt;": {"choice", "score", "confidence"}}}</code>。</p>
     <p>标了 <code>decides</code> 的模型，以及名为 <code>jev-*</code> 的模型，会作为分类器提供，并对智能体隐藏：发给它的对话请求会被拒绝。提供商没有 <code>decide: true</code> 时，<code>decides</code> 不起作用，所有模型照常用于对话。</p>

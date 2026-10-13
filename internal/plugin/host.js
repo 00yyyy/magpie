@@ -1294,6 +1294,10 @@ async function info(id, key, strict) {
     // magpie's own field: the plugin serves a decision API (System One)
     // for this provider, asked at its base /systemone through its fetch
     decide: cfg?.decide === true,
+    // magpie's own field: the provider's upstream answers a web search
+    // tool offered on its Anthropic or Responses API by itself, so a
+    // client's web_search goes to it as sent (#2027)
+    searches: cfg?.searches === true,
     models: {},
   }
   if (md) for (const m of Object.values(md.models ?? {})) out.models[m.id] = fromModelsDev(md, m)
@@ -1450,6 +1454,7 @@ async function providers({ proxies } = {}) {
       usage: typeof a.auth.usage === "function",
       checkin: typeof a.auth.checkin === "function",
       decide: p.decide === true,
+      searches: p.searches === true,
       maxConcurrency: concurrencyOf(a),
       signedIn: keys.length > 0,
       authType: first?.type ?? "",
