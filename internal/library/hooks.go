@@ -86,6 +86,16 @@ var hookAgents = []string{"claude", "codex", "cursor", "gemini"}
 var toolEvents = []string{"after-tool", "before-tool"}
 
 // hookSpecOf is how t keeps its hooks, or why magpie can't give it any.
+// claudeHookEvents are every hook event Claude Code has, in its own order:
+// the HOOK_EVENTS enum in claude 2.1.296. A settings.json hook under any
+// other name is one Claude Code never runs (#2020, emo172).
+var claudeHookEvents = []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Notification",
+	"UserPromptSubmit", "UserPromptExpansion", "SessionStart", "SessionEnd", "Stop", "StopFailure", "SubagentStart",
+	"SubagentStop", "PreCompact", "PostCompact", "PreModelSwitch", "PostModelSwitch", "PermissionRequest",
+	"PermissionDenied", "Setup", "TeammateIdle", "TaskCreated", "TaskCompleted", "Elicitation", "ElicitationResult",
+	"ConfigChange", "WorktreeCreate", "WorktreeRemove", "InstructionsLoaded", "CwdChanged", "FileChanged",
+	"DirectoryAdded", "MessageDisplay"}
+
 func hookSpecOf(t *Target) (*hookSpec, string) {
 	if t.Agent.WSL != "" {
 		return nil, fmt.Sprintf("magpie gives hooks only to agents on this computer, not yet to %s in WSL", t.Agent.Name)
@@ -96,9 +106,8 @@ func hookSpecOf(t *Target) (*hookSpec, string) {
 			path: filepath.Join(claudeDir(), "settings.json"),
 			events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
 				"prompt": "UserPromptSubmit", "session-start": "SessionStart"},
-			native: []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "Notification", "UserPromptSubmit",
-				"Stop", "SubagentStart", "SubagentStop", "PreCompact", "SessionStart", "SessionEnd"},
-			tools: map[string]string{"shell": "Bash", "edit": "Edit|Write|MultiEdit"},
+			native: claudeHookEvents,
+			tools:  map[string]string{"shell": "Bash", "edit": "Edit|Write|MultiEdit"},
 		}, ""
 	case "codex":
 		// codex-rs/hooks: hooks.json beside config.toml, whose events are

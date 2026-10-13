@@ -272,3 +272,25 @@ func TestHookDescription(t *testing.T) {
 	}
 	ok(t)(SaveHook("fmtq", Hook{Name: "fmtq", Description: strings.Repeat("格", 200), Event: "after-tool", Command: "fmtq"}))
 }
+
+// Claude Code's own events are all of its HOOK_EVENTS (claude 2.1.296),
+// those added after magpie's hooks first came among them: one goes to
+// settings.json under its own name, and the page offers every one (#2020,
+// emo172).
+func TestHooksClaudeEventsAll(t *testing.T) {
+	h := sandbox(t)
+	for _, ev := range []string{"StopFailure", "PostCompact", "FileChanged", "MessageDisplay", "PreModelSwitch", "PostToolBatch"} {
+		ok(t)(SaveHook("", Hook{Name: "on-" + ev, Event: "claude:" + ev, Command: "x", Agents: []string{"claude"}}))
+		if got := hooksOf(t, filepath.Join(h, ".claude/settings.json"), ev); len(got) != 1 {
+			t.Errorf("settings.json %s: %v", ev, got)
+		}
+	}
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := slices.IndexFunc(v.HookAgents, func(a HookAgentView) bool { return a.ID == "claude" })
+	if j < 0 || len(v.HookAgents[j].Events) != 33 {
+		t.Fatalf("claude's events: %+v", v.HookAgents)
+	}
+}
