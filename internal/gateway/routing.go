@@ -377,6 +377,12 @@ type Rest struct {
 	Failures int    `json:"failures,omitempty"` // in a row, for a backoff
 	// Key is what it rests by, for the app to lift the rest (Unrest)
 	Key string `json:"key,omitempty"`
+	// Model: the one model resting, when the account or key still
+	// answers its others (a pooled allowance, a model it doesn't serve);
+	// "" for the account or key as a whole. The app shows the rest on
+	// that model's rows only (#1960: Antigravity's Claude & GPT pool used
+	// up showed gemini-3.8-flash, in a pool of its own, as out too).
+	Model string `json:"model,omitempty"`
 	// Link: where the vendor said to verify the account, for failVerify
 	Link string `json:"link,omitempty"`
 
@@ -666,6 +672,9 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		id = c.restID()
 	}
 	r.Key = id
+	if id == c.restID() {
+		r.Model = c.model
+	}
 	restingUntil.Lock()
 	restingUntil.m[id] = r.Until
 	restingUntil.note[id] = r
