@@ -255,47 +255,6 @@ func stepcodeStartup(cfg stepcodeTOML) string {
 	return first
 }
 
-// stepcodeRenameRef is one enabledModels entry with provider from renamed
-// to to. A glob or a thinking level after the model stays. An entry that
-// does not name that provider is the user's and is left as it is.
-func stepcodeRenameRef(s, from, to string) (string, bool) {
-	rest, ok := strings.CutPrefix(s, magpieID+"/"+from+"/")
-	if !ok {
-		return s, false
-	}
-	return magpieID + "/" + to + "/" + rest, true
-}
-
-// stepcodeRenameList renames magpie/<from>/ entries. The model just set is
-// appended before the old entry is renamed onto the same text, so that
-// second copy is dropped. A list that names nothing of that provider is
-// returned unchanged, a repeated entry of the user's included.
-func stepcodeRenameList(pats []string, from, to string) ([]string, bool) {
-	if len(pats) == 0 {
-		return pats, false
-	}
-	out := make([]string, 0, len(pats))
-	seen := map[string]bool{}
-	fromRename := map[string]bool{}
-	renamed := false
-	for _, p := range pats {
-		n, hit := stepcodeRenameRef(p, from, to)
-		renamed = renamed || hit
-		if seen[n] && (hit || fromRename[n]) {
-			continue
-		}
-		if !seen[n] {
-			seen[n] = true
-			fromRename[n] = hit
-		}
-		out = append(out, n)
-	}
-	if !renamed {
-		return pats, false
-	}
-	return out, true
-}
-
 // stepcodeRenameRefs moves enabledModels off a renamed provider, in the
 // file and in the scope disconnect remembers, so a reset does not put the
 // old id back and still takes out only what magpie appended.
@@ -306,7 +265,7 @@ func stepcodeRenameRefs(at place, path, from, to string) (bool, error) {
 	}
 	moved := false
 	if cur.Scope != nil {
-		next, ok := stepcodeRenameList(*cur.Scope, from, to)
+		next, ok := renameRefList(*cur.Scope, from, to)
 		if ok {
 			raw, err := stepcodeScopeRaw(next)
 			if err != nil {
@@ -326,15 +285,15 @@ func stepcodeRenameRefs(at place, path, from, to string) (bool, error) {
 		return moved, nil
 	}
 	changed := false
-	if next, ok := stepcodeRenameList(state.OrigScope, from, to); ok {
+	if next, ok := renameRefList(state.OrigScope, from, to); ok {
 		state.OrigScope = next
 		changed = true
 	}
-	if next, ok := stepcodeRenameList(state.LastScope, from, to); ok {
+	if next, ok := renameRefList(state.LastScope, from, to); ok {
 		state.LastScope = next
 		changed = true
 	}
-	if next, ok := stepcodeRenameList(state.AppendedScope, from, to); ok {
+	if next, ok := renameRefList(state.AppendedScope, from, to); ok {
 		state.AppendedScope = next
 		changed = true
 	}

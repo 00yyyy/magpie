@@ -1002,6 +1002,16 @@ func piLikeKeyed(at place, id, name, dir string, key func() string) *Agent {
 		Sync: func() error {
 			return syncJSON(modelsPath, "providers."+magpieID, block)
 		},
+		// a provider renamed takes its magpie/<id>/ entries in enabledModels
+		// with it: an entry left on the old id names nothing, and Pi would
+		// leave that model out of Ctrl+P (#1919, #1828)
+		RenameRefs: func(from, to string) (bool, error) {
+			next, ok := renameRefList(piScope(path), from, to)
+			if !ok {
+				return false, nil
+			}
+			return true, edit.SetJSON(path, edit.KV{Path: "enabledModels", Value: next})
+		},
 		Fields: []Field{
 			{
 				Key: "model", Label: "model",
