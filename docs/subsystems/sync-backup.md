@@ -58,7 +58,10 @@ repository can keep the token. The branch is part of the sync state key.
 
 ## GitHub constraints and errors
 
-- The repository must exist. In an empty repository, the first encrypted
+- The repository must exist and be private: `prepare` refuses one whose
+  repository read doesn't say `"private": true`, since a public history hands
+  every sealed version to anyone to guess the passphrase against
+  (`TestGitHubPublicRepositoryRefused`). In an empty repository, the first encrypted
   backup initializes its default branch through the Contents API. A selected
   branch other than the default must already exist. The token needs repository
   Contents read and write.
@@ -87,7 +90,7 @@ repository can keep the token. The branch is part of the sync state key.
 
 ```sh
 go test -tags nogui ./internal/davsync
-go test -tags nogui . -run 'TestGitHubCmd|TestWebdavCmd|TestS3Cmd'
+go test -tags nogui ./internal/cli -run 'TestGitHubCmd|TestWebdavCmd|TestS3Cmd'
 node --test internal/gui/tests/github-sync.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/sync-other-kind.test.cjs
 ```
 

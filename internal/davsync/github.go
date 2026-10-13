@@ -139,11 +139,17 @@ func (g *github) prepare(ctx context.Context) error {
 	}
 	var repo struct {
 		DefaultBranch string `json:"default_branch"`
+		Private       *bool  `json:"private"`
 	}
 	err = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&repo)
 	res.Body.Close()
 	if err != nil {
 		return err
+	}
+	// A public repository hands every version of the sealed backup, its
+	// whole commit history, to anyone, to guess the passphrase at leisure.
+	if repo.Private == nil || !*repo.Private {
+		return fmt.Errorf("the GitHub repository %s is public, or GitHub didn't say it is private: anyone could download every version of the sealed backup from its history. Make it private, or use a private repository", g.repo)
 	}
 	if g.branch == "" {
 		g.branch = repo.DefaultBranch

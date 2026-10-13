@@ -114,7 +114,8 @@ const githubUsage = `usage:
   magpie github off                       turn it off; the encrypted file and its commit history stay
 
   token      asked for, unechoed, and saved only for this repository. It needs
-             Contents read and write permission. The repository must already exist.
+             Contents read and write permission. The repository must already
+             exist and be private.
              The first sync initializes an empty repository's default branch;
              other branches must already exist.
   passphrase the same on every computer; GitHub only ever receives the sealed file.

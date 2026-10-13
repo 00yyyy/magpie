@@ -2115,7 +2115,8 @@ the gateway runs. Choose one of these:
 - **S3**: a bucket on AWS S3, Cloudflare R2, Backblaze B2, MinIO, Garage, a
   NAS or any other S3-compatible server.
 - **GitHub**: an existing repository, using a fine-grained token
-  with Contents read and write permission. A private repository is recommended.
+  with Contents read and write permission. The repository must be private:
+  sync refuses a public one, whose history would give anyone every sealed version.
   The address can include a folder, such as `github://owner/repo/magpie-sync`.
   Each update is a commit to that branch, so the repository also provides a
   history of the encrypted backup.

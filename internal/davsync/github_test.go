@@ -33,6 +33,7 @@ type githubFixture struct {
 	refError      string
 	initialBranch string
 	defaultBranch string
+	public        bool
 }
 
 type githubTransport struct {
@@ -93,7 +94,7 @@ func (f *githubFixture) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	base := "/repos/alice/private"
 	if r.URL.Path == base {
-		send(200, map[string]string{"default_branch": f.defaultBranch})
+		send(200, map[string]any{"default_branch": f.defaultBranch, "private": !f.public})
 		return
 	}
 	if branch, ok := strings.CutPrefix(r.URL.Path, base+"/git/ref/heads/"); ok {
@@ -556,4 +557,22 @@ func TestGitHubFailures(t *testing.T) {
 			t.Fatalf("external redirect was followed: %v", err)
 		}
 	})
+}
+
+// A public repository would give anyone every sealed version of the setup,
+// its whole history, to try passphrases on: sync refuses it before writing.
+func TestGitHubPublicRepositoryRefused(t *testing.T) {
+	f := newGithubFixture(t)
+	f.public = true
+	newComputer(t).use(t)
+	if err := Configure(githubConfig()); err != nil {
+		t.Fatal(err)
+	}
+	err := Now(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "public") || !strings.Contains(err.Error(), "alice/private") {
+		t.Fatalf("a public repository should be refused by name: %v", err)
+	}
+	if f.writes != 0 || len(f.objects) != 0 {
+		t.Fatalf("a public repository got the backup: writes %d, files %d", f.writes, len(f.objects))
+	}
 }
