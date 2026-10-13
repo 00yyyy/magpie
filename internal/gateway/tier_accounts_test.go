@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,5 +137,49 @@ func TestUltrafastGoesToAnAccountOfferingIt(t *testing.T) {
 	proOut = false
 	if code, body := post(t, "/v1/responses", `{"model":"codex/gpt-6-luna","input":"ping","service_tier":"ultrafast"}`); code != 200 || !strings.HasPrefix(strings.Join(tried(), ","), "acct-pro:") {
 		t.Errorf("/v1/responses: status %d: %s", code, body)
+	}
+}
+
+// #1784, zhenghaowen0967: OMP, with gpt-6.1-sol switched fast in its
+// picker (fastPicks.omp), asked for Ultrafast and went as priority, the
+// fast mode's rewrite writing over the client's own, faster ask. It goes
+// as Ultrafast to the account that offers it, and as priority to one that
+// doesn't; a request that asked for no tier is sent fast as before.
+func TestFastPickKeepsTheClientsUltrafast(t *testing.T) {
+	proOut := false
+	tried := tierAccounts(t, &proOut)
+	if err := provider.SetFastPick("omp", "codex/gpt-6-luna", true); err != nil {
+		t.Fatal(err)
+	}
+	// at chatgpt.com, where Ultrafast is sent (buildResponses), reaching
+	// the fake backend
+	to, _ := url.Parse(provider.CodexBase)
+	provider.CodexBase = "https://chatgpt.com/backend-api/codex"
+	s := New()
+	s.client = &http.Client{Transport: qoderRoundTrip(func(r *http.Request) (*http.Response, error) {
+		r.URL.Scheme, r.URL.Host = to.Scheme, to.Host
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	omp := func(tier string) string {
+		t.Helper()
+		r := postFrom(t, s, "omp", "/v1/responses", `{"model":"codex/gpt-6-luna","input":"ping"`+tier+`}`)
+		if len(r.Tries) == 0 || !r.Tries[0].Fast {
+			t.Errorf("%s: not traced as sent fast: %+v", tier, r.Tries)
+		}
+		return strings.Join(tried(), ",")
+	}
+	if got := omp(`,"service_tier":"ultrafast"`); got != "acct-pro:ultrafast" {
+		t.Errorf("ultrafast tried %s", got)
+	}
+	proOut = true
+	if got := omp(`,"service_tier":"ultrafast"`); got != "acct-pro:ultrafast,acct-plus:priority" {
+		t.Errorf("pro out: ultrafast tried %s", got)
+	}
+	proOut = false
+	if got := omp(""); got != "acct-plus:priority" {
+		t.Errorf("no tier asked: tried %s", got)
+	}
+	if b := withFast(provider.Chat, []byte(`{"model":"m","service_tier":"ultrafast"}`)); askedTier(b) != "ultrafast" {
+		t.Errorf("chat: %s", b)
 	}
 }
