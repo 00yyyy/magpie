@@ -227,6 +227,9 @@ func TestGitHubNotBackup(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "GitHub") || !strings.Contains(err.Error(), "alice/private") || strings.Contains(err.Error(), "WebDAV") {
 				t.Fatalf("the recovery advice should name the GitHub repository: %v", err)
 			}
+			if tc.replace && !strings.Contains(err.Error(), "team/magpie/"+file) || strings.Contains(err.Error(), "magpie/magpie/") {
+				t.Fatalf("the advice should name the file where it is, team/magpie/%s: %v", file, err)
+			}
 			v := Status()
 			if v.File == nil || v.File.Replace != tc.replace {
 				t.Fatalf("the file's replacement status: %+v", v.File)

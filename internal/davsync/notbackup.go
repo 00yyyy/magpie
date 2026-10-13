@@ -92,7 +92,7 @@ func (e *notBackup) Error() string {
 func fileWhere(c Config) string {
 	if c.GitHub() {
 		if g, err := newGitHub(c); err == nil {
-			return "the file " + g.at(folder+"/"+file) + " in the GitHub repository " + g.repo
+			return "the file " + g.at(file) + " in the GitHub repository " + g.repo
 		}
 		return "the file in the GitHub repository"
 	}
