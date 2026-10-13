@@ -169,3 +169,39 @@ func TestGitPluginCheckCarriesGitHubToken(t *testing.T) {
 		t.Errorf("a host other than GitHub's API was sent Authorization %q", rawAuth)
 	}
 }
+
+// Bun's newest release, asked of GitHub's API, carries the token too; a
+// Bun download from another host never does (#1942).
+func TestBunReleaseCheckCarriesGitHubToken(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("GITHUB_TOKEN", "github-env")
+	var apiAuth, dlAuth string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiAuth = r.Header.Get("Authorization")
+		fmt.Fprint(w, `{"tag_name":"bun-v1.4.2","published_at":"2026-10-01T00:00:00Z"}`)
+	}))
+	t.Cleanup(api.Close)
+	dl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dlAuth = r.Header.Get("Authorization")
+		fmt.Fprint(w, "zip")
+	}))
+	t.Cleanup(dl.Close)
+	was := githubAPI
+	githubAPI = api.URL
+	t.Cleanup(func() { githubAPI = was })
+	if v, _, err := bunLatest(context.Background()); err != nil || v != "1.4.2" {
+		t.Fatalf("bunLatest = %q, %v", v, err)
+	}
+	if apiAuth != "Bearer github-env" {
+		t.Errorf("Bun's release was asked of GitHub's API with Authorization %q", apiAuth)
+	}
+	if _, err := getURL(context.Background(), dl.URL+"/bun-darwin-aarch64.zip", 1<<10); err != nil {
+		t.Fatal(err)
+	}
+	if dlAuth != "" {
+		t.Errorf("a download from another host was sent Authorization %q", dlAuth)
+	}
+}
