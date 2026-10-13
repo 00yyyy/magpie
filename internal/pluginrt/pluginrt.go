@@ -13,6 +13,7 @@ package pluginrt
 import (
 	"fmt"
 	"log"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -58,7 +59,19 @@ type Manifest struct {
 	Parts []Part
 	// Defaults is its config before plugins.yml's preset and rows
 	Defaults map[string]any
+	// Settings is a struct of its settings, their defaults its values
+	// (schema.go): the window draws their form, and SetConfig takes only
+	// what it allows. Register adds them to Defaults.
+	Settings any
+	// Client are its scripts in the window, under assets/plugins/<id>/:
+	// they register its parts with the window's kernel (kernel.js).
+	// TestBuiltinClientsLoaded holds the page to loading each.
+	Client []string
+	schema *Schema
 }
+
+// Schema is the schema of the plugin's Settings, nil for one with none.
+func (m Manifest) Schema() *Schema { return m.schema }
 
 // Part is one thing a plugin puts in the window: a Slot and a Key in it.
 type Part struct{ Slot, Key string }
@@ -119,6 +132,20 @@ func Register(m Manifest) {
 	}
 	if _, dup := registry[m.ID]; dup {
 		panic("pluginrt: two plugins " + m.ID)
+	}
+	if m.Settings != nil {
+		var defs map[string]any
+		m.schema, defs = SchemaOf(m.Settings)
+		d := maps.Clone(m.Defaults)
+		if d == nil {
+			d = map[string]any{}
+		}
+		for k, v := range defs {
+			if _, set := d[k]; !set {
+				d[k] = v
+			}
+		}
+		m.Defaults = d
 	}
 	registry[m.ID] = m
 }

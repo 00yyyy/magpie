@@ -3,6 +3,7 @@ package pluginrt
 import (
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"os"
 	"path/filepath"
@@ -124,6 +125,16 @@ func Compose(ms []Manifest, f File) []Composed {
 				c.Enabled, c.Source = *r.Enabled, FromUser
 			}
 			for k, v := range r.Config {
+				// a value its settings don't allow (plugins.yml edited by
+				// hand) is left out, the one under it kept; the file keeps it
+				if s := m.Schema(); s != nil {
+					ok, err := s.Validate(map[string]any{k: v})
+					if err != nil {
+						log.Printf("plugins: %s's %s in %s: %v", m.ID, k, Path(), err)
+						continue
+					}
+					v = ok[k]
+				}
 				c.Config[k], c.Sources[k] = merge(c.Config[k], v), FromUser
 			}
 		}
@@ -191,6 +202,39 @@ func Set(id string, on bool) error {
 			i = len(f.Plugins) - 1
 		}
 		f.Plugins[i].Enabled = &on
+	})
+}
+
+// SetConfig sets plugin id's settings in config as the user's own,
+// keeping its others and the rest of plugins.yml as they were. Only what
+// its settings' schema allows is taken: a key it doesn't have, or a value
+// of the wrong kind or out of range, is refused and nothing is written.
+func SetConfig(id string, config map[string]any) error {
+	var s *Schema
+	for _, m := range Registered() {
+		if m.ID == id {
+			if s = m.Schema(); s == nil {
+				return fmt.Errorf("%s has no settings", id)
+			}
+		}
+	}
+	if s == nil {
+		return fmt.Errorf("no built-in plugin %q", id)
+	}
+	ok, err := s.Validate(config)
+	if err != nil {
+		return err
+	}
+	return update(func(f *File) {
+		i := slices.IndexFunc(f.Plugins, func(r Row) bool { return r.ID == id })
+		if i < 0 {
+			f.Plugins = append(f.Plugins, Row{ID: id})
+			i = len(f.Plugins) - 1
+		}
+		if f.Plugins[i].Config == nil {
+			f.Plugins[i].Config = map[string]any{}
+		}
+		maps.Copy(f.Plugins[i].Config, ok)
 	})
 }
 

@@ -19,27 +19,38 @@ const assets = path.resolve(__dirname, "../assets");
 
 // as plugins/*'s manifests say them, in pluginrt.Registered's order (by id)
 const PLUGINS = [
+  { id: "gateway", name: "Gateway page", sub: "The gateway's state and keys, how to connect a client, its models and recent calls", one: "1 gateway key", many: "{n} gateway keys" },
   { id: "groups", name: "Routing groups", sub: "Several models agents pick as one: each request goes to the right one, and to the next when one fails", one: "1 group in use", many: "{n} groups in use" },
   { id: "library", name: "Library", sub: "Instructions, MCP servers, skills and hooks, kept once and given to every agent", one: "1 item given to agents", many: "{n} items given to agents" },
   { id: "otel", name: "Observability", sub: "Send each request's traces and metrics to an OpenTelemetry collector, such as Langfuse", one: "Sending to a collector", many: "Sending to a collector" },
   { id: "sessions", name: "Sessions", sub: "Your agents' past conversations: read, search, resume and export them", one: "Recording gateway conversations", many: "Recording gateway conversations" },
   { id: "warmups", name: "Warm-up and check-in", sub: "Start a subscription's usage window at a time you pick, and claim vendors' daily check-in credits", one: "1 warm-up or check-in on", many: "{n} warm-ups and check-ins on" },
 ];
-// a new install's (the Essentials preset): all off, but two routing groups
-// the user made
-const START = { groups: [false, 2], library: [false, 0], otel: [false, 0], sessions: [false, 0], warmups: [false, 0] };
+// a new install's (the Essentials preset): all off but the Gateway page,
+// which is essential, and two routing groups the user made
+const START = { gateway: [true, 0], groups: [false, 2], library: [false, 0], otel: [false, 0], sessions: [false, 0], warmups: [false, 0] };
 
-function builtins(st, broken) {
+// the Gateway page's settings, as pluginrt.SchemaOf makes them
+const GATEWAY_SCHEMA = {
+  type: "object",
+  properties: { callsPage: { type: "integer", title: "Recent calls at a time", description: "How many of the gateway's recent calls the page shows, and how many more each Show more adds", enum: [10, 20, 50, 100], default: 20 } },
+  "x-order": ["callsPage"],
+};
+
+function builtins(st, broken, config) {
   return PLUGINS.map((p) => {
     const [chosen, inUse] = st[p.id];
     const on = chosen || inUse > 0;
-    return { id: p.id, name: p.name, sub: p.sub, on, chosen, source: inUse > 0 && !chosen ? "in use" : "preset", state: on ? "active" : "off", inUse, use: inUse === 1 ? p.one : inUse > 1 ? p.many : undefined, broken };
+    const f = { id: p.id, name: p.name, sub: p.sub, on, chosen, source: inUse > 0 && !chosen ? "in use" : "preset", state: on ? "active" : "off", inUse, use: inUse === 1 ? p.one : inUse > 1 ? p.many : undefined, broken };
+    if (p.id === "gateway") Object.assign(f, { schema: GATEWAY_SCHEMA, config });
+    return f;
   });
 }
 
 function server(lang, posts, broken) {
   const st = structuredClone(START);
-  const list = () => builtins(st, broken);
+  const config = { callsPage: 20 };
+  const list = () => builtins(st, broken, config);
   const cur = () => ({
     theme: "light", lang, tray: "panel", currency: "usd", textSize: 100, redactWords: [],
     codexWarmup: "", claudeWarmup: "", codexWarmAt: "", claudeWarmAt: "",
@@ -59,7 +70,13 @@ function server(lang, posts, broken) {
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: cur(), fx: cur().fx });
     if (url.pathname === "/api/plugins/builtin") {
       if (req.method() !== "POST") return json(list());
-      const { id, on } = req.postDataJSON();
+      const { id, on, config: change } = req.postDataJSON();
+      if (change) {
+        posts.push([id, change]);
+        if (broken || ![10, 20, 50, 100].includes(change.callsPage)) return route.fulfill({ status: 400, json: { error: "callsPage: not one of [10 20 50 100]" } });
+        Object.assign(config, change);
+        return json(list());
+      }
       posts.push([id, on]);
       if (broken || (!on && st[id][1] > 0)) return route.fulfill({ status: 400, json: { error: "in use" } });
       st[id][0] = on;
@@ -139,12 +156,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual([g.on, g.disabled], ["true", true], `${where}: in use, locked`);
         assert.equal(g.why, await page.evaluate(() => t("{n} groups in use", { n: 2 })), where);
         if (lang !== "en") assert.notEqual(g.why, "2 groups in use", `${where}: why translated`);
-        for (const r of rows.filter((r) => r.id !== "groups")) assert.deepEqual([r.on, r.disabled, r.why], ["false", false, ""], `${where}: ${r.id}`);
+        const gw = rows.find((r) => r.id === "gateway");
+        assert.deepEqual([gw.on, gw.disabled], ["true", false], `${where}: the Gateway page, on`);
+        for (const r of rows.filter((r) => r.id !== "groups" && r.id !== "gateway")) assert.deepEqual([r.on, r.disabled, r.why], ["false", false, ""], `${where}: ${r.id}`);
         await page.locator('#builtinList [data-id="groups"] [role="switch"]').click({ force: true });
         await page.waitForTimeout(100);
         assert.deepEqual(posts, [], `${where}: a locked switch posts nothing`);
         // nothing wider than the window
         assert.ok(await page.evaluate(() => { const v = document.querySelector("#view-plugins"); return v.scrollWidth <= v.clientWidth + 1; }), `${where}: fits`);
+
+        // the Gateway page's setting, under its row, from its schema: in
+        // the page's language, its value in the app's menu, saved as picked
+        const set = page.locator('#builtinList .feat-set[data-of="gateway"][data-setting="callsPage"]');
+        assert.equal(await set.locator(".name").textContent(), await page.evaluate(() => t("Recent calls at a time")), where);
+        if (lang !== "en") assert.notEqual(await set.locator(".name").textContent(), "Recent calls at a time", `${where}: translated`);
+        assert.equal(await page.evaluate(() => document.querySelector('#builtinList .feat-set').previousElementSibling.dataset.id), "gateway", `${where}: under its row`);
+        assert.equal((await set.locator(".proto.pick").textContent()).trim(), "20", where);
+        await set.locator(".proto.pick").click();
+        await page.locator(".proto-menu .pm-item", { hasText: "50" }).click();
+        await page.waitForFunction(() => document.querySelector('#builtinList .feat-set .proto.pick')?.textContent.trim() === "50");
+        assert.deepEqual(posts, [["gateway", { callsPage: 50 }]], `${where}: posted`);
+        assert.equal(await page.evaluate(() => document.querySelectorAll(".proto-menu").length), 0, `${where}: the menu closed`);
+        posts.length = 0;
+        assert.ok(await page.evaluate(() => { const v = document.querySelector("#view-plugins"); return v.scrollWidth <= v.clientWidth + 1; }), `${where}: the setting fits`);
 
         // Library switched on: its tab is back at once, the page stays
         await page.locator('#builtinList [data-id="library"] [role="switch"]').click();

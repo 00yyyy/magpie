@@ -44,11 +44,12 @@ func TestBuiltinSwitch(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 			t.Fatal(err)
 		}
-		if len(out) != 5 {
+		if len(out) != 6 {
 			t.Fatalf("the built-ins: %+v", out)
 		}
 		for _, b := range out {
-			if b.On != (b.ID == "library") || b.On != (b.State == pluginrt.Active) {
+			// the gateway page is essential: on in every preset
+			if b.On != (b.ID == "library" || b.ID == "gateway") || b.On != (b.State == pluginrt.Active) {
 				t.Fatalf("after library on: %+v", out)
 			}
 		}
@@ -125,6 +126,94 @@ func TestBootSaysBuiltinsOff(t *testing.T) {
 	}
 }
 
+// A plugin's settings are set only as their schema allows, kept in
+// plugins.yml, and handed to the page in boot.js; a request says on or
+// config, not both.
+func TestBuiltinConfig(t *testing.T) {
+	h := builtinHome(t)
+	if _, err := pluginrt.Settle(false); err != nil {
+		t.Fatal(err)
+	}
+	gw := func() builtinJSON {
+		for _, b := range builtinsState() {
+			if b.ID == "gateway" {
+				return b
+			}
+		}
+		t.Fatal("no gateway plugin")
+		return builtinJSON{}
+	}
+	if b := gw(); b.Schema == nil || b.Schema.Properties["callsPage"] == nil || b.Config["callsPage"] != int64(20) {
+		t.Fatalf("before: %+v", b)
+	}
+	if rec := postBuiltin(h, `{"id":"gateway","config":{"callsPage":50}}`); rec.Code != http.StatusOK {
+		t.Fatalf("50: %d %s", rec.Code, rec.Body)
+	}
+	if b := gw(); b.Config["callsPage"] != int64(50) || !b.On {
+		t.Fatalf("after 50: %+v", b)
+	}
+	for _, bad := range []string{
+		`{"id":"gateway","config":{"callsPage":30}}`,
+		`{"id":"gateway","config":{"other":1}}`,
+		`{"id":"gateway","on":true,"config":{"callsPage":10}}`,
+		`{"id":"gateway"}`,
+		`{"id":"library","config":{"callsPage":10}}`,
+	} {
+		if rec := postBuiltin(h, bad); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", bad, rec.Code, rec.Body)
+		}
+	}
+	if b := gw(); b.Config["callsPage"] != int64(50) {
+		t.Fatalf("a refused one written: %+v", b)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/boot.js", nil))
+	if !strings.Contains(rec.Body.String(), `"pluginConfig":{"gateway":{"callsPage":50}}`) {
+		t.Fatalf("boot.js: %s", rec.Body)
+	}
+}
+
+// Every script a built-in plugin says it has is on disk, loaded by the
+// page after the kernel and before app.js, which looks for its pages, and
+// named with its hash so a new one isn't read from the cache.
+func TestBuiltinClientsLoaded(t *testing.T) {
+	page, err := os.ReadFile("assets/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(page)
+	at := func(name string) int {
+		i := strings.Index(src, `<script src="`+name+`"></script>`)
+		if i < 0 {
+			t.Fatalf("index.html doesn't load %s", name)
+		}
+		return i
+	}
+	kernel, app := at("kernel.js"), at("app.js")
+	if kernel > app {
+		t.Fatal("kernel.js after app.js")
+	}
+	n := 0
+	for _, m := range pluginrt.Registered() {
+		for _, c := range m.Client {
+			name := "plugins/" + m.ID + "/" + c
+			if _, err := os.Stat(filepath.Join("assets", name)); err != nil {
+				t.Errorf("%s: %v", name, err)
+			}
+			if i := at(name); i < kernel || i > app {
+				t.Errorf("%s isn't between kernel.js and app.js", name)
+			}
+			if !strings.Contains(string(versionedPage(page)), `src="`+name+`?v=`) {
+				t.Errorf("%s isn't named with its hash", name)
+			}
+			n++
+		}
+	}
+	if n == 0 {
+		t.Fatal("no plugin has a script")
+	}
+}
+
 // Every string of every built-in plugin is said in every language.
 func TestBuiltinsTranslated(t *testing.T) {
 	src, err := os.ReadFile("assets/i18n.js")
@@ -138,7 +227,16 @@ func TestBuiltinsTranslated(t *testing.T) {
 		}
 		block, _, _ = strings.Cut(block, "\n  },")
 		for _, m := range pluginrt.Registered() {
-			for _, s := range []string{m.Name, m.Sub, m.One, m.Many} {
+			says := []string{m.Name, m.Sub, m.One, m.Many}
+			if sc := m.Schema(); sc != nil {
+				for _, p := range sc.Properties {
+					says = append(says, p.Title, p.Description)
+				}
+			}
+			for _, s := range says {
+				if s == "" {
+					continue
+				}
 				k, _ := json.Marshal(s)
 				if !strings.Contains(block, "\n    "+string(k)+": ") {
 					t.Errorf("%s doesn't say %s", lang, k)

@@ -38,6 +38,10 @@ type builtinJSON struct {
 	InUse int             `json:"inUse"`
 	Use   string          `json:"use,omitempty"` // One or Many, by InUse
 	Parts []pluginrt.Part `json:"parts,omitempty"`
+	// Schema is its settings' (pluginrt/schema.go), which the page draws
+	// a form of; Config their values now
+	Schema *pluginrt.Schema `json:"schema,omitempty"`
+	Config map[string]any   `json:"config,omitempty"`
 	// Broken is plugins.yml's error when it can't be read: every
 	// plugin runs as it did, and no switch can be changed
 	Broken string `json:"broken,omitempty"`
@@ -60,7 +64,7 @@ func builtinsState() []builtinJSON {
 	out := []builtinJSON{}
 	for _, m := range pluginrt.Registered() {
 		c, s := byID[m.ID], st[m.ID]
-		j := builtinJSON{ID: m.ID, Name: m.Name, Sub: m.Sub, On: s.State == pluginrt.Active, Chosen: c.Chosen, Source: c.Source, State: s.State, Why: s.Why, InUse: c.InUse, Parts: s.Parts}
+		j := builtinJSON{ID: m.ID, Name: m.Name, Sub: m.Sub, On: s.State == pluginrt.Active, Chosen: c.Chosen, Source: c.Source, State: s.State, Why: s.Why, InUse: c.InUse, Parts: s.Parts, Schema: m.Schema(), Config: c.Config}
 		if err != nil {
 			j.Broken, j.Chosen = err.Error(), j.On
 		}
@@ -87,8 +91,21 @@ func builtinsOff(list []builtinJSON) []string {
 	return out
 }
 
+// builtinConfig is each plugin's settings the window shows, by id, for
+// boot.js to hand the page's plugins before they draw.
+func builtinConfig(list []builtinJSON) map[string]map[string]any {
+	out := map[string]map[string]any{}
+	for _, b := range list {
+		if b.On && b.Schema != nil {
+			out[b.ID] = b.Config
+		}
+	}
+	return out
+}
+
 // builtinRoutes: GET /api/plugins/builtin is every built-in plugin; POST
-// {"id", "on"} switches one, kept in plugins.yml as the user's own choice.
+// {"id", "on"} switches one, kept in plugins.yml as the user's own choice,
+// and {"id", "config"} sets its settings, only as their schema allows.
 // One in use is refused off.
 func builtinRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/plugins/builtin", func(rw http.ResponseWriter, r *http.Request) {
@@ -96,8 +113,9 @@ func builtinRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /api/plugins/builtin", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
-			ID string `json:"id"`
-			On bool   `json:"on"`
+			ID     string         `json:"id"`
+			On     *bool          `json:"on"`
+			Config map[string]any `json:"config"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -117,11 +135,20 @@ func builtinRoutes(mux *http.ServeMux) {
 		case b.Broken != "":
 			fail(rw, fmt.Errorf("%s", b.Broken))
 			return
-		case !in.On && b.InUse > 0:
+		case (in.On == nil) == (in.Config == nil):
+			fail(rw, fmt.Errorf("say on or config"))
+			return
+		case in.On != nil && !*in.On && b.InUse > 0:
 			fail(rw, fmt.Errorf("%s is in use and stays on", b.Name))
 			return
 		}
-		if err := pluginrt.Set(in.ID, in.On); err != nil {
+		var err error
+		if in.On != nil {
+			err = pluginrt.Set(in.ID, *in.On)
+		} else {
+			err = pluginrt.SetConfig(in.ID, in.Config)
+		}
+		if err != nil {
 			fail(rw, err)
 			return
 		}

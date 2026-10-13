@@ -941,7 +941,7 @@ Chinese.
 `old-webkit.test.cjs` holds the page to Safari 15.0, the WebKit macOS 12 can
 have (#220: a regex lookbehind in app.js, a syntax error before Safari 16.4,
 left the panel with its headings and nothing working). Every script in
-`assets/` is parsed (with the Babel parser Playwright bundles) and may have
+`assets/`, the built-in plugins' under `assets/plugins/` among them, is parsed (with the Babel parser Playwright bundles) and may have
 no regex lookbehind, v flag or modifiers, class static block, decorator,
 import attributes or `using`, in a literal or `new RegExp("…")`; no built-in
 newer than 15.0 (`.at`, `findLast`, `structuredClone`, `Object.hasOwn`,
@@ -2375,4 +2375,19 @@ and de. English and Chinese, Chromium and WebKit.
 ```sh
 node --test internal/gui/tests/tencent-access-key.test.cjs
 go test -tags nogui ./internal/gui -run TestProviderListTellsTencentAccessKey
+```
+
+`plugin-kernel.test.cjs` holds the window's plugin kernel (`kernel.js`) to
+its error boundary, with the Gateway page, the first page a plugin draws
+(`assets/plugins/gateway/`). With the page's drawing made to throw, the page
+says "This page stopped working", the error and Try again (role alert,
+translated, no sideways scroll); nothing escapes as a page error, Providers
+still opens, and back on the page nothing half drawn shows. Fixed, Try again
+draws the page whole, translated, with its Connect fold working. The page's
+`callsPage` setting shows 10 calls at a time from boot.js's `pluginConfig`,
+and 50 once Plugins › Built-in sets it. Chromium and WebKit, every language,
+1100 and 420 points.
+
+```sh
+node --test internal/gui/tests/plugin-kernel.test.cjs internal/gui/tests/builtins.test.cjs
 ```

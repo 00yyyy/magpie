@@ -747,8 +747,9 @@ func revalidated(next http.Handler) http.Handler {
 	})
 }
 
-// pageFile is a script or stylesheet of the page's own, named in it.
-var pageFile = regexp.MustCompile(`(src|href)="([A-Za-z0-9_.-]+\.(?:js|css))"`)
+// pageFile is a script or stylesheet of the page's own, named in it: one
+// of the page's, or of a built-in plugin's under plugins/<id>/.
+var pageFile = regexp.MustCompile(`(src|href)="([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.(?:js|css))"`)
 
 // versionedPage is the page with each of its own scripts and stylesheets
 // named with its content's hash; one not among the page's files (boot.js,
@@ -795,7 +796,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		// and the built-in plugins it leaves out (builtins.go), gone
 		// before the first paint rather than after the settings come
-		boot["featuresOff"] = builtinsOff(builtinsState())
+		list := builtinsState()
+		boot["featuresOff"] = builtinsOff(list)
+		// and the settings of those the page draws (kernel.js)
+		boot["pluginConfig"] = builtinConfig(list)
 		// on Omarchy the page takes its theme's look before it paints
 		if th, ok := omarchyTheme(); ok {
 			boot["omarchy"] = th

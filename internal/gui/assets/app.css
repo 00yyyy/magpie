@@ -2980,6 +2980,15 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .feat-say { margin: 2px 4px 10px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .set-searching .feat-say { display: none; }
 .row.pref .sub.feat-why { color: var(--muted); font-size: 11px; }
+/* a plugin's settings, under its row (kernel.js ui.form) */
+.row.pref.feat-set { min-height: 44px; padding-left: 30px; }
+.row.pref.feat-set .name { font-size: 12.5px; }
+.row.pref .set-field { flex: none; width: 120px; height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); }
+.row.pref .set-field[type=number] { width: 72px; text-align: right; }
+.row.pref .set-field[aria-invalid=true] { border-color: var(--red); }
+/* a plugin's page that broke (kernel.js): what broke, and Try again */
+.slot-error .row { gap: 14px; padding: 12px 14px; }
+.slot-error .sub { margin-top: 2px; color: var(--fg-2); overflow-wrap: anywhere; }
 .row.pref { min-height: 50px; padding: 8px 12px 8px 14px; gap: 14px; }
 .row.pref .who { flex: 1 1 auto; }
 .row.pref .sub { margin-top: 2px; color: var(--fg-2); }

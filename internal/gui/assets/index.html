@@ -27,7 +27,7 @@
   <div class="side-top" style="--wails-draggable:drag"></div>
   <div class="side-scroll"></div>
   <div class="side-foot">
-    <button type="button" class="side-gw" id="sideGw" hidden><i></i><span></span></button>
+    <button type="button" class="side-gw" id="sideGw" data-feature="gateway" hidden><i></i><span></span></button>
   </div>
   <!-- its edge, dragged to make it wider or narrower (app.js sideDrag) -->
   <div class="side-edge" id="sideEdge" role="separator" aria-orientation="vertical" tabindex="0" style="--wails-draggable:no-drag"></div>
@@ -52,7 +52,7 @@
     <span class="nav-gl" data-t>Models</span>
     <button data-view="providers"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="10" r="3"/><path d="M10 10h7M14 10v3M16.5 10v2"/></g></svg><span data-t>Providers</span></button>
     <button data-view="routing"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h5l4-5h5M8 10l4 5h5M14.5 3l2.5 2-2.5 2M14.5 13l2.5 2-2.5 2"/></g></svg><span data-t>Routing</span></button>
-    <button data-view="gateway"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="5" rx="1.5"/><rect x="3" y="11" width="14" height="5" rx="1.5"/><path d="M6 6.5h.01M6 13.5h.01"/></g></svg><span data-t>Gateway</span></button>
+    <button data-view="gateway" data-feature="gateway"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="5" rx="1.5"/><rect x="3" y="11" width="14" height="5" rx="1.5"/><path d="M6 6.5h.01M6 13.5h.01"/></g></svg><span data-t>Gateway</span></button>
     <span class="nav-gl" data-t>Insights</span>
     <button data-view="usage"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16V9M8 16V5M12 16v-5M16 16V7"/></g></svg><span data-t>Usage</span></button>
     <span class="nav-gl" data-t>Extend</span>
@@ -121,23 +121,8 @@
   <section class="sheet" id="addSheet" hidden></section>
 </main>
 
-<main class="view" id="view-gateway" hidden>
-  <div class="list gwcard">
-    <div class="row gw" id="gateway"></div>
-  </div>
-  <section id="gatewayKeysBlock" hidden>
-    <div class="row-head"><span class="label" data-t>Gateway keys</span><span class="grow"></span><button class="text" id="addGatewayKey" data-t>Add gateway key</button></div>
-    <p class="usage-note" data-t>Create a gateway key for each client. Usage is counted separately for each key.</p>
-    <section id="gatewayKeys"></section>
-  </section>
-  <p class="usage-note gw-keys-off" id="gatewayKeysOff" hidden><span data-t>Gateway keys are for other computers, and for a tunnel to this one such as Cloudflare Tunnel: they are added here once Share on local network is on. Agents on this computer need none.</span> <button class="text" id="openLanSettings" data-t>Network and sharing</button></p>
-  <div class="row-head"><button class="fold" id="foldConnect" aria-expanded="true" aria-controls="connect"><span class="label" data-t>Connect</span></button><span class="grow"></span><span class="note" id="connectNote"></span></div>
-  <section class="list connect" id="connect"></section>
-  <div class="row-head"><button class="fold" id="foldModels" aria-expanded="true" aria-controls="gwModels"><span class="label" data-t>Models</span><span class="note" id="modelsCount"></span></button><span class="grow"></span><button class="text" id="copyModels" data-t>Copy all ids</button></div>
-  <div class="list" id="gwModels"></div>
-  <div class="row-head"><span class="label" data-t>Recent calls</span><span class="grow"></span><span class="note" id="callsNote"></span></div>
-  <div class="list activity" id="activity"></div>
-</main>
+<!-- the pages plugins add (kernel.js) go here, in the order they register -->
+<template data-slot="page"></template>
 
 <main class="view" id="view-routing" hidden>
   <div class="row-head"><span class="label" data-t>Routing</span><span class="rt-livedot" aria-hidden="true"></span><span class="note" data-t>live, as the gateway decides</span><span class="grow"></span>
@@ -568,7 +553,10 @@
 </div>
 
 <script src="i18n.js"></script>
-<script src="caller-keys.js"></script>
+<script src="kernel.js"></script>
+<!-- the built-in plugins' own scripts (pluginrt.Manifest.Client) -->
+<script src="plugins/gateway/keys.js"></script>
+<script src="plugins/gateway/client.js"></script>
 <script src="purposes.js"></script>
 <script src="app.js"></script>
 <script src="routing.js"></script>
