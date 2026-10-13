@@ -79,6 +79,9 @@ type cliSpec struct {
 	// latest is the newest version its own updater would install, for one
 	// not published on npm
 	latest func() string
+	// only are the systems (GOOS) its vendor builds it for, when not all:
+	// on any other its package installs nothing that runs
+	only []string
 }
 
 var cliSpecs = map[string]cliSpec{
@@ -102,6 +105,19 @@ var cliSpecs = map[string]cliSpec{
 			return nil
 		}},
 	"gemini": {npm: []string{"@google/gemini-cli"}, brew: []string{"gemini-cli"}},
+	// DevEco Code: npm's @deveco/deveco-code, or its own installer's
+	// ~/.local/bin/deveco → ~/.local/share/deveco/versions/<v>/deveco
+	// (install), deveco.exe in ~\.local\bin on Windows (install.ps1),
+	// both of which deveco upgrade replaces
+	// Its npm package carries macOS and Windows binaries only (and
+	// OpenHarmony's), none for Linux.
+	"deveco": {npm: []string{"@deveco/deveco-code"}, only: []string{"darwin", "windows"},
+		self: func(bin, real string) []string {
+			if strings.Contains(real, "/.local/share/deveco/versions/") || strings.HasSuffix(strings.ToLower(real), "/.local/bin/deveco.exe") {
+				return []string{bin, "upgrade"}
+			}
+			return nil
+		}},
 	"opencode": {npm: []string{"opencode-ai"}, brew: []string{"opencode"},
 		self: func(bin, real string) []string {
 			if strings.Contains(real, "/.opencode/bin/") {

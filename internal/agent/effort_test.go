@@ -27,6 +27,7 @@ func effortHome(t *testing.T) string {
 	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	t.Setenv("HERMES_HOME", "")
 	t.Setenv("MIMOCODE_HOME", "")
+	t.Setenv("DEVECO_CONFIG_DIR", "")
 	t.Setenv("HANA_HOME", "")
 	t.Setenv("DSH_HOME", "")
 	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {

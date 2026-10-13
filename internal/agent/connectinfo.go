@@ -64,7 +64,7 @@ func (a *Agent) Source() string {
 		if v, _ := edit.GetJSON(filepath.Join(dir, "auth.json"), "OPENAI_API_KEY"); v != "" {
 			return "key"
 		}
-	case "opencode", "mimocode":
+	case "opencode", "mimocode", "deveco":
 		// the providers in its config, and those signed in through it
 		n := map[string]bool{}
 		var cfg map[string]json.RawMessage

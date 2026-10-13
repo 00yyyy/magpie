@@ -230,6 +230,12 @@ func TestHowInstalled(t *testing.T) {
 	if u := howInstalled(cliSpecs["opencode"], oc); u == nil || u.shown() != "opencode upgrade" {
 		t.Errorf("opencode's installer: %+v", u)
 	}
+	// DevEco Code's install: ~/.local/bin/deveco → its versions folder
+	file(t, filepath.Join(home, ".local/share/deveco/versions/0.2.3/deveco"), "")
+	deveco := link(t, filepath.Join(home, ".local/share/deveco/versions/0.2.3/deveco"), filepath.Join(home, ".local/bin/deveco"))
+	if u := howInstalled(cliSpecs["deveco"], deveco); u == nil || u.via != "self" || u.pkg != "@deveco/deveco-code" || !reflect.DeepEqual(u.cmd, []string{deveco, "upgrade"}) {
+		t.Errorf("deveco's installer: %+v", u)
+	}
 
 	// a binary that says nothing of how it got there: the version only
 	if u := howInstalled(cliSpecs["claude"], file(t, filepath.Join(tmp, "opt/bin/claude"), "\x7fELF")); u != nil {

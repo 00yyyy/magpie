@@ -34,6 +34,7 @@ func syncHome(t *testing.T) string {
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 	t.Setenv("HERMES_HOME", "")
 	t.Setenv("MIMOCODE_HOME", "")
+	t.Setenv("DEVECO_CONFIG_DIR", "")
 	t.Setenv("HANA_HOME", "")
 	t.Setenv("DSH_HOME", "")
 	t.Setenv("OMO_CODING_AGENT_DIR", "")
