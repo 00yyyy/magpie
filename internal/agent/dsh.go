@@ -150,7 +150,7 @@ func dshAt(at place) *Agent {
 			if err := dshMirrorHome(dir, nil, gw(), true); err != nil {
 				return err
 			}
-			return dshEnv(dir, gw(), false)
+			return dshEnv(dir, gw(), false, false)
 		},
 		Fields: []Field{{
 			Key: "model", Label: "model",
@@ -779,7 +779,10 @@ func dshCheck(dir, gw string) string {
 	}
 	creds := filepath.Join(dir, ".credentials.yaml")
 	if v, ok := edit.GetYAML(creds, "refs."+dshKeyRef); ok && v != keyAt(gw) && !gatewayTakes(v) {
-		return "DeepSeek Harness's own key store (" + creds + ") holds another " + dshKeyRef + ", which it uses over magpie's; remove it there (dsh's Models page, Magpie's key) to go through magpie"
+		if onAnotherMachine(gw) {
+			return "DeepSeek Harness's own key store (" + creds + ") holds another " + dshKeyRef + ", which it uses over magpie's; remove it there (dsh's Models page, Magpie's key) to go through magpie"
+		}
+		return "DeepSeek Harness's own key store (" + creds + ") holds another " + dshKeyRef + ", which it uses over magpie's and this magpie refuses; Apply again puts magpie's key there (Disconnect puts this one back)"
 	} else if !ok && dshCredsOurs(creds) {
 		// the desktop app doesn't read .env (#969)
 		return "DeepSeek Harness's own key store (" + creds + ") doesn't hold " + dshKeyRef + ": the desktop app reads the key from there, not from .env, and its sessions fail with no credential for provider route " + dshRoute + " until it is written (Apply again)"
@@ -855,7 +858,7 @@ func dshSet(dir, v, gw string) error {
 			return err
 		}
 	}
-	if err := dshEnv(dir, gw, viaGateway); err != nil {
+	if err := dshEnv(dir, gw, viaGateway, true); err != nil {
 		return err
 	}
 	// a model picked in dsh 0.1.x is saved in its settings and goes over
@@ -899,8 +902,8 @@ func dshKeepPick(f string) error {
 // dshEnv puts the key for the gateway in $DSH_HOME/.env and dsh's own key
 // store, or with on false takes it out; the name magpie's llm-deepseek entry
 // used goes either way.
-func dshEnv(dir, gw string, on bool) error {
-	if err := dshCreds(dir, gw, on); err != nil {
+func dshEnv(dir, gw string, on, take bool) error {
+	if err := dshCreds(dir, gw, on, take); err != nil {
 		return err
 	}
 	env := filepath.Join(dir, ".env")
@@ -928,10 +931,16 @@ func dshEnv(dir, gw string, on bool) error {
 // from: the desktop app reads this store and its own environment, and with
 // the key in .env alone its sessions failed with "no credential for provider
 // route magpie" (#969). The store wins over .env, so a key of the user's
-// there is left as it is (the check says so). dsh refuses a store any other
-// user can read, so a new one is made owner-only; one in a layout other
-// than version 1 is dsh's to move and isn't touched.
-func dshCreds(dir, gw string, on bool) error {
+// there is left as it is by the sync and the serving round (the check says
+// so). take is a model picked, or Apply again: that replaces a key there
+// this gateway refuses, which only fails every turn through magpie, and
+// stashes it for Disconnect to put back (#1419, DannyJRu: Reconnect said
+// done and the row stayed red). A key the gateway takes stays, and so does
+// any key for a gateway on another machine, which only that one can judge.
+// dsh refuses a store any other user can read, so a new one is made
+// owner-only; one in a layout other than version 1 is dsh's to move and
+// isn't touched.
+func dshCreds(dir, gw string, on, take bool) error {
 	creds := filepath.Join(dir, ".credentials.yaml")
 	raw, err := os.ReadFile(creds)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -942,8 +951,14 @@ func dshCreds(dir, gw string, on bool) error {
 	}
 	if on {
 		v, ok := edit.GetYAML(creds, "refs."+dshKeyRef)
-		if ok && (v == keyAt(gw) || !ourKey(v)) {
+		if ok && v == keyAt(gw) {
 			return nil
+		}
+		if ok && !ourKey(v) {
+			if !take || gatewayTakes(v) || onAnotherMachine(gw) {
+				return nil
+			}
+			stash(map[string]string{dshStashKey(creds, dshKeyRef): v})
 		}
 		if len(bytes.TrimSpace(raw)) == 0 {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -960,6 +975,11 @@ func dshCreds(dir, gw string, on bool) error {
 			if err := edit.DelYAML(creds, "refs."+k); err != nil {
 				return err
 			}
+		}
+	}
+	if v := unstash(dshStashKey(creds, dshKeyRef)); v != "" {
+		if _, ok := edit.GetYAML(creds, "refs."+dshKeyRef); !ok {
+			return edit.SetYAML(creds, edit.KV{Path: "refs." + dshKeyRef, Value: v})
 		}
 	}
 	return nil
@@ -1504,7 +1524,7 @@ func dshSync(dir, gw string) error {
 	defer func() {
 		// the key under the name the route gives it, moved from the old one
 		if _, items, err := dshRead(files[0]); err == nil && dshWired(items) {
-			dshEnv(dir, gw, true)
+			dshEnv(dir, gw, true, false)
 		}
 	}()
 	for _, f := range files {
