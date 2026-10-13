@@ -2328,7 +2328,13 @@
     // the one sent, each cut with an ellipsis in its own box (#435,
     // azir12345: 文字重叠 — "medium → low" was drawn over the numbers)
     const to = el("span", "to");
-    to.append(el("i"), el("span", "said", said));
+    // who answered, then its model: short of room the account gives way
+    // first, so the model that answered stays readable (#1926,
+    // hibaliqya-yonma: "ZCode …" was all the row had left of it)
+    const sd = el("span", "said"), cut = how === "ok" || how === "moved" ? said.lastIndexOf(" · ") : -1;
+    if (cut > 0) sd.classList.add("split"), sd.append(el("span", "who", said.slice(0, cut)), el("span", "mdl", said.slice(cut)));
+    else sd.textContent = said;
+    to.append(el("i"), sd);
     if (tr?.effort) {
       const ef = el("span", "ef" + (tr.picked ? " picked" : ""));
       const was = r.effort && r.effort !== tr.effort;
