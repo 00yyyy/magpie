@@ -1570,12 +1570,18 @@ func sseStart(head []byte) (sse, sure bool) {
 	return false, true
 }
 
-// streamEnds are how each protocol's stream says it is over, as they can
-// only appear outside a quoted string: text that says so is escaped.
+// streamEnds are how each protocol's stream says it is over, in every
+// spelling a relay sends: SSE makes the space after "data:" and "event:"
+// optional, and JSON the one after a colon (data:[DONE] from a relay was
+// logged 499 when the agent hung up on it, #1978). A JSON marker can only
+// appear outside a quoted string, as text that says so is escaped; an SSE
+// one starts a line, which text inside the JSON can't.
 var streamEnds = [][]byte{
-	[]byte(`"type":"response.completed"`), []byte(`"type":"response.incomplete"`), // Responses
-	[]byte(`"type":"message_stop"`), []byte("event: message_stop"), // Anthropic
-	[]byte("data: [DONE]"), // Chat Completions
+	[]byte(`"type":"response.completed"`), []byte(`"type": "response.completed"`), // Responses
+	[]byte(`"type":"response.incomplete"`), []byte(`"type": "response.incomplete"`),
+	[]byte(`"type":"message_stop"`), []byte(`"type": "message_stop"`), // Anthropic
+	[]byte("\nevent: message_stop"), []byte("\nevent:message_stop"),
+	[]byte("\ndata: [DONE]"), []byte("\ndata:[DONE]"), // Chat Completions
 }
 
 // see notes a stream's last event going by. An agent may hang up as soon as
@@ -1585,6 +1591,9 @@ func (h *holdWriter) see(b []byte) {
 		return
 	}
 	buf := append(h.tail, b...)
+	if len(h.tail) == 0 {
+		buf = append([]byte{'\n'}, b...) // the stream starts a line
+	}
 	for _, m := range streamEnds {
 		if bytes.Contains(buf, m) {
 			h.ended = true
