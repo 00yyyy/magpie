@@ -21951,8 +21951,6 @@ function renderCodexDescriptions(s) {
     return m ? `${m.name || m.id} · ${m.providerName}` : id;
   };
   const v = s.codexDescriptions || "";
-  $("#codexDescriptionsSub").textContent = v ? t("Codex’s description requests go to this model, not to its ChatGPT sign-in; the Usage and Routing views still show them as descriptions")
-    : t("Codex asks its own model for each thread’s description through its ChatGPT sign-in, even while the conversation is on magpie’s models");
   const b = el("button", "rt-cond on");
   b.type = "button";
   b.setAttribute("aria-label", t("Codex thread descriptions"));
