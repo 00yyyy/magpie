@@ -148,6 +148,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		PlainOwnNames:        true,
 		CodexAgentsV1:        true,
 		CodexTitles:          "off",
+		CodexDescriptions:    "fake/m1",
 		CodexAutoReview:      "fake/m1",
 		CodexSubagentModel:   "codex/gpt-6-astra",
 		ChinaMirror:          true,

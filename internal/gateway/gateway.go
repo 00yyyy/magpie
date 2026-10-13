@@ -1186,6 +1186,10 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 				s.codexTitle(w, r, body, to)
 				return
 			}
+			if to := codexDescriptionsTo(r.Header, body, true); to != "" {
+				s.codexDescription(w, r, body, to)
+				return
+			}
 			// Codex compacts remotely, a compaction_trigger here, on a
 			// provider table named "OpenAI" (CC Switch's relay tables,
 			// which magpie points here, #1301): the summary is magpie's to

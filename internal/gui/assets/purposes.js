@@ -56,6 +56,10 @@ const REQUEST_KINDS = {
     "purpose": "kind:routing",
     "name": "Routing classifier"
   },
+  "thread_description": {
+    "purpose": "kind:thread_description",
+    "name": "Description"
+  },
   "thread_spawn": {
     "purpose": "kind:collab_spawn",
     "name": "Subagent"

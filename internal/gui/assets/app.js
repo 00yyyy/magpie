@@ -20931,7 +20931,7 @@ function renderSettings() {
   // gateway mode leaves out what is written into this computer's agents'
   // files, and the alerts its desktop would show
   for (const r of [$("#plainNamesSegs").parentElement, $("#codexAgentsV1Segs").parentElement, $("#fullContextSegs").parentElement,
-    $("#codexTitlesRow"), $("#codexAutoReviewRow"), $("#usageAlertRow"), $("#balanceAlertRow"), $("#resetReminderRow"), $("#turnDoneRow")]) r.hidden = gatewayMode;
+    $("#codexTitlesRow"), $("#codexDescriptionsRow"), $("#codexAutoReviewRow"), $("#usageAlertRow"), $("#balanceAlertRow"), $("#resetReminderRow"), $("#turnDoneRow")]) r.hidden = gatewayMode;
   // the parts' tabs, one gone whose rows are all hidden here
   setSetTab(setTab);
 }
@@ -21533,6 +21533,7 @@ function renderTrayUsage(s, keep) {
   compactRow.append(compactSegs, compactNum);
   $("#fullContextSegs").replaceChildren(compactRow);
   renderCodexTitles(s);
+  renderCodexDescriptions(s);
   renderCodexAutoReview(s);
   renderCodexMemories();
   const rate = s.fx?.rate;
@@ -21939,6 +21940,33 @@ function renderAlerts(s, keep) {
   const turnOpts = [["0", t("Off")], ...mins.map((m) => [String(m * 60), t("{n} min", { n: m })])];
   if (d && !mins.some((m) => m * 60 === d)) turnOpts.push([String(d), d % 60 ? t("{n} s", { n: d }) : t("{n} min", { n: d / 60 })]);
   $("#turnDoneSegs").replaceChildren(segs(turnOpts, String(d), (v) => savePrefs({ ...keep, turnDoneAlert: Number(v) })));
+}
+
+// renderCodexDescriptions picks the model for descriptions independently
+// of titles; an empty setting preserves Codex's requested model.
+function renderCodexDescriptions(s) {
+  const models = s.titleModels || [];
+  const named = (id) => {
+    const m = models.find((x) => x.id === id);
+    return m ? `${m.name || m.id} · ${m.providerName}` : id;
+  };
+  const v = s.codexDescriptions || "";
+  $("#codexDescriptionsSub").textContent = v ? t("Codex’s description requests go to this model, not to its ChatGPT sign-in; the Usage and Routing views still show them as descriptions")
+    : t("Codex asks its own model for each thread’s description through its ChatGPT sign-in, even while the conversation is on magpie’s models");
+  const b = el("button", "rt-cond on");
+  b.type = "button";
+  b.setAttribute("aria-label", t("Codex thread descriptions"));
+  if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
+  else b.append(icon("openai"), el("span", "", t("Codex’s own (ChatGPT)")));
+  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
+  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexDescriptions", label: "model", value: v, options: [
+    { value: "", label: t("Codex’s own (ChatGPT)"), note: t("as Codex sends them"), icon: "openai", reset: true },
+    ...models.map(opt)],
+  onPick: (id) => {
+    if (id === v) return;
+    writingPrefs(api("settings/codex-descriptions", { model: id })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); });
+  } }, b, ev);
+  $("#codexDescriptionsPick").replaceChildren(b);
 }
 
 // renderCodexTitles: where Codex's requests for a thread's title go (#705)
