@@ -137,9 +137,16 @@ func targetOf(a *agent.Agent) *Target {
 		t.MCP = &mcpFile{Path: a.Path, Format: fmtOpenCode}
 		t.Skills = filepath.Join(d, "skills")
 	case "pi":
-		// PI_CODING_AGENT_DIR's, else ~/.pi/agent (agent.piDir)
+		// PI_CODING_AGENT_DIR's, else ~/.pi/agent (agent.piDir). Pi reads
+		// AGENTS.override.md there when it is there, else the first there
+		// is of AGENTS.md, AGENTS.MD, CLAUDE.md and CLAUDE.MD
+		// (loadContextFileFromDir in dist/core/resource-loader.js,
+		// @earendil-works/pi-coding-agent 1.2.0; the older
+		// @mariozechner/pi-coding-agent has the same order without the
+		// override), so a CLAUDE.md of the user's own is the one to edit
 		d := a.Dir
-		t.Instructions = filepath.Join(d, "AGENTS.md")
+		t.Instructions = firstThere(d, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
+		t.Override = filepath.Join(d, "AGENTS.override.md")
 		// Pi 0.99 reads MCP servers itself, from its mcp.json; before it,
 		// and while an MCP extension replaces its own (pi-mcp-adapter,
 		// pi-mcp-extension), each extension reads its own file (pimcp.go)
@@ -166,9 +173,13 @@ func targetOf(a *agent.Agent) *Target {
 		// OmO's engine (senpi, a fork of Pi) reads its agent folder's
 		// AGENTS.md, skills and mcp.json — mcpServers in the shape Pi 0.99's
 		// own has (command/args/env, url/headers), any other key refusing
-		// the whole file (docs/mcp.md, config-schema.js)
+		// the whole file (docs/mcp.md, config-schema.js). Its instructions
+		// are found as Pi's are: AGENTS.override.md, else the first there
+		// is of AGENTS.md, AGENTS.MD, CLAUDE.md and CLAUDE.MD
+		// (loadContextFileFromDir, @code-yeongyu/senpi 2026.10.12)
 		d := a.Dir
-		t.Instructions = filepath.Join(d, "AGENTS.md")
+		t.Instructions = firstThere(d, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
+		t.Override = filepath.Join(d, "AGENTS.override.md")
 		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative}
 		t.Skills = filepath.Join(d, "skills")
 	case "goose":
@@ -560,11 +571,13 @@ func wslTargetOf(a *agent.Agent) *Target {
 		// its MCP servers go where the Pi installed there reads them,
 		// which its version decides (piMCP), and that isn't known here
 		d := filepath.Join(h, ".pi", "agent")
-		t.Instructions = filepath.Join(d, "AGENTS.md")
+		t.Instructions = firstThere(d, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
+		t.Override = filepath.Join(d, "AGENTS.override.md")
 		t.Skills = filepath.Join(d, "skills")
 	case "omo":
 		d := filepath.Join(h, ".omo", "agent")
-		t.Instructions = filepath.Join(d, "AGENTS.md")
+		t.Instructions = firstThere(d, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
+		t.Override = filepath.Join(d, "AGENTS.override.md")
 		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative, WSL: true, Distro: a.WSL, Home: linuxHome(h)}
 		t.Skills = filepath.Join(d, "skills")
 	default:

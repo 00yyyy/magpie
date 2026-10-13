@@ -365,3 +365,42 @@ func TestGrokAppInstructions(t *testing.T) {
 		t.Fatalf("instructions rewrote the route:\n%s", cfg)
 	}
 }
+
+// Pi and OmO's engine (senpi, a fork of Pi) read AGENTS.override.md in
+// their agent folder when it is there, else the first there is of
+// AGENTS.md, AGENTS.MD, CLAUDE.md and CLAUDE.MD, so a user's own CLAUDE.md
+// is written into rather than hidden by a new AGENTS.md.
+func TestPiInstructionsFirstThere(t *testing.T) {
+	h := sandbox(t)
+	pi := filepath.Join(h, ".pi", "agent")
+	omo := filepath.Join(h, ".omo", "agent")
+	write(t, filepath.Join(omo, "settings.json"), "{}")
+	for _, d := range []string{pi, omo} {
+		if tg := targetByID(map[string]string{pi: "pi", omo: "omo"}[d]); tg == nil ||
+			tg.Instructions != filepath.Join(d, "AGENTS.md") || tg.Override != filepath.Join(d, "AGENTS.override.md") {
+			t.Fatalf("with no file there: %+v", tg)
+		}
+		write(t, filepath.Join(d, "CLAUDE.md"), "# Mine\n")
+	}
+	want := map[string]string{"pi": filepath.Join(pi, "CLAUDE.md"), "omo": filepath.Join(omo, "CLAUDE.md")}
+	for id, inst := range want {
+		if tg := targetByID(id); tg == nil || tg.Instructions != inst {
+			t.Fatalf("%s's instructions: %+v, want %s", id, tg, inst)
+		}
+	}
+	shared := "Use tabs."
+	ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{"pi", "omo"}}))
+	for id, inst := range want {
+		if s := read(t, inst); s != "# Mine\n\n"+blockBegin+"\nUse tabs.\n"+blockEnd+"\n" {
+			t.Fatalf("%s's CLAUDE.md:\n%s", id, s)
+		}
+		if _, err := os.Stat(filepath.Join(filepath.Dir(inst), "AGENTS.md")); !os.IsNotExist(err) {
+			t.Fatalf("%s got an AGENTS.md that hides CLAUDE.md: %v", id, err)
+		}
+	}
+	// an AGENTS.md there comes first again
+	write(t, filepath.Join(pi, "AGENTS.md"), "")
+	if tg := targetByID("pi"); tg.Instructions != filepath.Join(pi, "AGENTS.md") {
+		t.Fatalf("AGENTS.md comes before CLAUDE.md: %q", tg.Instructions)
+	}
+}
