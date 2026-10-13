@@ -190,9 +190,9 @@ type agentJSON struct {
 	// Wired: magpie is in its config, which its menu's Disconnect takes out
 	Wired bool `json:"wired,omitempty"`
 	// Import: an app that takes magpie by its own link (Cindy), and
-	// whether it has magpie already
+	// whether it has magpie already; omitted when the app has no status reader
 	Import string `json:"import,omitempty"`
-	Added  bool   `json:"added,omitempty"`
+	Added  *bool  `json:"added,omitempty"`
 	// Launch: the command that starts an agent taking the gateway only
 	// from its environment (agy) on magpie, to copy
 	Launch string `json:"launch,omitempty"`
@@ -2256,7 +2256,11 @@ func state() stateJSON {
 			aj.Failover = a.FailingOver != nil && a.FailingOver()
 		}
 		if a.Import != nil {
-			aj.Import, aj.Added = a.Import(), a.Added != nil && a.Added()
+			aj.Import = a.Import()
+			if a.Added != nil {
+				added := a.Added()
+				aj.Added = &added
+			}
 		}
 		if a.Launch != nil {
 			aj.Launch = a.Launch()

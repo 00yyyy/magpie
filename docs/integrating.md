@@ -114,9 +114,11 @@ app offers decides its shape:
   `Import` returns the link (`yourapp://provider/import?…` carrying the
   gateway's URL, the key `magpie-<id>` and the endpoints), the row's button
   opens it, and the user says yes once, in your app. `Added` reads,
-  read-only, whether your app has magpie already. magpie writes nothing of
-  yours. This suits an app that keeps its providers in a database or
-  encrypted.
+  read-only, whether your app has magpie already. Leave `Added` nil if your
+  app has no public status reader (as [Lody](../internal/agent/lody.go) does);
+  the row then asks the user to confirm in your app without claiming an
+  import status. magpie writes nothing of yours. This suits an app that keeps
+  its providers in a database or encrypted.
 - **Your app has a local API while it runs** (Alma, at `localhost:23001`):
   magpie adds itself as a provider and sets the default model through it.
 

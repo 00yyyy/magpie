@@ -123,3 +123,23 @@ go test -tags nogui ./internal/sessions -run 'CompactTook'
 node --test internal/gui/tests/context-tune.test.cjs
 node --test internal/gui/tests/agent-connect.test.cjs internal/gui/tests/agent-disconnect-preview.test.cjs internal/gui/tests/claude-signin.test.cjs internal/gui/tests/agent-failover.test.cjs internal/gui/tests/agent-proxied.test.cjs internal/gui/tests/plugin-agent.test.cjs
 ```
+
+## Lody import handoff
+
+[`lody.go`](../../internal/agent/lody.go) detects Lody's standard data folders
+(`~/.lody`, `~/.lody-oss`, or the platform configuration folders for Lody,
+Lody OSS and Lody Nightly), or its macOS application bundle. Its row opens
+`lody://provider/import?v=1&data=<base64url JSON>` with the Magpie envelope
+and seven runtime targets. Only loopback HTTP gateways are offered; the key
+is always the public attribution token `magpie-lody`, never a LAN secret.
+The OS chooses the installed Lody handler. A compatible Lody build must
+implement this import route.
+
+Lody asks which Providers to add, names them with `-magpie`, and writes only
+to the current desktop's local machine after confirmation. Magpie does not
+read or write Lody's private document store, select models there, or claim
+that opening the link completed the import. Lody exposes no public status
+reader: `Agent.Added` remains nil and the JSON row omits `added`. The GUI
+shows a confirmation hint for this unknown state; Cindy still reports its
+known true/false status. Reopening the link lets Lody handle duplicates.
+Bub requires its separately installed ACP plugin.

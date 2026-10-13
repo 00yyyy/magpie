@@ -1,4 +1,4 @@
-// An app magpie is added to by a link of its own (Cindy) is a row like the
+// An app magpie is added to by a link of its own (Cindy, Lody) is a row like the
 // others on the Agents page (the owner: its wide button, with no line under
 // the name, sat apart from every other): a line under its name says whether
 // magpie is added, and its button stands where the others' model picker
@@ -25,7 +25,7 @@ async function serve(route, lang, added) {
     return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:false,textSize:100};` });
   }
   if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
-  if (url.pathname === "/api/state") return json({ agents: [crush(added), cindy(added)], profiles: [], settings: { lang, theme: "light", textSize: 100 } });
+  if (url.pathname === "/api/state") return json({ agents: [crush(added), cindy(added), { id: "lody", name: "Lody", path: "", icon: "lody", import: "lody://provider/import?v=1&data=fixture", fields: [] }], profiles: [], settings: { lang, theme: "light", textSize: 100 } });
   if (url.pathname === "/api/providers") return json({ providers: [], gateway: { running: true, window: true } });
   if (url.pathname === "/api/plugins") return json({ plugins: [] });
   if (url.pathname.startsWith("/api/")) return json({});
@@ -42,7 +42,7 @@ const SAID = {
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh"]) {
     for (const added of [false, true]) {
-      test(`${engine} ${lang} ${added ? "added" : "not added"}: Cindy's row is laid out as the others`, async (t) => {
+      test(`${engine} ${lang} ${added ? "added" : "not added"}: import rows show known or unknown status and open their app`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         const page = await browser.newPage({ viewport: { width: 960, height: 600 } });
         t.after(async () => {
@@ -56,6 +56,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", (route) => serve(route, lang, added));
         await page.goto("http://magpie.test/");
         await page.waitForLoadState("networkidle");
+
+        const more = page.locator('.agent-more[aria-expanded="false"]');
+        if (await more.count()) await more.click();
+        const lody = page.locator('.row.agent[data-id="lody"]');
+        await lody.scrollIntoViewIfNeeded();
+        await lody.locator(".ag-st-t").waitFor();
+        const hint = await lody.locator(".ag-st-t").innerText();
+        assert.match(hint, /Lody/);
+        assert.doesNotMatch(hint, /Not added|未添加|Added ·|已添加/);
+        assert.equal(await lody.locator(".ag-st").evaluate((e) => e.classList.contains("on")), false);
+        const lodyOpened = page.waitForRequest((r) => r.url().includes("/api/open"));
+        await lody.locator(".ag-start").click();
+        assert.equal(JSON.parse((await lodyOpened).postData()).url, "lody://provider/import?v=1&data=fixture");
 
         const row = page.locator('.row.agent[data-id="cindy"]');
         await row.locator(".ag-st").waitFor();
