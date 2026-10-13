@@ -55,7 +55,7 @@ const L = {
     token: /你的 GitHub 令牌的请求额度暂时用完了$/, every: "所有插件都是最新的" },
   ja: { installed: "インストール済み", check: null, head: "確認できたプラグインに更新はありません · 1 個を確認できませんでした：", none: /^github:me\/opencode-x-auth の最新コミットを確認できませんでした：GitHub はトークンなしでは/,
     token: /GitHub トークンのレート制限は現在使い切られています$/, every: "すべてのプラグインが最新です" },
-  de: { installed: null, check: null, head: "Keine Updates für die geprüften Erweiterungen · 1 konnten nicht geprüft werden: ", none: /^github:me\/opencode-x-auth konnte nicht nach dem neuesten Commit gefragt werden: GitHub erlaubt ohne Token 60 Anfragen/,
+  de: { installed: "Installiert", check: null, head: "Keine Updates für die geprüften Erweiterungen · 1 konnten nicht geprüft werden: ", none: /^github:me\/opencode-x-auth konnte nicht nach dem neuesten Commit gefragt werden: GitHub erlaubt ohne Token 60 Anfragen/,
     token: /Das Rate-Limit von GitHub für Ihren GitHub-Token ist vorerst aufgebraucht$/, every: "Alle Erweiterungen sind aktuell" },
 };
 
@@ -75,9 +75,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             await page.route("**/*", server(lang, limited));
             await page.goto("http://magpie.test/?view=plugins");
             const view = page.locator("#view-plugins");
-            // the Installed tab, by its place where its name isn't given here
+            // the Installed tab, by its name: Built-in (P0) came before it
             const tabs = page.locator(":is(.lib-tabs .opt, .nav-s):visible");
-            await (w.installed ? tabs.filter({ hasText: w.installed }) : tabs.nth(1)).first().click();
+            await tabs.filter({ hasText: w.installed }).first().click();
             const row = view.locator(".pm-row").filter({ has: page.locator(".name span", { hasText: /^opencode-x-auth$/ }) });
             await row.waitFor();
             await view.locator(".pm-foot .pm-check").evaluate((b) => b.click());
