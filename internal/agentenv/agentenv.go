@@ -73,6 +73,8 @@ var Vars = []string{
 	"ALMA_DATA_DIR",
 	// Reasonix Studio and its native CLI share this config home
 	"REASONIX_HOME",
+	// Reasonix's state folder, where it reads REASONIX.md
+	"REASONIX_STATE_HOME",
 	// Mister Morph's config file
 	"MISTER_MORPH_CONFIG",
 	// T3 Code's base folder (its settings in userdata/)
