@@ -18530,7 +18530,8 @@ const ledRowSpeed = (r) => { const d = ledDecode(r); return d ? d.n / (d.w / 100
 // after it is a floor of the answer's speed, when that time is a second or
 // more and the answer 100 tokens or more, as a measured one is. A Codex turn
 // of one call that tells neither tells its output over the whole turn, the
-// wait in it: all of it was written in that time. ledFloor_ says the tokens,
+// wait in it, by the same 1,000-token rule as any whole-time floor (Fallmonkey
+// on Discord: 11 tokens in 2.75 s read ≥4 tok/s). ledFloor_ says the tokens,
 // the ms, and which it is (answer, turn).
 const LED_FLOOR_AGENTS = new Set(["claude", "claude-desktop", "codex"]);
 const ledFloor_ = (r) => {
@@ -18538,7 +18539,7 @@ const ledFloor_ = (r) => {
   if (ledCodexTurn(r)) {
     const n = r.out - (r.reasoning || 0), w = r.ms - r.ttft_ms;
     if (r.reasoning > 0 && n >= LED_CODEX_BODY && w >= LED_CODEX_WINDOW_MS && n * 1000 <= 10000 * w) return { n, w, answer: true };
-    return r.out > 0 && r.ms >= 100 && r.out * 1000 <= 10000 * r.ms ? { n: r.out, w: r.ms, turn: true } : null;
+    return r.out >= 1000 && r.ms >= 1000 && r.out * 1000 <= 10000 * r.ms ? { n: r.out, w: r.ms, turn: true } : null;
   }
   return r.out >= 1000 && r.ms >= 1000 && r.out * 1000 <= 10000 * r.ms ? { n: r.out, w: r.ms } : null;
 };

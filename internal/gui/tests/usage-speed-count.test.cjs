@@ -18,7 +18,10 @@
 // its answer's floor told, only over a second or more after its first token
 // and 100 tokens or more; else it tells the least it wrote at over the whole
 // turn (Fallmonkey on Discord: a first token at 6.8 s, the model working,
-// and the rest 0.2 s later in one push, read as 1,900 tok/s). Every
+// and the rest 0.2 s later in one push, read as 1,900 tok/s), by the same
+// 1,000-token rule as Claude Code's whole-time floor (Fallmonkey again: an
+// 11-token astra answer in 2.75 s read ≥4 tok/s, while an 815-token Claude
+// Code reply said nothing). Every
 // language, a wide window and a narrow one; no backend, the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -44,15 +47,20 @@ const ROWS = [
   // a short one tells nothing
   { ...CC, t: at(3), out: 300, ms: 20000 },
   // a sol turn of one call that reasoned: its 272 answer tokens came in the
-  // 827 ms after its first token, under a second, so the whole turn: at
-  // least 496 tokens in 11,055 ms, 45 tok/s (not 329 from the answer alone)
+  // 827 ms after its first token, under a second, so the whole turn, and
+  // its 496 tokens are under 1,000: nothing (not 329 from the answer alone)
   { ...SOL, t: at(4), out: 496, reasoning: 224, ms: 11055, ttft_ms: 10228 },
   // one that reasoned and wrote its 1,000-token answer over the 10 s after
   // its first token: at least 100 tok/s (not its 1,200 tokens, 120)
   { ...SOL, t: at(5), out: 1200, reasoning: 200, ms: 12000, ttft_ms: 2000 },
   // Fallmonkey's: a first token at 6.8 s and its 380 tokens 0.2 s later, one
-  // push, not 1,900 tok/s: at least 380 in the whole 7 s, 54 tok/s
+  // push, not 1,900 tok/s, and under 1,000 over the whole turn: nothing
   { ...SOL, t: at(6), out: 380, ms: 7000, ttft_ms: 6800 },
+  // Fallmonkey's astra answer: 11 tokens in 2.75 s, not ≥4 tok/s
+  { ...SOL, t: at(7), model: "gpt-6-astra", req: "gpt-6-astra", served: "gpt-6-astra", out: 11, ms: 2750, ttft_ms: 2600 },
+  // 1,200 tokens 0.5 s after a 9.5 s first token, one push: at least 1,200
+  // in the whole 10 s, 120 tok/s
+  { ...SOL, t: at(8), out: 1200, ms: 10000, ttft_ms: 9500 },
 ];
 // the groups as usage.Breakdown sums them (TestGroupSpeedSaysHowManyRepliesItIsOf)
 const G = {
@@ -116,27 +124,27 @@ const L = {
     m: (n, k) => `${n} tok/s · ${k} timed ${k === 1 ? "reply" : "replies"}`, f: (n, k) => `≥${n} tok/s · ${k} replies`, join: "; ", timed: (k) => ` · ${k} timed replies`,
     measured: (k, others) => (k === 1 ? `Measured on ${k} reply, from its first token to its end` : `Measured on ${k} replies, from their first token to their end`) + (others ? "; the others tell no speed" : ""),
     floorTip: (k) => `At least: ${k} replies read from session files, which don't say when their answers began, so time before that is counted too`, row: "125 tok/s", rowFloor: "≥100 tok/s",
-    cx: "≥50 tok/s", luna: "≥45 tok/s", answer: "≥100 tok/s", fall: "≥54 tok/s", turnTip: "the whole turn. What came after the first token (", answerTip: "At least: 1,000 answer tokens in " },
+    cx: "≥50 tok/s", answer: "≥100 tok/s", push: "≥120 tok/s", n1200: "1,200", turnTip: "the whole turn. What came after the first token (", answerTip: "At least: 1,000 answer tokens in " },
   zh: { speed: "速度", kpi: "输出速度",
     m: (n, k) => `${n} token/秒 · ${k} 次计时`, f: (n, k) => `≥${n} token/秒 · ${k} 次回复`, join: "；", timed: (k) => ` · ${k} 次计时`,
     measured: (k, others) => `实测 ${k} 次回复：从首字到结束` + (others ? "；其余请求测不出速度" : ""),
     floorTip: (k) => `下限：${k} 次读自会话文件的回复。会话文件不记录正文何时开始，之前的时间也算在里面`, row: "125 token/秒", rowFloor: "≥100 token/秒",
-    cx: "≥50 token/秒", luna: "≥45 token/秒", answer: "≥100 token/秒", fall: "≥54 token/秒", turnTip: "首字后只有 ", answerTip: "输出 1,000 个正文 token，200 个推理 token 不计" },
+    cx: "≥50 token/秒", answer: "≥100 token/秒", push: "≥120 token/秒", n1200: "1,200", turnTip: "首字后只有 ", answerTip: "输出 1,000 个正文 token，200 个推理 token 不计" },
   "zh-TW": { speed: "速度", kpi: null,
     m: (n, k) => `${n} token/秒 · ${k} 次計時`, f: (n, k) => `≥${n} token/秒 · ${k} 次回覆`, join: "；", timed: (k) => ` · ${k} 次計時`,
     measured: (k, others) => `實測 ${k} 次回覆：從首字到結束` + (others ? "；其餘請求測不出速度" : ""),
     floorTip: (k) => `下限：${k} 次讀自會話檔案的回覆。會話檔案不記錄正文何時開始，之前的時間也算在裡面`, row: "125 token/秒", rowFloor: "≥100 token/秒",
-    cx: "≥50 token/秒", luna: "≥45 token/秒", answer: "≥100 token/秒", fall: "≥54 token/秒", turnTip: "首字後只有 ", answerTip: "輸出 1,000 個正文 token，200 個推理 token 不計" },
+    cx: "≥50 token/秒", answer: "≥100 token/秒", push: "≥120 token/秒", n1200: "1,200", turnTip: "首字後只有 ", answerTip: "輸出 1,000 個正文 token，200 個推理 token 不計" },
   ja: { speed: null, kpi: null,
     m: (n, k) => `${n} トークン/秒 · 計測 ${k} 件`, f: (n, k) => `≥${n} トークン/秒 · 応答 ${k} 件`, join: "／", timed: (k) => ` · 計測 ${k} 件`,
     measured: (k, others) => `${k} 件の応答で実測：最初のトークンから終わりまで` + (others ? "。ほかのリクエストは速度を計れません" : ""),
     floorTip: (k) => `下限：セッションファイルから読んだ ${k} 件の応答。回答が始まった時刻がないため、その前の時間も含まれます`, row: "125 トークン/秒", rowFloor: "≥100 トークン/秒",
-    cx: "≥50 トークン/秒", luna: "≥45 トークン/秒", answer: "≥100 トークン/秒", fall: "≥54 トークン/秒", turnTip: "最初のトークン後は ", answerTip: "で回答 1,000 トークン（推論 200 トークンは含めず）" },
+    cx: "≥50 トークン/秒", answer: "≥100 トークン/秒", push: "≥120 トークン/秒", n1200: "1,200", turnTip: "最初のトークン後は ", answerTip: "で回答 1,000 トークン（推論 200 トークンは含めず）" },
   de: { speed: null, kpi: null,
     m: (n, k) => `${n} Token/s · ${k} gemessene ${k === 1 ? "Antwort" : "Antworten"}`, f: (n, k) => `≥${n} Token/s · ${k} Antworten`, join: "; ", timed: (k) => ` · ${k} gemessene Antworten`,
     measured: (k, others) => `Gemessen an ${k} ${k === 1 ? "Antwort" : "Antworten"}, vom ersten Token bis zum Ende` + (others ? "; die übrigen Anfragen zeigen kein Tempo" : ""),
     floorTip: (k) => `Mindestens: ${k} Antworten aus Sitzungsdateien. Sie sagen nicht, wann die Antworten begannen, also zählt die Zeit davor mit`, row: "125 Token/s", rowFloor: "≥100 Token/s",
-    cx: "≥50 Token/s", luna: "≥45 Token/s", answer: "≥100 Token/s", fall: "≥54 Token/s", turnTip: "der ganze Turn. Nach dem ersten Token kam nur ", answerTip: "Mindestens: 1.000 Antwort-Token in " },
+    cx: "≥50 Token/s", answer: "≥100 Token/s", push: "≥120 Token/s", n1200: "1.200", turnTip: "der ganze Turn. Nach dem ersten Token kam nur ", answerTip: "Mindestens: 1.000 Antwort-Token in " },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -182,13 +190,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal((await cell(1).textContent()).trim(), w.cx);
           assert.equal((await cell(2).textContent()).trim(), w.rowFloor);
           assert.equal((await cell(3).textContent()).trim(), "—");
-          assert.equal((await cell(4).textContent()).trim(), w.luna);
-          assert((await cell(4).getAttribute("title")).includes(w.turnTip), "the whole turn's floor says so: " + (await cell(4).getAttribute("title")));
+          assert.equal((await cell(4).textContent()).trim(), "—", "496 tokens over the whole turn tell nothing");
           assert.equal((await cell(5).textContent()).trim(), w.answer);
           assert((await cell(5).getAttribute("title")).includes(w.answerTip), "the answer's floor says so: " + (await cell(5).getAttribute("title")));
-          assert.equal((await cell(6).textContent()).trim(), w.fall);
-          const fallTip = await cell(6).getAttribute("title");
-          assert(fallTip.includes(w.turnTip) && fallTip.includes("380"), "Fallmonkey's says it is the whole turn: " + fallTip);
+          assert.equal((await cell(6).textContent()).trim(), "—", "Fallmonkey's 380 tokens over the whole turn tell nothing");
+          assert.equal((await cell(7).textContent()).trim(), "—", "Fallmonkey's 11-token astra answer tells nothing");
+          assert.equal((await cell(8).textContent()).trim(), w.push);
+          const pushTip = await cell(8).getAttribute("title");
+          assert(pushTip.includes(w.turnTip) && pushTip.includes(w.n1200), "the whole turn's floor says so: " + pushTip);
 
           // the ranking, by tokens: each group's speed beside its requests
           const rk = (id) => p.locator("#ledRank .rk").filter({ has: p.locator(".rk-nm", { hasText: id }) });

@@ -725,8 +725,11 @@ func (r Row) Decode() (tokens int, w int64) {
 //
 // A Codex turn of one call that tells neither, its window after the first
 // token too short or its body too small, tells its output over the whole
-// turn, the wait for the first token in it: everything it wrote, reasoning
-// too, was written in that time, so it is a true floor of any size.
+// turn, the wait for the first token in it, by the same rule as any other
+// such floor: 1,000 tokens or more over a second or more. It is the same
+// formula, so it has the same gate: under 1,000 tokens the wait is too much
+// of the time to tell anything (Fallmonkey on Discord: 11 tokens in 2.75 s
+// read ≥4 tok/s while an 815-token Claude Code reply told nothing).
 func (r Row) Floor() (tokens int, ms int64) {
 	if r.Source != "log" || !FloorAgents[r.Agent] || r.Failed() {
 		return 0, 0
@@ -740,10 +743,6 @@ func (r Row) Floor() (tokens int, ms int64) {
 				return n, w
 			}
 		}
-		if r.Output <= 0 || r.Millis < MinDecodeMs || int64(r.Output)*1000 > MaxDecodeSpeed*r.Millis {
-			return 0, 0
-		}
-		return r.Output, r.Millis
 	}
 	if r.Output < 1000 || r.Millis < 1000 || int64(r.Output)*1000 > MaxDecodeSpeed*r.Millis {
 		return 0, 0

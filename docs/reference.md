@@ -350,8 +350,10 @@ from the first token to its end, held to the same second and 100 tokens. Its
 whole output over that time would count reasoning written before the first
 token and read high. A Codex turn of one call that tells neither shows the
 least it wrote at over the whole turn, the wait for the first token in it
-(`≥54 tok/s` for 380 tokens in 7 s), of any size, as everything it wrote
-was written in that time. Gateway rows and other agents' keep their own
+(`≥120 tok/s` for 1,200 tokens in 10 s), by the same rule as any floor over
+a whole time: 1,000 tokens or more over a second or more. Under that the
+wait is too much of the time to tell anything, so an 11-token answer in
+2.75 s shows none, as an 815-token Claude Code reply does. Gateway rows and other agents' keep their own
 speed. A floor never mixes into a measured speed: the Speed trend and
 `magpie usage` count timed calls only.
 
