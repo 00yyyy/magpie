@@ -8939,6 +8939,10 @@ function drawEditor(p, presetID) {
   }
 
   if (p) ed.append(...field(t("Models"), renderModels(p), ""));
+  // Azure OpenAI's models are its deployments, which magpie lists with the
+  // key once the resource is added (#1995): said here, so no one takes the
+  // add page for one where they must type them
+  else if (pr?.id === "azure") ed.append(...field(t("Models"), el("div", "hint azure-models", t("No need to type them: once added, magpie lists the deployments this key can call. Type a deployment's name as a model id only if that list can't be fetched.")), ""));
   if (p?.drawIds?.length) ed.append(...renderDrawers(p));
   {
     // the window agents are told a model has, over what the vendor or
@@ -10048,6 +10052,15 @@ const servedIds = (p) => draft.chosen.length ? draft.chosen : draft.none ? [] : 
 // tall held, as app.css's .mchips max-height: min(132px, 28vh) says
 let modelsOpen = false;
 const MCHIPS_MAX = 132;
+// emptyModelsHint is what an empty model list says. Azure OpenAI's is its
+// deployments, asked for with the key after it is added (#1995): while that
+// is under way it says so, and after it says the deployments' names are
+// what to type; every other provider's is the vendor's list.
+function emptyModelsHint(p) {
+  if (p.preset !== "azure") return "The vendor's list is empty. Fetch models again, or type a model id.";
+  if (providers?.fetching && !p.fetched && !p.listError) return "Asking your resource for its deployments with this key…";
+  return "No deployments came back for this key. Fetch models again, or type a deployment's name as a model id.";
+}
 function renderModels(p) {
   // a chip's dot: how its model answered, when it has been asked
   const tested = (c, id) => {
@@ -10249,7 +10262,7 @@ function renderModels(p) {
       c.onclick = () => { draft.chosen = draft.chosen.filter((x) => x !== id); draft.none = true; draw(); };
       chips.append(c);
     }
-    if (!p.models.length && !draft.chosen.length) chips.append(el("span", "hint", t("The vendor's list is empty. Fetch models again, or type a model id.")));
+    if (!p.models.length && !draft.chosen.length) chips.append(el("span", "hint", t(emptyModelsHint(p))));
     // the list is of models agents chat with: image, embedding and speech
     // models are left out of it, and an image model is set in Settings
     else if (f && !chips.children.length) chips.append(el("span", "hint", t("No model here matches “{q}”. Image, embedding and speech models aren't listed, as agents can't chat with them: pick an image model in Settings → Images.", { q: q.value.trim() })));
