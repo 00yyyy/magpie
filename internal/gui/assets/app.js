@@ -6074,14 +6074,17 @@ function accountPlan(a) {
 // clipboard API is refused inside the app's window; a browser tab on the
 // dev UI falls back to it. A tab on `magpie web` reached over plain http
 // from another computer (a NAS's) has no clipboard API at all, so the
-// older copy command is the last try there.
+// older copy command is the last try there. magpie refuses a copy it
+// couldn't read back (#1881: GTK 3 on KDE Plasma without middle-click
+// paste served it empty), and the page's ways are tried then too. When
+// none copies, the page says so and shows the text to copy by hand.
 async function copy(text, what, btn, message) {
   const done = () => { status(message || t("{what} copied", { what }), "ok"); flashCopied(btn); };
   const res = await fetch("/api/copy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }).catch(() => null);
   if (res && res.ok) return done();
   try { await navigator.clipboard.writeText(text); return done(); } catch {}
   if (copyByCommand(text)) return done();
-  status(text);
+  status(t("Couldn't copy. Select it here and copy it yourself: {text}", { text }), "err");
 }
 
 // copyByCommand copies text with the page's copy command, through a
