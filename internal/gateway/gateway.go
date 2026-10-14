@@ -3675,6 +3675,8 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		geminiWhole = !streamOf(body)
 		body = withoutFields(body, "stream")
 	case provider.Anthropic:
+		// Claude Code's advisor, named by magpie's id (advisor.go)
+		body = advisorTools(body, p, upstream, wiresOf(r.Context()))
 		if p.IsBedrock() {
 			// Claude Code's metadata.user_id, a JSON string these days, is
 			// not the plain id Bedrock checks it against (#176)
