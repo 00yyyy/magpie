@@ -1826,7 +1826,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				Count    int          `json:"count"`
 				Dropped  []string     `json:"dropped,omitempty"`
 				Provider providerJSON `json:"provider"`
-			}{len(ms), dropped, providerInfo(*p, agentUses(agent.Detected(), provider.GroupFinder()))})
+			}{fetchedCount(*p, len(ms)), dropped, providerInfo(*p, agentUses(agent.Detected(), provider.GroupFinder()))})
 			return
 		default:
 			http.NotFound(rw, r)
@@ -2199,4 +2199,17 @@ func concurrencyOf(raw json.RawMessage) (n *int, keep bool, err error) {
 		return nil, false, fmt.Errorf("max concurrent requests must be from 0 to 1000, not %d", *n)
 	}
 	return n, false, nil
+}
+
+// fetchedCount is the number of models a refetch says it found: the
+// models the editor lists from it, not the vendor's ids. Antigravity lists
+// a model once per thinking level, which the editor shows as one model
+// with those levels (and Cursor and Devin fold theirs the same way), so
+// "Antigravity: 23 models" sat over 17 chips (#2069). The ids counted
+// stand when the provider offers none.
+func fetchedCount(p provider.Provider, ids int) int {
+	if n := len(p.Available()); n > 0 {
+		return n
+	}
+	return ids
 }
