@@ -437,7 +437,14 @@ func desktopTurn(asked string, body []byte, byClaudeCode, bySubagent bool) strin
 	if byClaudeCode {
 		aside = desktopTitle(body)
 	}
-	if unserved(asked) || !tools && aside && desktopAccepts(asked) {
+	title := !tools && aside && desktopAccepts(asked)
+	gone := unserved(asked)
+	if gone && !title {
+		if m := servedBeside(asked, picked); m != "" {
+			return m
+		}
+	}
+	if gone || title {
 		if picked != "" {
 			return picked
 		}
@@ -453,6 +460,51 @@ func desktopTurn(asked string, body []byte, byClaudeCode, bySubagent bool) strin
 		}
 	}
 	return asked
+}
+
+// servedBeside is the catalog id the session's provider serves a Claude
+// model by that Claude Code asked for by Claude's own id, which no entry
+// has as its id or model: another magpie (a Remote magpie provider) lists
+// it under its own provider's prefix, office/claude/claude-sonnet-5 with
+// the model claude/claude-sonnet-5. Its auto mode's classifier asks for
+// its sonnet by name while the session is on office/claude/claude-opus-5-5,
+// and went to that opus, writing an hour's cache for each tiny reply
+// (#2187, SuInk). Only the provider picked is looked at, so another
+// provider's model of the same name doesn't take it; of that provider's,
+// the one beside the picked model (the same subscription there) comes
+// first. "" when the session's provider serves no such model.
+func servedBeside(asked, picked string) string {
+	bare := strings.TrimSuffix(asked, "[1m]")
+	if picked == "" || strings.Contains(bare, "/") || claudeTier(bare) == "" {
+		return ""
+	}
+	cat := provider.Catalog()
+	var pid, dir string
+	for _, e := range cat {
+		if e.ID == strings.TrimSuffix(picked, "[1m]") && e.Group == "" {
+			pid = e.Provider.ID
+			if i := strings.LastIndex(e.Model, "/"); i >= 0 {
+				dir = e.Model[:i+1]
+			}
+			break
+		}
+	}
+	if pid == "" {
+		return ""
+	}
+	found := ""
+	for _, e := range cat {
+		if e.Group != "" || e.Provider.ID != pid || !strings.HasSuffix(e.Model, "/"+bare) {
+			continue
+		}
+		if dir != "" && e.Model == dir+bare {
+			return e.ID + strings.TrimPrefix(asked, bare)
+		}
+		if found == "" {
+			found = e.ID + strings.TrimPrefix(asked, bare)
+		}
+	}
+	return found
 }
 
 // desktopDefault is the model a request Desktop sends before any turn has
