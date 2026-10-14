@@ -235,3 +235,66 @@ func TestCodexSubagentNicknameInvalidatesOldParseCache(t *testing.T) {
 		t.Fatalf("older parse cache hid the native nickname: %q", got.Nickname)
 	}
 }
+
+// codexLegacySubagentActivity is the started activity as a legacy rollout
+// keeps it (Codex's default history before paginated, openai/codex#47900):
+// an event_msg sub_agent_activity whose event_id is the spawn call's id.
+func codexLegacySubagentActivity(t *testing.T, callID, childID, kind string) string {
+	t.Helper()
+	return codexDetailsLine(t, "event_msg", map[string]any{
+		"type": "sub_agent_activity", "model": "gpt-5.5", "reasoning_effort": "medium", "event_id": callID,
+		"occurred_at_ms": callT0.UnixMilli(), "agent_thread_id": childID, "agent_path": "/root/" + childID, "kind": kind,
+	})
+}
+
+func TestCodexSubagentTaskTitleFromLegacyActivity(t *testing.T) {
+	d := setupCalls(t)
+	codexDetailsRollout(t, d.codex, "main-legacy",
+		codexDetailsMeta(t, "main-legacy", "shared-session", "", ""),
+		codexDetailsSpawn(t, "call-started", "Legacy started task"),
+		codexLegacySubagentActivity(t, "call-started", "child-started", "started"),
+		codexDetailsSpawn(t, "call-interacted", "Legacy interacted task"),
+		codexLegacySubagentActivity(t, "call-interacted", "child-interacted", "interacted"),
+	)
+	for i, c := range []struct{ id, want string }{{"child-started", "Legacy started task"}, {"child-interacted", ""}} {
+		codexDetailsRollout(t, d.codex, c.id,
+			codexDetailsMeta(t, c.id, "shared-session", "main-legacy", ""),
+			codexDetailsUsage(t, c.id, i+1),
+		)
+		if got := Titles([]string{"codex:" + c.id})["codex:"+c.id]; got != c.want {
+			t.Errorf("legacy activity title for %s = %q, want %q", c.id, got, c.want)
+		}
+		if got := codexDetailsSession(t, c.id); got.Title != c.want {
+			t.Errorf("legacy activity session title for %s = %q, want %q", c.id, got.Title, c.want)
+		}
+	}
+}
+
+func TestCodexSubagentTaskTitleComesFromItsOwnParent(t *testing.T) {
+	d := setupCalls(t)
+	spawnFirst := []string{
+		codexDetailsSpawn(t, "call-first", "First child task"),
+		codexDetailsSubagentEvent(t, "call-first", "child-first"),
+	}
+	codexDetailsRollout(t, d.codex, "main-a", append([]string{codexDetailsMeta(t, "main-a", "shared-session", "", "")}, spawnFirst...)...)
+	// a forked child repeats its parent's history, the first child's spawn
+	// included, and its own copy of a spawn names no child of main-a
+	codexDetailsRollout(t, d.codex, "child-fork", append(append([]string{codexDetailsMeta(t, "child-fork", "shared-session", "main-a", "")}, spawnFirst...),
+		codexDetailsSpawn(t, "call-copied", "Only in the fork's copy"),
+		codexDetailsSubagentEvent(t, "call-copied", "child-copied"),
+		codexDetailsUsage(t, "child-fork", 1))...)
+	codexDetailsRollout(t, d.codex, "child-first",
+		codexDetailsMeta(t, "child-first", "shared-session", "main-a", ""),
+		codexDetailsUsage(t, "child-first", 2),
+	)
+	codexDetailsRollout(t, d.codex, "child-copied",
+		codexDetailsMeta(t, "child-copied", "shared-session", "main-a", ""),
+		codexDetailsUsage(t, "child-copied", 3),
+	)
+	if got := codexDetailsSession(t, "child-first"); got.Title != "First child task" {
+		t.Errorf("a fork's copy of the parent's spawn erased the child's title: %q", got.Title)
+	}
+	if got := codexDetailsSession(t, "child-copied"); got.Title != "" {
+		t.Errorf("a spawn its parent never made named the child: %q", got.Title)
+	}
+}

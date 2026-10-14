@@ -384,7 +384,12 @@ Codex keeps the existing session-title precedence. Only when that leaves the
 title empty may a child thread use its parent's `spawn_agent` `task_name`,
 matched by the same `call_id` and an `item_completed` event whose item has type
 `SubAgentActivity`, kind `started`, the same `id`, and the child's
-`agent_thread_id`.
+`agent_thread_id`. A legacy rollout (Codex's default history before paginated)
+keeps that started activity as an `event_msg` `sub_agent_activity` instead, its
+`event_id` the call id, and it links the same way. A link counts only from the
+file of the child's own parent (`parent_session`): a forked child's file
+repeats its parent's history, spawns of its siblings included, and that copy
+neither names a child nor takes a name away from one.
 The native top-level `session_meta.agent_nickname` is exposed separately as
 `nickname` on list, one, manage and overview responses; it does not replace the
 title. The parsed-session cache is versioned for nickname and task-title

@@ -1603,7 +1603,7 @@ func Get(key string) (Session, bool) {
 		return Session{}, false
 	}
 	var identities map[string]CodexIdentity
-	var taskTitles map[string]codexTaskTitle
+	var taskTitles map[codexTaskTitle]string
 	if strings.HasPrefix(key, "codex:") {
 		var codexFiles []file
 		for _, f := range files {

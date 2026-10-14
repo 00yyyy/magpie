@@ -40,6 +40,10 @@ type cxLine struct {
 		CallID        string `json:"call_id"`
 		Name          string `json:"name"`
 		Arguments     string `json:"arguments"`
+		// a legacy rollout's sub_agent_activity event
+		EventID       string `json:"event_id"`
+		AgentThreadID string `json:"agent_thread_id"`
+		Kind          string `json:"kind"`
 		Item          struct {
 			ID            string `json:"id"`
 			Type          string `json:"type"`
@@ -102,6 +106,7 @@ var (
 	cxText             = []byte(`,"text":"`)
 	cxSpawnAgent       = []byte(`"name":"spawn_agent"`)
 	cxSubAgentActivity = []byte(`"type":"SubAgentActivity"`)
+	cxSubAgentEvent    = []byte(`"type":"sub_agent_activity"`)
 	cxStartedKind      = []byte(`"kind":"started"`)
 )
 
@@ -149,7 +154,7 @@ func codexHead(s *state, b []byte, main bool) bool {
 		return true
 	case top == "event_msg":
 		return payload == "token_count" || payload == "task_started" || payload == "thread_settings_applied" || payload == "user_message" && s.Title == "" ||
-			bytes.Contains(h, cxSubAgentActivity) && bytes.Contains(h, cxStartedKind)
+			(payload == "sub_agent_activity" || bytes.Contains(h, cxSubAgentActivity)) && bytes.Contains(h, cxStartedKind)
 	case cxCalls[payload]:
 		// a tool call, named in its head
 		name := typeAfter(h, cxName)
@@ -292,12 +297,15 @@ func setSessionCodexIdentity(s *Session, identities map[string]CodexIdentity) {
 	}
 }
 
+// codexTaskTitle names a child thread by the parent whose spawn_agent call
+// started it: a forked child's file repeats its parent's history, spawns of
+// its siblings included, and those claims never stand for the real parent's.
 type codexTaskTitle struct {
+	child  string
 	parent string
-	title  string
 }
 
-func codexSubagentTaskTitles(files []file) map[string]codexTaskTitle {
+func codexSubagentTaskTitles(files []file) map[codexTaskTitle]string {
 	type parentCalls struct {
 		names       map[string]string
 		children    map[string]string
@@ -334,7 +342,7 @@ func codexSubagentTaskTitles(files []file) map[string]codexTaskTitle {
 			calls.children[id] = child
 		}
 	}
-	out, conflicts := map[string]codexTaskTitle{}, map[string]bool{}
+	out, conflicts := map[codexTaskTitle]string{}, map[codexTaskTitle]bool{}
 	for parentKey, calls := range parents {
 		parent := strings.TrimPrefix(parentKey, "codex:")
 		for id, name := range calls.names {
@@ -342,16 +350,16 @@ func codexSubagentTaskTitles(files []file) map[string]codexTaskTitle {
 			if calls.badNames[id] || calls.badChildren[id] || name == "" || child == "" {
 				continue
 			}
-			task := codexTaskTitle{parent: parent, title: name}
-			if old, ok := out[child]; ok && old != task {
-				conflicts[child] = true
+			link := codexTaskTitle{child: child, parent: parent}
+			if old, ok := out[link]; ok && old != name {
+				conflicts[link] = true
 			} else {
-				out[child] = task
+				out[link] = name
 			}
 		}
 	}
-	for child := range conflicts {
-		delete(out, child)
+	for link := range conflicts {
+		delete(out, link)
 	}
 	return out
 }
@@ -376,12 +384,30 @@ func codexTaskParentFiles(children, all []file) []file {
 	return out
 }
 
-func setSessionCodexTaskTitle(s *Session, titles map[string]codexTaskTitle) {
+// codexAgentStarted notes that the spawn call id started the child thread.
+func (s *state) codexAgentStarted(id, thread string) {
+	if id == "" || thread == "" {
+		return
+	}
+	if s.CodexAgentIDs == nil {
+		s.CodexAgentIDs = map[string]string{}
+	}
+	if old, ok := s.CodexAgentIDs[id]; ok && old != thread {
+		if s.CodexAgentConflicts == nil {
+			s.CodexAgentConflicts = map[string]bool{}
+		}
+		s.CodexAgentConflicts[id] = true
+	} else {
+		s.CodexAgentIDs[id] = thread
+	}
+}
+
+func setSessionCodexTaskTitle(s *Session, titles map[codexTaskTitle]string) {
 	if s.Agent != "codex" || s.Title != "" || s.Role != codexRoleSubagent || s.ParentSession == "" {
 		return
 	}
-	if task, ok := titles[s.ID]; ok && task.parent == s.ParentSession {
-		s.Title = task.title
+	if name, ok := titles[codexTaskTitle{child: s.ID, parent: s.ParentSession}]; ok {
+		s.Title = name
 	}
 }
 
@@ -508,7 +534,7 @@ func codexBody(s *state, b []byte, main bool) {
 	want := s.ID == "" && bytes.Contains(b, cxMeta) ||
 		bytes.Contains(b, cxTurn) || bytes.Contains(b, cxCount) || bytes.Contains(b, cxRecord) || bytes.Contains(b, cxCompacted) || bytes.Contains(b, cxStarted) || bytes.Contains(b, cxSettings) ||
 		s.Title == "" && bytes.Contains(b, cxUserMsg) || (main || s.Title == "") && bytes.Contains(b, cxUserRole) ||
-		bytes.Contains(b, cxSpawnAgent) || bytes.Contains(b, cxSubAgentActivity) && bytes.Contains(b, cxStartedKind)
+		bytes.Contains(b, cxSpawnAgent) || (bytes.Contains(b, cxSubAgentActivity) || bytes.Contains(b, cxSubAgentEvent)) && bytes.Contains(b, cxStartedKind)
 	if !want {
 		return
 	}
@@ -564,19 +590,11 @@ func codexBody(s *state, b []byte, main bool) {
 			}
 		}
 	case l.Type == "event_msg" && p.Type == "item_completed" && p.Item.Type == "SubAgentActivity" && p.Item.Kind == "started":
-		if p.Item.ID != "" && p.Item.AgentThreadID != "" {
-			if s.CodexAgentIDs == nil {
-				s.CodexAgentIDs = map[string]string{}
-			}
-			if old, ok := s.CodexAgentIDs[p.Item.ID]; ok && old != p.Item.AgentThreadID {
-				if s.CodexAgentConflicts == nil {
-					s.CodexAgentConflicts = map[string]bool{}
-				}
-				s.CodexAgentConflicts[p.Item.ID] = true
-			} else {
-				s.CodexAgentIDs[p.Item.ID] = p.Item.AgentThreadID
-			}
-		}
+		s.codexAgentStarted(p.Item.ID, p.Item.AgentThreadID)
+	case l.Type == "event_msg" && p.Type == "sub_agent_activity" && p.Kind == "started":
+		// a legacy rollout (Codex's default history before paginated) keeps
+		// the started activity as this event, its id the spawn call's
+		s.codexAgentStarted(p.EventID, p.AgentThreadID)
 	case l.Type == "turn_context":
 		codexState(s).context("", p.TurnID, p.Model)
 		if p.Model != "" {

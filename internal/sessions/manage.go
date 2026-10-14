@@ -118,7 +118,7 @@ func ListAgent(agent string) []Managed {
 	}
 	refresh(mine, all)
 	identities := map[string]CodexIdentity(nil)
-	taskTitles := map[string]codexTaskTitle(nil)
+	taskTitles := map[codexTaskTitle]string(nil)
 	if agent == "codex" {
 		identities = codexIdentitySnapshot(mine)
 		taskTitles = codexSubagentTaskTitles(mine)
