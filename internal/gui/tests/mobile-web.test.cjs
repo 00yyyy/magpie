@@ -7,8 +7,6 @@
 // layout and controls. Its height is rounded only for the pixel comparison,
 // so unchanged text below keeps the baseline's subpixel antialiasing. API
 // boundaries are faked; the page's scrolling helpers are left intact.
-// Until BASE_REF has Routing's wide layout, routing-context-layout checks
-// that intentional change; this file still checks Routing at phone widths.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -312,7 +310,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const original = await open(browser, lang, width, { touch: false, original: true });
           try {
             for (const view of views) {
-              if (view === "routing" && !baselineFile("routing.js").includes('const main = el("div", "rt-main")')) continue;
               if (view === "agents" && !baselineFile("app.js").includes("function connectPanel")) continue;
               await go(current, view); await go(original, view);
               await current.mouse.move(0, 0); await original.mouse.move(0, 0);

@@ -38,7 +38,7 @@ const routes = [101, 102, 103].map((id) => {
 async function serve(route) {
   const url = new URL(route.request().url());
   const json = (data) => route.fulfill({ json: data });
-  if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"en",theme:"light",web:true}; localStorage.setItem("magpie.routingContext", "1");` });
+  if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"en",theme:"light",web:true};` });
   if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
   if (url.pathname === "/api/state") return json({ agents: [{ id: "codex", name: "Codex", path: "/test/codex", fields: [] }], profiles: [], settings: { lang: "en", theme: "light" } });
   if (url.pathname === "/api/gateway/trace") {
@@ -67,9 +67,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=routing");
       await page.locator(".rt-ctx .ctx-waffle > i").first().waitFor();
       assert.equal(await page.locator(".rt-ctx .ctx-waffle > i").count(), 400);
-      // Routing draws the context cells without an entrance animation. Wait
-      // for the page's other entrances too before checking what they retain.
-      await page.waitForFunction(() => !document.getAnimations().some((a) => ["ctx-cell", "fade-in", "view-in"].includes(a.animationName) && a.playState === "running"), null, { timeout: 4000 });
+      // the cells come in, staggered: the last has begun within 1.5s
+      await page.waitForFunction(() => !document.getAnimations().some((a) => a.animationName === "ctx-cell" && a.playState === "running"), null, { timeout: 4000 });
       const held = await page.evaluate(() => {
         const by = {};
         for (const a of document.getAnimations()) {

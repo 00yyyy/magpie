@@ -59,18 +59,6 @@ const want = {
   de: { story: "doch Claude Code hat die Anfrage vorher abgebrochen, daher wird niemand erneut gefragt", retry: "erneut versucht", tag: "499 · abgebrochen" },
 };
 
-// History can be below the phone footer after the full story paints.
-// Reach it with user input; click scrolling is intentionally blocked.
-async function reach(page, target, width) {
-  for (let i = 0; i < 20; i++) {
-    const box = await target.boundingBox(), view = await page.locator("#view-routing").boundingBox();
-    if (box && box.y >= view.y && box.y + box.height <= view.y + view.height) break;
-    await page.mouse.move(width / 2, 380);
-    await page.mouse.wheel(0, box && box.y < view.y ? -250 : 250);
-    await page.waitForTimeout(100);
-  }
-}
-
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of Object.keys(want)) {
     for (const width of [1100, 420]) {
@@ -90,12 +78,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await browser.close();
         });
         await page.goto("http://magpie.test/?view=routing");
-        const day = page.locator(".rt-days .rt-day").nth(1);
-        await reach(page, day, width);
-        await day.click();
+        await page.locator(".rt-days .rt-day").nth(1).click();
         await page.locator(".rt-req").nth(routes.length - 1).waitFor();
         const row = page.locator(".rt-req").nth(0);
-        await reach(page, row, width);
         await row.click();
         await page.waitForTimeout(400);
         const steps = await page.locator(".rt-steps li").allTextContents();

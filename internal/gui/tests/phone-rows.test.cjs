@@ -119,19 +119,7 @@ const pages = [
   { view: "providers", rows: ".row.provider", wait: "#view-providers .row.provider" },
   { view: "gateway", rows: ".row.gw, #gwModels .row.model, #activity .call, #gatewayKeys .acc[data-key]", wait: "#gatewayKeys .acc[data-key]" },
   // the requests are today's in the history: open the day
-  { view: "routing", rows: ".rt-req", wait: ".rt-day >> nth=1", open: async (page) => {
-    const day = page.locator(".rt-day").nth(1);
-    // The live card can put history below the phone's footer. Scroll as
-    // the reader would; the app does not permit a click to scroll it.
-    for (let i = 0; i < 20; i++) {
-      const box = await day.boundingBox(), view = await page.locator("#view-routing").boundingBox();
-      if (box && box.y >= view.y && box.y + box.height <= view.y + view.height) break;
-      await page.mouse.move(180, 400);
-      await page.mouse.wheel(0, box && box.y < view.y ? -250 : 250);
-      await page.waitForTimeout(100);
-    }
-    await day.click();
-  }, then: ".rt-req .upstream" },
+  { view: "routing", rows: ".rt-req", wait: ".rt-day >> nth=1", open: (page) => page.locator(".rt-day").nth(1).click(), then: ".rt-req .upstream" },
 ];
 const engines = process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"];
 const langs = process.env.LANGS ? process.env.LANGS.split(",") : ["en", "zh", "zh-TW", "ja", "de"];
