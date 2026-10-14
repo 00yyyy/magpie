@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"maps"
 	"net/http"
 	"net/url"
@@ -608,7 +609,10 @@ func writeClaudeCredential(loc claudeCredentialLocation, c claudeCredentials) er
 		b = one.Bytes()
 	}
 	if !loc.keychain {
-		if err := os.WriteFile(loc.path, append(b, '\n'), 0o600); err != nil {
+		// Claude Code's own sign-in: never truncated in place, so a machine
+		// going down mid-write or a file held for a moment on Windows
+		// leaves the old one whole, not an empty file (#2239, #1505)
+		if err := writePrivate(loc.path, append(b, '\n')); err != nil {
 			return err
 		}
 	} else {
@@ -1024,9 +1028,17 @@ func codexToken(ctx context.Context, path string) (tok, accountID string, err er
 	if err != nil {
 		return "", "", err
 	}
-	// keep every other field of the file as Codex CLI wrote it
+	// keep every other field of the file as Codex CLI wrote it. The file
+	// is the user's own sign-in, which Codex CLI and the Codex app read:
+	// written beside it, flushed and renamed in, never truncated in place,
+	// so a machine going down mid-write leaves the old one whole and a
+	// file held for a moment on Windows is waited out (#2239, #1505). A
+	// write that still fails loses the rotation, said in the log; the
+	// fresh access token in hand still serves this request.
 	if out, err := json.MarshalIndent(raw, "", "  "); err == nil {
-		os.WriteFile(path, append(out, '\n'), 0o600)
+		if werr := writePrivate(path, append(out, '\n')); werr != nil {
+			log.Printf("codex: the refreshed sign-in didn't reach %s: %v", path, werr)
+		}
 	}
 	return tok, accountID, nil
 }
