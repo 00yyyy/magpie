@@ -4349,11 +4349,21 @@ function placePop(anchor, w, h) {
     pop.classList.add("up");
     pop.style.top = "auto";
     pop.style.bottom = innerHeight - r.top + 5 + "px";
+    holdPop(pop, r.top - 5 - top);
     return;
   }
   if (y + h > innerHeight - pad) y = Math.max(top, innerHeight - pad - h);
   pop.style.bottom = "auto";
   pop.style.top = y + "px";
+  holdPop(pop, innerHeight - pad - y);
+}
+
+// holdPop keeps the pop to the room it was placed in: on a phone it may
+// grow to the window's height (body.web), more than the h it was placed
+// by, and a model picker opened upward ran off the top, its filter and
+// first rows out of reach.
+function holdPop(pop, room) {
+  if (!(parseFloat(getComputedStyle(pop).maxHeight) <= room)) pop.style.maxHeight = room + "px";
 }
 
 // ultracodeToggle: Claude Code's ultracode as a square that a click turns
