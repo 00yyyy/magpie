@@ -360,8 +360,11 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 		ms := map[string]any{}
 		for _, m := range models {
 			e := map[string]any{"name": m.Name}
+			// modalities alone says a model takes images: OpenCode 1 takes
+			// its image input from them, and its attachment flag, which
+			// nothing of OpenCode 1.18 reads, is a legacy field OpenCode 2
+			// drops with a WARN per model on every load (#2209)
 			if m.Images {
-				e["attachment"] = true
 				e["modalities"] = map[string]any{"input": []string{"text", "image"}, "output": []string{"text"}}
 			}
 			// without it OpenCode doesn't know when to compact, and a
