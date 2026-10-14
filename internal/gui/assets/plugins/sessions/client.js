@@ -891,7 +891,19 @@ magpie.plugin("sessions", (ctx) => {
     const parts = got.tr?.parts || [];
     const out = [];
     if (!parts.length) out.push(el("p", "cx-none", t(got.tr?.source === "gateway" ? "No saved gateway content for this session" : "Nothing was said here")));
-    for (const p of parts) out.push(ledSaid(p));
+    // each reply names its model once, at its first part, and again
+    // only where the model changes inside it (#2253): the model its own
+    // line in the agent's file names, so none where the file names none
+    let said = "", fresh = true;
+    for (const p of parts) {
+      let model = "";
+      if (p.role === "assistant") {
+        if (p.model && (fresh || p.model !== said)) model = p.model;
+        said = p.model || "";
+        fresh = false;
+      } else if (p.role === "user") fresh = true;
+      out.push(ledSaid(p, model));
+    }
     if (got.tr?.cut) out.push(el("p", "cx-none", t("There was more than is shown here")));
     out.push(el("p", "cx-src", t(got.tr?.source === "gateway" ? "Recorded gateway traffic only; earlier, expired or uncaptured content may be missing" : "Read from the agent's session file; magpie keeps no copy")));
     box.replaceChildren(...out);

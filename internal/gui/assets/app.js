@@ -17173,11 +17173,18 @@ const LED_KINDS = { tool_use: "Tool call", tool_result: "Tool result", thinking:
 const LED_ROLES = { user: "You", assistant: "Assistant", tool: "Tool" };
 
 // one thing said: who said it, and its words in a box; long ones show a part and
-// unroll, and reasoning and what the agent put in itself are folded
-function ledSaid(p) {
+// unroll, and reasoning and what the agent put in itself are folded; model,
+// when given, is said muted after it (a session's reader names the model
+// of each reply, #2253)
+function ledSaid(p, model) {
   const head = el("div", "cx-h");
   head.append(el("span", "cx-role " + p.role, t(LED_KINDS[p.kind] || LED_ROLES[p.role] || p.role)));
   if (p.name) head.append(el("code", "cx-name", p.name));
+  if (model) {
+    const m = el("span", "cx-model", model);
+    m.title = t("Model") + ": " + model;
+    head.append(m);
+  }
   const words = el("pre", "cx-t", p.text);
   if (p.cut) words.append(el("em", "cx-cut", "\n" + t("… {n} more characters not shown", { n: ledNum(p.cut) })));
   if (p.kind === "thinking" || p.kind === "context") {

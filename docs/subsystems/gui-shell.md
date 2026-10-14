@@ -372,7 +372,18 @@ loop events from protocol 1.4 on (so a turn still running shows), and the
 untimed `context.append_message` records of a session imported from
 kimi-cli; Kimi Code's own timed messages repeat those and are skipped
 ([`transcript_kimi.go`](../../internal/sessions/transcript_kimi.go),
-`TestKimiCodeTranscript`). When the selected date range is empty but
+`TestKimiCodeTranscript`). Each reply in the conversation names its model
+(#2253), muted after its first part and again where it changes inside a
+reply: a part's `model` is what its own line in the agent's file names,
+Claude Code's `message.model` (the model that answered; none for its own
+`<synthetic>` lines), Codex's `turn_context.model` (the model the turn was
+sent to), Pi's and omp's `message.model`, OpenCode's `modelID` or OpenCode
+2's `model.id`. Kimi Code (whose model is only on a `usage.record` after
+the reply), Cursor and a gateway transcript (which records the model asked
+for, not the one that answered) name none, and nothing is guessed in their
+place. The Usage page's per-request content doesn't repeat it. See
+`TestTranscriptModel*` and `sessions-talk-model.test.cjs`. When the
+selected date range is empty but
 matching history exists, Usage offers **All sessions**, preserving the agent,
 model, folder and search filters. See `sessions-empty-range.test.cjs`.
 

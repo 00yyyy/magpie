@@ -96,6 +96,7 @@ type piEntry struct {
 	Message  *struct {
 		Role     string          `json:"role"`
 		ToolName string          `json:"toolName"`
+		Model    string          `json:"model"` // an assistant's: the one it was answered by (#2253)
 		Content  json.RawMessage `json:"content"`
 	} `json:"message"`
 }
@@ -134,6 +135,9 @@ func piTranscript(path string, add func(bool, Part) bool) error {
 	}
 	for i := len(branch) - 1; i >= 0; i-- {
 		for _, p := range piParts(branch[i]) {
+			if p.Role == "assistant" && branch[i].Message != nil {
+				p.Model = branch[i].Message.Model
+			}
 			if !add(p.Role != "assistant", p) {
 				return nil
 			}
