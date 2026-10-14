@@ -15409,17 +15409,18 @@ function drawQuotaPlot(g, lines, x0, x1, w, h, now, thin) {
   if (!thin) for (const v of [0, 50, 100]) g.append(sv("line", { x1: 0, x2: w, y1: h - (v / 100) * h, y2: h - (v / 100) * h, class: "qc-grid" }));
   const X = (t) => ((t - x0) / (x1 - x0)) * w;
   lines.forEach((l, i) => {
-    const color = `var(--c${(i % 7) + 1})`;
+    // data-series is the window's colour, and in colorblind mode its dash
+    const s = i % 7, color = `var(--c${s + 1})`;
     const c = l.cycle || quotaCycle(l, now);
     // a window far shorter than the span (a 5-hour one over a week) is
     // drawn faint, without its even burn, an all but upright dash
     const short = !thin && c.reset && c.reset - c.start < (x1 - x0) / 12;
     if (c.reset && c.start < c.reset && !short) {
-      const e = sv("line", { x1: X(c.start), y1: 0, x2: X(c.reset), y2: h, class: "qc-even" }, { stroke: color });
+      const e = sv("line", { x1: X(c.start), y1: 0, x2: X(c.reset), y2: h, class: "qc-even", "data-series": s }, { stroke: color });
       g.append(e);
     }
     const d = quotaPaths(l.points, x0, x1, w, h);
-    if (d) g.append(sv("path", { d, class: "qc-line" + (short ? " qc-short" : ""), "data-name": l.name, "data-series": i }, { stroke: color }));
+    if (d) g.append(sv("path", { d, class: "qc-line" + (short ? " qc-short" : ""), "data-name": l.name, "data-series": s }, { stroke: color }));
   });
   // a spark ends at now already, and in 16px the dotted now line read as a
   // stray mark under the curve (#1601); the large curve keeps it
@@ -15437,8 +15438,6 @@ function quotaCurve(sub) {
   range.type = "button";
   const key = usageAcctKey(sub);
   head.append(el("span", "", t("Left over time")), range);
-  // what the dashes are isn't plain from the plot (John on Discord asked)
-  box.title = t("Solid: what was left. Dashed: an even pace, full at the cycle's start to empty at its reset; a line above its dashes lasts the cycle, one below runs out before the reset.");
   const W = 300, H = 60;
   const g = sv("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", class: "qc-plot", role: "img" });
   curveZoom(box, g);
@@ -15448,14 +15447,16 @@ function quotaCurve(sub) {
     legend.replaceChildren();
     shown.forEach((l, i) => {
       const k = el("span", "qc-key");
-      k.dataset.series = i;
+      const s = i % 7, color = `var(--c${s + 1})`;
+      k.dataset.series = s;
       const sw = el("i");
-      const color = `var(--c${(i % 7) + 1})`;
-      sw.style.setProperty("--sw", color);
       sw.style.background = color;
+      // colorblind mode shows this for the dot: the window's line in its dash
+      const sample = sv("svg", { class: "qc-sample", viewBox: "0 0 22 6", "aria-hidden": "true" });
+      sample.append(sv("line", { x1: 1, y1: 3, x2: 21, y2: 3, class: "qc-dash", "data-series": s }, { stroke: color }));
       const last = l.points[l.points.length - 1];
       if (!last) return;
-      k.append(sw, el("span", "", l.label), el("b", "", Math.round(last.left) + "%"));
+      k.append(sw, sample, el("span", "", l.label), el("b", "", Math.round(last.left) + "%"));
       k.title = [t("{name}: {n} left, read {when}", { name: l.label, n: Math.round(last.left) + "%", when: quotaTimeText(last.at, now) }),
         "", t("Latest readings:"), ...quotaReadings(l, now)].join("\n");
       legend.append(k);
@@ -15471,6 +15472,11 @@ function quotaCurve(sub) {
     // at its end belongs to the next cycle, not this cycle's last figure.
     const shown = history?.shown || lines;
     drawQuotaPlot(g, shown, x0, Math.max(x0 + 1, x1), W, H, now);
+    // what the dashes are isn't plain from the plot (John on Discord asked);
+    // colorblind mode dashes the windows and dots the even paces
+    box.title = document.documentElement.dataset.colorblind
+      ? t("Each window's line has the dash shown beside its name. Dotted: an even pace, full at the cycle's start to empty at its reset; a line above its dots lasts the cycle, one below runs out before the reset.")
+      : t("Solid: what was left. Dashed: an even pace, full at the cycle's start to empty at its reset; a line above its dashes lasts the cycle, one below runs out before the reset.");
     const r = picked ? t("Past cycle") : t(quotaRange === "2d" ? "2 days" : "Cycle");
     range.textContent = r;
     range.disabled = quotaRange !== "cycle" || !past.cycles.length;
@@ -20932,7 +20938,7 @@ function renderSettings() {
   prefsBase = keep;
   renderFonts(s);
   $("#themeSegs").replaceChildren(segs(THEMES.map(([id, name]) => [id, t(name)]), s.theme, (theme) => savePrefs({ ...keep, theme })));
-  $("#colorblindSegs").title = t("High-contrast chart palette with distinct line styles and legend shapes");
+  $("#colorblindSegs").title = t("Colorblind-safe chart colors, and each allowance window's line in a dash of its own");
   $("#colorblindSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.colorblind ? "on" : "off", (v) => savePrefs({ ...keep, colorblind: v === "on" })));
   renderLangPick(s, keep);
   renderGatewayMode(s);

@@ -38,7 +38,8 @@ import (
 type Settings struct {
 	Theme string `json:"theme,omitempty"` // system | light | dark
 	// Colorblind switches chart series (--c1…--c7) to an Okabe–Ito palette
-	// and gives quota curve lines and legend keys distinct shapes (#2073).
+	// and gives each quota curve window, and its legend key, a dash of its
+	// own (#2073).
 	Colorblind bool   `json:"colorblind,omitempty"`
 	Lang       string `json:"lang,omitempty"` // system | en | zh
 	Tray       string `json:"tray,omitempty"` // what clicking the tray icon opens: panel | window

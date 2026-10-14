@@ -369,45 +369,99 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 }
 
 const cbWords = {
-  en: { label: "Colorblind mode", off: "Off", on: "On" },
-  zh: { label: "色盲模式", off: "关闭", on: "开启" },
-  "zh-TW": { label: "色盲模式", off: "關閉", on: "開啟" },
-  ja: { label: "色覚サポート", off: "オフ", on: "オン" },
-  de: { label: "Farbenblind-Modus", off: "Aus", on: "An" },
+  en: { label: "Colorblind mode", off: "Off", on: "On", tip: "Each window's line has the dash", solid: "Solid: what was left." },
+  zh: { label: "色盲模式", off: "关闭", on: "开启", tip: "每个窗口的线型", solid: "实线：剩余额度。" },
+  "zh-TW": { label: "色盲模式", off: "關閉", on: "開啟", tip: "每個時段的線型", solid: "實線：剩餘額度。" },
+  ja: { label: "色覚サポート", off: "オフ", on: "オン", tip: "各ウィンドウの線種", solid: "実線：残量。" },
+  de: { label: "Farbenblind-Modus", off: "Aus", on: "An", tip: "Jedes Zeitfenster hat das Strichmuster", solid: "Durchgezogen: der verbleibende Rest." },
 };
+
+// colorblindPage: the Usage and Settings pages over fixtures, with the
+// settings (colorblind included) kept as a backend would and every save
+// recorded
+async function colorblindPage(browser, lang, data, colorblind) {
+  const posts = [];
+  const st = { theme: "light", colorblind, lang, tray: "panel", quotaLeft: false, currency: "usd" };
+  const context = await browser.newContext({ viewport: { width: 900, height: 640 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  page.setDefaultTimeout(5000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const base = serve(lang, "light", false, data);
+  await page.route("**/*", async (route) => {
+    const req = route.request(), url = new URL(req.url());
+    const json = (body) => route.fulfill({ json: body });
+    if (url.pathname === "/boot.js") {
+      const boot = { lang, theme: st.theme, web: true, ...(st.colorblind ? { colorblind: true } : {}) };
+      return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify(boot)};` });
+    }
+    if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: st });
+    if (url.pathname === "/api/settings") {
+      if (req.method() === "POST") {
+        const b = req.postDataJSON();
+        posts.push(b);
+        Object.assign(st, b);
+      }
+      return json(st);
+    }
+    return base(route);
+  });
+  return { page, st, posts, errors };
+}
+
+// readCurve: what a quota curve shows of each window, as drawn
+function readCurve(page, sel) {
+  return page.evaluate((sel) => {
+    const parse = (s) => s.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
+    const lum = ([r, g, b]) => {
+      const [R, G, B] = [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+    };
+    const hue = ([r, g, b]) => {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+      if (!d) return 0;
+      const h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return h * 60;
+    };
+    const curve = document.querySelector(sel);
+    const lines = [...curve.querySelectorAll("path.qc-line")].map((p) => {
+      const cs = getComputedStyle(p);
+      const rgb = parse(cs.stroke);
+      return { series: p.dataset.series, stroke: cs.stroke, dash: cs.strokeDasharray, opacity: +cs.opacity, lum: lum(rgb), hue: hue(rgb) };
+    });
+    const evens = [...curve.querySelectorAll("line.qc-even")].map((e) => ({ series: e.dataset.series, stroke: getComputedStyle(e).stroke, dash: getComputedStyle(e).strokeDasharray }));
+    const keys = [...curve.querySelectorAll(".qc-key")].map((k) => {
+      const dot = k.querySelector("i"), sample = k.querySelector(".qc-sample"), line = sample?.querySelector("line");
+      const kept = [...k.querySelectorAll("*")].filter((x) => parseFloat(getComputedStyle(x).borderLeftWidth) > 0).length;
+      return {
+        series: k.dataset.series, dot: getComputedStyle(dot).display !== "none", dotColor: getComputedStyle(dot).backgroundColor,
+        sample: !!sample && getComputedStyle(sample).display !== "none" && sample.getBoundingClientRect().width > 10,
+        sampleStroke: line && getComputedStyle(line).stroke, sampleDash: line && getComputedStyle(line).strokeDasharray, borders: kept,
+      };
+    });
+    return { cb: document.documentElement.dataset.colorblind || "", title: curve.title, lines, evens, keys };
+  }, sel);
+}
+
+const codexCurve = '.subscription-card[data-key="codex"] .quota-curve';
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const [lang, w] of Object.entries(cbWords)) {
-    test(`${engine} ${lang}: colorblind mode separates quota series by colour, dash and legend shape (#2073)`, async (t) => {
+    test(`${engine} ${lang}: colorblind mode separates quota windows by colour and dash, in the legend too (#2073)`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
-      const data = fixtures(Date.now());
-      const posts = [];
-      let st = { theme: "light", colorblind: false, lang, tray: "panel", quotaLeft: false, currency: "usd" };
-      const context = await browser.newContext({ viewport: { width: 900, height: 640 }, reducedMotion: "reduce" });
-      const page = await context.newPage();
-      page.setDefaultTimeout(5000);
-      const errors = [];
-      page.on("pageerror", (e) => errors.push(e.message));
-      const base = serve(lang, "light", false, data);
-      await page.route("**/*", async (route) => {
-        const req = route.request(), url = new URL(req.url());
-        const json = (body) => route.fulfill({ json: body });
-        if (url.pathname === "/boot.js") {
-          const boot = { lang, theme: st.theme, web: true, ...(st.colorblind ? { colorblind: true } : {}) };
-          return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify(boot)};` });
-        }
-        if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: st });
-        if (url.pathname === "/api/settings") {
-          if (req.method() === "POST") {
-            const b = req.postDataJSON();
-            posts.push(b);
-            st = { ...st, ...b };
-          }
-          return json(st);
-        }
-        return base(route);
-      });
+      const { page, st, posts, errors } = await colorblindPage(browser, lang, fixtures(Date.now()), false);
+
+      // off by default: the dots and solid lines of before
+      await page.goto("http://magpie.test/?view=usage");
+      await page.locator(codexCurve).first().waitFor();
+      let got = await readCurve(page, codexCurve);
+      assert.equal(got.cb, "");
+      assert.ok(got.lines.every((l) => l.dash === "none"), JSON.stringify(got.lines));
+      assert.ok(got.keys.every((k) => k.dot && !k.sample), JSON.stringify(got.keys));
+      assert.ok(got.title.startsWith(w.solid), got.title);
+      const plainEven = got.evens[0].dash;
 
       await page.goto("http://magpie.test/?view=settings&tab=general");
       const row = page.locator("#colorblindRow");
@@ -415,36 +469,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await row.locator(".name").innerText(), w.label);
       assert.deepEqual(await row.locator("#colorblindSegs .opt").allInnerTexts(), [w.off, w.on]);
       assert.equal(await row.locator("#colorblindSegs .opt.on").innerText(), w.off, "off by default");
-      assert.equal(await page.evaluate(() => document.documentElement.dataset.colorblind), undefined);
-
-      const readCurve = () => page.evaluate(() => {
-        const parse = (s) => s.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
-        const lum = ([r, g, b]) => {
-          const [R, G, B] = [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
-          return 0.2126 * R + 0.7152 * G + 0.0722 * B;
-        };
-        const hue = ([r, g, b]) => {
-          r /= 255; g /= 255; b /= 255;
-          const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-          if (!d) return 0;
-          const h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-          return h * 60;
-        };
-        const curve = document.querySelector('.subscription-card[data-key="codex"] .quota-curve');
-        const lines = [...curve.querySelectorAll("path.qc-line")].map((p) => {
-          const cs = getComputedStyle(p);
-          const rgb = parse(cs.stroke);
-          return { series: p.dataset.series, stroke: cs.stroke, dash: cs.strokeDasharray, opacity: +cs.opacity, lum: lum(rgb), hue: hue(rgb) };
-        });
-        const keys = [...curve.querySelectorAll(".qc-key")].map((k) => {
-          const cs = getComputedStyle(k.querySelector("i"));
-          return { series: k.dataset.series, radius: cs.borderRadius, bg: cs.backgroundColor, shadow: cs.boxShadow, borderLeft: parseFloat(cs.borderLeftWidth) };
-        });
-        const root = getComputedStyle(document.documentElement);
-        const palette = [1, 2, 3, 4, 5, 6, 7].map((i) => root.getPropertyValue("--c" + i).trim());
-        return { cb: document.documentElement.dataset.colorblind || "", lines, keys, palette };
-      });
-
       const scroll0 = await page.locator("#view-settings").evaluate((v) => v.scrollTop);
       await row.locator("#colorblindSegs .opt", { hasText: w.on }).click();
       for (let i = 0; i < 50 && !posts.length; i++) await page.waitForTimeout(40);
@@ -452,31 +476,70 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), scroll0, "toggling colorblind mode never scrolls");
       await page.waitForFunction(() => document.documentElement.dataset.colorblind === "1");
 
+      // a reload takes it from boot.js
       await page.goto("http://magpie.test/?view=usage");
-      await page.locator('.subscription-card[data-key="codex"] .quota-curve').first().waitFor();
+      await page.locator(codexCurve).first().waitFor();
       for (const theme of ["light", "dark"]) {
-        st.theme = theme;
         await page.evaluate((th) => { document.documentElement.dataset.theme = th; }, theme);
-        const got = await readCurve();
+        got = await readCurve(page, codexCurve);
+        const say = `${theme}: ${JSON.stringify(got)}`;
         assert.equal(got.cb, "1");
-        assert.equal(got.lines.length, 2);
         assert.deepEqual(got.lines.map((l) => l.series), ["0", "1"]);
-        // 5h and 7d are separated in both hue (>100 deg apart, not two blues) and luminance
+        // 5h and 7d are apart in hue (>100 deg, not two blues) and in luminance
         const hueDiff = Math.abs(got.lines[0].hue - got.lines[1].hue);
-        assert.ok(Math.min(hueDiff, 360 - hueDiff) > 100, `${theme}: hues too close: ${JSON.stringify(got.lines)}`);
-        assert.ok(Math.abs(got.lines[0].lum - got.lines[1].lum) > 0.12, `${theme}: luminance too close: ${JSON.stringify(got.lines)}`);
-        // 5h and 7d have different dash styles, and the short 5h window isn't washed out
-        assert.equal(got.lines[0].dash, "none");
-        assert.notEqual(got.lines[1].dash, "none");
-        assert.ok(got.lines[0].opacity >= 0.8, `${theme}: short window stays legible: ${got.lines[0].opacity}`);
-        // Legend keys have distinct shapes and fills, with no left border
-        assert.notEqual(got.keys[0].radius, got.keys[1].radius, "circle vs square");
-        assert.notEqual(got.keys[0].bg, got.keys[1].bg, "filled vs hollow");
-        assert.notEqual(got.keys[1].shadow, "none", "hollow ring drawn with inset box-shadow");
-        assert.ok(got.keys.every((k) => k.borderLeft === 0), "no left border");
+        assert.ok(Math.min(hueDiff, 360 - hueDiff) > 100, `hues too close: ${say}`);
+        assert.ok(Math.abs(got.lines[0].lum - got.lines[1].lum) > 0.12, `luminance too close: ${say}`);
+        // 5h solid, 7d dashed, and the short 5h window isn't washed out
+        assert.equal(got.lines[0].dash, "none", say);
+        assert.notEqual(got.lines[1].dash, "none", say);
+        assert.ok(got.lines[0].opacity >= 0.8, `short window stays legible: ${say}`);
+        // each legend key is a sample of its own line: same dash, same colour
+        assert.deepEqual(got.keys.map((k) => k.series), ["0", "1"]);
+        for (const [i, k] of got.keys.entries()) {
+          assert.ok(!k.dot && k.sample, `key ${i} shows its line, not a dot: ${say}`);
+          assert.equal(k.sampleDash, got.lines[i].dash, `key ${i}'s dash: ${say}`);
+          assert.equal(k.sampleStroke, got.lines[i].stroke, `key ${i}'s colour: ${say}`);
+          assert.equal(k.borders, 0, "no left border");
+        }
+        // the even pace is dotted, unlike any window's line or what it was
+        assert.equal(got.evens.length, 1, say);
+        assert.equal(got.evens[0].series, "1");
+        assert.notEqual(got.evens[0].dash, plainEven, say);
+        assert.ok(got.lines.every((l) => l.dash !== got.evens[0].dash), say);
+        assert.ok(got.title.startsWith(w.tip), `the tooltip names the dashes and dots: ${got.title}`);
+        // the Context tab's "good" grade, a colour and not a series, stays
+        // apart in hue from "fair" (--c2 turns amber in this palette)
+        const grades = await page.evaluate(() => Object.fromEntries(["good", "fair"].map((g) => {
+          const e = document.createElement("span");
+          e.className = "ctx-grade-word " + g;
+          document.body.append(e);
+          const [r, gr, b] = getComputedStyle(e).color.match(/\d+(\.\d+)?/g).slice(0, 3).map((v) => v / 255);
+          e.remove();
+          const max = Math.max(r, gr, b), d = max - Math.min(r, gr, b);
+          const h = !d ? 0 : max === r ? ((gr - b) / d + (gr < b ? 6 : 0)) : max === gr ? (b - r) / d + 2 : (r - gr) / d + 4;
+          return [g, h * 60];
+        })));
+        const gradeDiff = Math.abs(grades.good - grades.fair);
+        assert.ok(Math.min(gradeDiff, 360 - gradeDiff) > 60, `good and fair too close: ${theme}: ${JSON.stringify(grades)}`);
       }
 
-      // Reload applies colorblind mode from boot.js before the first paint, and turning it off restores defaults
+      // turned off elsewhere: the window coming back reads it, and the
+      // curve drawn already goes back to dots, solid lines and its tooltip
+      await page.evaluate(() => { document.documentElement.dataset.theme = "light"; });
+      // no state read from before the change may land after it
+      await page.waitForLoadState("networkidle");
+      st.colorblind = false;
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await page.waitForFunction(() => !document.documentElement.dataset.colorblind);
+      await page.waitForLoadState("networkidle");
+      got = await readCurve(page, codexCurve);
+      assert.ok(got.lines.every((l) => l.dash === "none"), JSON.stringify(got.lines));
+      assert.ok(got.keys.every((k) => k.dot && !k.sample), JSON.stringify(got.keys));
+      assert.equal(got.evens[0].dash, plainEven);
+      assert.ok(got.title.startsWith(w.solid), `tooltip back to solid and dashed: ${got.title}`);
+
+      // and Settings turns it off for good
+      st.colorblind = true;
       await page.goto("http://magpie.test/?view=settings&tab=general");
       await row.waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.dataset.colorblind), "1", "kept across reload via boot.js");
@@ -488,4 +551,31 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(errors, []);
     });
   }
+
+  test(`${engine}: in colorblind mode seven windows have seven dashes, each in its legend key (#2073)`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const now = Date.now(), rw = now + 3 * 24 * H;
+    const data = fixtures(now);
+    const names = ["Weekly", "Weekly Opus", "Weekly Sonnet", "Monthly", "Weekly A", "Weekly B", "Weekly C"];
+    data.quotas[0].windows = names.map((name, i) => ({ name, used: 10 + i * 5, resetsAt: iso(rw) }));
+    data.history[0].lines = names.map((name, i) => ({ name, points: [90, 60, 30, 0].map((h) => ({ at: iso(now - h * H), left: 95 - i * 6 - (90 - h) / 9, start: iso(rw - 168 * H), resetsAt: iso(rw) })) }));
+    const { page, errors } = await colorblindPage(browser, "en", data, true);
+    await page.goto("http://magpie.test/?view=usage");
+    await page.locator(codexCurve).first().waitFor();
+    const got = await readCurve(page, codexCurve);
+    const say = JSON.stringify(got);
+    assert.deepEqual(got.lines.map((l) => l.series), ["0", "1", "2", "3", "4", "5", "6"]);
+    assert.equal(new Set(got.lines.map((l) => l.dash)).size, 7, `every window its own dash: ${say}`);
+    assert.equal(new Set(got.lines.map((l) => l.stroke)).size, 7, `and its own colour: ${say}`);
+    for (const [i, k] of got.keys.entries()) {
+      assert.ok(!k.dot && k.sample, say);
+      assert.equal(k.sampleDash, got.lines[i].dash, say);
+      assert.equal(k.sampleStroke, got.lines[i].stroke, say);
+    }
+    assert.equal(got.evens.length, 7);
+    assert.equal(new Set(got.evens.map((e) => e.dash)).size, 1, "the paces share one dotted pattern");
+    assert.ok(got.lines.every((l) => l.dash !== got.evens[0].dash), say);
+    assert.deepEqual(errors, []);
+  });
 }

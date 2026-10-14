@@ -21,7 +21,7 @@ html.omarchy body { -webkit-font-smoothing: antialiased; }
 /* square, or rounded as far as Hyprland rounds its windows; what spins or
    draws a dial stays round, as does a slider.s knob; a status dot goes square, like Omarchy.s workspace marks */
 html.omarchy *, html.omarchy *::before, html.omarchy *::after { border-radius: var(--om-radius) !important; }
-html.omarchy :is(.pq-dial, .pq-dial b, .sk-ring, .si-spin, .mk-spin, .signing .spinner, .eslide .knob, .effort-ticks i, .qc-key[data-series="0"] i),
+html.omarchy :is(.pq-dial, .pq-dial b, .sk-ring, .si-spin, .mk-spin, .signing .spinner, .eslide .knob, .effort-ticks i),
 html.omarchy input[type="range"]::-webkit-slider-thumb { border-radius: 50% !important; }
 
 /* no shadows or frosted glass: surfaces are the theme's background */
