@@ -1199,6 +1199,9 @@ func serve() error {
 	fmt.Println(muted.Render("  OpenAI  "), public+"/v1/chat/completions", muted.Render("·"), public+"/v1/responses")
 	fmt.Println(muted.Render("  Anthropic"), public+"/v1/messages")
 	fmt.Println(muted.Render("  key     "), gateway.Token, muted.Render(keyNote()))
+	if l := tlsLine(); l != "" {
+		fmt.Println(l)
+	}
 	for _, l := range shareLines() {
 		fmt.Println(l)
 	}

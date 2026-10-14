@@ -14,7 +14,7 @@ import (
 	"github.com/yetone/magpie/internal/gui"
 )
 
-const daemonUsage = "usage: magpie daemon [install|uninstall|start|stop|restart|status] · magpie daemon install [--web] [--lan] [--addr host:port] [--no-web] · magpie daemon web [on|off] [--lan] [--addr host:port]"
+const daemonUsage = "usage: magpie daemon [install|uninstall|start|stop|restart|status] · magpie daemon install [--web] [--lan] [--addr host:port] [--no-web] [--tls-cert <file> --tls-key <file>|--no-tls] · magpie daemon web [on|off] [--lan] [--addr host:port]"
 
 // daemonWait is how long install, start and restart wait for the gateway
 // to answer before saying where its log is; a var for the tests.
@@ -123,9 +123,35 @@ func webOptions(w daemonWeb, prevAddr, prevKey, envKey string) (daemon.Options, 
 // magpie daemon …: `magpie serve` as a service of the user's, started at
 // boot or login and again when it stops (systemd --user, launchd).
 func daemonCmd(args []string) error {
+	// install takes the gateway's TLS files, written into the service as
+	// MAGPIE_TLS_CERT and MAGPIE_TLS_KEY (daemon.carried); a pair that
+	// doesn't load is refused before anything is written. --no-tls takes
+	// the service's away.
+	noTLS := false
+	if len(args) > 1 && args[0] == "install" {
+		rest := args[1:]
+		for i, a := range rest {
+			if a == "--no-tls" {
+				noTLS = true
+				rest = append(append([]string{}, rest[:i]...), rest[i+1:]...)
+				break
+			}
+		}
+		rest, err := tlsFlags(rest)
+		if err != nil {
+			return err
+		}
+		if noTLS && gateway.TLSOn() {
+			return errors.New("magpie daemon install: --no-tls and a certificate both")
+		}
+		args = append([]string{"install"}, rest...)
+	}
 	cmd, web, err := parseDaemon(args)
 	if err != nil {
 		return err
+	}
+	if cmd == "install" || cmd == "web" {
+		keepTLS(noTLS)
 	}
 	switch cmd {
 	case "status":
@@ -168,6 +194,9 @@ func daemonCmd(args []string) error {
 	case "install", "web":
 		fmt.Println(green.Render("✓"), "magpie serves the gateway as a service, from boot or login, started again when it stops")
 		fmt.Println(muted.Render("  file   "), st.File)
+		if c, _ := gateway.TLSFiles(); c != "" && gateway.TLSOn() {
+			fmt.Println(muted.Render("  TLS    "), c, muted.Render("· https:// from other computers"))
+		}
 		if a, k := daemon.Web(); a != "" {
 			printDaemonWeb(a, k)
 		} else if cmd == "web" {
@@ -197,6 +226,24 @@ func daemonCmd(args []string) error {
 	return nil
 }
 
+// keepTLS: the service installed again (a new PATH, the page turned on)
+// keeps the certificate it was installed with when this shell names none,
+// as the page keeps its key; noTLS (--no-tls) takes it away.
+func keepTLS(noTLS bool) {
+	if noTLS {
+		os.Unsetenv(gateway.TLSCertEnv)
+		os.Unsetenv(gateway.TLSKeyEnv)
+		return
+	}
+	if c, k := gateway.TLSFiles(); c != "" || k != "" {
+		return
+	}
+	if c, k := daemon.TLS(); c != "" {
+		os.Setenv(gateway.TLSCertEnv, c)
+		os.Setenv(gateway.TLSKeyEnv, k)
+	}
+}
+
 // daemonInstall installs the service, serving the page as w says.
 func daemonInstall(w daemonWeb) error {
 	a, k := daemon.Web()
@@ -217,7 +264,7 @@ func printDaemonWeb(addr, key string) {
 		for _, l := range gui.NetworkLinks(port, q) {
 			fmt.Println(muted.Render("  on the network"), l)
 		}
-		fmt.Println(amber.Render("!"), lanWarning)
+		fmt.Println(amber.Render("!"), lanWarning())
 	} else if l := proxyLink(q); l != "" {
 		fmt.Println(muted.Render("  through your proxy"), l)
 	}

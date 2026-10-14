@@ -16,11 +16,17 @@ import (
 // webAddr is where `magpie web` listens unless told: beside the gateway.
 const webAddr = "127.0.0.1:3430"
 
-// webCmd: magpie web [--addr host:port] [--lan] [--no-open] [--gateway] —
+// webCmd: magpie web [--addr host:port] [--lan] [--no-open] [--gateway]
+// [--tls-cert <file> --tls-key <file>] —
 // the app's window in a browser, for a computer that can't show the app;
 // --gateway shows it in gateway mode (gui.WebGateway) unless Settings says
-// otherwise.
+// otherwise; with a certificate the page and the gateway are HTTPS to
+// other computers.
 func webCmd(args []string) error {
+	args, err := tlsFlags(args)
+	if err != nil {
+		return err
+	}
 	addr, lan, open := webAddr, false, true
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
@@ -36,7 +42,7 @@ func webCmd(args []string) error {
 		case a == "--gateway":
 			gui.WebGateway.Store(true)
 		default:
-			return fmt.Errorf("magpie web: unknown %q · magpie web [--addr host:port] [--lan] [--no-open] [--gateway], MAGPIE_WEB_KEY to keep one key", a)
+			return fmt.Errorf("magpie web: unknown %q · magpie web [--addr host:port] [--lan] [--no-open] [--gateway] [--tls-cert <file> --tls-key <file>], MAGPIE_WEB_KEY to keep one key", a)
 		}
 	}
 	if lan && addr == webAddr {
@@ -82,6 +88,9 @@ func webCmd(args []string) error {
 // printWeb prints where a started page is, and what its link carries.
 func printWeb(w *gui.Web) {
 	fmt.Println(green.Render("●"), "magpie web on", bold.Render(w.Link))
+	if l := tlsLine(); l != "" {
+		fmt.Println(l)
+	}
 	host, port, _ := net.SplitHostPort(w.Addr)
 	key := w.Link[strings.Index(w.Link, "/?k="):]
 	if ip := net.ParseIP(host); ip != nil && !ip.IsLoopback() {
@@ -91,7 +100,7 @@ func printWeb(w *gui.Web) {
 		if gateway.ContainerAddrs() {
 			fmt.Println(muted.Render("  " + containerNote))
 		}
-		fmt.Println(amber.Render("!"), lanWarning)
+		fmt.Println(amber.Render("!"), lanWarning())
 	} else if l := proxyLink(key); l != "" {
 		fmt.Println(muted.Render("  through your proxy"), l)
 	}
@@ -103,7 +112,12 @@ func printWeb(w *gui.Web) {
 }
 
 // lanWarning is said wherever the page is served on the network.
-const lanWarning = "anyone with the link can change magpie and see its keys, and the network carries it unencrypted"
+func lanWarning() string {
+	if gateway.TLSOn() {
+		return "anyone with the link can change magpie and see its keys"
+	}
+	return "anyone with the link can change magpie and see its keys, and the network carries it unencrypted (--tls-cert and --tls-key serve it over https)"
+}
 
 // webLink is the link to a page served on addr with key, from this
 // computer.
@@ -115,7 +129,13 @@ func webLink(addr, key string) string {
 	if ip := net.ParseIP(host); host == "" || ip != nil && ip.IsUnspecified() {
 		host = "127.0.0.1"
 	}
-	return "http://" + net.JoinHostPort(host, port) + "/?k=" + url.QueryEscape(key)
+	// this computer may call its loopback page over plain http; any other
+	// address it has is https with TLS on, as other computers see it
+	scheme := "http"
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		scheme = gateway.Scheme()
+	}
+	return scheme + "://" + net.JoinHostPort(host, port) + "/?k=" + url.QueryEscape(key)
 }
 
 // proxyLink is the page's link through a reverse proxy in front of a page
@@ -147,6 +167,10 @@ func proxyLink(key string) string {
 // (`magpie daemon install --web`), so the page shows the gateway that
 // serves the agents, its routing included (HuanCheng on Discord).
 func serveCmd(args []string) error {
+	args, err := tlsFlags(args)
+	if err != nil {
+		return err
+	}
 	web := ""
 	for _, a := range args {
 		switch {
@@ -158,7 +182,7 @@ func serveCmd(args []string) error {
 				return fmt.Errorf("magpie serve: --web=%s isn't host:port", web)
 			}
 		default:
-			return fmt.Errorf("magpie serve: unknown %q · magpie serve [--web[=host:port]]", a)
+			return fmt.Errorf("magpie serve: unknown %q · magpie serve [--web[=host:port]] [--tls-cert <file> --tls-key <file>]", a)
 		}
 	}
 	if web == "" {
@@ -173,6 +197,9 @@ func serveCmd(args []string) error {
 	fmt.Println(green.Render("●"), "magpie gateway on", bold.Render(gateway.URL()))
 	fmt.Println(muted.Render("  OpenAI  "), public+"/v1/chat/completions", muted.Render("·"), public+"/v1/responses")
 	fmt.Println(muted.Render("  Anthropic"), public+"/v1/messages")
+	if l := tlsLine(); l != "" {
+		fmt.Println(l)
+	}
 	if !w.ServesGateway() {
 		fmt.Println(amber.Render("!"), "another magpie serves the gateway there: this one serves it once that one stops")
 	}

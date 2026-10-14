@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -361,6 +362,8 @@ type Server struct {
 	// taken off it (see Relisten)
 	lnMu sync.Mutex
 	ln   net.Listener
+	// what it serves other computers TLS with, nil without (tls.go)
+	tls *tls.Config
 	// the images described for models that can't see them (vision.go)
 	sightMu    sync.Mutex
 	sights     map[string]*sight
@@ -446,7 +449,14 @@ var WhileServing []func(context.Context)
 // serving, which is fine for the caller to ignore.
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	migrateLANKeyBestEffort()
-	ln, err := Listen(listenAddr())
+	cfg, err := tlsConfig()
+	if err != nil {
+		return err
+	}
+	s.lnMu.Lock()
+	s.tls = cfg
+	s.lnMu.Unlock()
+	ln, err := s.listen(listenAddr())
 	if err != nil {
 		return err
 	}

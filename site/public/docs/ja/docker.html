@@ -124,7 +124,7 @@ docker logs magpie</pre>
     <p>ログのリンクを開きます。リンクのキーは cookie に置き換わり、アドレスから消えます。キーなしで開いたページは拒否されます（401）。<code>MAGPIE_WEB_KEY</code>（英数字か <code>- . _ ~</code> で 16 文字以上。<code>openssl rand -hex 16</code> で作れます）を設定すると、再起動してもキーは変わらず、ブラウザは 400 日サインインしたままです。設定しなければ起動のたびに新しいキーができ、cookie はそのブラウザセッションの間だけ有効です。</p>
     <p>ページは<b>ゲートウェイモード</b>で開きます：<span class="ui">プロバイダ</span>、<span class="ui">ゲートウェイ</span>、<span class="ui">ルーティング</span>、<span class="ui">使用量</span>、<span class="ui">プラグイン</span>、<span class="ui">設定</span>だけで、コンテナにはエージェントがないのでエージェント、セッション、ライブラリはありません。<span class="ui">設定</span> → <span class="ui">一般</span> → <span class="ui">ゲートウェイモード</span>でオフにできます。</p>
     <p>NAS や SSH で入るサーバーでは、3430 を公開せずにトンネル経由でページを開きます：<code>ssh -L 3430:127.0.0.1:3430 you@nas</code> を実行してから、自分のコンピューターでログのリンクを開きます。</p>
-    <div class="callout"><b>リンクを持つ人は誰でも magpie を変更し、そのキーを見られます。</b>ページ自体に HTTPS はありません。3430 はループバックか VPN 上に置くか、TLS 付きのリバースプロキシの後ろに置いてください。</div>
+    <div class="callout"><b>リンクを持つ人は誰でも magpie を変更し、そのキーを見られます。</b>3430 はループバックか VPN 上に置いてください。ネットワーク越しなら HTTPS で：<code>MAGPIE_TLS_CERT</code> と <code>MAGPIE_TLS_KEY</code> で magpie に証明書を渡すか、Caddy のような TLS 付きのリバースプロキシの後ろに置きます。</div>
 
     <h2 id="signin"><a class="anchor" href="#signin">サブスクリプションにサインイン</a></h2>
     <p>API キーはデスクトップと同じく<span class="ui">プロバイダ</span>で追加します。サブスクリプション（ChatGPT、Claude…）のサインインはブラウザでベンダーのページを開き、終わるとベンダーはそのブラウザを <code>localhost</code> に戻します。ChatGPT なら <code>http://localhost:1455/auth/callback?code=…</code> です。これはコンテナではなく自分のコンピューターなので、ページは開けません。アドレスバーのアドレスを丸ごとコピーし、サインインの <span class="ui">コールバック URL</span> 欄に貼り付けます。</p>
@@ -159,6 +159,7 @@ docker logs magpie</pre>
       <tr><td><code>MAGPIE_ADDR</code></td><td>ゲートウェイが待ち受けるアドレス。イメージでは <code>0.0.0.0:3425</code> に設定され、公開したポートから届きます。</td></tr>
       <tr><td><code>MAGPIE_PUBLIC_URL</code></td><td>ほかのマシンがゲートウェイに届くアドレス。例：<code>http://192.168.1.20:3425</code>（ホストや NAS のアドレスと公開ポート）、またはリバースプロキシのベース URL。コンテナ内の magpie には Docker 自身の <code>172.17.x</code> のアドレスしか見えません。これを設定すると、表示されるアドレスが使うべきものになります。</td></tr>
       <tr><td><code>MAGPIE_WEB_KEY</code></td><td>ブラウザ UI のキー。再起動しても変わりません（16 文字以上）</td></tr>
+      <tr><td><code>MAGPIE_TLS_CERT</code>、<code>MAGPIE_TLS_KEY</code></td><td>コンテナにマウントした PEM の証明書（後ろにチェーン）と秘密鍵。ほかのマシンはゲートウェイとブラウザ UI に <code>https://</code> でだけ届き、平文の HTTP は 400 になります。ファイルが変わると読み直すので、更新に再起動はいりません。片方だけ、または読めないファイルでは magpie は起動しません。<code>MAGPIE_PUBLIC_URL</code> も <code>https://</code> にしてください。</td></tr>
       <tr><td><code>MAGPIE_ALLOW_IPS</code></td><td>ほかのマシンがゲートウェイとブラウザ UI に接続できるアドレス。IP または CIDR 範囲で書きます：<code>203.0.113.7,10.0.0.0/8,2001:db8::/32</code>。ほかのアドレスからは、ゲートウェイキーがあっても 403 になります。設定しなければすべてのアドレスから接続でき、それぞれキーが要ります。<a href="#allow">許可するアドレス</a>を参照。</td></tr>
       <tr><td><code>HOME</code>、<code>XDG_CONFIG_HOME</code>、<code>XDG_CACHE_HOME</code>、<code>XDG_DATA_HOME</code>、<code>XDG_STATE_HOME</code></td><td>イメージが上の <code>/config</code> 配下のフォルダに設定しています。変えないでください</td></tr>
     </table></div>

@@ -151,6 +151,42 @@ var (
 	webKeyRe = regexp.MustCompile(webKeyVar + `(?:=|</key><string>)([A-Za-z0-9._~-]+)`)
 )
 
+// TLS is the certificate and key files the installed service serves
+// HTTPS with (`magpie daemon install --tls-cert … --tls-key …`), "" when
+// it has none or isn't installed.
+func TLS() (cert, key string) {
+	m, err := current()
+	if err != nil {
+		return "", ""
+	}
+	b, err := os.ReadFile(m.file())
+	if err != nil {
+		return "", ""
+	}
+	return tlsOf(string(b))
+}
+
+// tlsOf is TLS from a unit's or a launch agent's text: both files or
+// neither.
+func tlsOf(text string) (cert, key string) {
+	val := func(name string) string {
+		// a unit's Environment="NAME=…", quoted by unitQuote
+		if m := regexp.MustCompile(`Environment="` + name + `=((?:[^"\\]|\\.)*)"`).FindStringSubmatch(text); m != nil {
+			return strings.NewReplacer(`\\`, `\`, `\"`, `"`, "%%", "%").Replace(m[1])
+		}
+		// a plist's <key>NAME</key><string>…</string>
+		if m := regexp.MustCompile(`<key>` + name + `</key><string>([^<]*)</string>`).FindStringSubmatch(text); m != nil {
+			return html.UnescapeString(m[1])
+		}
+		return ""
+	}
+	cert, key = val("MAGPIE_TLS_CERT"), val("MAGPIE_TLS_KEY")
+	if cert == "" || key == "" {
+		return "", ""
+	}
+	return cert, key
+}
+
 // webOf is Web from a unit's or a launch agent's text.
 func webOf(text string) (addr, key string) {
 	m := webArgRe.FindStringSubmatch(text)
@@ -305,6 +341,8 @@ var carried = []string{
 	"http_proxy", "https_proxy", "all_proxy", "no_proxy",
 	"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME",
 	"MAGPIE_ADDR", "MAGPIE_TRUST_PROXY", "MAGPIE_BUN", "MAGPIE_WEB_URL",
+	// `magpie daemon install --tls-cert … --tls-key …` sets them
+	"MAGPIE_TLS_CERT", "MAGPIE_TLS_KEY",
 }
 
 // environ is carried's variables that are set, as KEY=value, in order.

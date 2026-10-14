@@ -658,6 +658,36 @@ doesn't parse and has no good backup, the list read last stays in force; if
 none was read since magpie started, only this computer is let in until the
 file is repaired. `magpie web`'s page honours the same list.
 
+**HTTPS.** A magpie reached over the internet (a server used as a relay)
+can serve HTTPS itself, with no proxy in front:
+
+```sh
+magpie serve --tls-cert /etc/letsencrypt/live/relay.example.com/fullchain.pem \
+             --tls-key  /etc/letsencrypt/live/relay.example.com/privkey.pem
+```
+
+`MAGPIE_TLS_CERT` and `MAGPIE_TLS_KEY` do the same (for Docker), and `magpie
+web` and `magpie daemon install` take the same flags; the service keeps the
+pair when it is installed again without them, and `--no-tls` takes it away.
+The files are PEM: the certificate with its chain after it, and its private
+key. One without the other, or files that don't load, refuse to start
+rather than serve plain HTTP. The certificate is read again when either
+file changes, so a renewal (certbot, acme.sh) is served on the next
+connection without a restart; files that don't load then (a renewal half
+written) leave the one before in place, and the log says so. Other
+computers reach the gateway, and `magpie web`'s page, over `https://` only,
+and the network links magpie prints say `https://`; plain HTTP from them is
+answered 400. This computer may still call `http://127.0.0.1` on the same
+port, as the agents, MCP servers and status checks magpie wires here do,
+since no certificate for the server's name covers loopback. A container or
+a WSL distro calling through its NAT address is another computer, and uses
+`https://`. Gateway keys, sharing and allowed addresses work as over HTTP.
+
+Caddy is the alternative that also gets the certificate for you: run
+`relay.example.com { reverse_proxy 127.0.0.1:3425 }` with sharing on and a
+gateway key per client. A proxy on this computer adds forwarding headers,
+so its requests count as another computer's, as above.
+
 **Usage → Overview → Gateway keys** groups calls by the client's key, never
 the provider's credential. **Usage → Requests** offers the same filter;
 CSV includes `caller_key_id` and `caller_key_name`. Deleted keys keep their
@@ -1989,7 +2019,8 @@ port is free.
 
 The service gets the environment `magpie daemon install` ran in: `PATH`
 (where it finds the agents' CLIs and bun), the proxy variables, `MAGPIE_*`
-settings such as `MAGPIE_ADDR`, the XDG folders and the agents' own folder
+settings such as `MAGPIE_ADDR` (and the `--tls-cert`/`--tls-key` pair, as
+`MAGPIE_TLS_CERT` and `MAGPIE_TLS_KEY`), the XDG folders and the agents' own folder
 variables (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`…). To that `PATH` it adds
 what a terminal of yours has and the shell may not: nvm's default Node
 (not its newest), the other version managers' and npm's folders, and your
@@ -2150,11 +2181,12 @@ gateway translates.
 magpie                          # open the app: a window plus the menu bar icon
 magpie tray                     # menu bar icon only (use this in your login items)
 magpie tui                      # the same thing, in the terminal; serves the gateway while open when no other magpie does
-magpie web                      # the app's window in a browser (WSL, a server over SSH); --lan, --addr, --no-open, --gateway
+magpie web                      # the app's window in a browser (WSL, a server over SSH); --lan, --addr, --no-open, --gateway, --tls-cert/--tls-key
                                 # (a new key each run; MAGPIE_WEB_KEY keeps one, for a page run as a service)
                                 # (behind a reverse proxy, MAGPIE_WEB_URL=https://<the page there> prints the link through it)
 magpie serve                    # the gateway alone, no window; --web[=host:port] serves the page too, from the same process
-magpie daemon install           # run magpie serve as a service (systemd, launchd); --web, --lan, --addr serve the page too
+                                # --tls-cert <file> --tls-key <file>: https:// for other computers (see HTTPS under sharing)
+magpie daemon install           # run magpie serve as a service (systemd, launchd); --web, --lan, --addr serve the page too; --tls-cert/--tls-key, --no-tls
 magpie ls                       # list every agent and its current settings
 magpie claude opus              # set a model (agent names accept prefixes: cc, oc, gem …)
 magpie codex gpt-5.6-sol

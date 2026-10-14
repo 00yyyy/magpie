@@ -86,7 +86,7 @@ func publicURL() string {
 	hasScheme := strings.Contains(u, "://")
 	u = strings.TrimRight(u, "/")
 	if !hasScheme {
-		u = "http://" + u
+		u = Scheme() + "://" + u
 	}
 	parsed, err := url.Parse(u)
 	// A query, a fragment or credentials would be lost or shown when the
@@ -165,7 +165,7 @@ func LANURLs() []string {
 		if ip := net.ParseIP(h); h == "localhost" || ip != nil && ip.IsLoopback() {
 			return nil
 		}
-		return []string{"http://" + net.JoinHostPort(h, Port())}
+		return []string{Scheme() + "://" + net.JoinHostPort(h, Port())}
 	}
 	var out []string
 	ifs, _ := net.Interfaces()
@@ -179,10 +179,20 @@ func LANURLs() []string {
 			if !ok || n.IP.To4() == nil || n.IP.IsLinkLocalUnicast() {
 				continue
 			}
-			out = append(out, "http://"+net.JoinHostPort(n.IP.String(), Port()))
+			out = append(out, Scheme()+"://"+net.JoinHostPort(n.IP.String(), Port()))
 		}
 	}
 	return out
+}
+
+// listen listens on addr, serving TLS to other computers when the gateway
+// does; under lnMu, or before serving.
+func (s *Server) listen(addr string) (net.Listener, error) {
+	ln, err := Listen(addr)
+	if err != nil || s.tls == nil {
+		return ln, err
+	}
+	return newTLSListener(ln, s.tls), nil
 }
 
 // Relisten moves the gateway to where settings now say it listens — onto
@@ -204,7 +214,7 @@ func (s *Server) Relisten() error {
 	// the old one lets go, so one the gateway can't have leaves it serving
 	// where it was
 	if _, p, _ := net.SplitHostPort(was); p != Port() {
-		ln, err := Listen(to)
+		ln, err := s.listen(to)
 		if err != nil {
 			return err
 		}
@@ -215,9 +225,9 @@ func (s *Server) Relisten() error {
 	}
 	// the port is the same, so the old one goes first
 	s.ln.Close()
-	ln, err := Listen(to)
+	ln, err := s.listen(to)
 	if err != nil {
-		if ln, _ = Listen(was); ln == nil {
+		if ln, _ = s.listen(was); ln == nil {
 			return err
 		}
 		s.ln = ln

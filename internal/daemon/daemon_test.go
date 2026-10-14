@@ -498,3 +498,44 @@ func TestWebNotInstalled(t *testing.T) {
 		t.Errorf("%q %q", a, k)
 	}
 }
+
+// install --tls-cert … --tls-key … writes the pair into the service, and
+// TLS reads it back through the unit's and the plist's quoting, so the
+// service installed again keeps it (paths with a space, % and & here).
+func TestInstallCarriesTLS(t *testing.T) {
+	const cert, key = `/etc/my certs/full%chain&"1".pem`, "/etc/my certs/priv%key.pem"
+	for _, c := range []struct {
+		goos string
+		in   string
+	}{
+		{"linux", `Environment="MAGPIE_TLS_CERT=/etc/my certs/full%%chain&\"1\".pem"`},
+		{"darwin", "<key>MAGPIE_TLS_CERT</key><string>/etc/my certs/full%chain&amp;&#34;1&#34;.pem</string>"},
+	} {
+		t.Run(c.goos, func(t *testing.T) {
+			fakes(t, c.goos)
+			if a, b := TLS(); a != "" || b != "" {
+				t.Errorf("TLS with no service: %q %q", a, b)
+			}
+			t.Setenv("MAGPIE_TLS_CERT", cert)
+			t.Setenv("MAGPIE_TLS_KEY", key)
+			if err := Install(Options{}); err != nil {
+				t.Fatal(err)
+			}
+			st, _ := Get()
+			b, _ := os.ReadFile(st.File)
+			if !strings.Contains(string(b), c.in) {
+				t.Errorf("the service has no %q:\n%s", c.in, b)
+			}
+			if a, k := TLS(); a != cert || k != key {
+				t.Errorf("TLS: %q %q", a, k)
+			}
+			t.Setenv("MAGPIE_TLS_KEY", "")
+			if err := Install(Options{}); err != nil {
+				t.Fatal(err)
+			}
+			if a, k := TLS(); a != "" || k != "" {
+				t.Errorf("half a pair read back: %q %q", a, k)
+			}
+		})
+	}
+}
