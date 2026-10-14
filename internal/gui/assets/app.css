@@ -1317,7 +1317,10 @@ body.window .field.solo { grid-column: auto; }
 .led .price-reference { font-size: 10px; color: var(--muted); }
 .led .cost { color: var(--green); }
 .led .cost.faint { color: var(--faint); }
-.led .who { display: inline-flex; align-items: center; gap: 6px; }
+/* a block of its own, centred in the cell as the time and the model are: an
+   inline-flex box took its icon's foot as its baseline, which raised the
+   name ~2px over them (#2237) */
+.led .who { display: flex; align-items: center; gap: 6px; }
 .led .who .ic { width: 14px; height: 14px; flex: none; }
 .led .swap { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; font-size: 10.5px; line-height: 16px; padding: 0 5px; border-radius: 5px; color: var(--amber); background: var(--amber-soft); }
 .led .st { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
