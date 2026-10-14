@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -503,24 +504,38 @@ const zstSuffix = ".zst"
 
 func codexFiles() []file { return codexFilesIn(CodexDir()) }
 
+// walkLinked is filepath.WalkDir over root, which can be a link to the
+// folder: the Codex CLI keeps .codex on another drive by making
+// ~/.codex/sessions a junction to it, and a symlink does the same
+// elsewhere. WalkDir lstat()s the root it is handed, where a link is no
+// folder at all, so it walked nothing behind it (#2233). It walks where
+// the link leads (proc.RealPath, since filepath.EvalSymlinks leaves a
+// junction as it is) and hands fn each path under root, not under the
+// link's target: an agent's folder is read back out of a session's path
+// (Codex's config.toml and state databases), and the target holds none
+// of it. A root that is no link is walked as it is.
+func walkLinked(root string, fn fs.WalkDirFunc) error {
+	walk := root
+	if fi, err := os.Lstat(root); err == nil && !fi.IsDir() {
+		if real, err := proc.RealPath(root); err == nil {
+			walk = real
+		}
+	}
+	return filepath.WalkDir(walk, func(p string, d fs.DirEntry, err error) error {
+		if walk != root {
+			if rel, err := filepath.Rel(walk, p); err == nil {
+				p = filepath.Join(root, rel)
+			}
+		}
+		return fn(p, d, err)
+	})
+}
+
 // codexFilesIn are the rollouts in a Codex folder.
 func codexFilesIn(dir string) []file {
 	var out []file
 	for _, folder := range []string{"sessions", "archived_sessions"} {
-		root := filepath.Join(dir, folder)
-		// The folder can be a link: the Codex CLI keeps .codex on another drive
-		// by making ~/.codex/sessions a junction to it, and a symlink elsewhere.
-		// WalkDir lstat()s the root it is handed, where a link is no folder at
-		// all, so it walks nothing: walk where the link leads, and name each
-		// rollout under this folder, whose config.toml and state databases are
-		// read back out of a rollout's path (#2233).
-		walk := root
-		if fi, err := os.Lstat(root); err == nil && !fi.IsDir() {
-			if real, err := proc.RealPath(root); err == nil {
-				walk = real
-			}
-		}
-		filepath.WalkDir(walk, func(p string, d os.DirEntry, err error) error {
+		walkLinked(filepath.Join(dir, folder), func(p string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
 			}
@@ -531,11 +546,6 @@ func codexFilesIn(dir string) []file {
 			fi, err := d.Info()
 			if err != nil || !fi.Mode().IsRegular() {
 				return nil
-			}
-			if walk != root {
-				if rel, err := filepath.Rel(walk, p); err == nil {
-					p = filepath.Join(root, rel)
-				}
 			}
 			out = append(out, file{agent: "codex", key: "codex:" + m[1], path: p, main: true, size: fi.Size(), mod: fi.ModTime()})
 			return nil

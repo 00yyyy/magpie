@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -73,6 +74,32 @@ func TestCodexRolloutsBehindALink(t *testing.T) {
 	for _, m := range ListAgent("codex") {
 		if m.UsesProvider != "magpie" {
 			t.Fatalf("session %s uses %q, want magpie", m.ID, m.UsesProvider)
+		}
+	}
+}
+
+// The same holds for the other agents whose sessions are walked from one
+// root: WorkBuddy's (and CodeBuddy Code's) projects folder, each session
+// named under the agent's own folder.
+func TestBuddyProjectsBehindALink(t *testing.T) {
+	setupAgents(t)
+	before := workbuddyFiles()
+	if len(before) == 0 {
+		t.Fatal("the fixture has no WorkBuddy session")
+	}
+	live := filepath.Join(WorkBuddyDir(), "projects")
+	elsewhere := filepath.Join(t.TempDir(), "projects")
+	if err := os.Rename(live, elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	linkFolder(t, elsewhere, live)
+	after := workbuddyFiles()
+	if len(after) != len(before) {
+		t.Fatalf("WorkBuddy sessions behind a link: %d, want %d", len(after), len(before))
+	}
+	for _, f := range after {
+		if !strings.HasPrefix(f.path, live+string(filepath.Separator)) {
+			t.Fatalf("a WorkBuddy session behind a link is named %s, want it under %s", f.path, live)
 		}
 	}
 }
