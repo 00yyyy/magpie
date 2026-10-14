@@ -635,7 +635,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	unread := why == failQuota && c.p.Account != nil && len(allowances(c.p.Account.UsageAgent())[c.p.Account.User]) == 0
 	// a model the key's plan doesn't serve rests alone, counted by itself
 	// (#1235): the key's other models are still served
-	unserved := why == failOther && modelRefused(status, body)
+	unserved := why == failOther && (modelRefused(status, body) || codeAssistModelMissing(c.p, status, body))
 	r := Rest{Why: why, Status: status, By: "cooldown"}
 	if why == failProxy {
 		// the account is as good as it was; the proxy is the user's to start
