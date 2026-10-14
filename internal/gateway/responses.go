@@ -1223,7 +1223,12 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 		out["include"] = include
 	}
 	b, _ := json.Marshal(out)
-	return b
+	// a call the client left unanswered (a turn it interrupted) gets its
+	// synthetic result, as buildChat's pairToolMessages and
+	// buildAnthropic's pairToolBlocks give one: the Responses API refuses
+	// the lone call, "No tool output found for function call <id>", on
+	// every turn after it too (#2222)
+	return pairToolItems(b)
 }
 
 type rUsage struct {
