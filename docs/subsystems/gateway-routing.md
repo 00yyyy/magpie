@@ -143,8 +143,8 @@ recorded as a prediction failure (`noPrediction`).
 ## Remote magpie APIs
 
 A remote provider serves the conversation, token-counting, System One,
-embeddings, rerank, image generation/edit and video creation/status/content
-APIs. Gemini clients enter through the local Gemini adapter and follow the
+embeddings, rerank, speech-to-text, image generation/edit and video
+creation/status/content APIs. Gemini clients enter through the local Gemini adapter and follow the
 same model routing as other conversation clients. Responses uses HTTP/SSE;
 its WebSocket route still answers 426. Discovery and older-peer behavior
 are described in [Providers and accounts](providers-accounts.md#remote-magpie).
@@ -177,7 +177,10 @@ way (`askDecisionGroup`, `decideRefused` carrying the vendor's status). A
 decision group is kept out of the agents' catalog (`groupEntries`), and a
 conversation asked of it is refused 400 pointing at `/v1/systemone`.
 [`embeddings.go`](../../internal/gateway/embeddings.go) relays retrieval
-bodies and options, [`draw.go`](../../internal/gateway/draw.go) sends images
+bodies and options (`serveRetrieval`), and
+[`transcribe.go`](../../internal/gateway/transcribe.go) speech-to-text's
+multipart forms through it as sent, rewriting only the model and a masked
+prompt under the form's own boundary (#2053), [`draw.go`](../../internal/gateway/draw.go) sends images
 to the remote's images API, and [`video.go`](../../internal/gateway/video.go)
 wraps remote task ids for later polls and downloads. `passOnCaller` in
 [`remote_magpie.go`](../../internal/gateway/remote_magpie.go) supplies

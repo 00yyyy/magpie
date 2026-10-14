@@ -579,6 +579,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /embeddings", s.retrieve("/embeddings", "embeddings"))
 	mux.HandleFunc("POST /v1/rerank", s.retrieve("/rerank", "rerank"))
 	mux.HandleFunc("POST /rerank", s.retrieve("/rerank", "rerank"))
+	// speech to text, for a client's voice input (#2053)
+	mux.HandleFunc("POST /v1/audio/transcriptions", s.transcribe("/audio/transcriptions", "transcriptions"))
+	mux.HandleFunc("POST /audio/transcriptions", s.transcribe("/audio/transcriptions", "transcriptions"))
+	mux.HandleFunc("POST /v1/audio/translations", s.transcribe("/audio/translations", "translations"))
+	mux.HandleFunc("POST /audio/translations", s.transcribe("/audio/translations", "translations"))
 	mux.HandleFunc("POST /v1/videos", s.videosCreate)
 	mux.HandleFunc("POST /videos", s.videosCreate)
 	mux.HandleFunc("GET /v1/videos/{id}", s.videosGet)
@@ -594,7 +599,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1beta/models", s.geminiModels)
 	mux.HandleFunc("POST /v1beta/models/{call...}", s.gemini)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, provider.Chat, http.StatusNotFound, "magpie serves /v1/chat/completions, /v1/responses, /v1/messages, /v1/systemone, /v1/images/generations, /v1/images/edits, /v1/videos, /v1/embeddings, /v1/rerank and /v1beta/models/*")
+		writeError(w, provider.Chat, http.StatusNotFound, "magpie serves /v1/chat/completions, /v1/responses, /v1/messages, /v1/systemone, /v1/images/generations, /v1/images/edits, /v1/videos, /v1/embeddings, /v1/rerank, /v1/audio/transcriptions, /v1/audio/translations and /v1beta/models/*")
 	})
 	return s.counted(corsGuard(callerGuard(withCaller(keyLimited(mux)))))
 }
@@ -616,7 +621,7 @@ func responsesOverHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"name": "magpie", "version": Version, "models": len(provider.Catalog()), "window": Window,
-		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/systemone", "/v1beta/models/{model}:generateContent", "/v1/images/generations", "/v1/images/edits", "/v1/videos", "/v1/embeddings", "/v1/rerank", "/v1/magpie/quotas", "/v1/magpie/quotas/history", "/v1/magpie/usage", "/v1/magpie/usage/requests", "/v1/magpie/route", SearchMCPPath, VisionMCPPath}})
+		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/systemone", "/v1beta/models/{model}:generateContent", "/v1/images/generations", "/v1/images/edits", "/v1/videos", "/v1/embeddings", "/v1/rerank", "/v1/audio/transcriptions", "/v1/audio/translations", "/v1/magpie/quotas", "/v1/magpie/quotas/history", "/v1/magpie/usage", "/v1/magpie/usage/requests", "/v1/magpie/route", SearchMCPPath, VisionMCPPath}})
 }
 
 // quotas is what is left of every subscription, plan and key magpie has,

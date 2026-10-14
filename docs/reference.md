@@ -419,7 +419,7 @@ and models with custom names. These appear as decision models rather than
 chat models. A bare provider id such as `office` asks the first listed
 decision model; it does not pick another model to satisfy a key's limits.
 If the key permits only another model, use its full `office/provider/model`
-id to avoid a 403. Embeddings and rerank requests use the remote's corresponding
+id to avoid a 403. Embeddings, rerank and speech-to-text requests use the remote's corresponding
 APIs, and its exposed retrieval models are kept when fetching its list.
 These remain in agent model lists as on the remote; being listed does not
 mean an embedding or rerank model can hold a conversation.
@@ -1572,6 +1572,7 @@ It exposes:
 | `/v1/messages`           | Anthropic Messages         |
 | `/v1/messages/count_tokens` | Anthropic token counting |
 | `/v1beta/models/{model}:generateContent` | Google Gemini (also `:streamGenerateContent`, `:countTokens`) |
+| `/v1/audio/transcriptions`, `/v1/audio/translations` | OpenAI speech to text (multipart, passed through) |
 | `/v1/models`, `/v1beta/models` | the catalog            |
 | `/v1/codex/models`       | the catalog as Codex's `model_catalog_url` reads it ([Codex on another computer](#providers-and-the-gateway)) |
 
@@ -1598,6 +1599,15 @@ models are named `provider/model`.
   it goes to the routing group magpie found for it, which asks them in the
   order of the Providers page and falls over to the next. With found
   groups off, it goes to the first of them in that order alone.
+- Speech to text (`/v1/audio/transcriptions`, `/v1/audio/translations`)
+  takes OpenAI's multipart form, its `model` a magpie id such as
+  `openai/whisper-1`, `groq/whisper-large-v3` or a custom provider's own
+  (a vLLM `qwen3-asr`). The form goes to that provider's OpenAI-style base
+  as it was sent, the audio byte for byte; only the model is set to the
+  provider's own id, and a `prompt` masked as your redaction settings say.
+  The answer comes back in the vendor's own format (`json`, `text`, `srt`,
+  `vtt`). A provider with no OpenAI-style API is refused; one that has no
+  such endpoint answers its own 404. Text to speech is not served.
 - Every reply names who answered in `X-Magpie-Provider` (the provider)
   and `X-Magpie-Model` (`provider/model`), and so does the usage log.
 
