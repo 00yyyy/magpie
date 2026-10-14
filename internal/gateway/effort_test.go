@@ -24,6 +24,7 @@ func TestFitEffort(t *testing.T) {
 		{"medium", glm, "high"}, // a tie goes up
 		{"low", glm, "low"},
 		{"xhigh", glm, "max"},
+		{"xhigh", []string{"high", "max"}, "max"}, // DeepSeek V4: Ultracode's xhigh
 		{"max", []string{"low", "medium", "high"}, "high"},
 		{"low", []string{"none", "minimal", "medium"}, "medium"},
 		{"medium", nil, "medium"}, // levels not known: as asked

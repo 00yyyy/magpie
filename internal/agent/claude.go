@@ -199,7 +199,9 @@ const claudeUnknownOutput = 32000
 // a gateway (CLAUDE_CODE_USE_GATEWAY, as Claude Desktop's Code tab runs it)
 // it otherwise takes no model of magpie's for one with effort, xhigh or max,
 // so "ultracode": true, which needs xhigh, did nothing (#430). Each magpie
-// model is said to have only the levels magpie knows it has.
+// model is said to have only the levels magpie knows it has, and xhigh
+// with max: the gateway runs xhigh at max for one without it, and without
+// xhigh_effort Claude Code turns Ultracode down (leesunrise2364 on Discord).
 const claudeCapsEnv = "CLAUDE_CODE_MODEL_CAPABILITIES"
 
 // claudeReviewEnv is whether Claude Code's auto mode asks the API to review
@@ -292,6 +294,12 @@ func claudeCapabilities(first []string, own, desktop bool) string {
 			return
 		}
 		levels = slices.DeleteFunc(slices.Clone(levels), func(l string) bool { return !contains(claudeEffortsFor(id), l) })
+		// one that reaches max without xhigh runs xhigh at max (the
+		// gateway's fitEffort), and Claude Code's Ultracode needs
+		// xhigh_effort (2.1.299: "Ultracode isn't available on …")
+		if contains(levels, "max") && !contains(levels, "xhigh") && contains(claudeEffortsFor(id), "xhigh") {
+			levels = append(levels, "xhigh")
+		}
 		if c := claudeCaps(levels); c != "" && !slices.ContainsFunc(segs, func(s seg) bool { return s.id == id }) {
 			segs = append(segs, seg{id, c})
 		}
