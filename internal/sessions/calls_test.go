@@ -595,6 +595,71 @@ func TestCallsCodexTimedFromTheAsk(t *testing.T) {
 	}
 }
 
+// A Claude Code compaction is no call of the file's, but its compact_boundary
+// line says how long it took (shape from a real 2026-10 transcript): the
+// first call after it carries that, an API error between them does not take
+// it, and a call with no compaction before it carries none.
+func TestCallsClaudeCompactTook(t *testing.T) {
+	d := setupCalls(t)
+	boundary := func(sec, ms int) string {
+		return fmt.Sprintf(`{"parentUuid":null,"logicalParentUuid":"p","isSidechain":false,"type":"system","subtype":"compact_boundary","content":"Conversation compacted","isMeta":false,"timestamp":"%s","uuid":"b%d","level":"info","compactMetadata":{"trigger":"auto","preTokens":169492,"postTokens":7669,"durationMs":%d},"sessionId":"sess1","cwd":"/work/app"}`, stamp(sec), sec, ms)
+	}
+	summary := func(sec int) string {
+		return fmt.Sprintf(`{"type":"user","timestamp":"%s","message":{"role":"user","content":"This session is being continued"},"isCompactSummary":true,"sessionId":"sess1"}`, stamp(sec))
+	}
+	writeLines(t, filepath.Join(d.claude, "projects", "-work-app", "sess1.jsonl"),
+		claudeMsg("a", "claude-opus-5-5", 1, 1, 160000, 0, 10),
+		boundary(60, 48913),
+		summary(60),
+		claudeSynthetic("API Error: overloaded", 61, `,"isApiErrorMessage":true`),
+		claudeMsg("b", "claude-opus-5-5", 1, 1, 0, 9000, 70),
+		claudeMsg("c", "claude-opus-5-5", 1, 1, 9000, 0, 80),
+	)
+	got := map[string]int64{}
+	check := func() {
+		t.Helper()
+		clear(got)
+		for _, c := range Calls(time.Time{}) {
+			got[c.RequestID+c.Error] += c.Compact
+		}
+		if got["req_a"] != 0 || got["req_b"] != 48913 || got["req_c"] != 0 || got["unknown"] != 0 {
+			t.Fatalf("compact: %v", got)
+		}
+	}
+	check()
+	Reset() // read again from the call cache
+	check()
+}
+
+// Codex compacts by a call of its own (a token_usage_record the compacted
+// line names): that call's time is the compaction's (real fixture: asked at
+// task_started 01:41:35.120, answered 01:44:20.576). Other calls carry none.
+func TestCallsCodexCompactTook(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "codex-native-compaction.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	codexUsageLog(t, strings.Split(strings.TrimSpace(string(data)), "\n"))
+	check := func() {
+		t.Helper()
+		got := map[string]int64{}
+		for _, c := range Calls(time.Time{}) {
+			got[c.ResponseID] = c.Compact
+		}
+		for id, ms := range got {
+			if want := map[bool]int64{true: 165456}[id == "resp_4"]; ms != want {
+				t.Fatalf("compact %v", got)
+			}
+		}
+		if _, ok := got["resp_4"]; !ok {
+			t.Fatalf("no compaction call: %v", got)
+		}
+	}
+	check()
+	Reset()
+	check()
+}
+
 // bare is a call without where it is in its file, which a test of what the
 // calls are has no want of.
 func bare(c Call) Call {

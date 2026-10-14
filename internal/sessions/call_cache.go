@@ -33,10 +33,13 @@ import (
 // one is.
 // v12: a ZCode call's input leaves out the cache, and its output the
 // reasoning counted twice, as its session's summary does (#1947).
+// v13: a call after a compaction carries how long the compaction took
+// (Compact): Claude Code's compact_boundary durationMs, Codex's compaction
+// call's own time.
 // What each version names is what a cache of the one before it cannot serve:
 // the version is part of the directory's name, so a cache written by an older
 // one is never read (pruneCalls).
-const callCacheVersion = "calls-v12"
+const callCacheVersion = "calls-v13"
 const maxKeptCalls = 131072
 const maxKeptFiles = 64
 

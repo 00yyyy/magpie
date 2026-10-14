@@ -44,8 +44,12 @@ type Call struct {
 	// Millis: how long the call took. Codex's, of a turn that made this call alone, is what
 	// it says; the rest are told from the file's times, the call's last line less the line
 	// that asked for it (a prompt, a tool's result), and so a little more or less than it was
-	Millis int64  `json:"ms,omitempty"`
-	Cwd    string `json:"cwd,omitempty"`
+	Millis int64 `json:"ms,omitempty"`
+	// Compact: how long a compaction of the context kept the agent waiting, in ms.
+	// Codex's is on the compaction's own call (its Millis); Claude Code's is the
+	// durationMs its compact_boundary line says, on the first call after it
+	Compact int64  `json:"compact_ms,omitempty"`
+	Cwd     string `json:"cwd,omitempty"`
 	// Where the call is in its file, for reading what was said in it (ContentOf): the file,
 	// from where what it was asked began — after the reply before it — to where it ended,
 	// and for Claude Code the id of its message
@@ -82,6 +86,8 @@ type callFile struct {
 	Requested          string
 	LastUser, LastAsst time.Time
 	Began              map[string]time.Time
+	// how long a compaction its file told of took, for the call after it
+	CompactMs int64
 	// Codex
 	CX *cxRun
 }
@@ -480,6 +486,16 @@ func claudeCallLine(st *callFile, b []byte) {
 			if json.Unmarshal(b, &n) == nil && n.Attachment.Identity.ModelID != "" {
 				st.Requested = st.str(n.Attachment.Identity.ModelID)
 			}
+		case bytes.Contains(b, ccCompact):
+			// {"type":"system","subtype":"compact_boundary","compactMetadata":{"durationMs":48913,…}}
+			var n struct {
+				Meta struct {
+					DurationMs int64 `json:"durationMs"`
+				} `json:"compactMetadata"`
+			}
+			if json.Unmarshal(b, &n) == nil && n.Meta.DurationMs > 0 {
+				st.CompactMs = n.Meta.DurationMs
+			}
 		case bytes.Contains(b, ccUserLine):
 			// what a reply is asked by: a prompt, or a tool's result
 			if at := tsAt(b, true); !at.IsZero() {
@@ -623,6 +639,9 @@ func claudeCallLine(st *callFile, b []byte) {
 		}
 		st.Msgs[c.Msg], st.Began[c.Msg] = m.Call, asked
 	}
+	if c.Error == "" {
+		c.Compact, st.CompactMs = st.CompactMs, 0
+	}
 	st.Calls = append(st.Calls, c)
 }
 
@@ -637,6 +656,7 @@ func firstChars(s string, n int) string {
 var (
 	ccIdentity  = []byte(`"identity":{"modelId":"`)
 	ccUserLine  = []byte(`"type":"user"`)
+	ccCompact   = []byte(`"subtype":"compact_boundary"`)
 	cxToolOut   = []byte(`"type":"function_call_output"`)
 	cxCustomOut = []byte(`"type":"custom_tool_call_output"`)
 	cxStarted   = []byte(`"type":"task_started"`)
@@ -773,6 +793,7 @@ func codexCallLine(st *callFile, b []byte) {
 		r.Turns[p.TurnID] = turn
 		if turn.N == 1 {
 			st.Calls[turn.First].TTFT, st.Calls[turn.First].Millis = p.FirstToken, p.Duration
+			st.codexCompact(turn.First)
 			st.markCall(turn.First)
 		}
 	case l.Type == "compacted":
@@ -897,8 +918,19 @@ func (st *callFile) codexTiming(i int) {
 	if turn.N == 1 && turn.Complete {
 		c.Millis, c.TTFT = turn.Duration, turn.FirstToken
 	}
+	st.codexCompact(i)
 	st.markCall(i)
 
+}
+
+// codexCompact notes a compaction's call's time as the wait it made: Codex
+// compacts by a call of its own to the model.
+func (st *callFile) codexCompact(i int) {
+	c := &st.Calls[i]
+	c.Compact = 0
+	if e := st.CX.Usage.Entries; i < len(e) && e[i].Compaction {
+		c.Compact = c.Millis
+	}
 }
 
 func hashHead(head string) string { return fmt.Sprintf("%x", sha256.Sum256([]byte(head))) }

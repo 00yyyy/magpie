@@ -923,15 +923,17 @@
   // how far apart, as a share of the axis, two of its labels must sit: a
   // label is about 30px wide, the narrowest card's axis about 280px
   const TICK_GAP = 0.16;
-  function chart(pts, current, best, show) {
+  function chart(pts, current, best, show, timed) {
     if (pts.length < 2) return null;
     const near = (v) => pts.reduce((a, p) => Math.abs(p.value - v) < Math.abs(a.value - v) ? p : a, pts[0]);
     const now = typeof current === "number" ? near(current) : pts.find((p) => p.value === current);
     const top = typeof best === "number" ? near(best) : pts.find((p) => p.value === best);
     if (!top) return null;
     // measured from the advice, not the cheapest point: tune takes the
-    // largest window within 1% of it, and those cost nothing more here
-    const low = top.cost;
+    // largest window within 1% of it, and those cost nothing more here.
+    // Timed, the advice may pass a cheaper window that waits longer, so
+    // each is said against the cheapest
+    const low = timed ? Math.min(...pts.map((p) => p.cost)) : top.cost;
     const extra = (p) => Math.max(0, p.cost - low);
     const most = Math.max(...pts.map(extra));
     if (!(most > 0)) return null;
@@ -971,7 +973,8 @@
         dot.append(tag);
       }
       dot.dataset.tt = p === top
-        ? t("{value}: the fewest tokens for how you work", { value: show(p.value) })
+        ? timed ? t("{value}: the fewest tokens without waiting longer on compactions", { value: show(p.value) })
+          : t("{value}: the fewest tokens for how you work", { value: show(p.value) })
         : t("{value}: {tokens} more tokens over the range (+{pct})", { value: show(p.value), tokens: fmtK(extra(p)), pct: pct(extra(p) / low) });
       plot.append(dot);
     };
@@ -991,7 +994,7 @@
       tagged.push(p);
       return label;
     };
-    const bestTag = tag(top, t("Leanest"));
+    const bestTag = tag(top, timed ? t("Tokens + wait") : t("Leanest"));
     const nowTag = now && now !== top ? tag(now, "+" + pct(extra(now) / low)) : "";
     const worstTag = worst !== now && worst !== top ? tag(worst, "+" + pct(extra(worst) / low)) : "";
     if (worst !== now && worst !== top) at(worst, "worst", worstTag);
@@ -1037,11 +1040,13 @@
       return f;
     };
     vals.append(val("Now", cur, "now"));
-    // named for what it is measured by, tokens alone, not "best" (#1854)
-    if (!same) vals.append(el("span", "ctx-tune-arrow", "→"), val("Fewest tokens", best, "best"));
+    // named for what it is measured by, tokens alone, not "best" (#1854);
+    // with the agent's compactions timed, tokens and the wait on them
+    const timed = !!(a.compact && (r.facts || {}).took > 0);
+    if (!same) vals.append(el("span", "ctx-tune-arrow", "→"), val(timed ? "Tokens + wait" : "Fewest tokens", best, "best"));
     row.append(vals);
     const c = a.compact
-      ? chart(a.compact.curve || [], r.current, r.best, show)
+      ? chart(a.compact.curve || [], r.current, r.best, show, timed)
       : chart([{ value: "5m", cost: r.short }, { value: "1h", cost: r.hour }], r.current, r.best, show);
     if (c) row.append(c);
 
@@ -1051,13 +1056,28 @@
       why.textContent = f.compacts
         ? t("Your conversations grow {growth} a call; a compaction leaves {after}, and reading back what it dropped costs {rework}. {n} compactions in the range.", { growth: fmtK(f.growth), after: fmtK(f.after), rework: fmtK(f.rework), n: f.compacts })
         : t("Your conversations grow {growth} a call, and none was compacted in the range.", { growth: fmtK(f.growth) });
+      // how long the agent's own compactions took, from its files: what a
+      // window that compacts more often would have kept the reader waiting
+      if (timed) {
+        const secs = f.took < 120 ? t("{n}s", { n: f.took }) : fmtDur(f.took);
+        why.textContent += " " + (same
+          ? t("Each compaction kept you waiting about {secs} ({n} timed). Over the range that's about {wait} at {value}.", { secs, n: f.timed, wait: fmtDur(r.wait || 0), value: show(cur) })
+          : t("Each compaction kept you waiting about {secs} ({n} timed). Over the range that's about {wait} at {best}, against {now} at {value}.", { secs, n: f.timed, wait: fmtDur(r.wait_best || 0), best: show(best), now: fmtDur(r.wait || 0), value: show(cur) }));
+        // the cheaper window the advice passed over, for waiting longer
+        const cheap = (a.compact.curve || []).find((p) => p.value === r.cheapest);
+        const adv = same ? r.cost : r.low;
+        if (cheap && r.cheapest !== best && adv > 0 && (adv - cheap.cost) / adv >= 0.03 && (r.wait_cheapest || 0) > (same ? r.wait || 0 : r.wait_best || 0))
+          why.textContent += " " + t("{value} would spend {pct} fewer tokens, but wait about {wait}.", { value: show(r.cheapest), pct: pct((adv - cheap.cost) / adv), wait: fmtDur(r.wait_cheapest) });
+      }
     } else {
       why.textContent = t("{quick} of your calls came within 5 minutes of the one before, {pause} after a pause of 5 to 60 minutes.", { quick: pct(f.quick || 0), pause: pct(f.pause || 0) });
     }
     row.append(why);
     // a window advised is weighed by tokens alone: what a compaction loses of
     // the task isn't measured, and a smaller one compacts more often (#1854)
-    if (a.compact && !same) row.append(el("p", "ctx-tune-caveat", t("A token estimate only: it doesn't measure how well the agent keeps the task after a compaction. The lower the window, the more often it compacts.")));
+    if (a.compact && !same) row.append(el("p", "ctx-tune-caveat", timed
+      ? t("Tokens and waiting only: it doesn't measure how well the agent keeps the task after a compaction. The lower the window, the more often it compacts.")
+      : t("A token estimate only: it doesn't measure how well the agent keeps the task after a compaction. The lower the window, the more often it compacts.")));
 
     const foot = el("div", "ctx-tune-foot");
     const verdict = same || applied
@@ -1113,16 +1133,20 @@
       other.setAttribute("aria-expanded", "false");
       other.onclick = (e) => {
         e.stopPropagation();
-        const base = (pts.find((p) => p.value === best) || {}).cost ?? r.low;
+        // timed, the advice may spend over the cheapest to wait no
+        // longer, so each value is said against the cheapest
+        const cheapest = pts.reduce((x, p) => p.cost < x.cost ? p : x, pts[0]);
+        const base = timed ? cheapest.cost : (pts.find((p) => p.value === best) || {}).cost ?? r.low;
         const now = set.ours && set.value != null ? +set.value : cur;
         const near = pts.reduce((x, p) => Math.abs(p.value - now) < Math.abs(x.value - now) ? p : x, pts[0]);
         const opts = pts.map((p) => {
           const extra = Math.max(0, p.cost - base);
-          const spend = p.value === best ? t("Fewest tokens")
+          const spend = p.value === (timed ? cheapest.value : best) ? t("Fewest tokens")
             : base > 0 && extra / base < 0.005 ? t("As few tokens")
             : t("+{tokens} tokens (+{pct})", { tokens: fmtK(extra), pct: pct(base > 0 ? extra / base : 0) });
           const often = p.compacts == null ? "" : p.compacts ? count(p.compacts, "about 1 compaction", "about {n} compactions") : t("no compaction");
-          return { v: String(p.value), name: show(p.value), literalName: true, note: [spend, often].filter(Boolean).join(" · ") };
+          const wait = timed && p.compacts ? t("about {d} waiting", { d: fmtDur(p.wait || 0) }) : "";
+          return { v: String(p.value), name: show(p.value), literalName: true, note: [spend, often, wait].filter(Boolean).join(" · ") };
         });
         openProtoMenu(other, opts, String(near.value), (v) => {
           if (v !== String(now)) send("apply", v);

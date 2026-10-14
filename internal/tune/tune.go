@@ -34,6 +34,9 @@ type Call struct {
 	Out    int
 	Wrote  int // of Prompt, written to the cache
 	Wrote1 int // of Wrote, kept an hour
+	// Compact is how long a compaction kept the agent waiting, in ms, on the
+	// call its file tells it with; 0 when none or the agent doesn't say
+	Compact int64
 }
 
 // FromCalls makes tune's calls of an agent's calls read from its files,
@@ -60,6 +63,7 @@ func FromCalls(cs []sessions.Call) []Call {
 			Time: c.Time, Stream: stream, Model: strings.ToLower(m), Long: long,
 			Sub:    strings.Contains(filepath.ToSlash(c.File), "/subagents/"),
 			Prompt: p, Out: c.Output, Wrote: c.CacheWrite, Wrote1: c.CacheWrite1h,
+			Compact: c.Compact,
 		})
 	}
 	return out
@@ -83,11 +87,14 @@ func WeightsFor(model string) Weights {
 
 // Point is one setting tried and what the period would have cost with it,
 // and how many compactions it would have made there: what a window over
-// the leanest buys, said beside what it costs (#1860).
+// the leanest buys, said beside what it costs (#1860). Wait is the seconds
+// those compactions would have kept the user waiting, when the agent's
+// files time them (Facts.Took).
 type Point struct {
 	Value    int     `json:"value"`
 	Cost     float64 `json:"cost"`
 	Compacts int     `json:"compacts"`
+	Wait     int     `json:"wait,omitempty"`
 }
 
 // Facts are what a replay found of the user's habits, said beside the
@@ -106,6 +113,10 @@ type Facts struct {
 	Away     float64 `json:"away,omitempty"`     // over an hour
 	Hour     float64 `json:"hour,omitempty"`     // of the cache writes, the share kept an hour
 	Sessions int     `json:"sessions,omitempty"` // streams that reached a compaction
+	// Took is the median seconds a compaction kept the agent waiting, of
+	// Timed compactions its files timed; 0 when fewer than minTimed were
+	Took  int `json:"took,omitempty"`
+	Timed int `json:"timed,omitempty"`
 }
 
 // Compaction is the window advised for one model of an agent.
@@ -118,6 +129,14 @@ type Compaction struct {
 	Low     float64 `json:"low"`  // with Best
 	Curve   []Point `json:"curve"`
 	Facts   Facts   `json:"facts"`
+	// with compactions timed, the seconds they would have waited: with
+	// Current, and with Best
+	Wait     int `json:"wait,omitempty"`
+	WaitBest int `json:"wait_best,omitempty"`
+	// with compactions timed, the cheapest window and its wait, which
+	// the advice passes over when it would wait longer than now
+	Cheapest     int `json:"cheapest,omitempty"`
+	WaitCheapest int `json:"wait_cheapest,omitempty"`
 }
 
 // CompactOpts says how an agent compacts: the windows it takes, and how
@@ -143,7 +162,29 @@ const (
 	dropFrom = 20000
 	// the calls after a compaction its rework is counted over
 	reworkCalls = 10
+	// the compactions that must be timed before their time is weighed
+	minTimed = 3
+	// windows within this share of the cheapest cost the same: the least
+	// that is worth changing a setting for (Compact keeps the current one
+	// unless it saves this much), and so, with compactions timed, the band
+	// the one that compacts least is taken from
+	sameCost = 0.03
 )
+
+// took is the median seconds a compaction took of those the calls time,
+// and how many that is; 0 when fewer than minTimed are.
+func took(cs []Call) (int, int) {
+	var ms []int
+	for _, c := range cs {
+		if c.Compact > 0 {
+			ms = append(ms, int(c.Compact))
+		}
+	}
+	if len(ms) < minTimed {
+		return 0, len(ms)
+	}
+	return (median(ms) + 500) / 1000, len(ms)
+}
 
 // streams groups calls by the conversation they are in, each oldest first.
 func streams(cs []Call) [][]Call {
@@ -321,12 +362,17 @@ func Compact(cs []Call, o CompactOpts) *Compaction {
 	// over: it keeps at least half the summary's size, or twenty calls'
 	// growth, free over it
 	floor := max(o.Min, roundUp(after+max(after/2, 20*f.Growth)+o.Reserve, o.Step))
+	f.Took, f.Timed = took(cs)
+	if f.Took == 0 {
+		f.Timed = 0
+	}
 	r := &Compaction{Model: model, Current: cur, Window: o.Window, Facts: f}
 	run := func(v int) Point {
 		c, n, _ := replayCompact(ss, max(after+1, v-o.Reserve), after, b, rework, w, write)
-		return Point{Value: v, Cost: c, Compacts: n}
+		return Point{Value: v, Cost: c, Compacts: n, Wait: n * f.Took}
 	}
-	r.Cost = run(cur).Cost
+	now := run(cur)
+	r.Cost = now.Cost
 	for v := floor; v <= top; v += o.Step {
 		r.Curve = append(r.Curve, run(v))
 	}
@@ -342,10 +388,38 @@ func Compact(cs []Call, o CompactOpts) *Compaction {
 			best = p
 		}
 	}
+	// with the agent's compactions timed, the advice never makes the user
+	// wait longer than the window now does: tokens and seconds share no
+	// unit the files measure, so it doesn't trade one for the other on a
+	// guessed rate. Of the windows that compact no more often than now,
+	// the cheapest; of those within sameCost of it, the one that waits
+	// least (the fewest compactions, the larger of two that make as
+	// many). A cheaper window that waits longer stays on the curve with
+	// its wait, for the reader to pick.
+	if f.Took > 0 {
+		var calm []Point
+		for _, p := range r.Curve {
+			if p.Compacts <= now.Compacts {
+				calm = append(calm, p)
+			}
+		}
+		best = now
+		if len(calm) > 0 {
+			cl := slices.MinFunc(calm, func(a, b Point) int { return cmpF(a.Cost, b.Cost) })
+			best = cl
+			for _, p := range calm {
+				if p.Cost <= cl.Cost*(1+sameCost) && (p.Compacts < best.Compacts || p.Compacts == best.Compacts && p.Value > best.Value) {
+					best = p
+				}
+			}
+		}
+		r.Cheapest, r.WaitCheapest = low.Value, low.Wait
+	}
 	r.Best, r.Low = best.Value, best.Cost
+	r.Wait, r.WaitBest = now.Wait, best.Wait
 	// it only says to change what would save 3% or more
-	if r.Cost <= 0 || (r.Cost-r.Low)/r.Cost < 0.03 {
-		r.Best, r.Low = cur, r.Cost
+	if r.Cost <= 0 || (r.Cost-r.Low)/r.Cost < sameCost {
+		r.Best, r.Low, r.WaitBest = cur, r.Cost, r.Wait
 	}
 	_, _, over := replayCompact(ss, max(after+1, r.Best-o.Reserve), after, b, rework, w, write)
 	f.Long = float64(over) / float64(max(1, f.Calls))
