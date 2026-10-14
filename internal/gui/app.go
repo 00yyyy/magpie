@@ -665,6 +665,13 @@ func panelOptions(goos, theme string) application.WebviewWindowOptions {
 		Mac: application.MacWindow{
 			Backdrop:     application.MacBackdropTranslucent,
 			CornerRadius: 12,
+			// On every Space, a full-screen app's among them, as a menu
+			// bar extra's panel is: by default (FullScreenPrimary alone)
+			// it stayed on the desktop Space it was first shown on, and a
+			// click on the icon over a full-screen Chrome showed it there,
+			// out of sight, until the user swiped back (#2141).
+			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces |
+				application.MacWindowCollectionBehaviorFullScreenAuxiliary,
 		},
 		Windows: application.WindowsWindow{HiddenOnTaskbar: true},
 	}
