@@ -8391,7 +8391,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -8542,6 +8542,10 @@ function drawEditor(p, presetID) {
   // the Key header row, shown while the provider has a third-party
   // Anthropic API, which is sent its key in both headers by default
   let showAuth = () => {};
+  // the Compaction row, shown while the provider has a Responses API
+  // (Provider.CarriesCompaction): Codex's own compaction can go only there
+  let showCompaction = () => {};
+  const carriesCompaction = () => !!((draft.responses ?? (isNew && pr ? pr.responses : "")) || "").trim();
   if (custom) {
     name = input(draft.name, t("e.g. My Relay"));
     name.oninput = () => { draft.name = name.value; if (isNew) draft.id = slug(name.value); };
@@ -8588,6 +8592,7 @@ function drawEditor(p, presetID) {
       showSearch();
       showLocal();
       showAuth();
+      showCompaction();
     };
     queueMicrotask(() => slide(seg, "api"));
     url = input(draft[apiField[draft.api]], urlHint(draft.api), "url");
@@ -8595,7 +8600,7 @@ function drawEditor(p, presetID) {
     url.oninput = () => {
       draft[apiField[draft.api]] = url.value;
       if (carried) { draft[carried.from] = carried.value; carried = null; fillEndpoints(); }
-      showSearch(); showLocal(); showAuth();
+      showSearch(); showLocal(); showAuth(); showCompaction();
     };
     const urlWrap = el("div", "stack");
     urlWrap.append(seg, url);
@@ -8650,6 +8655,7 @@ function drawEditor(p, presetID) {
     ed.append(...field(t("Context window"), contextPicks(p, cx), t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
     ed.append(...outputField());
     ed.append(...compactField());
+    if (p.carriesCompaction) ed.append(...nativeCompactionField(() => true)[0]);
     ed.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
     const proxies = el("div", "stack");
     proxies.append(proxyPicker());
@@ -8695,7 +8701,7 @@ function drawEditor(p, presetID) {
       const priceRate = priceRateOfDraft();
       if (priceRate === undefined) return priceRateError(ed);
       if (priceTypedError(ed)) return;
-      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), unlisted: draft.unlisted, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...routingOfDraft(p) };
+      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), unlisted: draft.unlisted, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
       saving(saveBtn, t("Saving…"));
       savePluginOptions(subOf(a.agent)).then(() => providerAction("save", body, t("{name} saved", { name: p.name })), (e) => { doneSaving(saveBtn); editorError(e.message || String(e)); }); };
     bar.append(cancel, saveBtn);
@@ -8711,7 +8717,7 @@ function drawEditor(p, presetID) {
     if (draft.chat === undefined) { draft.chat = p?.chat || ""; draft.responses = p?.responses || ""; }
     endpoint = input(draft.chat || draft.responses || "", pr.endpoint, "url");
     endpoint.classList.add("endpoint");
-    endpoint.oninput = () => { draft.chat = draft.responses = endpoint.value.trim(); refreshEndpoints(); };
+    endpoint.oninput = () => { draft.chat = draft.responses = endpoint.value.trim(); refreshEndpoints(); showCompaction(); };
     ed.append(...field(t("Endpoint"), endpoint, pr.endpointHint ? t(pr.endpointHint) : ""));
   }
 
@@ -9070,7 +9076,12 @@ function drawEditor(p, presetID) {
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
     if (!decideOnly(p || pr)) ed.append(...field(t("Context window"), contextPicks(p, cx), t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
     if (!decideOnly(p || pr)) ed.append(...outputField());
-    if (!decideOnly(p || pr)) ed.append(...compactField());
+    if (!decideOnly(p || pr)) {
+      ed.append(...compactField());
+      const [row, refresh] = nativeCompactionField(carriesCompaction);
+      ed.append(...row);
+      showCompaction = refresh;
+    }
   }
   if (p && !decideOnly(p)) ed.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
   else if (custom) {
@@ -9140,7 +9151,7 @@ function drawEditor(p, presetID) {
       const add = (label, key, ph, hint) => {
         if (apiField[draft.api] === key) return;
         const i = input(draft[key], ph, "url");
-        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); showAuth(); };
+        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); showAuth(); showCompaction(); };
         eps.append(...field(t(label), i, t(hint)));
       };
       add("OpenAI URL", "chat", "https://…/v1", "if the vendor also serves chat completions");
@@ -9242,6 +9253,7 @@ function drawEditor(p, presetID) {
     body.pinUpstream = !!draft.pinUpstream;
     if (twoKeyHeaders()) body.authHeader = draft.authHeader || "";
     body.unredacted = !!draft.unredacted && onLAN();
+    if (!decideOnly(p || pr)) body.nativeCompaction = !!draft.nativeCompaction && carriesCompaction();
     body.passUserAgent = !!draft.passUserAgent && uaPassable();
     const cx = parseContexts(draft.contexts || "");
     if (cx.error) return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn");
@@ -9392,6 +9404,21 @@ function outputField() {
   const wrap = el("div", "cxfield");
   wrap.append(ox, row);
   return field(t("Max output"), wrap, t("The most a reply may hold, told to the agents as their max tokens and sent as max_tokens on Anthropic's API when the agent names none; empty leaves it to the vendor and models.dev"));
+}
+
+// nativeCompactionField is the editor's Compaction (#1099): Codex's own
+// compaction asked of the provider as Codex sent it, its sealed item given
+// back as it came, in place of the summary magpie writes. Offered only
+// where the wire carries it (a Responses API, a ChatGPT account, GitHub
+// Copilot); show says when, for a custom provider whose URLs are typed.
+function nativeCompactionField(show) {
+  const [ntk, ncb] = tick(t("Codex compacts on this provider"), !!draft.nativeCompaction);
+  ntk.classList.add("native-compaction");
+  ncb.onchange = () => { draft.nativeCompaction = ncb.checked; };
+  const row = field(t("Compaction"), ntk, t("Codex's compaction is asked of this provider as Codex sent it, and the summary it seals goes back to Codex unchanged. Off, magpie writes the summary. A conversation compacted this way continues only on this provider and account: another is refused with an error, never sent without the context."));
+  const refresh = () => { for (const e of row) e.style.display = show() ? "" : "none"; };
+  refresh();
+  return [row, refresh];
 }
 
 // compactField is the editor's Compact at (#876): where Codex and Claude

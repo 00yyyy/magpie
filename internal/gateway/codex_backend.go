@@ -149,7 +149,9 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			}
 			// a sealed subagent task goes to a ChatGPT account the model
 			// or group has, or is turned away (serve, sealedReader)
-			body, compact := codexInput(body, true)
+			// a provider set to compact natively is asked Codex's own
+			// compaction, and its sealed item goes back as it came (#1099)
+			body, compact := codexInputAs(body, true, s.nativeCompactionFor(model))
 			if compact {
 				s.codexCompact(w, r, body)
 				return
@@ -1362,6 +1364,13 @@ func codexListTag() string {
 // replaces Codex's compaction trigger with a request to summarise the input.
 // OpenAI's own models keep the trigger for their backend to handle.
 func codexInput(body []byte, magpieModel bool) (_ []byte, compact bool) {
+	return codexInputAs(body, magpieModel, false)
+}
+
+// codexInputAs is codexInput, the trigger kept for a magpie model too
+// when native says its provider compacts natively (NativeCompaction,
+// #1099): the summaries magpie made before are still restored.
+func codexInputAs(body []byte, magpieModel, native bool) (_ []byte, compact bool) {
 	var q map[string]json.RawMessage
 	if json.Unmarshal(body, &q) != nil {
 		return body, false
@@ -1386,7 +1395,7 @@ func codexInput(body []byte, magpieModel bool) (_ []byte, compact bool) {
 				out = append(out, userMessage(codexSummaryPrefix+"\n"+string(b)))
 			}
 		case "compaction_trigger":
-			if !magpieModel {
+			if !magpieModel || native {
 				out = append(out, it)
 				continue
 			}

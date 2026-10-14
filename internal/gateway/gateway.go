@@ -1328,10 +1328,11 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 			// Codex compacts remotely, a compaction_trigger here, on a
 			// provider table named "OpenAI" (CC Switch's relay tables,
 			// which magpie points here, #1301): the summary is magpie's to
-			// make, as on CodexPath, and magpie's summaries go back as text
+			// make, as on CodexPath, and magpie's summaries go back as text;
+			// a provider set to compact natively is asked Codex's own (#1099)
 			if bytes.Contains(body, []byte(`"compaction`)) {
 				var compact bool
-				if body, compact = codexInput(body, true); compact {
+				if body, compact = codexInputAs(body, true, s.nativeCompactionFor(modelOf(body))); compact {
 					s.codexCompact(w, r, body)
 					return
 				}
@@ -1861,6 +1862,32 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if sealedTask {
 		cands, pl = s.sealedReaders(cands, pl, sealers)
 	}
+	// a compaction a provider set to compact natively sealed goes only to
+	// the key or account that sealed it, or is refused saying so: never
+	// to another, to be refused, dropped or summarised (#1099). Codex's
+	// trigger goes only where it can be asked as Codex sent it.
+	var checkpoint *checkpointWriter
+	if from == provider.Responses {
+		if cp, ok := checkpointOf(body); ok {
+			checkpoint = &cp
+			var left bool
+			if cands, pl, left = checkpointReaders(cands, pl, cp.Who); !left {
+				call.Status, call.Error = 400, "native compaction sealed elsewhere"
+				writeError(w, from, 400, checkpointError(call.Model, cp))
+				turnedAway()
+				return
+			}
+		}
+		if compactionTriggerIn(body) {
+			var left bool
+			if cands, pl, left = s.compactionCarriers(cands, pl); !left {
+				call.Status, call.Error = 400, "native compaction not carried"
+				writeError(w, from, 400, carrierError(call.Model))
+				turnedAway()
+				return
+			}
+		}
+	}
 	var accountHeld bool // every candidate was an account or key the calling key may not use
 	if keyHeld || accHeld {
 		who := keyWho
@@ -2112,6 +2139,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// and the provider's last answer, saved to disk, took seconds on a busy
 	// disk, and the reply's speed counted them as its own)
 	var ended time.Time
+	// the compaction a provider set to compact natively seals, read on the
+	// way to Codex, and who sealed it remembered once it has answered
+	// (#1099)
+	var sealedBy *candidate
+	if from == provider.Responses && compactionTriggerIn(body) {
+		watch := &compactionWatch{w: w}
+		w = watch
+		defer func() {
+			if sealedBy != nil {
+				if enc := watch.sealed(); enc != "" {
+					wroteCheckpoint(enc, *sealedBy)
+				}
+			}
+		}()
+	}
 	for i := 0; i < len(cands); i++ {
 		c := cands[i]
 		if j := s.laneMate(cands, i, isGroup, gaveWay); j > i {
@@ -2585,7 +2627,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					refused(stuck, c.who(), attemptBody, "reasoning")
 				}
 			}
-			if !ok {
+			// a compaction sealed where native compaction is on is never
+			// left out: its writer's refusal goes back as it came (#1099)
+			if !ok && checkpoint == nil && !s.compactsNatively(c.p, c.model) {
 				resealed = 2
 				if b, ok = withoutCompaction(body); ok {
 					refused(stuck, c.who(), attemptBody, compactionKinds...)
@@ -3060,6 +3104,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			if hit == nil || !hit.Compact {
 				answered(stuck, c, aff.Turn, call.Usage)
 			}
+			if s.compactsNatively(c.p, c.model) {
+				sealedBy = &c
+			}
 			if hit != nil && !hit.Compact {
 				ruleAnswered(ruleAt, call.Usage)
 			}
@@ -3252,7 +3299,8 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// (the provider is always streamed on that path) rather than relayed,
 	// except a plugin's on Responses, which is relayed streamed and given
 	// back whole (gathers)
-	relay := slices.Contains(s.usable(p, model), from) && (p.Account == nil || !p.Account.Stream || streamOf(body) || gathers(p, from, body))
+	relayable := slices.Contains(s.usable(p, model), from) && (p.Account == nil || !p.Account.Stream || streamOf(body) || gathers(p, from, body))
+	relay := relayable
 	// a Claude model is asked on Messages whatever API the client spoke,
 	// for the cache breakpoints the translation adds: OpenCode speaks Chat
 	// for every model, and a relay drops cache_control on Chat, so every
@@ -3294,12 +3342,23 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if relay && from == provider.Chat && !streamOf(body) && dashScope(p) {
 		relay, ownAPI = false, true
 	}
+	// Codex's compaction trigger, or a compaction sealed where native
+	// compaction is on, goes as it came: a translation would leave it out
+	// (#1099)
+	keep := s.keepsCompaction(from, p, model, body)
+	if keep && relayable {
+		relay, ownAPI = true, false
+	}
 	if relay {
 		call.To = from
 		if status, msg, done := s.passthrough(w, r, p, from, model, body, &call.Usage); done {
 			return status, msg
 		}
 		// the model isn't served on the client's own API: speak another
+	}
+	if keep {
+		msg := fmt.Sprintf("%s doesn't serve %s on the Responses API, so Codex's native compaction can't be asked of it", p.Name, model)
+		return writeError(w, from, 400, msg), msg
 	}
 	to := s.usable(p, model)
 	if len(to) == 0 {

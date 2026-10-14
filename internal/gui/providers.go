@@ -92,6 +92,11 @@ type providerJSON struct {
 	// on this machine or the local network, set to go unmasked by
 	// Settings' redaction (provider.Unredacted)
 	Unredacted bool `json:"unredacted"`
+	// Codex's compaction asked of it as Codex sent it, its sealed item
+	// back as it came (provider.NativeCompaction, #1099); CarriesCompaction: its
+	// wire can carry it, so the editor offers it
+	NativeCompaction  bool `json:"nativeCompaction"`
+	CarriesCompaction bool `json:"carriesCompaction,omitempty"`
 	// requests go with the agent's own User-Agent, not magpie's
 	// (provider.PassUserAgent, #1851); OwnClient: they go as a client of
 	// the vendor's own whatever is set (provider.OwnClient), so the
@@ -539,7 +544,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(), MarksKinds: p.MarksKinds(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Picks(), Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Unlisted: p.Unlisted, NoModels: p.ServesNone(), Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
@@ -1109,6 +1114,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// quota left goes to the back (provider.Provider.Sink); a
 			// save that leaves it out keeps it
 			Sink *bool `json:"sink"`
+			// NativeCompaction, for save: Codex's compaction asked of it
+			// as Codex sent it (provider.Provider.NativeCompaction); a save
+			// that leaves it out keeps it
+			NativeCompaction *bool `json:"nativeCompaction"`
 			// AuthHeader, for save: which header the key goes in on a
 			// third-party Anthropic API (provider.Provider.AuthHeader); a
 			// save that leaves it out keeps it, one learned too
@@ -1166,6 +1175,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		if req.Sink != nil {
 			in.Sink = *req.Sink
+		}
+		if req.NativeCompaction != nil {
+			in.NativeCompaction = *req.NativeCompaction
 		}
 		if req.AuthHeader != nil {
 			in.AuthHeader = *req.AuthHeader
@@ -1247,6 +1259,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				pr.Searches = in.Searches
 				pr.PinUpstream = in.PinUpstream
 				pr.Unredacted = in.Unredacted
+				pr.NativeCompaction = in.NativeCompaction
 				pr.PassUserAgent = in.PassUserAgent
 				pr.AuthHeader = in.AuthHeader
 				if in.Name != "" {
@@ -1323,6 +1336,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 			in.SecretAccessKey = strings.TrimSpace(in.SecretAccessKey)
 			var old *provider.Provider
+			if req.New && in.NativeCompaction && !in.CarriesCompaction() {
+				fail(rw, fmt.Errorf("%s can't carry Codex's native compaction: only a provider with a Responses API, a ChatGPT account or GitHub Copilot can", cmp.Or(in.Name, in.ID)))
+				return
+			}
 			if req.New {
 				// a second one of a preset, or a name already in use, is
 				// added beside the first under the next free id
@@ -1453,6 +1470,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					if req.Sink == nil {
 						in.Sink = old.Sink
 					}
+					if req.NativeCompaction == nil {
+						in.NativeCompaction = old.NativeCompaction
+					}
 					if req.AuthHeader == nil {
 						in.AuthHeader = old.AuthHeader
 					}
@@ -1489,6 +1509,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				}
 				if in.Icon == "" && old != nil && in.Preset == "" {
 					in.Icon = old.Icon
+				}
+				// native compaction only where the wire carries it: a
+				// signed-in account is told by the one saved
+				if in.NativeCompaction && !in.CarriesCompaction() && (old == nil || old.Account == nil || !old.CarriesCompaction()) {
+					fail(rw, fmt.Errorf("%s can't carry Codex's native compaction: only a provider with a Responses API, a ChatGPT account or GitHub Copilot can", cmp.Or(in.Name, in.ID)))
+					return
 				}
 				if err := provider.Save(in); err != nil {
 					fail(rw, err)

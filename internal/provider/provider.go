@@ -227,6 +227,18 @@ type Provider struct {
 	// fitting, which a backend that isn't OpenAI's needs (#350).
 	CodexAsSent bool `json:"codexAsSent,omitempty"`
 
+	// NativeCompaction has Codex's compaction_trigger go to the provider
+	// as Codex sent it, and the compaction the provider writes back go to
+	// Codex as it came (#1099), where magpie otherwise asks the model for
+	// a summary and hands Codex that (its "magpie1:" compaction). Only a
+	// provider whose wire carries it takes it (CarriesCompaction): a
+	// Responses API (Sub2API, a remote magpie), a ChatGPT account, GitHub
+	// Copilot's GPT models. Such a compaction is sealed by the key or
+	// account that wrote it, so its conversation stays there, or is
+	// refused, never sent elsewhere to be dropped. Off, the default,
+	// keeps magpie's summary.
+	NativeCompaction bool `json:"nativeCompaction,omitempty"`
+
 	// PassUserAgent has a request go to the vendor with the User-Agent the
 	// agent that sent it gave (pi, opencode, Claude Code…), in place of
 	// magpie's own (#1851): a coding plan that serves only agents it names
@@ -620,6 +632,7 @@ func withPicks(a, pk Provider) Provider {
 	a.Models, a.Unlisted, a.Off, a.Fallback, a.Routing, a.Affinity, a.KeepLogin, a.KeepLoginAs, a.Contexts, a.Family = pk.Models, pk.Unlisted, pk.Off, pk.Fallback, pk.Routing, pk.Affinity, pk.KeepLogin, pk.KeepLoginAs, pk.Contexts, pk.Family
 	a.SwitchOnly = pk.SwitchOnly
 	a.Sink, a.NoModels = pk.Sink, pk.NoModels
+	a.NativeCompaction = pk.NativeCompaction
 	a.Proxy, a.AccountProxies, a.AccountModels = pk.Proxy, pk.AccountProxies, pk.AccountModels
 	a.AccountCaps, a.AccountWindowCaps = pk.AccountCaps, pk.AccountWindowCaps
 	a.AccountNames = pk.AccountNames
@@ -740,7 +753,7 @@ func Save(p Provider) error {
 		if p.ID == "kiro" {
 			key = p.Key
 		}
-		p = Provider{ID: p.ID, Key: key, Models: p.Models, NoModels: p.NoModels, PickedFrom: p.PickedFrom, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, QuotaRest: p.QuotaRest, QuotaResetAt: p.QuotaResetAt, RestCap: p.RestCap, PinUpstream: p.PinUpstream, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
+		p = Provider{ID: p.ID, Key: key, Models: p.Models, NoModels: p.NoModels, PickedFrom: p.PickedFrom, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, QuotaRest: p.QuotaRest, QuotaResetAt: p.QuotaResetAt, RestCap: p.RestCap, PinUpstream: p.PinUpstream, NativeCompaction: p.NativeCompaction, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
 	} else {
 		p.AccountProxies = keyProxies(p) // a provider of keys proxies each key apart
 		if subscriptionID(p.ID) && !stored(p.ID) {
@@ -892,6 +905,7 @@ func AddCopy(p Provider, from string) (string, error) {
 	p.Unlisted = p.Unlisted || src.Unlisted
 	p.Searches = p.Searches || src.Searches
 	p.Unredacted = p.Unredacted || src.Unredacted
+	p.NativeCompaction = p.NativeCompaction || src.NativeCompaction
 	p.PassUserAgent = p.PassUserAgent || src.PassUserAgent
 	if p.Website == "" {
 		p.Website = src.Website

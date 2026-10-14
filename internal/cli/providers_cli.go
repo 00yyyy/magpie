@@ -38,7 +38,10 @@ const providerUsage = `usage:
                                           (a relay that checks they are Codex's own), codex=default fits them;
                                           user-agent=agent sends the User-Agent the agent gave (pi, opencode…)
                                           in place of magpie's, for a plan that serves only agents it names;
-                                          user-agent=magpie, the default, sends magpie's
+                                          user-agent=magpie, the default, sends magpie's;
+                                          compaction=native asks the provider Codex's own compaction and hands
+                                          Codex its sealed item as it came (a Responses API, a ChatGPT account,
+                                          Copilot), compaction=magpie, the default, has magpie summarise
   magpie provider key <id> <key>          change the API key
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
   magpie provider fallback <id> <provider/model>…   where requests go when it's out of quota or down (none clears)
@@ -796,6 +799,9 @@ func showProvider(p provider.Provider) error {
 		}
 		kv("unmasked", "yes"+muted.Render(why))
 	}
+	if p.NativeCompaction {
+		kv("compaction", "native"+muted.Render("  Codex's own, sealed by the key or account that answers it"))
+	}
 	switch {
 	case p.Account != nil:
 		who := p.Account.User
@@ -1039,6 +1045,18 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				return fmt.Errorf("search=yes|no, not %q", v)
 			}
 			p.Searches = v == "yes"
+		case "compaction":
+			// native: Codex's compaction_trigger goes to the provider as
+			// Codex sent it, its sealed compaction back to Codex as it
+			// came (#1099); magpie: magpie's summary, the default
+			switch strings.ToLower(v) {
+			case "native", "yes", "on":
+				p.NativeCompaction = true
+			case "magpie", "default", "no", "off":
+				p.NativeCompaction = false
+			default:
+				return fmt.Errorf("compaction=native|magpie, not %q", v)
+			}
 		case "unmasked":
 			// yes: a model on this computer or the local network gets the
 			// requests as written, unmasked by Settings' redaction (lc on
@@ -1093,6 +1111,9 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			}
 			return fmt.Errorf("unknown field %q\n\n%s", k, providerUsage)
 		}
+	}
+	if p.NativeCompaction && !p.CarriesCompaction() {
+		return fmt.Errorf("compaction=native: %s can't carry Codex's own compaction; only a provider with a Responses API (responses=), a ChatGPT account or GitHub Copilot can", p.Name)
 	}
 	if workspace != "" {
 		// Bailian's decision model is asked at the workspace's own host
