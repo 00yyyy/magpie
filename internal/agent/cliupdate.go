@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -926,7 +927,96 @@ func (a *Agent) UpdateCLI() (CLI, error) {
 	if c.Update && c.Version == before {
 		return c, fmt.Errorf("%s is still %s after %s; %s is out", a.Name, c.Version, u.shown(), c.Latest)
 	}
+	// the package says its new version, but that isn't the CLI running: npm
+	// leaves out an optional dependency it couldn't fetch and still exits 0,
+	// and Claude Code without its native package is a stub that only says
+	// "claude native binary not installed" (#2128)
+	broken := runsBroken(ctx, bin, u)
+	if broken != "" && u.via == "npm" && !u.admin {
+		// once more, the version just installed with its optional
+		// packages: how the reporter's own install was mended
+		again := *u
+		again.cmd = append([]string{}, u.cmd...)
+		at := c.Version
+		if at == "" {
+			at = "latest"
+		}
+		again.cmd[len(again.cmd)-1] = u.pkg + "@" + at
+		again.cmd = append(again.cmd, "--include=optional")
+		if _, err := runUpdate(ctx, &again); err == nil {
+			versions.forget(real)
+			shimTargets.forget(bin)
+			c, _ = a.CLI()
+			broken = runsBroken(ctx, bin, u)
+		}
+	}
+	if broken != "" {
+		return c, fmt.Errorf("%s was updated, but %s --version fails: %s — %s", a.Name, filepath.Base(bin), broken, mendHint(u, c.Version))
+	}
 	return c, nil
+}
+
+// runsBroken is what bin --version says when it ran and failed without
+// saying a version, "" when it said one or what it is can't be told: it
+// didn't start, took too long, or its interpreter wasn't found (127), none
+// of which says the update broke it. It runs as the update did, its npm's
+// folder first on PATH, so a node CLI finds the node it was installed for.
+func runsBroken(ctx context.Context, bin string, u *updater) string {
+	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
+	defer cancel()
+	out, code, err := runCheck(ctx, bin, updateEnv(u))
+	if err == nil || ctx.Err() != nil || code <= 0 || code == 127 || parseVersion(out) != "" {
+		return ""
+	}
+	if msg := lastLines(out, 2); msg != "" {
+		return msg
+	}
+	return fmt.Sprintf("exit status %d", code)
+}
+
+// checkTimeout bounds the run after an update: a busy machine's first start
+// of a CLI that was just written.
+var checkTimeout = 30 * time.Second
+
+// runCheck runs bin --version with nothing on its stdin, and says what it
+// printed and its exit code (-1 when it didn't run to one); a var so tests
+// can fake it.
+var runCheck = func(ctx context.Context, bin string, env []string) (string, int, error) {
+	cmd := proc.ProbeContext(ctx, bin, "--version")
+	cmd.Stdin = nil
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	code := -1
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		code = ee.ExitCode()
+	}
+	return string(out), code, err
+}
+
+// mendHint is how to put back a CLI an update left unable to run.
+func mendHint(u *updater, version string) string {
+	at := version
+	if at == "" {
+		at = "latest"
+	}
+	switch u.via {
+	case "npm":
+		prefix := u.prefix
+		if strings.ContainsAny(prefix, " \t") {
+			prefix = `"` + prefix + `"`
+		}
+		return fmt.Sprintf("its install is incomplete (npm can leave out a native package and still succeed); reinstall it with: npm install -g --prefix %s %s@%s --include=optional", prefix, u.pkg, at)
+	case "bun", "pnpm":
+		return fmt.Sprintf("its install is incomplete; reinstall it with: %s add -g %s@%s", u.via, u.pkg, at)
+	case "brew":
+		cask := ""
+		if u.cask {
+			cask = " --cask"
+		}
+		return fmt.Sprintf("reinstall it with: brew reinstall%s %s", cask, u.pkg)
+	}
+	return "run " + u.shown() + " again, or reinstall it the way you installed it"
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
