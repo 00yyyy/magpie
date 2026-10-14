@@ -23174,10 +23174,15 @@ function renderCORS(s) {
 // each to take it away. None listed lets every address in, with a gateway
 // key, as before; this computer is always let in. MAGPIE_ALLOW_IPS, where
 // set, is the list, shown and not edited here.
-let allowDraft = { value: "", err: "" };
+// A list that would shut out the page saving it names the address magpie
+// sees the page from (Mathresearcher on Discord: which address?), and
+// offers to add it to the list that was refused; behind Docker or a proxy
+// that is the proxy's, not the user's computer's (gateway.peerAddr).
+let allowDraft = { value: "", err: "", addr: "", tried: null };
 function allowSays(m) {
   if (/is not an IP address/.test(m)) return t("Write an address as 203.0.113.7, or a range as 10.0.0.0/8 or 2001:db8::/32");
-  if (/shut out/.test(m)) return t("That list leaves out the address this page is open from: add it first, or this page can’t reach magpie");
+  const out = /shut out (\S+), the address/.exec(m);
+  if (out) return t("That list leaves out {addr}, the address magpie sees this page open from: add it first, or this page can’t reach magpie", { addr: out[1] });
   if (/MAGPIE_ALLOW_IPS/.test(m)) return t("MAGPIE_ALLOW_IPS sets this list; change it there");
   return t(m);
 }
@@ -23189,13 +23194,28 @@ function renderAllow(s) {
   const list = env ? (s.allowIPsFromEnv || []) : (s.allowIPs || []);
   const d = allowDraft;
   const set = (next, done) => writingPrefs(api("settings/allowips", { ips: next }))
-    .then((ns) => { prefs = ns; d.err = ""; done?.(); renderSettings(); status(t("Saved"), "ok", 1500); })
-    .catch((e) => { d.err = allowSays(e.message); status(d.err, "err"); renderSettings(); });
+    .then((ns) => { prefs = ns; d.err = d.addr = ""; d.tried = null; done?.(); renderSettings(); status(t("Saved"), "ok", 1500); })
+    .catch((e) => {
+      d.err = allowSays(e.message);
+      d.addr = /shut out (\S+), the address/.exec(e.message)?.[1] || "";
+      d.tried = d.addr ? { next, done } : null;
+      status(d.err, "err"); renderSettings();
+    });
   const r = el("div", "row pref rule-row");
   const who = el("div", "who");
   const sub = d.err || (env ? t("Set by MAGPIE_ALLOW_IPS. Other computers reach magpie only from these addresses, even with a gateway key; this computer always can")
     : t("Other computers reach magpie only from these addresses or ranges (CIDR), even with a gateway key; this computer always can. None listed lets every address in"));
   who.append(el("div", "name", t("Allowed addresses")), el("div", "sub" + (d.err ? " err" : ""), sub));
+  // the address the refusal named, added to the list that was refused in
+  // one click
+  if (d.err && d.addr && d.tried && !env) {
+    const fix = el("button", "text allow-fix", t("Add {addr}", { addr: d.addr }));
+    fix.type = "button";
+    fix.title = t("Behind Docker or a reverse proxy, this is the proxy’s address, not your computer’s: adding it lets in everyone who comes through that proxy");
+    const { next, done } = d.tried;
+    fix.onclick = () => set([...next, d.addr], done);
+    who.append(fix);
+  }
   r.append(who);
   if (!env) {
     const field = input(d.value, "203.0.113.7, 10.0.0.0/8");
