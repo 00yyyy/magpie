@@ -68,3 +68,19 @@ func desktopSubagentEffort(r *http.Request, agent string, body []byte, pick *Sub
 	}
 	return level
 }
+
+// subagentTurnOf is the Claude Code subagent whose turn r is, for the
+// Routing page's tag (Route.SubagentID): its x-claude-code-agent-id on a
+// request that offers tools and names no kind, the turn
+// desktopSubagentPick and desktopSubagentEffort take. Claude Code sends the
+// id from a terminal as from Desktop, so both are tagged; a subagent's
+// tool-less helper calls aren't its turns. known is a Desktop pick or effort
+// that found the turn already, so the body isn't decoded again, and a
+// request without the id isn't decoded at all.
+func subagentTurnOf(r *http.Request, kind string, body []byte, known bool) string {
+	sub, _ := subagentOf(r.Header)
+	if sub == "" || kind != "" || !known && !hasTools(body) {
+		return ""
+	}
+	return sub
+}

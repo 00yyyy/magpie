@@ -420,6 +420,17 @@ including an effort-only pick with no model replacement. Chromium and WebKit, En
 Chinese, Traditional Chinese, Japanese and German; all APIs are faked.
 Run with `node --test internal/gui/tests/desktop-subagent-model.test.cjs`.
 
+`claude-subagent-tag.test.cjs` checks the Routing page's tag on a Claude Code
+subagent's turn, Desktop's and a terminal's, which has no kind but a
+`subagentId` in its route. It reads as Codex's subagents do, with Codex's
+reasons under the pointer (moved, in a routing group, on the model asked for):
+beside the model in the request list, by request and by session, in the story
+(the reason said once), in the replay and in the tray panel. A kind wins over
+a stray id, the lead and a route kept before the id have no tag, and the
+Purpose filter keeps the tagged turns under Unmarked. Nothing is cut out of
+its row. Chromium and WebKit, five languages, 1100 and 420 wide; all APIs are
+faked. Run with `node --test internal/gui/tests/claude-subagent-tag.test.cjs`.
+
 `tier-effort.test.cjs` draws Claude Code's per-tier effort (#536) in Chromium
 and WebKit, English and Chinese: no tier's effort is a field of its own; the
 tiers' square lists each tier's model and then its effort (the bars, and "the

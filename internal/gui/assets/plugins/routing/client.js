@@ -1813,7 +1813,7 @@ function routingPage(part) {
       : main && main.model !== r.model && wentOn(r) === r.model
       ? t("{agent} asked for {model}: {name} serves it, and the vendor is asked for {sent}", { agent: agentName(r.agent), model: r.model, name: main.name, sent: main.model })
       : t("{agent} asked for {model}", { agent: agentName(r.agent), model: r.model }) + " → " + (main?.name || r.provider), ""]);
-    if (r.kind) items.push([kindWhy(r), "aside kind"]);
+    if (tagKind(r)) items.push([kindWhy(r), "aside kind"]);
     else if (r.subagent) items.push([subagentWhy(r), "aside"]);
     if (r.subagentEffort) items.push([t("The subagent effort set in magpie is {effort}; the model's supported levels and a routing group's fixed member effort still apply.", { effort: t(r.subagentEffort) }), "aside"]);
     if (r.sealedTask) items.push([t(r.group
@@ -1848,7 +1848,7 @@ function routingPage(part) {
       if (tr.done && tryOk(tr) && tr.upstream) items.push([upstreamWhy(tr), "aside upstream-said", tr]);
     });
     if (r.done && !r.tries.length) items.push([t("Nothing was tried: {error}", { error: r.error || r.status }), "bad"]);
-    const key = JSON.stringify([r.kind, items.map(([s, c, tr]) => [s, c, tr?.model, tr?.served]), r.order.map(logoOf)]);
+    const key = JSON.stringify([tagKind(r), items.map(([s, c, tr]) => [s, c, tr?.model, tr?.served]), r.order.map(logoOf)]);
     if (stepsKey === key) return;
     stepsKey = key;
     // A line that says the same stays the very node it was, and a new line
@@ -1859,7 +1859,7 @@ function routingPage(part) {
     const logos = r.order.map(logoOf);
     const was = new Map([...steps.children].map((li) => [li.dataset.k, li]));
     const lis = items.map(([s, c, tr]) => {
-      const k = JSON.stringify([r.kind, s, c, tr?.model, tr?.served, logos]);
+      const k = JSON.stringify([tagKind(r), s, c, tr?.model, tr?.served, logos]);
       const old = was.get(k);
       if (old) { was.delete(k); return { li: old }; }
       return { k, s, c, tr };
@@ -1933,8 +1933,12 @@ function routingPage(part) {
   });
   window.purposeOf = purposeOf;
   window.purposeOptions = purposeOptions;
+  // a Claude Code subagent's turn, Desktop's or a terminal's, names no kind
+  // (Route.SubagentID): it is tagged and told as Codex's subagents are, its
+  // purpose left unmarked as the ledger keeps it
+  const tagKind = (r) => r.kind || (r.subagentId ? "collab_spawn" : "");
   function kindTag(r) {
-    const k = el("span", "kind", kindName(r.kind));
+    const k = el("span", "kind", kindName(tagKind(r)));
     k.title = kindWhy(r);
     return k;
   }
@@ -1976,8 +1980,8 @@ function routingPage(part) {
   }
   function kindWhy(r) {
     const agent = agentName(r.agent);
-    if (purposeOf(r.kind) === "kind:collab_spawn" && r.subagent) return subagentWhy(r);
-    if (purposeOf(r.kind) === "kind:collab_spawn") return r.group
+    if (purposeOf(tagKind(r)) === "kind:collab_spawn" && r.subagent) return subagentWhy(r);
+    if (purposeOf(tagKind(r)) === "kind:collab_spawn") return r.group
       ? t("{agent} requested a subagent; magpie selects its model within this routing group.", { agent })
       : t("{agent} requested a subagent on {model}.", { agent, model: r.model });
     if (purposeOf(r.kind) === "kind:ambient_suggestions") return t("{agent} drafted the suggested prompts on its home page by itself, in the background, searching the project's files and connected apps, and checked them for safety. Not a turn of the conversation; Codex's Settings › Configuration › Suggested prompts turns it off.", { agent });
@@ -2367,7 +2371,7 @@ function routingPage(part) {
       const metrics = requestMetrics(r, how);
       // all the row says, and its titles
       const title = reqTitle(r, how, tr);
-      const sig = JSON.stringify([lang, said, how, title, r.time, r.agent, agentName(r.agent), ag?.icon, r.model, r.provider, r.kind, r.effort,
+      const sig = JSON.stringify([lang, said, how, title, r.time, r.agent, agentName(r.agent), ag?.icon, r.model, r.provider, tagKind(r), r.effort,
         tr?.effort, tr?.picked, tr?.fixed, tr?.fast, tr?.swapped && tr.done && tryOk(tr) ? [tr.model, tr.served] : 0, tr?.routed && tr.done && tryOk(tr) ? tr.served : 0, tr?.done && tryOk(tr) ? tr.upstream : 0, meta, metrics, routeCost(r)]);
       ids.add(r.id);
       let x = reqRows.get(r.id);
@@ -2401,7 +2405,7 @@ function routingPage(part) {
     const sw = el("i", "ag");
     sw.style.setProperty("--agent", hueOf(r.agent));
     asked.append(sw, icon(ag?.icon || "generic"), el("span", "m", r.model));
-    if (r.kind) { asked.classList.add("kinded"); asked.append(kindTag(r)); }
+    if (tagKind(r)) { asked.classList.add("kinded"); asked.append(kindTag(r)); }
     // the reasoning the model was sent at — the turn's pick, or the
     // agent's fitted to the model's levels — after the one the agent
     // asked for when that was another (xhigh → max), so a level the
@@ -2994,7 +2998,7 @@ function routingPage(part) {
       sw.style.setProperty("--agent", hueOf(r.agent));
       const [said] = outcome(r);
       row.append(el("span", "rp-n", t("request {i} of {n}", { i: g.n, n: p.plan.length })), sw,
-        el("b", "", agentName(r.agent)), el("code", "mdl", r.model), ...(r.kind ? [kindTag(r)] : []), el("span", "rp-to", "→ " + said),
+        el("b", "", agentName(r.agent)), el("code", "mdl", r.model), ...(tagKind(r) ? [kindTag(r)] : []), el("span", "rp-to", "→ " + said),
         el("span", "rp-at", t("sent {time}", { time: new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })));
       row.onclick = () => { cur = r; renderLog(); };
       return row;
@@ -5512,7 +5516,7 @@ function routingPage(part) {
     const ag = agentOf(r.agent);
     const asked = el("span", "pr-a");
     asked.append(icon(ag?.icon || "generic"), el("span", "pr-who", agentName(r.agent)), el("code", "m", r.model));
-    if (r.kind) asked.append(kindTag(r));
+    if (tagKind(r)) asked.append(kindTag(r));
     const when = el("span", "at", new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }));
     // where it went: the provider, the account or key, and the model that
     // answered — marked when the reply names another than the one sent

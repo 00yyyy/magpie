@@ -118,7 +118,9 @@ redraw clamps the list's scroll; the reader scrolling outside still dismisses it
 Choosing All purposes closes the menu and returns keyboard focus to the
 purpose button without scrolling; unticking the last checkbox keeps the
 menu open and focused on that checkbox.
-Counts, the current story and replay
+A Claude Code subagent's turn has the Subagent tag (`tagKind`,
+`Route.SubagentID`) and no kind, so it stays under Unmarked, as on the
+Usage page. Counts, the current story and replay
 follow the same filtered list. Selected purposes remain available when a day
 has no matching requests. Opening a request from another page clears the
 filter only when that request is excluded. Usage's purpose picker remains a
