@@ -1039,6 +1039,18 @@ func codexRefresh(ctx context.Context, raw map[string]any) (string, error) {
 		toks = map[string]any{}
 	}
 	refresh, _ := toks["refresh_token"].(string)
+	// Once sent, a refresh is waited for even when whoever asked gives up
+	// (a request the agent cancelled, a usage read's or the keep-alive's
+	// deadline): OpenAI rotates the refresh token as it answers, and an
+	// answer dropped leaves magpie holding the spent one, which the next
+	// refresh is refused for (refresh_token_reused). The account then
+	// read as signed out while its access token still served (willz on
+	// Discord). The ChatGPT API's refresh waits so already (siwcFresh).
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
 	body, _ := json.Marshal(map[string]string{"client_id": codexClientID, "grant_type": "refresh_token",
 		"refresh_token": refresh, "scope": "openid profile email"})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, codexTokenURL, bytes.NewReader(body))
