@@ -677,8 +677,28 @@ func install(ctx context.Context, spec string) error {
 			return err
 		}
 	}
+	defer installMu.Unlock()
+	err = bunAdd(ctx, bun, spec)
+	// a @magpie-community package or version npm doesn't have (a new
+	// one waits for an owner to publish it there) comes from the
+	// community repo's dist branch; one Bun's minimumReleaseAge holds
+	// back stays held, as the user's bunfig asks
+	if name, version, ok := distWanted(spec); ok && err != nil && !minAge.MatchString(err.Error()) {
+		if derr := installDist(ctx, bun, name, version); derr != nil {
+			return fmt.Errorf("%w (and from the community repo's dist branch: %v)", err, derr)
+		}
+		err = nil
+	}
+	if err == nil {
+		pruneDist()
+	}
+	return err
+}
+
+// bunAdd adds spec to plugins/ with bun, its scripts left unrun.
+// installMu held.
+func bunAdd(ctx context.Context, bun, spec string) error {
 	out, err := bunCommand(ctx, bun, Dir(), "add", "--ignore-scripts", spec).CombinedOutput()
-	installMu.Unlock()
 	if err != nil {
 		if hint := missingLibs(string(out)); hint != "" {
 			return fmt.Errorf("bun add %s: %s: %w", spec, hint, err)
