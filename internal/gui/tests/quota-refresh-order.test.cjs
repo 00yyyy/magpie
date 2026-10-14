@@ -30,7 +30,7 @@ function page() {
       if (path.includes("history")) return Promise.resolve([]);
       return new Promise((resolve, reject) => requests.push({ path, resolve, reject }));
     }
-    ${section("let quotasLoading =", "// the period picker, in the page's head")}
+    ${section("let quotasLoading =", "// A period of picked days is")}
     ${section("const quotaRefreshing =", "// familyQuota:")}
     globalThis.p = {
       requests, errors,

@@ -735,6 +735,10 @@
   let ctxDays = "7";
   try { const d = localStorage.getItem("magpie.ctxDays"); if (CTX_RANGES.some(([id]) => id === d)) ctxDays = d; } catch {}
   let ctxData = null, ctxJSON = "", ctxRead = 0, ctxOpen = "", ctxAgent = "all";
+  // the days the pane shows "Reading…" for: a second read before the history
+  // answers (the page opened, then the first state's refresh) leaves it be,
+  // so the advice drawn meanwhile keeps its entrance
+  let ctxWaiting = "";
 
   const SCORE_NAMES = { cache: "Cache", lean: "Lean start", pace: "Pace", reliable: "Reliability" };
   const SCORE_NOTES = {
@@ -1258,7 +1262,8 @@
   async function loadContext() {
     const read = ++ctxRead, days = ctxDays;
     if (tuneData && tuneData.days !== +days) tuneData = null;
-    if (!ctxData || ctxData.days !== +days) { ctxData = null; renderContext(); }
+    if (ctxData && ctxData.days !== +days) ctxData = null;
+    if (!ctxData && (ctxWaiting !== days || !$("#contextPane")?.childElementCount)) { ctxWaiting = days; renderContext(); }
     loadTune().catch((e) => status(e.message, "err"));
     const data = await api("context?days=" + days);
     if (read !== ctxRead) return;
@@ -1274,7 +1279,4 @@
   }
   window.loadContext = loadContext;
   window.renderContext = renderContext;
-  // opened on the Context tab (?view=usage): app.js showed it, and may have
-  // read the state, before this file was here to load it
-  if (view === "usage" && usageTab === "context") loadContext().catch((e) => status(e.message, "err"));
 })();

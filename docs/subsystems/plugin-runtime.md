@@ -9,7 +9,7 @@ runtime, the file and the window's switch) and P1 (the window's kernel: a
 plugin's page, its error boundary, the kit it draws with and its settings
 form, with the Gateway page as the first plugin to draw its own page), and
 P2 so far (a page moved out of the core whole: its code, styles and words:
-Sessions, Library and Routing). OpenCode plugins (npm packages in
+Sessions, Library, Routing and Usage). OpenCode plugins (npm packages in
 the plugin host) are a different thing; see
 [provider and plugin ownership](provider-plugins.md) and
 [gateway middleware](gateway-middleware.md).
@@ -24,7 +24,7 @@ the plugin host) are a different thing; see
 | Ctx | What `Apply` gets: `OnDispose(f)`, `Contribute(slot, key)`, `Provide(name, v)` (withdrawn when it goes), `Service(name)`, and its composed `Config`. Disposers run in reverse, each one's panic logged and the rest still run. | [`pluginrt.go`](../../internal/pluginrt/pluginrt.go) |
 | plugins.yml | `appdir.Config()/plugins.yml`: `preset` (`essentials` or `all`) and `plugins`, rows of `{id, enabled, config}` holding only what the user set. | [`config.go`](../../internal/pluginrt/config.go) |
 | Settings schema | `SchemaOf(Settings)` makes a JSON Schema object of the struct, in its fields' order (`x-order`): each exported field with a json name is a setting, of `bool`, an int, `float64` or `string`, with tags `title` (English; the window translates it), `description`, `enum` (comma separated) and `min`/`max`. Its values are the defaults. A field a form can't draw, or a tag that doesn't parse, panics at `Register`. `Schema.Validate` takes a value only as the schema allows it (a JSON float64 or a YAML int for an integer); `SetConfig(id, config)` writes the user's row through it, and `Compose` leaves out a value edited into plugins.yml by hand that it doesn't allow, so the default stands. | [`schema.go`](../../internal/pluginrt/schema.go), [`config.go`](../../internal/pluginrt/config.go) |
-| Built-in plugins | `groups`, `library`, `otel`, `sessions`, `warmups` (P0), `gateway` (P1), the Gateway page, which is Essential and in use while a gateway key is there (`access.List`), and `routing` (P2), the Routing page, Essential and in use while the user has a routing group, since the page is where groups are made and changed. The Gateway page's one setting, `callsPage` (10, 20, 50 or 100; 20), is how many recent calls the page shows at a time. The other five aren't Essential. Each one's `InUse` counts what the user made with it: routing groups not Auto and not hidden, library items given to agents, a collector sent to, gateway conversations recorded, warm-ups and check-ins on. | [`plugins/`](../../plugins) |
+| Built-in plugins | `groups`, `library`, `otel`, `sessions`, `warmups` (P0), `gateway` (P1), the Gateway page, which is Essential and in use while a gateway key is there (`access.List`), and `routing` (P2), the Routing page, Essential and in use while the user has a routing group, since the page is where groups are made and changed. `usage` (P2), the Usage page, is Essential too, with no `InUse`: what it shows the gateway counts anyway, and the tray panel's Usage tab still shows the allowances with it off. The Gateway page's one setting, `callsPage` (10, 20, 50 or 100; 20), is how many recent calls the page shows at a time. The other five aren't Essential. Each one's `InUse` counts what the user made with it: routing groups not Auto and not hidden, library items given to agents, a collector sent to, gateway conversations recorded, warm-ups and check-ins on. | [`plugins/`](../../plugins) |
 
 The boundary is checked by `TestPluginsImportOnlyCore`: no package outside
 `plugins/` imports one (but `main.go`, through `plugins/all`), a plugin never
@@ -130,6 +130,27 @@ says one of its words, which goes back to i18n.js.
   Providers' "Make a routing group of …" (`data-feature="routing"`), the
   Usage list's View routing and its time as a link, and the context card's
   Latest request; a panel left on its Routing tab shows Agents.
+- **Usage** (`plugins/usage`, `Client: i18n.js, client.js, page.js`):
+  the page that was the largest part of app.js (about 3000 lines: the
+  Overview's cards, the Requests ledger, the Sessions tab and the Agents
+  list). Its part's `html` is the page's markup that was index.html's
+  `#view-usage`. Its code builds on app.js at the top level (its timers,
+  `?view=usage`'s tab and filters), so `page.js` is the one script a
+  plugin loads after app.js: index.html loads kernel.js, the plugins'
+  other scripts, app.js and the scripts beside it, then each `page.js`,
+  then `start.js`, which is app.js's old tail (`magpie.start()`, the
+  first page shown, the first `load()`), so the first page has its code.
+  `TestBuiltinClientsLoaded` holds that order. Its hooks: `open` loads
+  it, `refresh(again)` is `load()`'s read of it (coming back to the
+  Overview is opening the allowances, #1588), `reload` is Refresh now,
+  `costs` draws the costs again when Settings' currency changes, and
+  `tab` says which tab it is on, for `focusQuotaCard`. Still in app.js,
+  since the tray panel draws them too: the allowance cards,
+  `quotasOpened`, `panelQuotaFocus` and `panelUseFocus`. With the plugin
+  off, its nav tab goes, and so do the ways to the page
+  (`data-feature="usage"`): the tray panel's Open Usage and Routing's View
+  usage. A `show("usage")` left anywhere gives way to Agents. The panel's
+  Allowances tab stays.
 
 ## Source of truth and composing
 

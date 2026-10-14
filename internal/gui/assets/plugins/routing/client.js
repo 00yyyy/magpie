@@ -1682,6 +1682,7 @@ function routingPage(part) {
         el("span", "grow"));
       if (!rp && r.done) {
         const usage = el("button", "text", t("View usage"));
+        usage.dataset.feature = "usage"; // it opens on the Usage page
         usage.onclick = () => window.openUsageRoute(logR);
         logHead.append(usage);
         const again = el("button", "text", t("Replay"));
