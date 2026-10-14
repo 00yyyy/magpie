@@ -21516,8 +21516,11 @@ async function renderSync(v) {
   // (#1259)
   if (v.on && !v.error && v.usageError) sub.after(el("div", "sub bad wraps sync-usage-err", t("Couldn't share usage: {error}", { error: v.usageError })));
   // subscriptions whose settings sync brought with no account here: sync
-  // carries no sign-in, and they are listed once signed in to here
-  if (v.on && v.signIn?.length) sub.after(el("div", "sub wraps sync-sign-in", t("Not signed in on this computer: {names}. Sync carries no sign-in: sign in to them in Providers → Add a provider.", { names: subNames(v.signIn) })));
+  // carries no sign-in, and they are listed once signed in to here. It says
+  // the synced settings are why they are named, and that one not used here
+  // needs nothing (悠悠哥 on Discord asked why sync said ChatGPT wasn't
+  // signed in)
+  if (v.on && v.signIn?.length) sub.after(el("div", "sub wraps sync-sign-in", t("Your synced settings use {names}, which isn't signed in on this computer. Sync carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })));
   // the server's file isn't a backup a sync can read, and is a file: this
   // computer's setup can go up in its place, the user choosing it
   if (v.on && v.error && v.serverFile?.replace) {
@@ -21883,7 +21886,7 @@ function importForm() {
       const lines = [t("Providers: {added} added, {replaced} replaced; {profiles} profiles; {agents} agent settings changed", { added: r.Added, replaced: r.Replaced, profiles: r.Profiles, agents: r.Agents })];
       if (r.NeedKey?.length) lines.push(t("Needs a key: {names}", { names: r.NeedKey.join(", ") }));
       // a backup carries a subscription's settings, never its sign-in
-      if (r.SignIn?.length) lines.push(t("Not signed in on this computer: {names}. A backup carries no sign-in: sign in to them in Providers → Add a provider.", { names: subNames(r.SignIn) }));
+      if (r.SignIn?.length) lines.push(t("This backup's settings use {names}, which isn't signed in on this computer. A backup carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(r.SignIn) }));
       if (r.Plugins?.length) lines.push(t("Plugins added: {names}", { names: r.Plugins.join(", ") }));
       for (const [spec, error] of Object.entries(r.PluginErrors || {})) lines.push(t("Couldn't add the plugin {spec}: {error}", { spec, error }));
       if (r.Library) lines.push(t("Library brought in and written into the agents"));
