@@ -567,3 +567,59 @@ func TestSiliconFlowRetiredBalanceQuery(t *testing.T) {
 		}
 	}
 }
+
+// A key usage query that takes only "Authorization: Bearer <key>"
+// (lx_78654 on Discord: a header of "Bearer {token}" went as written, and
+// the vendor said "Authorization header format must be 'Bearer {token}'").
+// The key is put in for each of its names, and the key pasted as the
+// balance token goes as a Bearer too, not bare as an access token.
+func TestBalanceKeyAsBearer(t *testing.T) {
+	const key = "sk-tt-1"
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("Authorization"))
+		if r.Header.Get("Authorization") != "Bearer "+key {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"code":"INVALID_AUTH_HEADER","message":"Authorization header format must be 'Bearer {token}'"}`))
+			return
+		}
+		w.Write([]byte(`{"data":{"remain":8.5}}`))
+	}))
+	defer srv.Close()
+	base := Provider{ID: "relay", Chat: srv.URL + "/v1", Key: key, BalanceURL: srv.URL + "/key/usage", BalancePath: "$data.remain"}
+	for _, c := range []struct {
+		name    string
+		headers map[string]string
+		token   string
+	}{
+		{name: "no header"},
+		{name: "{token}", headers: map[string]string{"Authorization": "Bearer {token}"}},
+		{name: "{key}", headers: map[string]string{"Authorization": "Bearer {key}"}},
+		{name: "{API_KEY}", headers: map[string]string{"authorization": "Bearer {API_KEY}"}},
+		{name: "{{apikey}}", headers: map[string]string{"Authorization": "Bearer {{apikey}}"}},
+		{name: "${API_KEY}", headers: map[string]string{"Authorization": "Bearer ${API_KEY}"}},
+		{name: "key as token", token: key},
+		{name: "Bearer key as token", token: "Bearer " + key},
+	} {
+		p := base
+		p.Headers, p.BalanceToken = c.headers, c.token
+		got = nil
+		if amount, ok, err := Balance(context.Background(), p); err != nil || !ok || amount != "$8.50" {
+			t.Errorf("%s: balance = %q %v %v, sent %q", c.name, amount, ok, err, got)
+		}
+	}
+	// the key in the URL is escaped there, under any of its names
+	p := base
+	p.BalanceURL = srv.URL + "/key/usage?k={TOKEN}"
+	p.Key = "sk-tt 1"
+	if u := withBalanceKey(p.BalanceURL, p.Key, true); !strings.HasSuffix(u, "?k=sk-tt+1") {
+		t.Fatalf("url = %q", u)
+	}
+	// a token of the account's own, not the key, still goes as it is
+	p = base
+	p.BalanceToken = "tok"
+	got = nil
+	if _, _, err := Balance(context.Background(), p); err == nil || len(got) != 1 || got[0] != "tok" {
+		t.Fatalf("an access token went as %q (%v)", got, err)
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -151,6 +152,7 @@ var tokenQueries = []struct{ account, key, field string }{
 // again asks the account query again. One with an Authorization or Cookie
 // header of the user's own still asks it as they set it.
 func keyQueryOf(p Provider) Provider {
+	p = keyNotToken(p)
 	if p.BalanceURL == "" || strings.TrimSpace(p.BalanceToken) != "" {
 		return p
 	}
@@ -1219,9 +1221,14 @@ func sub2APIKeyLimits(p Provider) bool {
 
 // balanceKeyNames are what a Balance URL or a header's value names the
 // key by, for a vendor that wants it somewhere of its own, in the query
-// most often (…/balance?key={key}): each key the provider has on is put in
-// its own ask, so each card tells that key's balance.
-var balanceKeyNames = []string{"{key}", "{apiKey}", "{api_key}"}
+// most often (…/balance?key={key}) or a header (Authorization: Bearer
+// {token}): each key the provider has on is put in its own ask, so each
+// card tells that key's balance. Any case, in one or two braces or as
+// ${…}: {key}, {apiKey}, {api_key}, {API_KEY}, {token}, {{key}}, ${API_KEY}.
+// {token} is the key too: it is what a vendor's own error names the value
+// in "Authorization: Bearer {token}" (lx_78654 on Discord, whose header
+// went with "{token}" in it as written, and the vendor refused it).
+var balanceKeyNames = regexp.MustCompile(`(?i)\$?\{\{?\s*(?:key|api[_-]?key|token)\s*\}?\}`)
 
 // withBalanceKey is s with the key in place of its names, escaped for a
 // URL's query when inURL.
@@ -1229,10 +1236,23 @@ func withBalanceKey(s, key string, inURL bool) string {
 	if inURL {
 		key = url.QueryEscape(key)
 	}
-	for _, n := range balanceKeyNames {
-		s = strings.ReplaceAll(s, n, key)
+	return balanceKeyNames.ReplaceAllLiteralString(s, key)
+}
+
+// keyNotToken is p without a balance token that is only its own key
+// pasted there: the query is asked as with no token, the key as a Bearer
+// the way a chat request sends it, not the key bare in Authorization as
+// a new-api access token goes, which a vendor that wants "Bearer <key>"
+// refuses (lx_78654 on Discord).
+func keyNotToken(p Provider) Provider {
+	t := strings.TrimSpace(p.BalanceToken)
+	if len(t) > 7 && strings.EqualFold(t[:7], "bearer ") {
+		t = strings.TrimSpace(t[7:])
 	}
-	return s
+	if t != "" && t == strings.TrimSpace(p.Key) {
+		p.BalanceToken = ""
+	}
+	return p
 }
 
 var keyBalanceCache struct {
