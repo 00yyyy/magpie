@@ -24169,7 +24169,9 @@ function savePrefs(body) {
 //   exception: it goes down with what it opens, and what's held is the
 //   part it is in, so the rows open downwards rather than the page riding
 //   up past them. A view at its top stays at its top: what comes in above
-//   the control there moves it down instead of scrolling itself out of sight.
+//   the control there moves it down instead of scrolling itself out of sight,
+//   as long as that leaves it under the pointer (less than half its height);
+//   what comes in larger above it (a day's stage on Routing) is scrolled past.
 //
 // Code moves a view only in answer to a click that asks to go somewhere, and
 // shows that with the reader's event: scrollOnPurpose(e). Called without one
@@ -24406,8 +24408,11 @@ function hold(h) {
     // a view at its top when clicked stays at its top: what comes in above
     // what was clicked moves it down rather than scrolling the view to follow
     // it. Turning automatic updates off grew the Version row above the
-    // switch once the save answered, and the view slid 2px off its top (#2134)
-    if (h.top && want > 0) want = 0;
+    // switch once the save answered, and the view slid 2px off its top (#2134).
+    // Only while what was clicked stays under the pointer, moved by less than
+    // half its height: a day picked on Routing brings its stage in above the
+    // bar (~138px), and the bar is held where it was clicked (#961)
+    if (h.top && want > 0 && Math.abs(d) < a[0].getBoundingClientRect().height / 2) want = 0;
     // a view at its top when clicked stays there rather than be given room
     // to scroll down: a chip saved in the panel's Profiles came in above the
     // button held, and room made for the button slid the chip up under the
