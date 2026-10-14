@@ -210,7 +210,8 @@ func memberOptions(skip []string, self string) []agent.Option {
 		}
 	}
 	if self == "" || decides {
-		for _, e := range provider.Deciders() {
+		// those of a provider's picks, as the Routing view's picker offers
+		for _, e := range provider.OfferedDeciders(nil) {
 			if !slices.Contains(skip, e.ID) {
 				out = append(out, agent.Option{Value: e.ID, Note: e.Name + " · decision model"})
 			}

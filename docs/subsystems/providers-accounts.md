@@ -71,8 +71,12 @@ routing possible; their presence does not mean they support conversations.
 
 `DecidesModel` uses the remote's explicit decision marker, so Clef and custom
 names work and a chat model named Jev Router stays a chat model. `Deciders`
-and the provider editor offer these decisions even when the user's local
-conversation picks omit them. Only remote decision entries use `entryFor`
+lists, and the gateway answers, these decisions even when the user's local
+conversation picks omit them. What a routing group's pickers, templates and
+the TUI offer is `OfferedDeciders`: with picks saved, only the picked
+decision models plus any a group names already, as the provider editor
+shows the rest unpicked (coeo91 on Discord: two free OpenRouter models
+picked, OpenRouter's decision models still offered beside them). Only remote decision entries use `entryFor`
 to apply user model names and limits; other decision providers retain their
 previous entry formatting. The editor's `providerInfo` in
 [`providers.go`](../../internal/gui/providers.go) sends `deciders: []` when
