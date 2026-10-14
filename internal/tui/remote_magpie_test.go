@@ -73,16 +73,20 @@ func TestTUIAddsARemoteMagpieWithItsAddress(t *testing.T) {
 		t.Fatalf("after w: %q %q key %q", p.Chat, p.Anthropic, p.Key)
 	}
 
-	// a vendor of its own address has none to change
+	// a vendor of its own address has none to change (a provider of the
+	// user's own does: TestTUIEditsACustomProvidersBaseURL)
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Preset: "deepseek", Key: "kd", Chat: "https://api.deepseek.com/v1"}); err != nil {
+		t.Fatal(err)
+	}
 	m.reloadProviders()
 	for i, q := range m.provs {
-		if q.ID == "a" {
+		if q.ID == "deepseek" {
 			m.prow = i
 		}
 	}
 	m = press(t, m, "w")
 	if m.mode == modeAsk {
-		t.Fatal("w asked a custom provider's address")
+		t.Fatal("w asked a vendor's address")
 	}
 }
 
