@@ -30,8 +30,31 @@ import (
 )
 
 // jevSure is how confident Jev must be of an intent for it to count.
-// Confidence runs from 0, every option as likely, to 1, one certain.
+// Confidence runs from 0, every option as likely, to 1, one certain, as
+// System One gives it (provider.Confidence), read from the answer's
+// probabilities wherever it has them (sureOf).
 const jevSure = 0.4
+
+// sureOf is how sure an answer is of its choice on jevSure's scale: from
+// the probability it gave each option where it gave two or more, else the
+// confidence it said. A decision model's own confidence field is
+// calibrated its own way: Cloudflare's clef-flash says 0.2866 of a
+// 提醒我明天下午三点给 Dora 打电话 it put at about 0.68 (@VersunPan on X),
+// where the same model run in MLX-Serve says its top probability, and Jev
+// says the top over an even spread. Its probabilities say the same thing on
+// every one, and an even spread of them is still 0.
+func sureOf(confidence float64, ps map[string]any) float64 {
+	n := 0
+	for _, v := range ps {
+		if _, ok := v.(float64); ok {
+			n++
+		}
+	}
+	if n < 2 {
+		return confidence
+	}
+	return provider.Confidence(ps)
+}
 
 // noIntent is the option Jev picks for a message that is none of the
 // intents.
@@ -189,9 +212,10 @@ func readJev(b []byte, intents []string, levels bool, prev before) (verdict, err
 	var out struct {
 		Model   string `json:"model"`
 		Answers map[string]struct {
-			Choice     string  `json:"choice"`
-			Score      float64 `json:"score"`
-			Confidence float64 `json:"confidence"`
+			Choice        string         `json:"choice"`
+			Score         float64        `json:"score"`
+			Confidence    float64        `json:"confidence"`
+			Probabilities map[string]any `json:"probabilities"`
 		} `json:"answers"`
 		Usage struct {
 			Input  int `json:"input_tokens"`
@@ -203,8 +227,8 @@ func readJev(b []byte, intents []string, levels bool, prev before) (verdict, err
 	}
 	var v verdict
 	if a, ok := out.Answers["intent"]; ok && len(intents) > 0 && !levels {
-		v.Sure = a.Confidence
-		if a.Choice != noIntent && a.Confidence >= jevSure {
+		v.Sure = sureOf(a.Confidence, a.Probabilities)
+		if a.Choice != noIntent && v.Sure >= jevSure {
 			v.Intent = intentNamed(intents, a.Choice)
 		}
 	}
@@ -213,9 +237,9 @@ func readJev(b []byte, intents []string, levels bool, prev before) (verdict, err
 		// is torn, the conversation stays at the level of the turn before
 		// (继续，再加一个基准测试 after a 复杂任务 came out 0.54 to 0.46),
 		// and a turn with none before takes the likelier
-		v.Sure = a.Confidence
+		v.Sure = sureOf(a.Confidence, a.Probabilities)
 		v.Intent = intentNamed(intents, a.Choice)
-		if was := intentNamed(intents, prev.Intent); a.Confidence < jevSure && was != "" {
+		if was := intentNamed(intents, prev.Intent); v.Sure < jevSure && was != "" {
 			v.Intent = was
 		}
 	}
