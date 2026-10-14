@@ -2499,6 +2499,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #gatewayKeys .klf-used { display: flex; align-items: center; gap: 8px; min-width: 0; }
 #gatewayKeys .klf-used .key-limit { flex: 1 1 auto; }
 #gatewayKeys .klf-used .klf-reset { flex: none; }
+/* a key's several limits (#2227): one tab each, the editor is of one */
+#gatewayKeys .klf-which { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+#gatewayKeys .klf-tab { height: 24px; padding: 0 10px; border-radius: 6px; font-size: 12px; color: var(--ctl-fg); white-space: nowrap; }
+#gatewayKeys .klf-tab:hover:not(.on) { color: var(--fg-2); }
+#gatewayKeys .klf-tab.on { color: var(--fg); background: var(--seg-thumb); box-shadow: var(--seg-edge); }
 @media (max-width: 520px) { #gatewayKeys .klf, #gatewayKeys .klf.with-days { grid-template-columns: 1fr; } #gatewayKeys .klf-used { flex-wrap: wrap; } }
 /* the models a key may use (#882): a long model's id is cut, and the
    badge gives way first on a narrow window */

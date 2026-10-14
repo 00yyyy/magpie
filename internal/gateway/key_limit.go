@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -32,13 +33,15 @@ const remoteKeyLimitHeader = "X-Magpie-Limit-Reset"
 func keyLimited(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := access.Caller(r.Context())
-		if !who.Limit.Limited() || r.Method != http.MethodPost || strings.HasPrefix(r.URL.Path, "/_magpie/") || strings.HasPrefix(r.URL.Path, "/mcp/") || strings.HasSuffix(r.URL.Path, "/count_tokens") {
+		limits := who.Limits()
+		if len(limits) == 0 || r.Method != http.MethodPost || strings.HasPrefix(r.URL.Path, "/_magpie/") || strings.HasPrefix(r.URL.Path, "/mcp/") || strings.HasSuffix(r.URL.Path, "/count_tokens") {
 			next.ServeHTTP(w, r)
 			return
 		}
 		size, model := r.ContentLength, ""
 		// a compressed body (#1223) is reserved at its decoded size and model
-		if enc := r.Header.Get("Content-Encoding"); who.Limit.Cost > 0 || size < 0 || (enc != "" && !strings.EqualFold(enc, "identity")) {
+		costCap := slices.ContainsFunc(limits, func(l *access.Limit) bool { return l.Cost > 0 })
+		if enc := r.Header.Get("Content-Encoding"); costCap || size < 0 || (enc != "" && !strings.EqualFold(enc, "identity")) {
 			b, status, err := readBoundedRequestBody(w, r, requestLimits{})
 			if err != nil {
 				writeError(w, protoOfPath(r.URL.Path), status, err.Error())
@@ -81,13 +84,15 @@ func protoOfPath(path string) provider.Protocol {
 
 // keyLimit answers GET /v1/magpie/limit: the calling gateway key's limit,
 // what it has used and when it resets; {"limited":false} for a key with
-// none or a request without one.
+// none or a request without one. "limits" is each of a key's limits
+// (#2227), and "limit" the one holding it most (budget.Binding), which is
+// what a magpie from before them reads.
 func (s *Server) keyLimit(w http.ResponseWriter, r *http.Request) {
 	who := access.Caller(r.Context())
-	if who.KeyID == "" || !who.Limit.Limited() {
+	if who.KeyID == "" || len(who.Limits()) == 0 {
 		writeJSON(w, 200, map[string]any{"limited": false, "key": who.KeyName})
 		return
 	}
-	st := budget.Of(access.Key{ID: who.KeyID, Name: who.KeyName, Limit: who.Limit}, limitClock())
-	writeJSON(w, 200, map[string]any{"limited": true, "key": who.KeyName, "limit": st})
+	all := budget.All(access.Key{ID: who.KeyID, Name: who.KeyName, Limit: who.Limit, More: who.More}, limitClock())
+	writeJSON(w, 200, map[string]any{"limited": true, "key": who.KeyName, "limit": budget.Binding(all), "limits": all})
 }

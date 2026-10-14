@@ -1,6 +1,7 @@
 package access
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -341,5 +342,121 @@ func TestLimitHoursSetAndReset(t *testing.T) {
 	}
 	if start, reset := l.Window(clock.Add(time.Minute)); !start.Equal(clock) || !reset.Equal(clock.Add(6*time.Hour)) {
 		t.Fatalf("after reset: %s – %s", start, reset)
+	}
+}
+
+// A key holds several limits at once (#2227): the first stays where an
+// older magpie reads it, the rest go beside it, and each is added,
+// changed, removed and reset on its own.
+func TestSeveralLimits(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	clock := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
+	Now = func() time.Time { return clock }
+	t.Cleanup(func() { Now = time.Now })
+	secret, err := Update("add-key", Change{Name: "Shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := List()
+	id := keys[0].ID
+	at := func(n int, l *Limit) error {
+		_, err := Update("limit-key", Change{Key: id, Limit: l, Index: &n})
+		return err
+	}
+	limits := func() []*Limit {
+		t.Helper()
+		keys, err := List()
+		if err != nil || len(keys) != 1 {
+			t.Fatal(keys, err)
+		}
+		return keys[0].Limits()
+	}
+	if err := at(0, &Limit{Period: "hours", Hours: 5, Cost: 10}); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(time.Hour)
+	if err := at(1, &Limit{Period: "week", Cost: 50}); err != nil {
+		t.Fatal(err)
+	}
+	if err := at(2, &Limit{Period: "days", Days: 30, Tokens: 1_000_000}); err != nil {
+		t.Fatal(err)
+	}
+	ls := limits()
+	if len(ls) != 3 || ls[0].Hours != 5 || ls[1].Period != "week" || ls[2].Days != 30 || !ls[2].Since.Equal(clock) {
+		t.Fatalf("three limits kept as %+v %+v %+v", ls[0], ls[1], ls[2])
+	}
+	// the first is where an older magpie reads a key's limit
+	b, _ := os.ReadFile(Path())
+	var saved []map[string]json.RawMessage
+	if err := json.Unmarshal(b, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(saved[0]["limit"]), `"hours": 5`) || !strings.Contains(string(saved[0]["moreLimits"]), `"week"`) {
+		t.Fatalf("saved as %s", b)
+	}
+	if err := at(3, &Limit{Period: "week", Tokens: 5}); err == nil || !strings.Contains(err.Error(), "already has a limit") {
+		t.Fatalf("a second week limit: %v", err)
+	}
+	if err := at(5, &Limit{Period: "day", Tokens: 5}); err == nil {
+		t.Fatal("a limit past the end was added")
+	}
+	if err := at(3, &Limit{Period: "day", Tokens: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if err := at(4, &Limit{Period: "month", Tokens: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if err := at(5, &Limit{Period: "hours", Hours: 1, Tokens: 5}); err == nil || !strings.Contains(err.Error(), "at most") {
+		t.Fatalf("a sixth limit: %v", err)
+	}
+	// changing one keeps its cycle and leaves the others alone
+	clock = clock.Add(time.Hour)
+	if err := at(2, &Limit{Period: "days", Days: 30, Tokens: 2_000_000}); err != nil {
+		t.Fatal(err)
+	}
+	if ls := limits(); len(ls) != 5 || ls[2].Tokens != 2_000_000 || !ls[2].Since.Equal(clock.Add(-time.Hour)) || ls[0].Cost != 10 {
+		t.Fatalf("after a change: %+v", ls[2])
+	}
+	// one reset, then all
+	if _, err := Update("reset-limit-key", Change{Key: id, Index: new(1)}); err != nil {
+		t.Fatal(err)
+	}
+	if ls := limits(); !ls[1].Since.Equal(clock) || ls[0].Since.Equal(clock) {
+		t.Fatalf("reset one: %+v %+v", ls[0], ls[1])
+	}
+	clock = clock.Add(time.Hour)
+	if _, err := Update("reset-limit-key", Change{Key: id}); err != nil {
+		t.Fatal(err)
+	}
+	for i, l := range limits() {
+		if !l.Since.Equal(clock) {
+			t.Fatalf("reset all left limit %d at %s", i, l.Since)
+		}
+	}
+	// removing the first moves the next into its place
+	for range 4 {
+		if err := at(0, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keys, _ = List()
+	if l := keys[0].Limit; l == nil || l.Period != "month" || keys[0].More != nil {
+		t.Fatalf("after removing four: %+v %+v", l, keys[0].More)
+	}
+	// the single-limit form makes one the only limit again
+	at(1, &Limit{Period: "day", Tokens: 9})
+	if _, err := Update("limit-key", Change{Key: id, Limit: &Limit{Period: "week", Tokens: 7}}); err != nil {
+		t.Fatal(err)
+	}
+	if ls := limits(); len(ls) != 1 || ls[0].Period != "week" {
+		t.Fatalf("the single form left %d limits", len(ls))
+	}
+	who, ok := Authenticate(secret)
+	if !ok || len(who.Limits()) != 1 {
+		t.Fatalf("authenticated with %+v", who)
+	}
+	at(1, &Limit{Period: "day", Tokens: 9})
+	if who, _ := Authenticate(secret); len(who.Limits()) != 2 || who.More[0].Period != "day" {
+		t.Fatalf("authenticated without its second limit: %+v", who.More)
 	}
 }

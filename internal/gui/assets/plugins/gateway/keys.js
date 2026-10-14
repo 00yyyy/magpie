@@ -182,8 +182,8 @@ function renderGatewayKeys() {
     const rotate = el("button", "text quiet", t("Rotate key"));
     rotate.onclick = () => askGatewayKey(k, true);
     row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), el("span", "grow"), gatewayModelsBadge(k), gatewayLimitBadge(k), copyCallerKeyBtn(k), rotate, rm);
-    const under = gatewayLimit?.id === k.id ? gatewayLimitEditor(k) : k.used ? gatewayLimitLine(k) : null;
-    if (under) row.classList.add("with-limit"), row.append(under);
+    const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
+    if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
   }
   if (gatewayKeyDraft !== null) list.append(gatewayKeyForm());
@@ -381,10 +381,31 @@ function limitCost(v) {
 }
 const usd = (n) => "$" + (n >= 100 ? n.toFixed(0) : n.toFixed(2));
 
+// keyLimits are a key's limits, its first and the rest (#2227), and
+// keyUsed what it has used of each, in the same order.
+const keyLimits = (k) => k.limit ? [k.limit, ...(k.moreLimits || [])] : [];
+const keyUsed = (k) => k.usedAll || (k.used ? [k.used] : []);
+// limitDraft is the editor's draft of a key's nth limit, or of a new one
+// at n past the last.
+function limitDraft(k, n) {
+  const l = keyLimits(k)[n] || {};
+  const taken = keyLimits(k).map((x) => x.period);
+  // a new one in a window the key has no limit in yet: a week beside 5 hours
+  const period = l.period || (n ? ["week", "hours", "day", "month"].find((p) => !taken.includes(p)) || "days" : "day");
+  return { id: k.id, n, period, days: l.days ? String(l.days) : "", hours: l.hours ? String(l.hours) : (n && period === "hours" ? "5" : ""), tokens: l.tokens ? String(l.tokens) : "", cost: l.cost ? String(l.cost) : "", cacheReads: !!l.cacheReads };
+}
+// bindingUsed is the limit holding a key most: of those spent, the one
+// that resets last, as it is refused until then; else the first
+function bindingUsed(k) {
+  const all = keyUsed(k), spent = all.filter((u) => u.spent);
+  return spent.length ? spent.reduce((a, b) => (new Date(b.reset) > new Date(a.reset) ? b : a)) : all[0];
+}
+
 // gatewayLimitBadge opens a key's limit editor: "Limit" on hover when it
-// has none, else what it has used, "1.2M / 2M · day", always shown.
+// has none, else what it has used, "1.2M / 2M · day", always shown; with
+// several limits, the one holding it most and how many more there are.
 function gatewayLimitBadge(k) {
-  const u = k.used;
+  const u = bindingUsed(k), more = keyUsed(k).length - 1;
   const b = el("button", "amodels limit" + (u ? " set" : "") + (u?.spent ? " spent" : "") + (gatewayLimit?.id === k.id ? " open" : ""));
   b.type = "button";
   if (!u) b.textContent = t("Limit");
@@ -392,7 +413,8 @@ function gatewayLimitBadge(k) {
     const parts = [];
     if (u.tokenLimit) parts.push(fmtN(u.tokens) + " / " + fmtN(u.tokenLimit));
     if (u.costLimit) parts.push(usd(u.cost) + " / " + usd(u.costLimit));
-    b.textContent = (u.spent ? t("Spent") + " · " : "") + parts.join(" · ") + " · " + perWords(u.period, u.days, u.hours);
+    b.textContent = (u.spent ? t("Spent") + " · " : "") + parts.join(" · ") + " · " + perWords(u.period, u.days, u.hours)
+      + (more > 0 ? " · " + t(more === 1 ? "+1 limit" : "+{n} limits", { n: more }) : "");
   }
   b.title = t(u ? "Change this key's limit" : "Set a limit for this key");
   b.setAttribute("aria-label", b.title);
@@ -400,21 +422,19 @@ function gatewayLimitBadge(k) {
   b.onclick = (e) => {
     e.preventDefault();
     if (gatewayLimit?.id === k.id) gatewayLimit = null;
-    else {
-      const l = k.limit || {};
-      gatewayLimit = { id: k.id, period: l.period || "day", days: l.days ? String(l.days) : "", hours: l.hours ? String(l.hours) : "", tokens: l.tokens ? String(l.tokens) : "", cost: l.cost ? String(l.cost) : "", cacheReads: !!l.cacheReads };
-    }
+    else gatewayLimit = limitDraft(k, Math.max(0, keyUsed(k).indexOf(u)));
     renderGatewayKeys();
   };
   return b;
 }
 
-// gatewayLimitLine says what a limited key has used, has left and when
-// it resets, under its row.
-function gatewayLimitLine(k) {
-  const u = k.used;
+// gatewayLimitLine says what a limited key has used of a limit u, has
+// left and when it resets, under its row; with several, each says its
+// window first.
+function gatewayLimitLine(k, u) {
   const line = el("div", "key-limit" + (u.spent ? " spent" : ""));
   const parts = [];
+  if (keyUsed(k).length > 1) parts.push(perWords(u.period, u.days, u.hours));
   if (u.tokenLimit) parts.push(t("{used} of {limit} tokens · {left} left", { used: fmtN(u.tokens), limit: fmtN(u.tokenLimit), left: fmtN(u.tokensLeft) }));
   if (u.costLimit) parts.push(t("{used} of {limit} estimated · {left} left", { used: usd(u.cost), limit: usd(u.costLimit), left: usd(u.costLeft) }));
   const at = new Date(u.reset);
@@ -431,7 +451,8 @@ function gatewayLimitEditor(k) {
   const d = gatewayLimit;
   const box = el("div", "acct-models key-limit-ed");
   box.onclick = (e) => e.stopPropagation();
-  const kept = k.limit || {};
+  const limits = keyLimits(k), n = d.n || 0, used = keyUsed(k)[n];
+  const kept = limits[n] || {};
   const changed = () => d.period !== (kept.period || "day") || limitTokens(d.tokens) !== (kept.tokens || 0)
     || limitCost(d.cost) !== (kept.cost || 0) || d.cacheReads !== !!kept.cacheReads
     || (d.period === "days" && limitDays(d.days) !== kept.days)
@@ -476,6 +497,29 @@ function gatewayLimitEditor(k) {
   const pl = el("label", "klf-field");
   pl.append(el("span", "klf-name", t("Window")), period);
   fields.append(pl, dl, hl, tl, cl);
+  // a key's limits (#2227), each a tab, when it has more than one or one
+  // is being added: the editor is of one at a time
+  let which = null;
+  if (limits.length > 1 || n >= limits.length && limits.length) {
+    which = el("div", "klf-which");
+    which.setAttribute("role", "tablist");
+    which.setAttribute("aria-label", t("This key's limits"));
+    const tabs = limits.map((l, i) => ({ i, name: perWords(l.period, l.days, l.hours) }));
+    if (n >= limits.length) tabs.push({ i: n, name: t("New limit") });
+    for (const x of tabs) {
+      const tab = el("button", "klf-tab" + (x.i === n ? " on" : ""), x.name);
+      tab.type = "button";
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", String(x.i === n));
+      tab.onclick = (e) => {
+        e.stopPropagation();
+        if (x.i === n) return;
+        gatewayLimit = limitDraft(k, x.i);
+        renderGatewayKeys();
+      };
+      which.append(tab);
+    }
+  }
   const cache = el("label", "klf-check");
   const cb = el("input");
   cb.type = "checkbox";
@@ -494,7 +538,8 @@ function gatewayLimitEditor(k) {
     err.textContent = bad;
     err.hidden = !bad;
     unsaved.hidden = !changed();
-    save.disabled = !!bad || !changed();
+    // a limit being added has a cap to save
+    save.disabled = !!bad || !changed() || (n >= limits.length && !limitTokens(d.tokens) && !limitCost(d.cost));
   };
   period.onclick = (e) => {
     e.preventDefault();
@@ -528,28 +573,38 @@ function gatewayLimitEditor(k) {
     const limit = tk || c ? { period: d.period, tokens: tk, cost: c, cacheReads: d.cacheReads } : null;
     if (limit && d.period === "days") limit.days = limitDays(d.days);
     if (limit && d.period === "hours") limit.hours = limitHours(d.hours);
-    const out = await gatewayKeyAction("limit-key", { key: k.id, limit });
+    // which one only when there are several: one is the key's only limit
+    const out = await gatewayKeyAction("limit-key", which ? { key: k.id, limit, index: n } : { key: k.id, limit });
     if (!out) { update(); return; }
     status(t(limit ? "Limit saved for {name}" : "Limit removed for {name}", { name: k.name }), "ok");
   };
   const foot = el("div", "acm-foot");
   foot.append(cache, el("span", "grow"), unsaved);
-  if (k.limit) {
-    const off = el("button", "text", t("No limit"));
+  if (limits.length && n < limits.length && limits.length < 5) {
+    // one more limit in a window of its own (#2227): 5 hours and a week,
+    // as a subscription's; a request passes only while all have some left
+    const more = el("button", "text", t("Add a limit"));
+    more.title = t("Another limit in a window of its own; a request passes only while every limit has something left");
+    more.onclick = (e) => { e.stopPropagation(); gatewayLimit = limitDraft(k, limits.length); renderGatewayKeys(); };
+    foot.append(more);
+  }
+  if (n < limits.length) {
+    const off = el("button", "text", t(limits.length > 1 ? "Remove this limit" : "No limit"));
     off.title = t("Clears the caps; Save makes it");
     off.onclick = () => { d.tokens = ""; d.cost = ""; tokens.value = ""; cost.value = ""; update(); };
     foot.append(off);
   }
   foot.append(cancel, save);
+  if (which) box.append(which);
   box.append(fields, hint, err);
-  if (k.used) {
+  if (used) {
     // count from 0 again, tokens and cost together (#1509)
     const zero = el("button", "text klf-reset", t("Reset usage"));
     zero.title = t("Count this key's use from 0 again, tokens and cost together");
-    zero.onclick = (e) => { e.stopPropagation(); askResetLimit(k); };
-    const used = el("div", "klf-used");
-    used.append(gatewayLimitLine(k), zero);
-    box.append(used);
+    zero.onclick = (e) => { e.stopPropagation(); askResetLimit(k, n); };
+    const line = el("div", "klf-used");
+    line.append(gatewayLimitLine(k, used), zero);
+    box.append(line);
   }
   box.append(foot);
   update();
@@ -559,8 +614,8 @@ function gatewayLimitEditor(k) {
 // askResetLimit confirms a key's Reset (#1509): what it has used goes back
 // to 0, tokens and cost together; an N-day cycle starts again from now, a
 // calendar window keeps its end.
-function askResetLimit(k) {
-  const u = k.used || {};
+function askResetLimit(k, n) {
+  const u = keyUsed(k)[n] || {};
   const ed = el("div", "editor");
   const head = el("div", "ehead");
   head.append(el("b", "", t("Reset {name}'s usage?", { name: k.name })));
@@ -576,7 +631,7 @@ function askResetLimit(k) {
     e.stopPropagation();
     if (go.disabled) return;
     go.disabled = true;
-    const out = await gatewayKeyAction("reset-limit-key", { key: k.id });
+    const out = await gatewayKeyAction("reset-limit-key", keyUsed(k).length > 1 ? { key: k.id, index: n } : { key: k.id });
     if (!out) { go.disabled = false; return; }
     closeConfirmAsk();
     status(t("Usage reset for {name}", { name: k.name }), "ok");

@@ -503,10 +503,12 @@ magpie gateway-key list                # ids, names, enabled state and masked ke
 magpie gateway-key rotate <id>         # prints the replacement; identity stays the same
 magpie gateway-key remove <id>         # revokes remote access
 magpie gateway-key limit <id> week --tokens 2m --cost 5   # its own limit
-magpie gateway-key limit <id>          # limit, used, left and reset
+magpie gateway-key limit <id> list     # each limit, used, left and reset
 magpie gateway-key limit <id> 10d --tokens 5m   # every 10 days, from now
 magpie gateway-key limit <id> 5h --tokens 200k  # every 5 hours, from now
-magpie gateway-key limit <id> reset    # count its usage from 0 again
+magpie gateway-key limit <id> add week --cost 20   # one more limit; all must pass
+magpie gateway-key limit <id> remove 2 # take off the 2nd limit
+magpie gateway-key limit <id> reset    # count its usage from 0 again (reset 2: only the 2nd)
 magpie gateway-key limit <id> off      # no limit
 magpie gateway-key models <id> openai/gpt-5 anthropic/*   # only these models
 magpie gateway-key models <id> all     # every model
@@ -525,7 +527,17 @@ move it. Changing only
 the caps or **Count cache reads too** keeps the cycle; changing N or the
 period, or turning the limit on, starts a new one then. Set it with **Limit** on
 the key's row (saved with Save) or `magpie gateway-key limit`; the row shows
-what the key has used, what is left and when it resets. Tokens counted are a
+what the key has used, what is left and when it resets. A key can have up to
+five limits, each in a window of its own (#2227), such as $3 every 5 hours and
+$20 a week, as a subscription's two windows: **Add a limit** in the editor or
+`magpie gateway-key limit <id> add`. A request passes only while every one has
+something left; its reservation is held in each window, and its 429 names the
+spent limit that resets last. Two limits can't share a window: a window's
+tokens and cost caps go in one limit. Setting a window without `add` changes
+the key's limit of that window, or its only one. `GET /v1/magpie/limit` gives
+each in `limits`, and in `limit` the one holding the key most, which a magpie
+from before #2227 reads; such a magpie also keeps only the first limit
+(`limit` in caller-keys.json, the rest under `moreLimits`). Tokens counted are a
 call's uncached input, output and cache writes, plus cache reads when **Count
 cache reads too** is on. Cost is an estimate at the Usage page's prices; a
 call with no known price adds none. A call counts in the window it started
@@ -537,7 +549,9 @@ flight holds a reservation (its body's size in tokens plus the key's mean
 output per call), so requests sent at once overshoot by about one call; a
 streamed reply is settled when it ends with the usage its vendor reported.
 **Reset usage** in the key's limit editor (or `magpie gateway-key limit
-<id> reset`) counts the key's tokens and cost from 0 together, from now. An
+<id> reset`) counts the key's tokens and cost from 0 together, from now: the
+editor's resets the limit it is open on, the CLI's every limit, or the nth
+with `reset <n>`. An
 N-day or N-hour key starts a new cycle then. A day, week or month key keeps
 its window's end (midnight, Monday, the 1st): only the calls before the
 reset stop counting, so it doesn't drift off the calendar. The reset is

@@ -159,9 +159,15 @@ are described in [Providers and accounts](providers-accounts.md#remote-magpie).
 `GET /v1/magpie/limit` (`keyLimit` in
 [`key_limit.go`](../../internal/gateway/key_limit.go)) answers the limit of
 the gateway key the request carries (`access.Caller`) and of no other: it
-reads nothing from the request but its key. A local magpie asks it with
-each of its remote-magpie keys for that key's card on its Usage page
-(#1547).
+reads nothing from the request but its key. A key may hold up to five
+limits at once, each in its own window, and a request needs every one
+(#2227, `budget.Reserve`: one reservation per window, and a refusal names
+the spent limit that resets last). The saved key keeps the first limit in
+`limit`, which older magpie reads, and the rest in `moreLimits`. The answer's
+`limit` is the one holding the key most (`budget.Binding`), what older
+clients read, and `limits` is each of them (`budget.All`). A local magpie
+asks it with each of its remote-magpie keys for that key's card on its
+Usage page (#1547), a window per limit's cap.
 
 System One uses `RouteDecider` and `postDecide` in
 [`decide.go`](../../internal/gateway/decide.go), taking one provider prefix

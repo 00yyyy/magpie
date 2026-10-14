@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 )
 
@@ -32,6 +33,59 @@ type Limit struct {
 	// the same window doesn't count. Zero for a calendar limit never
 	// reset, as every limit from before #1509 is.
 	Since time.Time `json:"since,omitzero"`
+}
+
+// MaxLimits is how many limits one key can have (#2227).
+const MaxLimits = 5
+
+// Limits are k's limits, its Limit first; none for a key with no limit.
+// Each holds the key on its own: a request passes only while all of them
+// have something left.
+func (k Key) Limits() []*Limit { return limitsOf(k.Limit, k.More) }
+
+// Limits are the limits who's key holds it to, as Key.Limits.
+func (who Identity) Limits() []*Limit { return limitsOf(who.Limit, who.More) }
+
+func limitsOf(first *Limit, more []Limit) []*Limit {
+	var out []*Limit
+	if first.Limited() {
+		out = append(out, first)
+	}
+	for i := range more {
+		if more[i].Limited() {
+			out = append(out, &more[i])
+		}
+	}
+	return out
+}
+
+// limitList is a copy of k's limits, to change and set back.
+func (k *Key) limitList() []Limit {
+	var out []Limit
+	for _, l := range k.Limits() {
+		out = append(out, *l)
+	}
+	return out
+}
+
+// setLimits keeps ls as k's limits: the first as Limit, so a magpie from
+// before #2227 still holds the key to it, the rest as More.
+func (k *Key) setLimits(ls []Limit) {
+	k.Limit, k.More = nil, nil
+	if len(ls) > 0 {
+		first := ls[0]
+		k.Limit = &first
+		k.More = slices.Clone(ls[1:])
+	}
+	if len(k.More) == 0 {
+		k.More = nil
+	}
+}
+
+// sameWindow: l and o count in the same window, so two limits of one key
+// that do are one limit with two caps.
+func (l *Limit) sameWindow(o *Limit) bool {
+	return l.Period == o.Period && l.Days == o.Days && l.Hours == o.Hours
 }
 
 // Periods are the windows a limit can be set for.

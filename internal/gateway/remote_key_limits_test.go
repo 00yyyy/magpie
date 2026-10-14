@@ -121,6 +121,17 @@ func TestRemoteMagpieKeyLimitCards(t *testing.T) {
 		l.Windows[0].Name != "Tokens this cycle" || !l.GatewayKey.Reset.Equal(l.GatewayKey.Start.Add(5*time.Hour)) {
 		t.Errorf("laptop every 5 hours: %+v %+v", l, l.GatewayKey)
 	}
+	// and a week beside it (#2227): a window for each, the key told of the
+	// one holding it most
+	n := 1
+	if _, err := access.Update("limit-key", access.Change{Key: keys[0].ID, Limit: &access.Limit{Period: "week", Tokens: 300}, Index: &n}); err != nil {
+		t.Fatal(err)
+	}
+	provider.RefreshUsage(ctx, "office/~keys", "laptop")
+	if l := cards()["laptop"]; len(l.Windows) != 2 || l.Windows[0].Name != "Tokens this cycle" || l.Windows[1].Name != "Tokens this week" ||
+		l.Windows[1].Amount != 350 || l.Windows[1].Limit != 300 || l.GatewayKey.Period != "week" || !l.GatewayKey.Spent {
+		t.Errorf("laptop with two limits: %+v %+v", l, l.GatewayKey)
+	}
 }
 
 // A key asking after its limit is told its own, whatever the request
