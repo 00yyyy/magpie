@@ -347,7 +347,7 @@ func Run(version string, showMain bool, link string) error {
 		Name:           "magpie",
 		Description:    "one place to pick every agent's model",
 		Icon:           appIconFor(),
-		Assets:         application.AssetOptions{Handler: handler},
+		Assets:         application.AssetOptions{Handler: ownWindow(handler)},
 		Mac:            application.MacOptions{ActivationPolicy: dockPolicy(settings.Load().Dock)},
 		Windows:        windowsOptions(),
 		// the tray stays when lightweight mode has let both windows go
