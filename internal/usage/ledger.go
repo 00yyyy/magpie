@@ -344,8 +344,7 @@ func logRecord(c sessions.Call) Record {
 		Millis: c.Millis, TTFT: c.TTFT, Session: c.Session, RequestID: c.RequestID, Error: c.ErrorText, ErrType: c.Error, Subagent: sessions.SubagentOf(c.File), ParentAgent: sessions.SubagentParent(c.File)}
 	if c.Agent == "codex" {
 		r.ResponseID = c.ResponseID
-		compacted := c.Compaction
-		r.Compaction = &compacted
+		r.Compaction = codexCompactionOf(c)
 	}
 	if c.Agent == "codex" || c.Agent == "opencode" {
 		r.Requested, r.Served = c.Model, ""

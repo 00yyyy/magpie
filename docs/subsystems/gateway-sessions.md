@@ -423,7 +423,11 @@ session metadata.
 
 `GET /api/usage/requests` and `GET /v1/magpie/usage/requests` expose Codex
 `compaction` as `true` or `false` when a native Codex call establishes the
-marker state, and omit it when there is no matching native evidence. A unique
+marker state, and omit it when there is no matching native evidence. Only a
+call read from a `token_usage_record` (it has a `response_id`) establishes it:
+Codex writes that record and a compaction's `compaction_response_id` together,
+so a call told from `token_count` alone, in an older rollout, leaves it out
+rather than saying `false`. A unique
 `response_id` match adds this metadata to the gateway row while preserving that
 row's model, usage, cost and kind.
 Compaction is already included in Codex's total consumption, so this marker

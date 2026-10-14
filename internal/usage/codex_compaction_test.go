@@ -303,3 +303,39 @@ func appendCompactionLine(t *testing.T, path, responseID, threadID, sessionID, t
 		t.Fatal(err)
 	}
 }
+
+// A Codex call told from token_count alone (a rollout from before Codex wrote
+// token_usage_record) has no response_id and can't carry the native marker:
+// its compaction is unknown, never false.
+func TestCodexCallWithoutResponseIDHasNoCompactionState(t *testing.T) {
+	pageHome(t)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC))
+	old := LogCalls
+	LogCalls = func(time.Time) []sessions.Call {
+		return []sessions.Call{
+			codexCompactionCall(now.Add(-time.Hour), "", 31, 6, false),
+			codexCompactionCall(now.Add(-time.Hour+time.Second), "resp-recorded", 37, 7, false),
+		}
+	}
+	defer func() { LogCalls = old }()
+	for name, rows := range map[string][]Row{"ledger": LedgerOf(All, Filter{}).Rows, "requests": QueryPage(All, Filter{}, 0, 50).Rows} {
+		var legacy, recorded *Row
+		for i := range rows {
+			switch rows[i].Input {
+			case 31:
+				legacy = &rows[i]
+			case 37:
+				recorded = &rows[i]
+			}
+		}
+		if legacy == nil || recorded == nil {
+			t.Fatalf("%s: native rows missing: %+v", name, rows)
+		}
+		if b, _ := json.Marshal(legacy); strings.Contains(string(b), `"compaction"`) {
+			t.Errorf("%s: a call with no response_id claimed a compaction state: %s", name, b)
+		}
+		if compacted, known := compactionValue(*recorded); !known || compacted {
+			t.Errorf("%s: a recorded call lost its false marker: %+v", name, recorded.Compaction)
+		}
+	}
+}

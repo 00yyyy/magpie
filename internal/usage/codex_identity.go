@@ -73,8 +73,13 @@ func sameCodexCall(a, b Row) bool {
 		a.Error == b.Error && a.ErrType == b.ErrType && a.RequestID == b.RequestID
 }
 
+// codexCompactionOf is what a native Codex call says about compaction: only
+// a call read from a token_usage_record (it has a response_id) can say, as
+// Codex writes that record and a compaction's compaction_response_id together
+// (openai/codex#41912). An older rollout's call, told from token_count alone,
+// never carries the marker, so it is unknown, not "no compaction".
 func codexCompactionOf(call sessions.Call) *bool {
-	if call.Agent != "codex" {
+	if call.Agent != "codex" || call.ResponseID == "" {
 		return nil
 	}
 	compacted := call.Compaction
