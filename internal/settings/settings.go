@@ -235,6 +235,12 @@ type Settings struct {
 	// one of UpdateEveries, 0 for every six hours.
 	NoAutoUpdate bool `json:"noAutoUpdate,omitempty"`
 	UpdateEvery  int  `json:"updateEvery,omitempty"`
+	// AutoRestart has the app restart into an update it downloaded by
+	// itself, once the gateway it serves has nothing in flight, rather than
+	// waiting for a click or for quitting (#2096). Off by default: a
+	// restart ends the window and whatever an agent sends next waits for
+	// the gateway to be back. Nothing happens with NoAutoUpdate on.
+	AutoRestart bool `json:"autoRestart,omitempty"`
 	// UpdateMirror is a GitHub download mirror an update's file is fetched
 	// through, its prefix put before the release's github.com URL
 	// (https://mirror.example/https://github.com/…): "" for none, which is

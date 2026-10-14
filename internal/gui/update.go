@@ -63,6 +63,12 @@ type updater struct {
 	whenIdle func() bool
 	onWait   func()
 	loops    sync.WaitGroup // the waits going on
+	// With Settings' AutoRestart, the clock has autoRestart run (the app's
+	// or magpie web's restart) once a downloaded update is ready and the
+	// gateway idle (#2096); autoSkip is the version whose wait the user
+	// called off, which isn't restarted into by itself again.
+	autoRestart func() bool
+	autoSkip    string
 }
 
 type updateJSON struct {
@@ -109,9 +115,11 @@ func (u *updater) start() {
 			u.mu.Lock()
 			last := u.asked
 			u.mu.Unlock()
-			if updateDue(settings.Load(), last, time.Now()) {
+			s := settings.Load()
+			if updateDue(s, last, time.Now()) {
 				u.checkByClock()
 			}
+			u.autoTick(s)
 			time.Sleep(time.Minute)
 		}
 	}()
@@ -521,7 +529,7 @@ func updateRoutes(mux *http.ServeMux, w Windows) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&in)
 		if in.When == "cancel" {
-			updates.cancelWait()
+			updates.callOff()
 			writeJSON(rw, updates.json())
 			return
 		}
@@ -567,6 +575,13 @@ var relaunchBinary = update.RelaunchBinary
 // Off the Mac, the new one opens its window on view when window is set, and
 // only the tray icon when not; the Mac's always opens its window.
 func restartToUpdate(web, window bool, view string) bool {
+	return restartInto(web, window, view, false)
+}
+
+// restartInto is restartToUpdate; bySelf, Settings' AutoRestart restarts
+// (#2096), and the Mac's new one too opens only its menu bar icon when no
+// window was up, rather than putting up one the user had closed.
+func restartInto(web, window bool, view string, bySelf bool) bool {
 	bundle, exe := updates.bundle, updates.exe
 	updates.mu.Lock()
 	version := ""
@@ -584,7 +599,7 @@ func restartToUpdate(web, window bool, view string) bool {
 	}
 	var err error
 	if bundle != "" {
-		err = update.Relaunch(bundle)
+		err = update.Relaunch(bundle, window || !bySelf)
 	} else {
 		updates.mu.Lock()
 		aside := updates.aside

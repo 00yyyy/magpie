@@ -455,6 +455,14 @@ func Run(version string, showMain bool, link string) error {
 		})
 	}
 	updates.onWait = func() { application.InvokeSync(relabel) }
+	// Settings' AutoRestart: the window comes back only if it was up (#2096)
+	updates.autoRestart = func() bool {
+		if restartInto(false, h.MainShown(), "", true) {
+			h.app.Quit()
+			return true
+		}
+		return false
+	}
 	updates.start()
 	news.start()
 	// the library written into the agents again, once: one installed or

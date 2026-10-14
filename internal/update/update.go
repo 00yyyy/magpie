@@ -348,12 +348,22 @@ func InstallAsAdmin(staged, bundle string) error {
 	return err
 }
 
-// Relaunch opens bundle again once this process (pid) has exited.
-func Relaunch(bundle string) error {
-	script := fmt.Sprintf(`while kill -0 %d 2>/dev/null; do sleep 0.2; done; open %q`, os.Getpid(), bundle)
+// Relaunch opens bundle again once this process (pid) has exited: with its
+// window when window is set, else only its menu bar icon (`tray`, as a
+// login launch), which a restart by itself uses while no window was up.
+func Relaunch(bundle string, window bool) error {
+	script := fmt.Sprintf(`while kill -0 %d 2>/dev/null; do sleep 0.2; done; %s`, os.Getpid(), relaunchOpen(bundle, window))
 	cmd := proc.Command("/bin/sh", "-c", script)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	return cmd.Start()
+}
+
+// relaunchOpen is the open command Relaunch runs for bundle.
+func relaunchOpen(bundle string, window bool) string {
+	if window {
+		return fmt.Sprintf("open %q", bundle)
+	}
+	return fmt.Sprintf("open %q --args tray", bundle)
 }
 
 // ReplaceBinary puts the release's build for this binary where the

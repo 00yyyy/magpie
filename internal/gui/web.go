@@ -107,6 +107,14 @@ func StartWeb(addr, version string) (*Web, error) {
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 	go w.srv.Serve(ln)
+	// Settings' AutoRestart: magpie web runs on as the new version (#2096)
+	updates.autoRestart = func() bool {
+		if restartInto(true, false, "", true) {
+			quit()
+			return true
+		}
+		return false
+	}
 	updates.start()
 	news.start()
 	return w, nil

@@ -21028,6 +21028,10 @@ function renderSettings() {
   row(t("Check every"), s.noAutoUpdate ? t("While automatic updates are on") : t("How often magpie looks for a newer version"), "",
     segs(UPDATE_EVERY.map((m) => [m, m < 60 ? t("{n} min", { n: m }) : t("{n} h", { n: m / 60 })]), s.updateEvery || 360,
       (updateEvery) => savePrefs({ ...keep, updateEvery }))).classList.add("update-every-row", ...(s.noAutoUpdate ? ["off"] : []));
+  // whether a downloaded update is restarted into by itself, once no agent
+  // request is in flight (#2096); off, it waits for Restart or for quitting
+  row(t("Restart automatically"), s.noAutoUpdate ? t("While automatic updates are on") : t("Once an update is downloaded, restarts into it when no agent request is in flight"), "",
+    segs([["off", t("Off")], ["on", t("On")]], s.autoRestart ? "on" : "off", (v) => savePrefs({ ...keep, autoRestart: v === "on" }))).classList.add("update-restart-row", ...(s.noAutoUpdate ? ["off"] : []));
   renderUpdateMirror(row(t("Download source"), "", ""), s);
   const open = el("button", "text", t("Open"));
   open.onclick = () => api("settings/reveal", {}).catch((e) => status(e.message, "err"));
@@ -23727,7 +23731,7 @@ function prefsKeep(s) {
     claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "",
     codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, noStats: !!s.noStats, noUsageStats: !!s.noUsageStats,
     memberModel: !!s.memberModel, noLoopGuard: !!s.noLoopGuard, refusalRetries: s.refusalRetries ?? null,
-    noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360,
+    noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360, autoRestart: !!s.autoRestart,
     trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, trayPace: !!s.trayPace, vision: s.vision || "", visionEffort: s.visionEffort || "", searcherEffort: s.searcherEffort || "", imageGen: s.imageGen || "", searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",
     chineseUnits: !!s.chineseUnits, usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0, resetReminder: s.resetReminder || 0,
     turnDoneAlert: s.turnDoneAlert || 0 };
