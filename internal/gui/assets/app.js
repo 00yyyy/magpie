@@ -986,7 +986,7 @@ function driftFix(a, label = "Apply again") {
   const want = (f && optionFor(f, d.want)?.label) || d.want;
   const fix = el("button", "ag-fix");
   fix.type = "button";
-  fix.title = `${t(DRIFT_WHY[d.kind] || DRIFT_WHY.unwired, { agent: a.name, model: want })}\n${d.detail}`;
+  fix.title = `${t(DRIFT_WHY[d.kind] || DRIFT_WHY.unwired, { agent: a.name, model: want })}\n${tNotice(d.detail)}`;
   const deaf = d.kind === "unreachable" || d.kind === "proxied";
   if (deaf && d.move) label = t("Use {url}", { url: d.move.replace(/^https?:\/\//, "") });
   else if (deaf) label = "How to fix";
@@ -1009,7 +1009,7 @@ function explainDrift(a) {
   const head = el("div", "ehead");
   head.append(el("b", "", t(DRIFT_WHY[a.drift.kind] || DRIFT_WHY.unreachable, { agent: a.name })));
   ed.append(head);
-  ed.append(el("p", "lib-confirm drift-why", a.drift.detail));
+  ed.append(el("p", "lib-confirm drift-why", tNotice(a.drift.detail)));
   const bar = el("div", "bar");
   const ok = el("button", "text primary", t("OK"));
   ok.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
@@ -1305,7 +1305,7 @@ function connectLine(a, kind) {
   }
   if (a.drift) {
     say(t(DRIFT_WHY[a.drift.kind] || DRIFT_WHY.unwired, { agent: a.name, model: a.drift.want }), "bad");
-    words.title = a.drift.detail || "";
+    words.title = tNotice(a.drift.detail) || "";
     line.append(driftFix(a, "Reconnect"));
     return line;
   }

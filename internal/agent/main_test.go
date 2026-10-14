@@ -48,6 +48,9 @@ func TestMain(m *testing.M) {
 	// nor is the way Codex goes there read from this machine's proxy
 	// settings, or a proxy tried; the proxy tests say both
 	codexProxyEnv = func(string) string { return "" }
+	// nor Claude Code's provider switches read from the login shell; the
+	// cloud tests say what one there does
+	claudeShellEnv = func(string) string { return "" }
 	codexSystemProxy = func() netproxy.Proxy { return netproxy.Proxy{} }
 	proxyProbe = func(string, string) bool { return true }
 	// nor an address of the agent's own asked whether magpie answers

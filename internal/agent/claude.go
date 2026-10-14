@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/desktopdir"
 	"github.com/yetone/magpie/internal/edit"
@@ -65,6 +66,79 @@ var claudeOwnEnv = append([]string{
 	"ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_FABLE_MODEL",
 	"ANTHROPIC_SMALL_FAST_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL",
 }, claudeAboutEnv...)
+
+// claudeClouds are the clouds Claude Code's provider switches
+// (agentenv.ClaudeProviders) send its requests to, named as Claude Code
+// 2.1.300 names them. Each has an endpoint variable of its own
+// (ANTHROPIC_BEDROCK_BASE_URL, …), and ANTHROPIC_BASE_URL is passed over,
+// so a Claude Code with one on never reaches magpie: Bedrock refused
+// magpie's model ids (jw1dev on X).
+var claudeClouds = map[string]string{
+	"CLAUDE_CODE_USE_BEDROCK":                "Amazon Bedrock",
+	"CLAUDE_CODE_USE_VERTEX":                 "Google Vertex AI",
+	"CLAUDE_CODE_USE_FOUNDRY":                "Microsoft Foundry",
+	"CLAUDE_CODE_USE_ANTHROPIC_AWS":          "Claude Platform on AWS",
+	"CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD": "Claude Platform on Google Cloud",
+	"CLAUDE_CODE_USE_MANTLE":                 "Amazon Bedrock (Mantle)",
+}
+
+// claudeSwitchOn is whether Claude Code reads a switch's value as on: 1,
+// true, yes or on, in any case, spaces around it taken off (2.1.300). "0",
+// "false" or "" is off, and stays as the user wrote it.
+func claudeSwitchOn(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
+// claudeShellEnv is a variable as a Claude Code started in a terminal has
+// it: the login shell's, else magpie's own; a var so tests can say.
+var claudeShellEnv = func(k string) string {
+	if v := loginEnv(k); v != "" {
+		return v
+	}
+	return os.Getenv(k)
+}
+
+// claudeCloud says which provider switch (claudeClouds) takes the Claude
+// Code whose settings.json is at path onto a cloud, past magpie, and where
+// it is set; "" when none is on. Claude Code puts the env of .claude.json,
+// then of the user's settings, then of an administrator's managed settings
+// over the environment it was started in, so the last of those that has
+// the variable is the one it goes by. A project's .claude/settings.json is
+// not looked at: magpie doesn't know which folders Claude Code runs in.
+func claudeCloud(at place, path string) string {
+	managed := claudeManaged()
+	if at.sys != nil {
+		managed = at.sys("/etc/claude-code/managed-settings.json")
+	}
+	dir := filepath.Dir(path)
+	global := filepath.Join(dir, ".claude.json")
+	if dir == filepath.Join(at.home, ".claude") {
+		global = filepath.Join(at.home, ".claude.json")
+	}
+	for _, k := range agentenv.ClaudeProviders {
+		set := false
+		for _, f := range []string{managed, path, global} {
+			v, has := edit.GetJSON(f, "env."+k)
+			if !has {
+				continue
+			}
+			if claudeSwitchOn(v) {
+				return noticeClaudeCloudFile.say("file", at.native(f), "var", k, "cloud", claudeClouds[k])
+			}
+			set = true
+			break
+		}
+		// a distro's environment magpie can't read
+		if !set && at.spell == nil && claudeSwitchOn(claudeShellEnv(k)) {
+			return noticeClaudeCloudShell.say("var", k, "cloud", claudeClouds[k])
+		}
+	}
+	return ""
+}
 
 // claudeTiers are the aliases Claude Code resolves (/model opus, a
 // subagent's "model: haiku", …), each of which can have a model of its own.
@@ -1171,6 +1245,50 @@ func claudeIn(at place) *Agent {
 		}
 		return main, tiers
 	}
+	// a provider switch the env has on (claudeClouds) sends Claude Code to
+	// that cloud, past ANTHROPIC_BASE_URL, so routing it through magpie
+	// takes the switch out, its value kept in the stash as the user wrote
+	// it (a string or JSON's true), and magpie stepping out puts it back
+	// (jw1dev on X: CLAUDE_CODE_USE_BEDROCK=1 beside magpie's wiring, and
+	// Bedrock refused magpie's model). The cloud's own variables (AWS_*,
+	// ANTHROPIC_VERTEX_PROJECT_ID, …) stay: without the switch Claude Code
+	// doesn't read them. One that is off stays as it is.
+	cloudKey := func(k string) string { return at.key("claude.cloud." + k) }
+	dropClouds := func() error {
+		var gone []string
+		kept := map[string]string{}
+		for _, k := range agentenv.ClaudeProviders {
+			raw, has := edit.GetJSONRaw(path, "env."+k)
+			if v, _ := edit.GetJSON(path, "env."+k); !has || !claudeSwitchOn(v) {
+				continue
+			}
+			kept[cloudKey(k)] = raw
+			gone = append(gone, "env."+k)
+		}
+		if len(gone) == 0 {
+			return nil
+		}
+		stash(kept)
+		return edit.DelJSON(path, gone...)
+	}
+	putClouds := func() error {
+		var back []edit.KV
+		for _, k := range agentenv.ClaudeProviders {
+			raw := unstash(cloudKey(k))
+			if raw == "" || !json.Valid([]byte(raw)) {
+				continue
+			}
+			// one the user set again since is theirs as it is
+			if _, has := edit.GetJSON(path, "env."+k); has {
+				continue
+			}
+			back = append(back, edit.KV{Path: "env." + k, Value: json.RawMessage(raw)})
+		}
+		if len(back) == 0 {
+			return nil
+		}
+		return edit.SetJSON(path, back...)
+	}
 	// unroute takes magpie's endpoint and models out of Claude Code's env
 	// and puts back the endpoint and token the stash kept from before magpie
 	// was wired in; it answers the model Claude Code was on then, for
@@ -1188,6 +1306,9 @@ func claudeIn(at place) *Agent {
 			return "", err
 		}
 		if err := dropPicker(); err != nil {
+			return "", err
+		}
+		if err := putClouds(); err != nil {
 			return "", err
 		}
 		if !routed() {
@@ -1340,6 +1461,9 @@ func claudeIn(at place) *Agent {
 		}
 		// what the env says about a tier's model goes with the model
 		if err := dropAbout(tiers); err != nil {
+			return err
+		}
+		if err := dropClouds(); err != nil {
 			return err
 		}
 		// subagents given a model of their own keep it; the others run on
@@ -1784,6 +1908,10 @@ func claudeIn(at place) *Agent {
 			if !routed() {
 				return desktopOnly()
 			}
+			// a switch turned on since, or left by an older magpie
+			if err := dropClouds(); err != nil {
+				return err
+			}
 			// routed by an older magpie: what was said about the models
 			// before it is taken out as it is now when magpie is wired in
 			if stashLoad()[aboutKey] == "" {
@@ -1867,6 +1995,9 @@ func claudeIn(at place) *Agent {
 			getEnv := func(k string) (string, bool) { return edit.GetJSON(path, "env."+k) }
 			if off := wiringOff("Claude Code", path, getEnv, "ANTHROPIC_BASE_URL", at.gw()); off != "" {
 				return off
+			}
+			if why := claudeCloud(at, path); why != "" {
+				return why
 			}
 			// the key it sends: none where it keeps its claude.ai sign-in,
 			// which a key there would take the place of; magpie's otherwise,
@@ -2344,6 +2475,12 @@ func claudeMain(path string) string {
 var (
 	noticeClaudeEffort    = newNotice("an open Claude Code session keeps the effort it started with — restart it to use this.")
 	noticeClaudeUltracode = newNotice("an open Claude Code session keeps the ultracode it started with — restart it to use this.")
+)
+
+// why a Claude Code wired to magpie goes to a cloud instead (claudeCloud)
+var (
+	noticeClaudeCloudFile  = newNotice("{file} sets {var}, so Claude Code sends its requests to {cloud}, not to magpie: take it out there to go through magpie.")
+	noticeClaudeCloudShell = newNotice("{var} is set in your shell's environment, so Claude Code started there sends its requests to {cloud}, not to magpie: take it out of your shell's profile to go through magpie.")
 )
 
 // magpiesPicker says whether settings.json's modelPicker is one magpie

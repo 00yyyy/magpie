@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -124,7 +125,7 @@ func Isolate() (string, error) {
 			return "", err
 		}
 	}
-	for _, k := range agentenv.Vars {
+	for _, k := range append(slices.Clone(agentenv.Vars), agentenv.ClaudeProviders...) {
 		if err := os.Unsetenv(k); err != nil {
 			return "", err
 		}
