@@ -2315,22 +2315,27 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// nothing is sent (the 499 below)
 			// its queue full, or waited out (QueueLimit, QueueWait), it is
 			// turned away below
-			waited := time.Now()
+			// queued is only the time it stood in its lane's queue and
+			// waited for its minute, not the keepalive's start and stop
+			// around them: a provider with no limit, or a slot and room
+			// free at once, never reads as queued (#2153: 1ms on a busy
+			// machine)
 			// a streaming agent waiting is kept alive meanwhile
 			queuedAlive := hw.keepQueued()
-			release, err := s.lanes.take(ctx, c.who(), c.p.LaneLimit(), c.p.QueueLimit, time.Duration(c.p.QueueWait)*time.Second)
+			release, inLane, err := s.lanes.take(ctx, c.who(), c.p.LaneLimit(), c.p.QueueLimit, time.Duration(c.p.QueueWait)*time.Second)
+			var inMinute time.Duration
 			if err == nil && c.p.RPMLimit() > 0 {
 				// with a MaxRPM, it then waits for room in the minute, and
 				// goes counted in it; the requests it makes on the way
 				// count too (rpm.go)
-				if _, err = s.rpms.wait(ctx, c.who(), c.p.RPMLimit(), rpmWait(c.p)); err != nil {
+				if inMinute, err = s.rpms.wait(ctx, c.who(), c.p.RPMLimit(), rpmWait(c.p)); err != nil {
 					release()
 				} else {
 					ctx = s.paidFor(ctx, c.p, c.who())
 				}
 			}
 			queuedAlive()
-			queued = time.Since(waited).Milliseconds()
+			queued = (inLane + inMinute).Milliseconds()
 			var tooMany *errRPM
 			if errors.Is(err, errQueueFull) || errors.Is(err, errQueueWait) || errors.As(err, &tooMany) {
 				laneErr = err
