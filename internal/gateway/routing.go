@@ -755,6 +755,9 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	if (why == failCredit || why == failQuota) && c.p.PaidBesideFree(c.model) {
 		id = c.restID()
 	}
+	if remoteModelRest(c, why) {
+		id = c.restID()
+	}
 	r.Key = id
 	if id == c.restID() {
 		r.Model = c.model
@@ -770,6 +773,21 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	return r
 }
 
+// remoteModelRest says a refusal for want of quota, credit or rate rests
+// only the model it was about, when it came from another computer's magpie
+// (a Remote magpie provider, LAN share): that magpie serves each of its
+// models from its own providers and rests them itself, so one of them out
+// of quota there says nothing of the others (bigsteven on Discord: the
+// remote's 429 for one model rested every model on it for the 3 hours it
+// named). Its key refused, or the computer unreachable, still rests it
+// whole.
+func remoteModelRest(c candidate, why string) bool {
+	if !c.p.IsRemoteMagpie() {
+		return false
+	}
+	return why == failQuota || why == failCredit || why == failRate
+}
+
 // rateRest is how long a rate-limited candidate sits out: as long as the
 // vendor says (Retry-After, a reset header or a reset time in its error),
 // and a minute when it says nothing. One limited again as soon as its rest
@@ -781,7 +799,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 // count where it is, so one request's own retries don't stretch it.
 func (s *Server) rateRest(c candidate, header http.Header, body []byte, sharedPool bool, now time.Time) (time.Duration, string, int) {
 	id := c.restKey()
-	if c.isOpenRouterFree() && sharedPool {
+	if c.isOpenRouterFree() && sharedPool || remoteModelRest(c, failRate) {
 		id = c.restID()
 	}
 	n := 1
