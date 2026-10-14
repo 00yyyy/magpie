@@ -214,7 +214,7 @@ func buddyWriteAt(path, agent string, on bool, where place) error {
 	var ids []string
 	if on {
 		for _, m := range magpieModels(agent) {
-			e := buddyModel(agent, m.ID, m.Name, m.Context, maxTokens(m), m.Images, m.Efforts)
+			e := buddyModel(agent, m.ID, m.Name, m.Context, outputOr(m, zcodeOutput(maxTokens(m))), m.Images, m.Efforts)
 			if off[m.ID] {
 				e["disabled"] = true
 			}
@@ -292,8 +292,9 @@ func buddyModel(agent, id, name string, context, output int, images bool, effort
 		"maxInputTokens":   context,
 		"supportsToolCall": true, "supportsImages": images, "supportsReasoning": false,
 	}
-	// without it WorkBuddy caps every reply at its own default
-	if out := zcodeOutput(output); out > 0 {
+	// without it WorkBuddy caps every reply at its own default; output
+	// comes already trimmed (zcodeOutput) unless the user set it (outputOr)
+	if out := output; out > 0 {
 		e["maxOutputTokens"] = out
 	}
 	var levels []string

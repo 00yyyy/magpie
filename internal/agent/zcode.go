@@ -131,7 +131,7 @@ func zcodeProviderJSON(path string, keep bool) any {
 		}
 		limit := map[string]any{"context": window}
 		// without it ZCode caps every reply at 32000 tokens
-		if out := zcodeOutput(maxTokens(m)); out > 0 {
+		if out := outputOr(m, zcodeOutput(maxTokens(m))); out > 0 {
 			limit["output"] = out
 		}
 		e := map[string]any{"name": m.Name, "limit": limit,
@@ -435,7 +435,7 @@ func zcodeRules(path string, on, keep bool) error {
 			// ZCode's own rules give a model it doesn't know 32000 tokens
 			// out and thinking only on or off
 			specs := map[string]any{}
-			if out := zcodeOutput(maxTokens(m)); out > 0 {
+			if out := outputOr(m, zcodeOutput(maxTokens(m))); out > 0 {
 				specs["maxOutputTokens"] = map[string]any{"max": out}
 			}
 			if levels := zcodeLevels(m.Efforts); levels != nil {

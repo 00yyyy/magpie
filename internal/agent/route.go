@@ -150,7 +150,7 @@ func magpieModels(agent string) []catalog.Model {
 		return ms
 	}
 	for i, e := range shown {
-		m := catalog.Model{ID: e.ID, Name: labels[i], Provider: firstOf(e.Provider.Catalogs()), Efforts: e.Efforts, Images: e.Images || seen, ImageInput: e.ImageInput, Context: e.Context, Output: e.Output, AgentsV2: e.AgentsV2, Reasoning: e.Reasoning}
+		m := catalog.Model{ID: e.ID, Name: labels[i], Provider: firstOf(e.Provider.Catalogs()), Efforts: e.Efforts, Images: e.Images || seen, ImageInput: e.ImageInput, Context: e.Context, Output: e.Output, OutputSet: e.OutputSet, AgentsV2: e.AgentsV2, Reasoning: e.Reasoning}
 		// where Codex and Claude Code compact it (#876): a threshold the
 		// user set on the model or on its provider, else a window they
 		// typed whole (#1809), else the one for every model, which codexcat
@@ -205,6 +205,18 @@ func allResponses(ms []provider.Member) bool {
 // above their window (deepseek-chat's 384000 against 128000). An unknown
 // window leaves the output as it is.
 func maxTokens(m catalog.Model) int { return provider.OutputWithin(m.Context, m.Output) }
+
+// outputOr is the output limit an agent is handed for m: the Max output the
+// user set for it (catalog.Model.OutputSet), kept within its window, else
+// capped, the agent's own trim of the vendor's figure. A cap of magpie's
+// never overrides the user's number: DeepSeek V4.1 Flash set to 384k reached
+// VS Code as 250000 and WorkBuddy as 128000 (#2064).
+func outputOr(m catalog.Model, capped int) int {
+	if n := maxTokens(m); m.OutputSet && n > 0 {
+		return n
+	}
+	return capped
+}
 
 // group tags every option with a group name.
 func group(name string, opts []Option) []Option {

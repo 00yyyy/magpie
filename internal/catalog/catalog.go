@@ -55,6 +55,10 @@ type Model struct {
 	MaxContext int `json:",omitempty"`
 	// Output is the most tokens a reply may hold, when known.
 	Output int `json:",omitempty"`
+	// OutputSet is set when Output is a Max output the user typed for the
+	// model or its provider (provider.Entry.OutputSet): an agent that trims
+	// a vendor's figure for its own reasons hands this one on as it is.
+	OutputSet bool `json:"-"`
 	// Compact is where the user has Codex compact a conversation on this
 	// model (#876), its own or its provider's (settings.ModelCompacts), or
 	// Context itself when that is a window the user typed (#1809,

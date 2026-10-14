@@ -115,7 +115,7 @@ func TestWorkBuddy(t *testing.T) {
 func TestWorkBuddyEfforts(t *testing.T) {
 	e := buddyModel("workbuddy", "x/y", "Y", 0, 500000, true, []string{"none", "low", "high"})
 	r, _ := e["reasoning"].(map[string]any)
-	if e["maxInputTokens"] != 200000 || e["maxOutputTokens"] != zcodeMaxOutput || e["supportsReasoning"] != true ||
+	if e["maxInputTokens"] != 200000 || e["maxOutputTokens"] != 500000 || e["supportsReasoning"] != true ||
 		r["canDisableThinking"] != true || r["defaultEffort"] != "high" || len(r["supportedEfforts"].([]string)) != 2 {
 		t.Fatalf("%v", e)
 	}
