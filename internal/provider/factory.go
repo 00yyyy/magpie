@@ -585,7 +585,8 @@ type factoryModel struct {
 // factoryModels are the ones droid's /model picker offers, less auto (droid
 // picks it client side). Gemini's are the ones droid 0.231.0's CLI registry
 // still offers (provider google); 2.5 and Gemini 3 Pro Image are
-// availableInCLI false there, and stay out. They go to /api/llm/g.
+// availableInCLI false there, and stay out. They go to /api/llm/g. Gemini 4
+// Argon is droid 0.241.1's (#2080), behind a Factory feature flag there.
 // Haiku 5.5 and Mistral Large 4 are droid 0.240.0's; GPT-6 Astra Ultra
 // Fast, new there too, stays out, as droid offers it only once the user
 // has accepted Factory's high-cost terms for it.
@@ -611,6 +612,7 @@ var factoryModels = []factoryModel{
 	{"gpt-5.3-codex", "GPT-5.3-Codex", Responses, "openai", 400000, 128000, []string{"low", "medium", "high", "xhigh"}, true},
 	{"grok-4.7", "Grok 4.7", Responses, "xai", 500000, 63356, []string{"low", "medium", "high", "xhigh"}, true},
 	{"grok-4.6", "Grok 4.6", Responses, "xai", 200000, 63356, []string{"low", "medium", "high", "xhigh"}, true},
+	{"gemini-4-argon", "Gemini 4 Argon", Gemini, "google", 1000000, 65536, []string{"low", "medium", "high"}, true},
 	{"gemini-3.1-pro-preview", "Gemini 3.1 Pro", Gemini, "google", 1000000, 65536, []string{"low", "medium", "high"}, true},
 	{"gemini-3.8-flash", "Gemini 3.8 Flash", Gemini, "google", 1000000, 65536, []string{"low", "medium", "high"}, true},
 	{"gemini-3.7-flash", "Gemini 3.7 Flash", Gemini, "google", 1000000, 65536, []string{"low", "medium", "high"}, true},
