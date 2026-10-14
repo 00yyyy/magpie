@@ -74,10 +74,13 @@ const providerUsage = `usage:
                                           without saying when it is back (default: 15 minutes; at most 8 days),
                                           or until the time of day a daily allowance comes back, on this
                                           computer's clock or at the vendor's offset from UTC
-  magpie provider rest-cap <id> [30m|6h|1d|default]
+  magpie provider rest-cap <id> [1m|30m|6h|1d|off|default]
                                           the most a key or account sits out while it keeps failing or being
                                           rate limited, its rest doubling each time from a minute (default:
-                                          10 minutes for a failure, 30 for a rate limit; at most 8 days)
+                                          10 minutes for a failure, 30 for a rate limit; at most 8 days);
+                                          off: one that fails without saying why (a relay's 5xx) doesn't
+                                          rest at all, while out of quota, its key refused or rate limited
+                                          still rests it
   magpie provider listed <id> yes|no      no: its models serve only through routing groups, not in the list
   magpie provider off|on <id>             switch it off (kept, but no agent or request uses it), or on again
   magpie provider test <id> [--as codex|claude-code] [model…]
@@ -1655,14 +1658,14 @@ func quotaRestCmd(rest []string) error {
 // while they keep failing or being rate limited (#2008).
 func restCapCmd(rest []string) error {
 	if len(rest) < 1 || len(rest) > 2 {
-		return fmt.Errorf("magpie provider rest-cap <id> [30m|6h|1d|default]")
+		return fmt.Errorf("magpie provider rest-cap <id> [1m|30m|6h|1d|off|default]")
 	}
 	p, err := provider.Find(rest[0])
 	if err != nil {
 		return err
 	}
 	if len(rest) > 1 {
-		minutes, err := restMinutes(rest[1])
+		minutes, err := restCapMinutes(rest[1])
 		if err != nil {
 			return err
 		}
@@ -1673,12 +1676,29 @@ func restCapCmd(rest []string) error {
 			return err
 		}
 	}
-	if p.RestCap > 0 {
+	if p.NoFailRest() {
+		fmt.Printf("%s · a key or account that fails without saying why doesn't rest: the next request asks it again. Out of quota or credit, its key refused or its model not served still rests it; rate limited, at most 30 minutes (magpie's own)\n", p.Name)
+	} else if p.RestCap > 0 {
 		fmt.Printf("%s · a key or account that keeps failing sits out at most %s\n", p.Name, restWords(time.Duration(p.RestCap)*time.Minute))
 	} else {
 		fmt.Printf("%s · a key or account that keeps failing sits out at most 10 minutes, 30 when rate limited (magpie's own)\n", p.Name)
 	}
 	return nil
+}
+
+// restCapMinutes reads a rest cap as restCapCmd takes it: as restMinutes
+// does, but off (or never) is provider.RestCapOff, no rest after an
+// unknown failure, and a cap under a minute is turned away with what to
+// set instead, as the first rest is a minute already.
+func restCapMinutes(s string) (int, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "off", "never", "no":
+		return provider.RestCapOff, nil
+	}
+	if d, err := time.ParseDuration(strings.TrimSpace(s)); err == nil && d > 0 && d < time.Minute {
+		return 0, fmt.Errorf("the shortest rest cap is 1m, which rests a minute every time, not longer; off doesn't rest after an unknown failure at all")
+	}
+	return restMinutes(s)
 }
 
 // restMinutes reads a rest as quotaRestCmd takes it: default (0), a

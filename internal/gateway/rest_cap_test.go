@@ -50,3 +50,62 @@ func TestRestCapOr(t *testing.T) {
 		t.Error(d)
 	}
 }
+
+// Kismet Alan on Discord: a relay or account pool whose unknown errors
+// come now and then, the next request often going through, is set never
+// to rest after one (`magpie provider rest-cap <id> off`). Its 5xx and its
+// dropped connection rest it no more, nor count toward a backoff; what
+// says why still rests it as before: a rate limit (magpie's own 30
+// minutes cap), out of quota, its key refused, its model not served.
+func TestRestCapOff(t *testing.T) {
+	s := &Server{}
+	c := candidate{p: provider.Provider{ID: "nofail", Key: "k", RestCap: provider.RestCapOff}, model: "m", rest: "nofail#k"}
+	id := c.restKey()
+	t.Cleanup(func() {
+		clearRest(id)
+		clearRest(c.restID())
+		routed.Lock()
+		delete(routed.failures, id)
+		delete(routed.failures, c.restID())
+		routed.Unlock()
+	})
+	fail := `{"error":{"message":"upstream connect error","type":"api_error"}}`
+	for i, status := range []int{500, 502, 503, 504, 520} {
+		r := s.restAfter(c, status, http.Header{}, []byte(fail))
+		if r.Why != failOther || r.By != "off" || r.Until.After(time.Now()) {
+			t.Fatalf("#%d %d: rests %v by %s (%s), want no rest", i+1, status, time.Until(r.Until), r.By, r.Why)
+		}
+		if resting(c) {
+			t.Fatalf("#%d %d: set aside", i+1, status)
+		}
+	}
+	routed.Lock()
+	n := routed.failures[id]
+	routed.Unlock()
+	if n != 0 {
+		t.Fatalf("%d failures counted", n)
+	}
+	// what says why rests it still
+	for _, k := range []struct {
+		status int
+		body   string
+		why    string
+	}{
+		{401, `{"error":{"message":"invalid api key","type":"api_error"}}`, failOther},
+		{403, `{"error":{"message":"forbidden","type":"api_error"}}`, failOther},
+		{429, `{"error":{"message":"Too many requests","type":"rate_limit_error"}}`, failRate},
+		{429, `{"error":{"message":"You exceeded your current quota, please check your plan","type":"insufficient_quota"}}`, failCredit},
+		{404, `{"error":{"message":"The model m does not exist or you do not have access to it","type":"invalid_request_error"}}`, failOther},
+	} {
+		clearRest(id)
+		clearRest(c.restID())
+		r := s.restAfter(c, k.status, http.Header{}, []byte(k.body))
+		if r.Why != k.why || r.By == "off" || !r.Until.After(time.Now()) || !resting(c) {
+			t.Fatalf("%d %s: rests %v by %s (%s), want a rest as %s", k.status, k.body, time.Until(r.Until), r.By, r.Why, k.why)
+		}
+	}
+	// a rate limit's cap is magpie's own 30 minutes, not none
+	if d := c.p.RestCapOr(longestRateRest); d != longestRateRest {
+		t.Fatalf("rate cap %v", d)
+	}
+}

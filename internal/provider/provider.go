@@ -186,7 +186,8 @@ type Provider struct {
 	// out while it keeps failing or keeps being rate limited as soon as
 	// its rest is over (#2008); 0 is the gateway's own, 10 minutes for a
 	// failure and 30 for a rate limit. The vendor's own "try again in"
-	// still stands over it.
+	// still stands over it. RestCapOff (-1): no rest at all after a
+	// failure that says nothing of why, a rate limit's as the gateway's own.
 	RestCap int `json:"restCap,omitempty"`
 
 	// PriceRate is what the provider charges against the official price
@@ -1172,7 +1173,9 @@ func normalize(p Provider) Provider {
 	p.QueueLimit, p.QueueWait = min(max(p.QueueLimit, 0), MaxQueueLimit), min(max(p.QueueWait, 0), MaxQueueWait)
 	p.MaxRPM = min(max(p.MaxRPM, 0), MaxRPMLimit)
 	p.QuotaRest = min(max(p.QuotaRest, 0), MaxQuotaRest)
-	p.RestCap = min(max(p.RestCap, 0), MaxQuotaRest)
+	if p.RestCap != RestCapOff {
+		p.RestCap = min(max(p.RestCap, 0), MaxQuotaRest)
+	}
 	if _, err := ParseResetAt(p.QuotaResetAt); err != nil {
 		p.QuotaResetAt = ""
 	}

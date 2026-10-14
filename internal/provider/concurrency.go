@@ -322,8 +322,23 @@ func SetQuotaResetAt(id, at string) error {
 	return Save(*p)
 }
 
+// RestCapOff is RestCap set to off (`magpie provider rest-cap <id> off`):
+// a key or account of the provider that fails without saying why — a
+// relay's or an account pool's 5xx, a dropped connection — doesn't rest at
+// all, and is asked again by the next request as if it hadn't failed
+// (Kismet Alan on Discord: an aggregator's unknown errors fail now and
+// then, and the next request often goes through). What the vendor said
+// plainly still rests it as ever: out of quota or credit, rate limited,
+// its key refused (401, 403), its model not served, its window full.
+const RestCapOff = -1
+
+// NoFailRest says p's keys and accounts don't rest after an unknown
+// failure (RestCapOff).
+func (p Provider) NoFailRest() bool { return p.RestCap == RestCapOff }
+
 // RestCapOr is the most one of p's keys or accounts sits out while it keeps
-// failing: the user's RestCap, else the gateway's own def.
+// failing: the user's RestCap, else the gateway's own def (RestCapOff
+// included: it says nothing of a rate limit's rest).
 func (p Provider) RestCapOr(def time.Duration) time.Duration {
 	if c := min(max(p.RestCap, 0), MaxQuotaRest); c > 0 {
 		return time.Duration(c) * time.Minute
@@ -333,10 +348,10 @@ func (p Provider) RestCapOr(def time.Duration) time.Duration {
 
 // SetRestCap sets the most, in minutes, the provider's keys and accounts
 // sit out while they keep failing or being rate limited, 0 for the
-// gateway's own.
+// gateway's own, RestCapOff for no rest after an unknown failure.
 func SetRestCap(id string, minutes int) error {
-	if minutes < 0 || minutes > MaxQuotaRest {
-		return fmt.Errorf("the longest rest is from 0 (magpie's own) to %d minutes (8 days), not %d", MaxQuotaRest, minutes)
+	if minutes != RestCapOff && (minutes < 0 || minutes > MaxQuotaRest) {
+		return fmt.Errorf("the longest rest is from 0 (magpie's own) to %d minutes (8 days), or off, not %d", MaxQuotaRest, minutes)
 	}
 	p, err := Find(id)
 	if err != nil {

@@ -380,7 +380,9 @@ type Rest struct {
 	// (the allowance window it filled renews), "quota" (no word of when),
 	// "cooldown" (a minute), "backoff" (longer each time it fails again,
 	// or is rate limited again as soon as it is back), "restricted" (the
-	// vendor restricted the account: two hours, or until lifted by hand).
+	// vendor restricted the account: two hours, or until lifted by hand),
+	// "off" (no rest: its provider is set not to rest after an unknown
+	// failure, provider.RestCapOff).
 	By       string `json:"by"`
 	Failures int    `json:"failures,omitempty"` // in a row, for a backoff
 	// Key is what it rests by, for the app to lift the rest (Unrest)
@@ -699,6 +701,16 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		}
 		r.Link, _ = provider.Verification([]byte(r.said))
 	default:
+		// the provider set never to rest after a failure that says nothing
+		// of why (provider.RestCapOff; Kismet Alan on Discord: a relay's
+		// or an account pool's unknown errors come now and then, and the
+		// next request often goes through): it isn't set aside, nor its
+		// failure counted. A key refused, a model not served, or a window
+		// full still rests it, as they say why
+		if c.p.NoFailRest() && why == failOther && !unserved && status != http.StatusUnauthorized && status != http.StatusForbidden && (c.p.Account == nil || c.full(now).IsZero()) {
+			r.By, r.Until = "off", now
+			return r
+		}
 		counted := c.restKey()
 		if unserved {
 			counted = c.restID()

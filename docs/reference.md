@@ -1441,7 +1441,13 @@ minutes. Out of credit rests half an hour. Any other failure rests a minute, lon
 again, up to 10 minutes; a subscription that fails with a window used up
 rests until that window renews. `magpie provider rest-cap <id> 4h` moves
 both of those caps, 30 and 10 minutes, for one provider's keys and
-accounts, up to 8 days; `default` gives them back.
+accounts, from 1 minute (every rest a minute) up to 8 days; `default` gives
+them back. `magpie provider rest-cap <id> off` is for a relay or an account
+pool whose unknown errors come now and then: a key or account of it that
+fails without saying why (a 5xx, a dropped connection) doesn't rest at all,
+and the next request asks it again. A refused key (401, 403), a model it
+doesn't serve, being out of quota or credit, or a rate limit still rests
+it as above.
 
 **When the safety filter refuses.** A reply the vendor's safety filter
 refuses before any of it is said rests nobody: it is about what was asked,
