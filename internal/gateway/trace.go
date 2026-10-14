@@ -102,6 +102,10 @@ type Route struct {
 	// Conv: the conversation a request without a session id is part of,
 	// as a digest of its first user turn (conversationID)
 	Conv string `json:"conv,omitempty"`
+	// Folder: the last two levels of the folder its agent says it works
+	// in (shortFolder), never the whole path; a request that says none
+	// takes its session's, as said last (#1068)
+	Folder string `json:"folder,omitempty"`
 }
 
 // RouteUsage is one billable attempt's pricing inputs, kept in routing history.
@@ -410,6 +414,14 @@ type trace struct {
 	bodies []keptBody
 	// turns follows agents' turns, to say when one is done (TurnDone)
 	turns turns
+	// folders: each session's folder, as its requests said it last, for
+	// the requests that don't say it (a title, a topic check)
+	folders map[string]sessionFolder
+}
+
+type sessionFolder struct {
+	folder string
+	at     time.Time
 }
 
 // Totals count the requests routed since the gateway started.
@@ -443,8 +455,16 @@ func (t *trace) beginFor(req *http.Request, r Route) *Route {
 }
 
 func (t *trace) begin(r Route) *Route {
+	// the body is read for its folder before the lock: a long one takes
+	// a while, and every route waits on the lock
+	if r.dirOf != nil {
+		dir := r.dirOf()
+		r.dirOf = func() string { return dir }
+		r.Folder = shortFolder(dir)
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.sessionFolder(&r, time.Now())
 	if t.ids == 0 {
 		// ids go on from one run to the next, the history keeping them
 		// all: counted on from the time the gateway began
@@ -462,6 +482,63 @@ func (t *trace) begin(r Route) *Route {
 	t.changed()
 	rp.Seq = t.seq
 	return rp
+}
+
+// foldersKeep is how many sessions' folders are kept, the oldest said
+// going first when there are more.
+const foldersKeep = 512
+
+// sessionFolder gives r its session's folder when it says none, and keeps
+// the one it says for those that come after: an agent's requests on the
+// side, a title or a topic check, have no full system prompt to say it.
+// A request with no session id has only its own (#1068).
+func (t *trace) sessionFolder(r *Route, now time.Time) {
+	key := func(s string) string {
+		if s == "" {
+			return ""
+		}
+		return r.Agent + "\x00" + s
+	}
+	own, parent := key(r.Session), key(r.ParentSession)
+	if r.Folder == "" {
+		for _, k := range []string{own, parent} {
+			if f, ok := t.folders[k]; ok && k != "" {
+				r.Folder = f.folder
+				return
+			}
+		}
+		return
+	}
+	if own == "" {
+		return
+	}
+	if t.folders == nil {
+		t.folders = map[string]sessionFolder{}
+	}
+	t.folders[own] = sessionFolder{r.Folder, now}
+	for len(t.folders) > foldersKeep {
+		oldest := ""
+		for k, f := range t.folders {
+			if oldest == "" || f.at.Before(t.folders[oldest].at) {
+				oldest = k
+			}
+		}
+		delete(t.folders, oldest)
+	}
+}
+
+// shortFolder is the last two levels of dir, "/"-joined: enough to tell
+// one project from another, without the rest of the path (#1068). A
+// Windows drive is no level; "" for none.
+func shortFolder(dir string) string {
+	parts := strings.FieldsFunc(strings.TrimSpace(dir), func(c rune) bool { return c == '/' || c == '\\' })
+	if len(parts) > 0 && len(parts[0]) == 2 && parts[0][1] == ':' {
+		parts = parts[1:]
+	}
+	if len(parts) > 2 {
+		parts = parts[len(parts)-2:]
+	}
+	return strings.Join(parts, "/")
 }
 
 // trim keeps traceKeep routes, the oldest finished ones going first: a

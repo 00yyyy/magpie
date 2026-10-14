@@ -1153,6 +1153,10 @@
     return SPARE[h % SPARE.length];
   }
 
+  // foldersOf: the folders routes say, each once, in their order;
+  // lastLevel, a folder's last level ("workspace/magpie" → "magpie")
+  const foldersOf = (rs) => [...new Set(rs.map((r) => r.folder).filter(Boolean))];
+  const lastLevel = (f) => f.split("/").pop();
   function agentNode(id) {
     let a = agents.get(id);
     if (a) return a;
@@ -1327,7 +1331,13 @@
       const a = agents.get(id), r = rs.filter((x) => x.agent === id).pop(), ag = agentOf(id);
       if (a.icon !== (ag?.icon || "generic")) { a.icon = ag?.icon || "generic"; a.ic.replaceChildren(icon(a.icon)); }
       a.name.textContent = agentName(id);
-      a.sub.textContent = r.model;
+      // one agent working in more than one folder at once: which, by
+      // their last level (#1068). The stage holds an agent's latest
+      // request alone, so its others still going, or just done, count too.
+      const n = now(), going = pinned ? [] : [...src().values()].filter((x) => x.agent === id && (!x.done || at(x.time) + (x.ms || 0) > n - LINGER));
+      const fs = foldersOf([...new Set([...going, ...rs.filter((x) => x.agent === id)])].sort((x, y) => x.id - y.id));
+      a.sub.textContent = fs.length > 1 ? fs.map(lastLevel).join(", ") : r.model;
+      a.node.title = [agentName(id), r.model, ...fs.map((f) => t("Folder") + ": " + f)].join("\n");
     }
     // the account sets, the latest of each
     const latest = new Map();
@@ -1976,11 +1986,13 @@
   // the row no longer says (#337)
   function reqTitle(r, how, tr) {
     const head = `${agentName(r.agent)} · ${r.model} → `;
+    // the folder its agent works in, the last two levels of it (#1068)
+    const folder = r.folder ? "\n" + t("Folder") + ": " + r.folder : "";
     const w = how !== "bad" && r.tries.length > 1 && tr && tried(r, tr);
-    if (!w) return head + r.provider;
+    if (!w) return head + r.provider + folder;
     const first = r.tries[0], f = tried(r, first);
     const from = f && seat(f) !== seat(w) ? "\n" + t("rerouted from {from}", { from: `${where(f)} · ${first.model || f.model}` }) : "";
-    return head + `${where(w)} · ${tr.model || w.model}` + from;
+    return head + `${where(w)} · ${tr.model || w.model}` + from + folder;
   }
 
   // the requests the gateway keeps, newest first: pick one to see how it was routed
@@ -2192,11 +2204,14 @@
       const memory = g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:memory_consolidation");
       const suggestions = g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:ambient_suggestions");
       const name = g.rows.find((r) => r.sessionTitle)?.sessionTitle || otherTitles.get(ownKey(g.r)) || (memory ? t("Background memory task") : suggestions ? t("Background prompt suggestions") : "");
-      setText(x.name, g.key ? agentName(g.r.agent) + " · " + (name || groupSession(g.r)) : t("No session ID"));
+      // the folder the session works in, as its latest request said it
+      // (#1068): it tells two runs of one agent apart before their titles
+      const folder = g.key ? g.rows.find((r) => r.folder)?.folder || "" : "";
+      setText(x.name, g.key ? [agentName(g.r.agent), folder, name || (folder ? "" : groupSession(g.r))].filter(Boolean).join(" · ") : t("No session ID"));
       const purpose = memory ? t("Codex is organizing memories from earlier chats in the background. This can continue after a chat finishes.") + "\n"
         : suggestions ? kindWhy(g.r) + "\n"
         : g.rows.some((r) => r.parentMatched) ? t("Title requests were automatically matched using the prompt and the applied chat title.") + "\n" : "";
-      x.name.title = g.key ? (name ? name + "\n" : "") + purpose + t("Session id") + ": " + groupSession(g.r) : t("These requests did not provide a session ID; they are not treated as one conversation.");
+      x.name.title = g.key ? (name ? name + "\n" : "") + purpose + (folder ? t("Folder") + ": " + folder + "\n" : "") + t("Session id") + ": " + groupSession(g.r) : t("These requests did not provide a session ID; they are not treated as one conversation.");
       const bits = [t(g.rows.length === 1 ? "{n} request" : "{n} requests", { n: g.rows.length })];
       if (visibleMetrics.includes("tokens") && total.tokens) bits.push(t("{n} tokens", { n: tokens(total.tokens) }));
       if (total.running) bits.push(t("{n} in progress", { n: total.running }));
@@ -5070,7 +5085,7 @@
       n.node.style.setProperty("--agent", hueOf(id));
       n.wire.style.setProperty("--agent", hueOf(id));
       n.node.replaceChildren(icon(ag?.icon || "generic"), el("span", "ps-name", agentName(id)));
-      n.node.title = agentName(id);
+      n.node.title = [agentName(id), ...foldersOf(recent.filter((r) => r.agent === id).slice(0, 20).reverse()).map((f) => t("Folder") + ": " + f)].join("\n");
       return n.node;
     }));
     pTo.replaceChildren(...pDst.map((k) => {
