@@ -5045,7 +5045,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		msg := p.Name + ": " + errEndedShort.Error()
 		return writeError(w, from, 502, msg), msg
 	}
-	if empty && !saidAnything(col.res.Parts) && answersNothing(col.res.Stop) {
+	if (empty || repliesCounted(actual) && uncounted(col.res.Usage)) && !saidAnything(col.res.Parts) && answersNothing(col.res.Stop) {
 		msg := p.Name + ": " + emptyReply
 		return writeError(w, from, 502, msg), msg
 	}
@@ -5075,6 +5075,22 @@ const emptyReply = "an empty reply (the model answered nothing; try again)"
 // protocol's is.
 func emptyFails(proto provider.Protocol) bool {
 	return proto == provider.CodeAssist || proto == provider.Gemini
+}
+
+// repliesCounted tells whether every whole reply in proto counts its tokens:
+// Anthropic's message_start counts the prompt, Responses' response.completed
+// its usage. One of these that says nothing and counted nothing is no reply
+// at all, whatever its end says: #2086's proxy ended a Codex turn with a
+// stop and no tokens, which went to Codex as a completed turn with no
+// message, and Codex didn't ask again. Claude's own empty end_turn counts
+// its prompt and stays an answer.
+func repliesCounted(proto provider.Protocol) bool {
+	return proto == provider.Anthropic || proto == provider.Responses
+}
+
+// uncounted tells whether a reply's usage counted no token at all.
+func uncounted(u Usage) bool {
+	return u.Input+u.Output+u.CacheRead+u.CacheWrite == 0
 }
 
 // answersNothing tells whether a reply with nothing said ended for no

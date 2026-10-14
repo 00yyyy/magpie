@@ -304,7 +304,10 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 	var failedStatus int
 	var cut, errSent bool
 	var empty bool // a reply in this protocol that says nothing fails (#667)
-	empties := 0   // the times such a reply was asked again here
+	// counts: a reply in this protocol counts its tokens, and one that
+	// said nothing and counted none fails too (repliesCounted, #2086)
+	var counts bool
+	empties := 0 // the times such a reply was asked again here
 	said, stop := false, ""
 	var kept []Event       // the reply's end, while nothing is said in it
 	var before, this Usage // what the tries before this one billed, and this try
@@ -366,7 +369,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		case KStop:
 			stop = ev.Stop
 		}
-		if empty && !said {
+		if (empty || counts) && !said {
 			switch {
 			case saysSomething(ev):
 				said = true
@@ -406,7 +409,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		if err == nil {
 			u.RequestID = requestID(res.Header)
 			summaryUpstream = actual == provider.Responses || actual == provider.Gemini || actual == provider.CodeAssist
-			empty = emptyFails(actual)
+			empty, counts = emptyFails(actual), repliesCounted(actual)
 		}
 		if err == nil && res.StatusCode >= 400 {
 			b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -511,7 +514,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			if held != nil {
 				held()
 			}
-			if empty && !said && answersNothing(stop) {
+			if (empty || counts && uncounted(this)) && !said && answersNothing(stop) {
 				if empties < emptyRetries(w, r.Context()) && r.Context().Err() == nil {
 					// asked again here first, for the agent to have the
 					// answer rather than the error: Gemini on a long
