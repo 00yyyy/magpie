@@ -96,6 +96,18 @@ function serve(lang) {
   };
 }
 
+// History can be below the phone footer after the full story paints.
+// Reach it with user input; click scrolling is intentionally blocked.
+async function reach(page, target, width) {
+  for (let i = 0; i < 20; i++) {
+    const box = await target.boundingBox(), view = await page.locator("#view-routing").boundingBox();
+    if (box && box.y >= view.y && box.y + box.height <= view.y + view.height) break;
+    await page.mouse.move(width / 2, 380);
+    await page.mouse.wheel(0, box && box.y < view.y ? -250 : 250);
+    await page.waitForTimeout(100);
+  }
+}
+
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
     for (const width of [1100, 420]) {
@@ -116,8 +128,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await browser.close();
         });
         await page.goto("http://magpie.test/?view=routing");
-        await page.locator(".rt-days .rt-day").nth(1).click();
-        await page.locator(".rt-req").first().click();
+        const day = page.locator(".rt-days .rt-day").nth(1);
+        await reach(page, day, width);
+        await day.click();
+        const row = page.locator(".rt-req").first();
+        await reach(page, row, width);
+        await row.click();
         const src = page.locator(".rt-src").filter({ hasText: "OpenAI" });
         await src.waitFor();
         const got = await src.evaluate((n) => ({

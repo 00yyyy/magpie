@@ -56,7 +56,7 @@ function serve(lang, feed) {
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data) => route.fulfill({ json: data });
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true}; localStorage.setItem("magpie.routingContext", "1");` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json(state);
     if (url.pathname === "/api/gateway/trace") {
@@ -78,7 +78,7 @@ function serve(lang, feed) {
 const sizes = [["en", 420], ["en", 1100], ["zh", 420], ["zh", 1100], ["zh-TW", 900], ["ja", 900], ["de", 420]];
 // the parts of the card watched on every frame
 const WATCH = {
-  card: ".rt-ctx .ctx-card", model: ".rt-ctx .ctx-model", state: ".rt-ctx .ctx-state", used: ".rt-ctx .ctx-stat .ctx-big b",
+  card: ".rt-ctx-detail .ctx-body", header: ".rt-ctx-toggle .ctx-title", state: ".rt-ctx-toggle .ctx-state", used: ".rt-ctx .ctx-stat .ctx-big b",
   cache: ".rt-ctx .ctx-cache", figure: ".rt-ctx .ctx-cache .ctx-big b", bar: ".rt-ctx .ctx-cache .ctx-bar", grid: ".rt-ctx .ctx-waffle",
   legend: ".rt-ctx .ctx-legend", foot: ".rt-ctx .ctx-foot",
 };
@@ -150,7 +150,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             seen.push([id, step, await cacheNow()]);
             if (process.env.ARTIFACT_DIR && id === 104 && step !== "start") {
               await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
-              await page.locator(".rt-ctx .ctx-card").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-${step === "read" ? "live" : "done"}.png`) });
+              await page.locator(".rt-ctx-detail .ctx-body").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-${step === "read" ? "live" : "done"}.png`) });
             }
           }
         }
@@ -196,7 +196,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(est.bar, "hidden", "no empty bar under the dash");
         const after = await page.evaluate((s) => [...document.querySelectorAll(s)].map((e) => e.getBoundingClientRect().y), Object.values(WATCH).join(","));
         assert.deepEqual(after.map(Math.round), before.map(Math.round), "nothing moved for the estimated request");
-        if (process.env.ARTIFACT_DIR) await page.locator(".rt-ctx .ctx-card").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-none.png`) });
+        if (process.env.ARTIFACT_DIR) await page.locator(".rt-ctx-detail .ctx-body").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-none.png`) });
         // another session's first request, under way: no last request of
         // its own to show, so a dash till it is read, in the same place
         const top = await page.locator(".rt-ctx .ctx-cache").evaluate((e) => e.getBoundingClientRect().y);
@@ -208,7 +208,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(soon.gap >= 3, `the dash and its word are apart: ${soon.gap}px`);
         assert.equal(soon.bar, "hidden");
         assert(Math.abs(await page.locator(".rt-ctx .ctx-cache").evaluate((e) => e.getBoundingClientRect().y) - top) <= 0.5, "the cache kept its place");
-        if (process.env.ARTIFACT_DIR) await page.locator(".rt-ctx .ctx-card").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-soon.png`) });
+        if (process.env.ARTIFACT_DIR) await page.locator(".rt-ctx-detail .ctx-body").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-soon.png`) });
         assert.deepEqual(errors, []);
         feed.next?.(req(999, "done"));
         await context.close();

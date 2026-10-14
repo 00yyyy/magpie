@@ -33,6 +33,39 @@ three.
 
 ## Constraints and failure behavior
 
+### Routing context header and wide layout
+
+Routing keeps its descriptive request heading, visible stage caption and
+full request story. At 1100px card width the stage and caption share the
+upper left column, with the story on the right. The page keeps its shared
+1200px content cap. Context stays below both columns. Its overview and
+content list share a row from 800px, using the same split so the separators
+align; the content label and scrollable filters remain on one line, and a
+long list scrolls within the card. Smaller cards stack these regions.
+
+A request with prompt data has one clickable context header. Closed, it
+shows used/window tokens, fill, cache and the occupancy bar; the grid and
+content rows are not constructed until opened. Open, the counts appear in
+the body, without a second header. The preference is stored separately as
+`magpie.routingContext`; an absent preference reads the existing
+`magpie.ctxShut` choice. An opening from Usage's Context tab applies to one
+request without replacing the saved choice. The next selected request
+restores it. Clicking the header keeps its position, and its preference
+survives incoming requests and reloads.
+
+The existing live context patching, cache state, text viewer and Routing
+story's node and logo retention remain in use. An open card retains its
+cells and unchanged rows while a new prompt arrives. The fixed grid row
+height bounds the space used by unused tokens. Usage context cards keep
+their existing header and layout.
+While a new live prompt is still being read, the carried context remains
+available for opening and closing without removing the card.
+
+See `routing-context-layout.test.cjs`, `routing-context-fold.test.cjs`,
+`routing-ctx-fold.test.cjs`, `routing-live-patch.test.cjs` and
+`routing-ctx-still.test.cjs`; `routing-log-icons.test.cjs` guards main's
+live story and logo retention in both engines and all five languages.
+
 ### Streamed output speed
 
 Usage rows and aggregates use `Record.Decode` and `DecodeOf` in

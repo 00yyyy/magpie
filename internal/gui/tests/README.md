@@ -6,6 +6,18 @@ covers saving and reloading, escaped and non-UTF-8 credentials, masked
 addresses/status, clearing authentication, Tab and Escape, mode switches,
 HTTP compatibility, and narrow windows in English and Chinese on Chromium
 and WebKit.
+## Routing context header
+
+`routing-context-layout.test.cjs` checks one lazy context header, full
+routing reasons, the visible stage caption and original heading, aligned
+wide-card separators, narrow windows, keyboard controls, reload and
+preference retention in both engines and all five languages.
+`MAGPIE_CONTEXT_ASSETS` points at base assets for a negative check.
+The folded-context, live-patch and every-frame suites retain the upstream
+geometry, cache, cell identity and Usage-link assertions using the unified
+header. The live story logo tests retain their upstream fixtures and node
+identity assertions.
+
 ## Installed desktop fonts
 
 `fonts.test.cjs` exercises the interface/code font controls with installed

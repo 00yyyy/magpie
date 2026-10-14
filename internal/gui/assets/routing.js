@@ -67,12 +67,33 @@
     stats.append(s);
   }
   foot.append(cap, stats);
+  const main = el("div", "rt-main");
   const log = el("div", "rt-log");
   const logHead = el("div", "rt-log-head");
   const steps = el("ol", "rt-steps");
   // what the request's prompt held: its context window (context.js)
   const ctxBox = el("div", "rt-ctx");
-  log.append(logHead, steps, ctxBox);
+  ctxBox.hidden = true;
+  const ctxToggle = el("button", "ctx-head rt-ctx-toggle");
+  ctxToggle.type = "button";
+  ctxToggle.dataset.unrolls = "";
+  const ctxDetail = el("div", "rt-ctx-detail");
+  ctxDetail.id = "rtContextDetails";
+  ctxToggle.setAttribute("aria-controls", ctxDetail.id);
+  ctxBox.append(ctxToggle, ctxDetail);
+  let contextOpen = false;
+  try {
+    const pref = localStorage.getItem("magpie.routingContext");
+    contextOpen = pref !== null ? pref === "1" : localStorage.getItem("magpie.ctxShut") === "0";
+  } catch {}
+  ctxToggle.onclick = () => {
+    contextOpen = !(contextOpen || !!ctxFor);
+    ctxFor = 0;
+    try { localStorage.setItem("magpie.routingContext", contextOpen ? "1" : "0"); } catch {}
+    ctxKey = "";
+    steady(() => { if (logR) renderCtx(logR); });
+  };
+  log.append(logHead, steps);
   const off = el("div", "none rt-off");
   // over the stage while a replay plays: the time it is replaying, which
   // requests are in flight then, and where it is among them
@@ -85,7 +106,8 @@
   rTrack.append(rHead);
   rbar.append(rTop, rWhat, rTrack);
   rbar.hidden = true;
-  box.append(top, rbar, stage, foot, log, off);
+  main.append(top, rbar, stage, foot, log, off);
+  box.append(main, ctxBox);
 
   // under the stage: every request the gateway keeps, and each account or
   // key as those requests found it
@@ -232,7 +254,8 @@
       for (const [cls, fits] of Object.entries(marks)) node.classList.toggle(cls, fits(w));
     });
   }).observe(node);
-  byWidth(box, { max560: (w) => w <= 560 });
+  byWidth(box, { min800: (w) => w >= 800, min1100: (w) => w >= 1100 });
+  byWidth(main, { max560: (w) => w <= 560 });
   byWidth(list, { max460: (w) => w <= 460, max560: (w) => w <= 560 });
   byWidth(more, { max520: (w) => w <= 520, min1150: (w) => w >= 1150 });
   for (const col of [colA, colB]) byWidth(col, { max440: (w) => w <= 440, max760: (w) => w <= 760 });
@@ -1623,7 +1646,7 @@
   function renderLog() {
     const r = logR = pinned || cur;
     log.hidden = !r;
-    if (!r) return;
+    if (!r) { hideCtx(); return; }
     const on = () => listed().filter((x) => x.id >= logR.id);
     const head = JSON.stringify([document.documentElement.lang, !!rp, pinned?.id, r.id, r.time, r.done, !!pinned && on().length > 1]);
     if (headKey !== head) {
@@ -1699,33 +1722,53 @@
   // ctxFor is a request opened to see its context window (the Usage
   // page's Context tab): its card shows unfolded, it alone, whatever the
   // reader keeps folded
-  let ctxKey = "", ctxShown = 0, ctxTab = "all", ctxFor = 0;
+  let ctxKey = "", ctxShown = 0, ctxTab = "all", ctxFor = 0, ctxCarry = null;
+  function hideCtx() {
+    ctxBox.hidden = true;
+    box.classList.remove("has-context");
+    ctxKey = "";
+    ctxCarry = null;
+    ctxDetail.replaceChildren();
+    ctxShown = 0;
+  }
   function renderCtx(r) {
-    if (!r.prompt || !window.ctxCard) {
-      // a live request whose prompt the gateway is still reading keeps
-      // the card in its place until it has it, rather than the card
-      // going and coming back a moment later
-      if (!r.prompt && !r.done && !pinned && ctxBox.firstElementChild?.ctxUpdate) return;
-      if (ctxKey) { ctxKey = ""; ctxBox.replaceChildren(); }
+    // A Usage context link opens this request only, without changing the
+    // reader's saved preference for the next request or a reload.
+    if (ctxFor && ctxFor !== r.id) ctxFor = 0;
+    const open = contextOpen || ctxFor === r.id;
+    ctxToggle.setAttribute("aria-expanded", String(open));
+    ctxDetail.hidden = !open;
+    // Keep the last live context in place while the next prompt is read,
+    // including the closed summary. A deliberately picked request is fresh.
+    if (!r.prompt && !r.done && !pinned && !ctxBox.hidden && ctxCarry) r = ctxCarry;
+    ctxBox.hidden = !r.prompt || !window.ctxCard;
+    box.classList.toggle("has-context", !ctxBox.hidden);
+    if (ctxBox.hidden) {
+      ctxKey = "";
+      ctxCarry = null;
+      ctxDetail.replaceChildren();
       return;
     }
-    const sk = sessionKey(r);
+    ctxCarry = r;
+    const sk = open ? sessionKey(r) : "";
     const same = (x) => x.prompt && x.agent === r.agent && !x.kind && (sk ? sessionKey(x) === sk : r.conv && x.conv === r.conv);
-    const series = (sk || r.conv) && !r.kind ? listed().filter(same).sort((a, b) => a.id - b.id)
+    const series = open && (sk || r.conv) && !r.kind ? listed().filter(same).sort((a, b) => a.id - b.id)
       .map((x) => ({ id: x.id, tokens: x.prompt.tokens, time: x.time })) : null;
     if (series && !series.some((x) => x.id === r.id)) series.push({ id: r.id, tokens: r.prompt.tokens, time: r.time });
-    if (ctxFor && ctxFor !== r.id) ctxFor = 0;
-    const key = JSON.stringify([document.documentElement.lang, ctxFor, r.id, r.done, r.prompt.tokens, r.prompt.counted, r.prompt.window, r.usage?.length, series?.map((x) => x.id + ":" + x.tokens).join()]);
+    const key = JSON.stringify([document.documentElement.lang, r.id, r.done,
+      r.prompt, r.usage, series, open]);
     if (key === ctxKey) return;
     ctxKey = key;
+    if (ctxToggle.firstElementChild) window.ctxSummary(r, open, ctxToggle.firstElementChild);
+    else ctxToggle.replaceChildren(window.ctxSummary(r, open), svg(CHEV, 12, 1.6));
+    if (!open) { ctxDetail.replaceChildren(); return; }
+    const sess = groupSession(r) || r.conv || "";
     const still = ctxShown === r.id;
     ctxShown = r.id;
-    const sess = groupSession(r) || r.conv || "";
-    const card = ctxBox.firstElementChild;
-    const draw = card?.ctxUpdate && (still || !pinned) ? card.ctxUpdate : (r, o) => ctxBox.replaceChildren(window.ctxCard(r, o));
+    const card = ctxDetail.firstElementChild;
+    const draw = card?.ctxUpdate && (still || !pinned) ? card.ctxUpdate : (r, o) => ctxDetail.replaceChildren(window.ctxCard(r, o));
     draw(r, {
-      still, series, tab: ctxTab, place: "routing", foldable: true,
-      open: ctxFor === r.id, onFold: () => { ctxFor = 0; },
+      still: true, series, tab: ctxTab, place: "routing", headless: true,
       onTab: (id) => { ctxTab = id; },
       crumbs: [agentName(r.agent), sess && (sess.length > 14 ? sess.slice(0, 12) + "…" : sess), "#" + r.id],
       onPoint: (pt) => {

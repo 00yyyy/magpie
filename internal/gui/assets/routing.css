@@ -1,7 +1,9 @@
 /* Routing, live: the Gateway view's stage for what routing does with each
    request (routing.js). The same stage as the site's Model Routing, only
    played by the gateway's own trace. */
-.rt { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; margin: 0 0 18px; }
+#view-routing { overflow-y: scroll; }
+#view-routing > .row-head, #view-routing > .rt { flex-shrink: 0; }
+.rt { --rt-columns: minmax(0, 1fr) minmax(0, 1fr); background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; margin: 0 0 18px; }
 .rt-top { display: flex; flex-direction: column; gap: 3px; }
 .rt-what { font-size: 13px; color: var(--muted); }
 .rt-what b { color: var(--fg); font-weight: 600; }
@@ -119,6 +121,50 @@
 .rt-log { padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--line); }
 .rt-log-head { display: flex; align-items: center; font-size: 12px; font-weight: 600; color: var(--fg); }
 .rt-log-head .grow { flex: 1; }
+/* Context sits below both upper columns, and its own columns use
+   the same split so a tall content list cannot leave the stage empty. */
+.rt-main, .rt-log { min-width: 0; }
+.rt > .rt-ctx { margin-top: 12px; }
+.rt.min1100 .rt-main { display: grid; grid-template-columns: var(--rt-columns); column-gap: 24px; align-items: start; }
+.rt.min1100 .rt-top, .rt.min1100 .rt-replay { grid-column: 1 / -1; }
+.rt.min1100 .rt-stage { grid-column: 1; grid-row: 3; column-gap: 36px; }
+.rt.min1100 .rt-foot { grid-column: 1; grid-row: 4; }
+.rt.min1100 .rt-log { grid-column: 2; grid-row: 3 / 5; margin-top: 16px; padding: 0 0 0 24px; border-top: 0; border-left: 1px solid var(--line); }
+.rt.min1100 .rt-off { grid-column: 1 / -1; }
+.rt-ctx-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rt-ctx-toggle > svg { flex: none; }
+.rt-ctx-toggle[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.rt-ctx { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 12px; font-variant-numeric: tabular-nums; }
+.rt-ctx-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; padding: 3px 0; background: none; border: 0; border-radius: 4px; color: var(--fg); }
+.rt-ctx-toggle > svg { opacity: .5; }
+.rt-ctx-toggle:hover > svg { opacity: 1; }
+.ctx-summary { flex: 1; display: flex; align-items: center; gap: 6px 10px; min-width: 0; height: 20px; white-space: nowrap; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ctx-summary .ctx-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ctx-summary-numbers { display: flex; align-items: center; gap: inherit; flex: none; }
+.ctx-summary .ctx-stack { display: flex; }
+.rt:not(.min800) .ctx-summary { gap: 6px; font-size: 11px; }
+.rt:not(.min800) .ctx-summary .ctx-stack { min-width: 12px; }
+.ctx-summary .grow { flex: 1; }
+.ctx-summary .ctx-title { font-size: 12px; }
+.ctx-summary-used { color: var(--muted); white-space: nowrap; }
+.ctx-summary-used b { color: var(--fg); font-weight: 600; }
+.ctx-summary-est, .ctx-summary-cache { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.rt-ctx-detail, .rt-ctx-detail .ctx-body { min-width: 0; }
+.rt-ctx-detail .ctx-body { position: relative; display: flex; flex-direction: column; gap: 16px; }
+.rt-ctx-detail .ctx-overview { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.rt-ctx-detail .ctx-waffle { grid-template-columns: repeat(50, minmax(0, 1fr)); grid-auto-rows: 7px; }
+.rt-ctx-detail .ctx-waffle > i { aspect-ratio: auto; animation: none; }
+.rt-ctx-detail .ctx-bar i { animation: none; }
+.rt-ctx-detail .ctx-contents-head { flex-wrap: nowrap; }
+.rt-ctx-detail .ctx-contents-head .ctx-k { flex: none; }
+.rt-ctx-detail .ctx-contents-head .grow { display: none; }
+.rt-ctx-detail .ctx-contents-head .segs { flex: 0 1 auto; min-width: 0; margin-left: auto; }
+.rt-ctx-detail .ctx-contents-head .segs .opt { padding: 0 7px; }
+.rt-ctx-detail .ctx-rows { max-height: 234px; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px; margin: 0 -6px; }
+.rt.min800 .rt-ctx-detail .ctx-body { display: grid; grid-template-columns: var(--rt-columns); gap: 24px; }
+.rt.min800 .rt-ctx-detail .ctx-contents { min-width: 0; padding: 0 0 0 24px; border-top: 0; border-left: 1px solid var(--line); }
+.rt-ctx-detail .ctx-body.max420 :is(.ctx-mini, .ctx-tag) { display: none; }
+.rt-ctx-detail .ctx-body.max520 .ctx-top { gap: 12px; }
 .rt-steps { list-style: none; margin: 6px 0 0; padding: 0; display: grid; align-content: start; gap: 5px; counter-reset: rt; }
 .rt-steps li { position: relative; padding-left: 20px; font-size: 12.5px; line-height: 1.45; color: var(--fg-2); }
 .rt-steps li::before { content: ""; position: absolute; left: 5px; top: .5em; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
@@ -152,12 +198,12 @@
 .rt-accts:where(.max460) li.rt-fold .chev { grid-column: 3; grid-row: 1; }
 /* narrow (the tray panel): magpie and the agent side by side, the
    accounts under them, on a lane down their left */
-:where(.rt.max560) .rt-stage { grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 26px; padding: 16px 0; }
-:where(.rt.max560) .rt-accts { grid-column: 1 / -1; padding-left: 22px; }
+:where(.rt-main.max560) .rt-stage { grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 26px; padding: 16px 0; }
+:where(.rt-main.max560) .rt-accts { grid-column: 1 / -1; padding-left: 22px; }
 .rt-accts:where(.max560) li { grid-template-columns: 10px minmax(0, 1fr); }
 .rt-accts:where(.max560) em { grid-column: 2; white-space: normal; }
 .rt-accts:where(.max560) .bar { grid-column: 2; }
-:where(.rt.max560) .rt-stats { gap: 14px; }
+:where(.rt-main.max560) .rt-stats { gap: 14px; }
 /* the Routing view */
 #view-routing .row-head { margin: 14px 0 6px; padding: 0 2px; gap: 0; }
 #view-routing .row-head .note { font-size: 11px; color: var(--faint); margin-left: 8px; }
