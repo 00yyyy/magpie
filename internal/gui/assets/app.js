@@ -9801,7 +9801,7 @@ function renderImport(im) {
     return ed;
   }
 
-  const hosts = [...new Set([p.chat, p.responses, p.anthropic].filter(Boolean).map(hostOf))];
+  const hosts = [...new Set([p.chat, p.responses, p.anthropic, p.gemini].filter(Boolean).map(hostOf))];
   ed.append(el("div", "warnbox", t("Added from a link. Your prompts and this key will go to {hosts}; add it only if you trust the site that sent you here.", { hosts: hosts.join(", ") })));
 
   const name = input(im.name ?? p.name, t("e.g. My Relay"));
