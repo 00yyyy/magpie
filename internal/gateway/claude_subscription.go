@@ -3506,7 +3506,16 @@ func (r *subscriptionRun) drain() {
 	}
 }
 
-func (r *subscriptionRun) abort() {
+// stopGrace is how long Claude Code is given to clean up after it is asked
+// to end, before its tree is killed: it removes an OAuth refresh lock it
+// holds as it exits, which a SIGKILL left for the next requests to wait on
+// (#2195). Claude Code 2.1.299 exits within half a second of SIGTERM.
+const stopGrace = 5 * time.Second
+
+// abort ends the run: Claude Code is asked to end (proc.Tree.Stop) and its
+// tree killed if it hasn't within stopGrace. The run counts as ended at
+// once. The channel closes once the tree is.
+func (r *subscriptionRun) abort() <-chan struct{} {
 	r.mu.Lock()
 	t := r.tree
 	if t != nil && r.exited != nil {
@@ -3517,11 +3526,15 @@ func (r *subscriptionRun) abort() {
 		}
 	}
 	r.mu.Unlock()
+	var stopped <-chan struct{} = closedChan
 	if t != nil {
-		t.Kill()
+		stopped = t.Stop(stopGrace)
 	}
 	r.finish()
+	return stopped
 }
+
+var closedChan = func() chan struct{} { c := make(chan struct{}); close(c); return c }()
 
 // abortFor is abort, why kept for the log of a turn that finds the run
 // gone (whyNoRun); the first reason given is the one kept.
@@ -3543,8 +3556,14 @@ func (b *subscriptionBridge) abortAll() {
 		runs = append(runs, run)
 	}
 	b.mu.Unlock()
+	// each asked at once, then waited for: a Claude Code magpie exits
+	// under is not left to be killed by no one
+	stops := make([]<-chan struct{}, 0, len(runs))
 	for _, run := range runs {
-		run.abort()
+		stops = append(stops, run.abort())
+	}
+	for _, s := range stops {
+		<-s
 	}
 }
 
