@@ -774,7 +774,6 @@ func groupEntries(entries []Entry) []Entry {
 		// gateway sends max to the members that have no ultra
 		ultra := false
 		chatgpt := false // a ChatGPT account answers for a member
-		smallest := 0    // the smallest window a member is known to have
 		for i, m := range ms {
 			chatgpt = chatgpt || m.Provider.Account != nil && m.Provider.Account.Agent == "codex"
 			if !slices.ContainsFunc(ms[:i], func(o Member) bool { return o.Provider.ID == m.Provider.ID }) {
@@ -821,9 +820,6 @@ func groupEntries(entries []Entry) []Entry {
 			// for the one free model among them that holds 200k (#712)
 			if ctx > e.Context {
 				e.Context = ctx
-			}
-			if ctx > 0 && (smallest == 0 || ctx < smallest) {
-				smallest = ctx
 			}
 			if i == 0 {
 				e.ImageInput = imageInput
@@ -899,13 +895,40 @@ func groupEntries(entries []Entry) []Entry {
 		ruledEntry(&e, g.Live(), ms, entries)
 		if g.Context > 0 {
 			e.Context, e.WindowSet = g.Context, true
-		} else if g.Context == ContextSmallest && smallest > 0 {
-			e.Context = smallest
+		} else if smallest, typed := smallestWindow(entries, ms); g.Context == ContextSmallest && smallest > 0 {
+			e.Context, e.WindowSet = smallest, typed
 		}
 		e.Family = g.Family
 		out = append(out, e)
 	}
 	return out
+}
+
+// smallestWindow is the smallest window a member of ms is known to have
+// (0 when none is), and whether the user typed it, on the member's
+// provider for its model or all of its models. A group told its
+// smallest member's window is then told one the user typed (#2224: a
+// group following its smallest member, a 500K the user set on it, was
+// handed to Claude Desktop and Codex as magpie's default 272K, which a
+// group set to 500K itself wasn't). A tie counts as typed: the window is
+// the user's either way.
+func smallestWindow(entries []Entry, ms []Member) (n int, typed bool) {
+	for _, m := range ms {
+		ctx, set := 0, false
+		for _, x := range entries {
+			if x.Provider.ID == m.Provider.ID && x.Model == m.Model {
+				ctx, set = x.Context, x.WindowSet
+			}
+		}
+		switch {
+		case ctx <= 0:
+		case n == 0 || ctx < n:
+			n, typed = ctx, set
+		case ctx == n:
+			typed = typed || set
+		}
+	}
+	return n, typed
 }
 
 // levelsUnknown reports whether nothing magpie reads says which reasoning
