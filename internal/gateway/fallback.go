@@ -375,7 +375,9 @@ func (s *Server) plan(p provider.Provider, model string, from provider.Protocol)
 // alone, whatever the group's (#576): in order, in its place; else as
 // one, weighed with the rest by the one it would try first, and tried
 // whole where that one goes — the group's routing picks between its
-// groups, never within them. A member's fallbacks are not the group's.
+// groups, never within them. A group in the group sinks by its own Sink
+// too, within its own order (#2255), before g's Sink orders the whole.
+// A member's fallbacks are not the group's.
 func (s *Server) planGroup(g provider.Group, ms []provider.Member, from provider.Protocol) ([]candidate, planned) {
 	var pl planned
 	var asides []candidate
@@ -460,6 +462,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 				}
 				var sub planned
 				cs := planLevel(m.Via[depth], ms[i:j], depth+1, from, &sub, asides, wAsides)
+				cs, sub.order = sinkOwn(m.Via[depth], cs, sub.order)
 				pl.left = append(pl.left, sub.left...)
 				pl.capped = append(pl.capped, sub.capped...)
 				if len(cs) > 0 {
@@ -541,12 +544,18 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 	for i := 0; i < len(ms); {
 		m := ms[i]
 		if len(m.Path) > depth+1 {
-			// a group in g: its models, planned by its routing
+			// a group in g: its models, planned by its routing and
+			// sunk by its Sink
 			j := i + 1
 			for j < len(ms) && len(ms[j].Path) > depth+1 && ms[j].Path[depth] == m.Path[depth] {
 				j++
 			}
-			out = append(out, planLevel(m.Via[depth], ms[i:j], depth+1, from, pl, asides, wAsides)...)
+			at := len(pl.order)
+			cs := planLevel(m.Via[depth], ms[i:j], depth+1, from, pl, asides, wAsides)
+			var order []Weighed
+			cs, order = sinkOwn(m.Via[depth], cs, pl.order[at:])
+			pl.order = append(pl.order[:at], order...)
+			out = append(out, cs...)
 			i = j
 			continue
 		}
@@ -561,6 +570,19 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		i++
 	}
 	return out
+}
+
+// sinkOwn is cs, the keys and accounts of sub, a group in a group, as
+// planLevel planned them, with those that sank behind the others when
+// sub's own Sink is on, and order, what the trace says of each, kept with
+// them (#2255, ggbdpq): a nested group is planned by its own routing
+// (#576) and rules, and its Sink was left unread, only the group the
+// agent asked for sinking.
+func sinkOwn(sub provider.Group, cs []candidate, order []Weighed) ([]candidate, []Weighed) {
+	if !sinks(sub.Sink, sub.Routing) {
+		return cs, order
+	}
+	return sinkPlanned(cs, order)
 }
 
 // firstAwake is the first of cs that isn't resting, else the first: what
