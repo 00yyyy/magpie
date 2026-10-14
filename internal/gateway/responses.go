@@ -516,9 +516,16 @@ func toolResultItem(t string) bool {
 //
 // An item that carries a call_id is part of an exchange and never moves,
 // whatever its type. Before the run's first result, what the model wrote
-// between its own calls (reasoning, its text, a hosted tool's call) is its
-// step and stays; anything else there (a subagent's agent_message, a note)
-// moves as it would between the results. A call opens the run only when a
+// between its own calls is its step: reasoning and a hosted tool's call
+// stay, and its text (an assistant message) goes ahead of the run's first
+// call, with the reasoning right before it, so the step's calls stand
+// together. OpenCode Go turns a relayed request into chat with each
+// assistant message after a call opening a new assistant message, so
+// [text, call_a, text, call_b, out_a, out_b], what Codex keeps when the
+// model wrote a line before each call of a batch, reached it as two
+// messages with tool_calls and the first answered by nothing: "No tool
+// output found for tool call call_a" (#2100). Anything else there (a
+// subagent's agent_message, a note) moves as it would between the results. A call opens the run only when a
 // result after it answers it: a call nothing answers is pairToolItems'
 // (#1341), and one answered before it is not waited on. An item between two
 // whole exchanges stays where it is, and a request with nothing inside a
@@ -563,12 +570,15 @@ func joinToolRuns(body []byte) []byte {
 			strings.HasSuffix(it.Type, "_call")
 	}
 	out := make([]json.RawMessage, 0, len(input))
+	kinds := make([]item, 0, len(input)) // what each item of out is
 	var held []json.RawMessage
 	moved := false
 	// open: calls of the run in progress whose result is still ahead;
-	// answering: a result of the run has come
+	// answering: a result of the run has come; first: where in out the
+	// run's first call is
 	open := map[string]bool{}
 	answering := false
+	first := 0
 	for i, raw := range input {
 		it := items[i]
 		switch {
@@ -579,15 +589,34 @@ func joinToolRuns(body []byte) []byte {
 			}
 		case it.CallID != "":
 			if answeredLater[i] {
+				if len(open) == 0 {
+					first = len(out)
+				}
 				open[it.CallID] = true
 			}
 		case len(open) > 0 && (answering || !modelsOwn(it)):
 			held, moved = append(held, raw), true
 			continue
+		case len(open) > 0 && it.Type == "message":
+			// the model's text between its calls goes ahead of the
+			// first, the reasoning it follows with it
+			from := len(out)
+			for from > first && kinds[from-1].Type == "reasoning" {
+				from--
+			}
+			seg := append(append([]json.RawMessage(nil), out[from:]...), raw)
+			segKinds := append(append([]item(nil), kinds[from:]...), it)
+			out = slices.Insert(out[:from], first, seg...)
+			kinds = slices.Insert(kinds[:from], first, segKinds...)
+			first += len(seg)
+			moved = true
+			continue
 		}
 		out = append(out, raw)
+		kinds = append(kinds, it)
 		if len(open) == 0 {
 			out = append(out, held...)
+			kinds = append(kinds, make([]item, len(held))...)
 			held, answering = nil, false
 		}
 	}
