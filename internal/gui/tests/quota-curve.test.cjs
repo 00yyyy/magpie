@@ -275,7 +275,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const second = card.locator(".subscription-account", { hasText: "b@x.com" });
           // (after the curve, a Codex account's Auto-use row, #719, then its
           // Use credits row, which closes its section)
-          assert.deepEqual(await second.evaluate((e) => [e.previousElementSibling.previousElementSibling.previousElementSibling.className, e.previousElementSibling.previousElementSibling.className, e.previousElementSibling.className]), ["quota-curve", "quota-autoreset", "quota-credits on"]);
+          assert.deepEqual(await second.evaluate((e) => [e.previousElementSibling.previousElementSibling.previousElementSibling.className, e.previousElementSibling.previousElementSibling.className, e.previousElementSibling.className]), ["quota-curve", "quota-autoreset ar-split", "quota-credits on"]);
           assert.notEqual(await second.evaluate((e) => getComputedStyle(e).borderTopStyle), "none", "a rule between the accounts");
           const choose = async (name) => {
             await pick.click();

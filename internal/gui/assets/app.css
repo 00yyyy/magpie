@@ -1759,6 +1759,19 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .ar-say { flex: 1; min-width: 0; line-height: 1.35; }
 .ar-say b { font-weight: 500; color: var(--fg-2); }
 .ar-used { display: block; margin-top: 2px; color: var(--faint); }
+/* its two times, each a line of its own with its switch (#2078): the
+   say on top, the lines under it, each switch at the line's end */
+.quota-autoreset.ar-split, .pq-autoreset.ar-split { flex-direction: column; align-items: stretch; gap: 3px; }
+.ar-cases { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ar-case { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ar-case-say { flex: 1; min-width: 0; line-height: 16px; }
+.ar-case.on .ar-case-say { color: var(--fg-2); }
+.ar-case .lib-switch { flex: none; }
+/* Settings › Usage: an account's two times, each with its Off/On */
+.ar-own-cases { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; }
+.ar-own-case { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
+.ar-own-say { min-width: 0; color: var(--muted); font-size: 12px; text-align: right; }
+.ar-own-case .segs { flex: none; }
 .lib-switch.auto-reset, .lib-switch.use-credits { width: 28px; height: 16px; padding: 0; border: 0; cursor: pointer; }
 .lib-switch.auto-reset i, .lib-switch.use-credits i { width: 12px; height: 12px; }
 .lib-switch.auto-reset.on i, .lib-switch.use-credits.on i { transform: translateX(12px); }

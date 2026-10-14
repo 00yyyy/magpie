@@ -1640,13 +1640,18 @@ names the subscription, and reopening the menu shows it ticked. No click
 moves the page. The checks run in English and Chinese, in Chromium and
 WebKit.
 
-`codex-auto-reset.test.cjs` checks the Auto-use toggle beside a Codex
-account's resets, on the Usage page's card and on the menu bar panel's. It is
-off until turned on; a click posts `settings/codex-auto-reset` for that
-account, shows it pressed and says so, and a second click turns it off. A GLM
-team's resets get no toggle. No click moves the page, and nothing has a
-left-border accent. The checks run in English and Chinese, in Chromium and
-WebKit.
+`codex-auto-reset.test.cjs` checks a Codex account's resets used by
+themselves, on the Usage page's card and on the menu bar panel's: the two
+times one is used, its week used up and one about to expire, each on its own
+line with its own switch (#2078). Each is off until turned on; a click posts
+`settings/codex-auto-reset` for that account and that time (`when`), turns
+that switch alone, and says what the account does now; the resets-held line
+says the one about to expire is kept only while that time is on. An account
+in brief has one switch for both, posted without `when`, its title naming
+each time. A GLM team's resets get no switch. No click moves the page, the
+switches fit the card, nothing has a left-border accent and there is no
+native select. The checks run in English, Chinese, Traditional Chinese,
+Japanese and German, 1100 and 420 wide, in Chromium and WebKit.
 
 `library-all.test.cjs` opens the Library with an All chip ahead of each
 server's and skill's agent chips (Discord: MCP 服务器 SKILL 都得一个个选):

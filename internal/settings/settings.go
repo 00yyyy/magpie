@@ -162,6 +162,13 @@ type Settings struct {
 	// unused half an hour before it does, or at once when the account is
 	// held up past then (provider.SpendExpiringCodexResets).
 	CodexAutoReset []string `json:"codexAutoReset,omitempty"`
+	// CodexAutoResetOnly narrows an account in CodexAutoReset to one of
+	// those two times (#2078, alanwalk: Codex's own resets come often, so
+	// a week used up is worth waiting out, while a card about to run out
+	// isn't): "week" for its week used up only, "expiring" for the one
+	// about to run out only. An account not in it uses one at both, as
+	// every account did before the two were split.
+	CodexAutoResetOnly map[string]string `json:"codexAutoResetOnly,omitempty"`
 	// CodexNoCredits are the ChatGPT accounts (lower-case) that don't
 	// spend their credits: once a usage window is used up, routing holds
 	// the account as used up and goes on to the user's other accounts,
@@ -1237,6 +1244,16 @@ func save(s Settings, recording bool) error {
 		s.CodexAutoReset[i] = strings.ToLower(u)
 	}
 	s.CodexAutoReset = ids(s.CodexAutoReset)
+	only := map[string]string{}
+	for u, c := range s.CodexAutoResetOnly {
+		if u = strings.ToLower(u); (c == "week" || c == "expiring") && slices.Contains(s.CodexAutoReset, u) {
+			only[u] = c
+		}
+	}
+	s.CodexAutoResetOnly = nil
+	if len(only) > 0 {
+		s.CodexAutoResetOnly = only
+	}
 	for i, u := range s.CodexNoCredits {
 		s.CodexNoCredits[i] = strings.ToLower(u)
 	}

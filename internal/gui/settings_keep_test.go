@@ -161,6 +161,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		DesktopSubagentModel: "fake/m2",
 		ChinaMirror:          true,
 		CodexAutoReset:       []string{"me@example.com"},
+		CodexAutoResetOnly:   map[string]string{"me@example.com": "expiring"},
 		CodexNoCredits:       []string{"me@example.com"},
 		CodexWarmAtOf:        map[string]string{"me@example.com": "09:00"},
 		TextSize:             125,

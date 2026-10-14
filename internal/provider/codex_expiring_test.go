@@ -123,6 +123,14 @@ func TestSpendExpiringCodexResets(t *testing.T) {
 	if read.Load() != 0 || consumed.Load() != 0 {
 		t.Fatalf("not turned on, yet read %d, spent %d", read.Load(), consumed.Load())
 	}
+	// kept to its week used up (#2078): the one about to run out isn't its to spend
+	if err := SetCodexAutoResetCase("me@example.com", ResetCaseWeek, true); err != nil {
+		t.Fatal(err)
+	}
+	SpendExpiringCodexResets(t.Context())
+	if read.Load() != 0 || consumed.Load() != 0 {
+		t.Fatalf("kept to its week, yet read %d, spent %d", read.Load(), consumed.Load())
+	}
 	if err := SetCodexAutoReset("me@example.com", true); err != nil {
 		t.Fatal(err)
 	}

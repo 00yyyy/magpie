@@ -16412,7 +16412,7 @@ function resetsWords(r, q) {
     // whether the one that runs out first is kept from going to waste:
     // with Auto-use on it is used shortly before it does (#624, #719)
     if (q && autoResetKept(q)) {
-      const on = autoResetOn(q);
+      const on = autoResetWhen(q).expiring;
       w.append(el("span", "resets-kept" + (on ? " on" : ""), " · " + t(on ? "auto-used before it expires" : "not auto-used")));
       w.title += "\n" + t(on ? "Auto-use is on: the reset that runs out first is used about half an hour before it does, if this account's windows have been used, so what they have left can be used until then and it isn't lost; at once if the account is held up until after then."
         : "Auto-use is off: the reset that runs out first is lost unless it's used by hand before then.");
@@ -16454,23 +16454,61 @@ function autoResetKept(q) {
   return !!(q.user && AUTO_RESET_KEPT[q.provider] && !q.resets?.byWindow);
 }
 function autoResetOn(q) {
-  return autoResetKept(q) && !!(state.settings?.[AUTO_RESET_KEPT[q.provider]] || []).includes(q.user.toLowerCase());
+  const w = autoResetWhen(q);
+  return w.week || w.expiring;
+}
+// autoResetWhen: at which of the two times the account uses one by itself,
+// each its own switch (#2078, alanwalk: Codex resets the week often enough
+// that a used-up week is worth waiting out, while a card about to run out
+// isn't); an account not kept to one (codexAutoResetOnly) uses one at both.
+function autoResetWhen(q) {
+  if (!autoResetKept(q) || !(state.settings?.[AUTO_RESET_KEPT[q.provider]] || []).includes(q.user.toLowerCase())) return { week: false, expiring: false };
+  return autoResetWhenOf(state.settings?.codexAutoResetOnly?.[q.user.toLowerCase()]);
+}
+function autoResetWhenOf(only) {
+  return { week: only !== "expiring", expiring: only !== "week" };
+}
+// AUTO_RESET_CASES: the two times, in the order they're shown, with their
+// words and what each switch's title says on and off.
+const AUTO_RESET_CASES = [
+  { id: "week", say: "when its week runs out",
+    on: "On: a reset is used by itself when this account's week is used up and no other account can answer, one a week at most. The five hours running out never uses one. Click to turn it off.",
+    off: "Off: a used-up week is waited out, and the vendor may start it again sooner; requests go to your other accounts, or are refused with why. Click to turn it on." },
+  { id: "expiring", say: "before one expires",
+    on: "On: the reset that runs out first is used about half an hour before it does, if this account's windows have been used, or at once when the account is held up until after then. Click to turn it off.",
+    off: "Off: a reset that runs out unused is lost. Click to turn it on." },
+];
+// autoResetStatus says what the account does now, after a switch.
+function autoResetStatus(user, w) {
+  if (w.week && w.expiring) return t("{who} uses a reset by itself when its week runs out, or before one expires", { who: user });
+  if (w.week) return t("{who} uses a reset by itself only when its week runs out", { who: user });
+  if (w.expiring) return t("{who} uses a reset by itself only before one expires", { who: user });
+  return t("{who} no longer uses a reset by itself", { who: user });
 }
 
 // autoResetRow is that say on an account's card, whether or not it holds a
-// reset now, so it can be set ahead of one (#719): both times it uses one,
-// in words, and the switch.
+// reset now, so it can be set ahead of one (#719): each of the two times it
+// uses one on a line of its own, in words, with its switch (#2078).
 function autoResetRow(q, cls) {
   if (!autoResetKept(q)) return null;
   const on = autoResetOn(q);
-  const row = el("div", cls + (on ? " on" : ""));
+  const row = el("div", cls + " ar-split" + (on ? " on" : ""));
   const say = el("span", "ar-say");
-  say.append(el("b", "", t("Auto-use resets:")), document.createTextNode(" " + t("when the week runs out, or before one expires")));
-  say.title = autoResetTitle(on);
+  say.append(el("b", "", t("Auto-use resets:")));
   const used = resetsUsedLine(q);
   if (used) say.append(used);
+  const cases = el("div", "ar-cases");
+  const w = autoResetWhen(q);
+  for (const c of AUTO_RESET_CASES) {
+    const line = el("div", "ar-case" + (w[c.id] ? " on" : ""));
+    line.dataset.case = c.id;
+    const words = el("span", "ar-case-say", t(c.say));
+    words.title = t(w[c.id] ? c.on : c.off);
+    line.append(words, autoResetButton(q, c));
+    cases.append(line);
+  }
   row.dataset.user = q.user;
-  row.append(say, autoResetButton(q));
+  row.append(say, cases);
   return row;
 }
 
@@ -16511,30 +16549,35 @@ function autoResetBrief(q) {
   const s = el("span", "acct-auto" + (on ? " on" : ""));
   if (q.resets?.count) s.append(el("span", "acct-auto-n", "↺ " + q.resets.count + " ·"));
   s.append(el("span", "acct-auto-say", t("Auto-use")), autoResetButton(q));
-  s.title = (q.resets?.count ? t(q.resets.count === 1 ? "1 reset" : "{n} resets", { n: q.resets.count }) + "\n" : "") + autoResetTitle(on);
+  const w = autoResetWhen(q);
+  s.title = (q.resets?.count ? t(q.resets.count === 1 ? "1 reset" : "{n} resets", { n: q.resets.count }) + "\n" : "")
+    + t("Auto-use resets:") + "\n" + AUTO_RESET_CASES.map((c) => "· " + t(c.say) + ": " + t(w[c.id] ? "On" : "Off")).join("\n");
   const used = resetsUsedLine(q);
   if (used) s.title += "\n" + used.textContent;
   return s;
 }
 
-// autoResetButton turns that on or off: a switch, its words beside it.
-function autoResetButton(q) {
-  const on = autoResetOn(q);
+// autoResetButton turns that on or off: a switch, its words beside it. With
+// c (one of AUTO_RESET_CASES), at that time alone, the other kept; without,
+// the brief's switch, at both: off when either is on, else on at both.
+function autoResetButton(q, c) {
+  const on = c ? autoResetWhen(q)[c.id] : autoResetOn(q);
   const b = el("button", "lib-switch auto-reset" + (on ? " on" : ""));
   b.type = "button";
   b.setAttribute("role", "switch");
   b.setAttribute("aria-checked", String(on));
-  b.setAttribute("aria-label", t("Auto-use resets"));
-  b.title = autoResetTitle(on);
+  b.setAttribute("aria-label", t("Auto-use resets") + (c ? " · " + t(c.say) : ""));
+  b.title = c ? t(on ? c.on : c.off) : autoResetTitle(on);
+  if (c) b.dataset.case = c.id;
   b.append(el("i"));
   b.onclick = async (e) => {
     e.stopPropagation();
     if (b.disabled) return;
     b.disabled = true;
     try {
-      prefs = await writingPrefs(api("settings/" + q.provider + "-auto-reset", { user: q.user, on: !on }));
+      prefs = await writingPrefs(api("settings/" + q.provider + "-auto-reset", c ? { user: q.user, on: !on, when: c.id } : { user: q.user, on: !on }));
       state.settings = prefs;
-      status(t(on ? "{who} no longer uses a reset by itself" : "{who} uses a reset by itself when its week runs out, or before one expires", { who: q.user }), "ok");
+      status(autoResetStatus(q.user, autoResetWhen(q)), "ok");
       renderQuotas();
       if ($("#codexAutoResetRow")) renderAutoResetOwn(prefs); // Settings › Usage says the same
     } catch (err) {
@@ -22203,21 +22246,32 @@ function renderAutoResetOwn(s) {
     const name = el("div", "name", user);
     name.title = user;
     who.append(name);
-    const was = on.includes(user.toLowerCase());
-    const pick = segs([["off", t("Off")], ["on", t("On")]], was ? "on" : "off", async (v) => {
-      try {
-        prefs = await writingPrefs(api("settings/codex-auto-reset", { user, on: v === "on" }));
-        if (state) state.settings = prefs;
-        status(t(v === "on" ? "{who} uses a reset by itself when its week runs out, or before one expires" : "{who} no longer uses a reset by itself", { who: user }), "ok");
-        renderSettings();
-        if (quotas) renderQuotas(); // the account's card says the same
-      } catch (e) {
-        status(t(e.message), "err");
-        renderSettings();
-      }
-    });
-    pick.setAttribute("aria-label", t("Auto-use resets") + " · " + user);
-    r.append(who, pick);
+    // each of the two times its own Off/On (#2078)
+    const was = on.includes(user.toLowerCase()) ? autoResetWhenOf(s.codexAutoResetOnly?.[user.toLowerCase()]) : { week: false, expiring: false };
+    const cases = el("div", "ar-own-cases");
+    for (const c of AUTO_RESET_CASES) {
+      const line = el("div", "ar-own-case");
+      line.dataset.case = c.id;
+      const say = el("span", "ar-own-say", t(c.say));
+      say.title = t(was[c.id] ? c.on : c.off);
+      const pick = segs([["off", t("Off")], ["on", t("On")]], was[c.id] ? "on" : "off", async (v) => {
+        try {
+          prefs = await writingPrefs(api("settings/codex-auto-reset", { user, on: v === "on", when: c.id }));
+          if (state) state.settings = prefs;
+          const now = (prefs.codexAutoReset || []).includes(user.toLowerCase()) ? autoResetWhenOf(prefs.codexAutoResetOnly?.[user.toLowerCase()]) : { week: false, expiring: false };
+          status(autoResetStatus(user, now), "ok");
+          renderSettings();
+          if (quotas) renderQuotas(); // the account's card says the same
+        } catch (e) {
+          status(t(e.message), "err");
+          renderSettings();
+        }
+      });
+      pick.setAttribute("aria-label", t("Auto-use resets") + " · " + t(c.say) + " · " + user);
+      line.append(say, pick);
+      cases.append(line);
+    }
+    r.append(who, cases);
     after.after(r);
     after = r;
   }

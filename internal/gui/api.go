@@ -1221,6 +1221,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.ChinaMirror = cur.ChinaMirror // the Plugins page's, set on its own
 		// which Codex accounts spend a reset by themselves, set on the Usage card
 		in.CodexAutoReset = cur.CodexAutoReset
+		in.CodexAutoResetOnly = cur.CodexAutoResetOnly // and at which of the two times
 		// and which of them spend their credits, set there too
 		in.CodexNoCredits = cur.CodexNoCredits
 		// and each Codex account's own daily warm-up (codex-warm-at below)
@@ -1606,10 +1607,13 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// a Codex account's auto-use of its resets: at both times, or with When
+	// ("week" or "expiring") at that one alone, the other kept (#2078)
 	mux.HandleFunc("POST /api/settings/codex-auto-reset", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			User string
 			On   bool
+			When string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -1619,7 +1623,11 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			fail(rw, fmt.Errorf("which Codex account?"))
 			return
 		}
-		if err := provider.SetCodexAutoReset(in.User, in.On); err != nil {
+		set := func() error { return provider.SetCodexAutoReset(in.User, in.On) }
+		if in.When != "" {
+			set = func() error { return provider.SetCodexAutoResetCase(in.User, in.When, in.On) }
+		}
+		if err := set(); err != nil {
 			fail(rw, err)
 			return
 		}

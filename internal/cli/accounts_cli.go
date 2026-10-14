@@ -279,7 +279,7 @@ func accountsCmd(args []string) error {
 			line += "  " + balanceCell(r.Balance, r.Agent, r.User)
 		}
 		if r.Resets != nil {
-			line += "  " + resetsCell(r.Resets, provider.AutoResets(r.Agent, r.User))
+			line += "  " + resetsCell(r.Resets, r.Agent, r.User)
 		}
 		if r.Lapsed != "" {
 			line += "  " + muted.Render(r.Lapsed)
