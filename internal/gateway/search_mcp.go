@@ -13,6 +13,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/budget"
+	"github.com/yetone/magpie/internal/redact"
 )
 
 // magpie's web search, the one a model that can't search is given
@@ -202,7 +203,9 @@ func (s *Server) searchMCPRun(r *http.Request, query string) (string, error) {
 		}
 		return "", searchMCPError(msg)
 	}
-	return said, nil
+	// what was masked on the way out (maskedQuery, or the searcher's
+	// request) is the agent's own: it gets it back
+	return redact.Restore(said, false), nil
 }
 
 // readMCPBody reads a request body of at most limit bytes, answering 413

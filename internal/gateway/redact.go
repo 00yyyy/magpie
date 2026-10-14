@@ -40,6 +40,21 @@ func redactionOptions() redact.Options {
 	return redact.Options{Secrets: st.Redact, Personal: st.RedactPersonal, Kinds: st.RedactKinds, Words: st.RedactWords, Rules: st.RedactRules}
 }
 
+// maskedQuery masks a web search's query, as the settings say, before it
+// goes to a search service that isn't a model's endpoint: a search API, or
+// a Kimi Code plan's or WorkBuddy's search (to p, nil for an API; one the
+// user set to go unmasked keeps it as it is). A model's web_search writes
+// its query from a request already masked, but an agent's call to the
+// search MCP carries it as the agent's model wrote it, values put back
+// (lc on Discord).
+func maskedQuery(query string, p *provider.Provider) string {
+	if p != nil && p.SkipsRedaction() {
+		return query
+	}
+	masked, _ := redact.Mask(query, redactionOptions())
+	return masked
+}
+
 // unredactedRoute says a request resolved to p, or to the group whose
 // models are ms, goes only where the user set requests to go unmasked
 // (provider.SkipsRedaction): p and each of its fallbacks, or every model of

@@ -396,6 +396,16 @@ Rests are held by vendor and a hash of the key (`searchKeyID`), never the
 key itself, and the vendor's error has the key masked
 (`provider.MaskSearchKey`, `tvly-…abcd`) before it is logged or returned.
 
+The query a search API, a Kimi Code plan's search service or WorkBuddy's
+search is asked is masked as Settings → Privacy says (`maskedQuery` in
+[`redact.go`](../../internal/gateway/redact.go); a plan set to go unmasked,
+`provider.SkipsRedaction`, gets it as it is). A searcher model is asked
+through `serve`, which masks its request the usual way. An agent's call to
+the search MCP carries its query with the values put back, so before this
+it went out as the agent wrote it (lc on Discord); `searchMCPRun` puts the
+values back in what it returns (`redact.Restore`). What a model's own
+web_search finds goes back to its vendor as found, placeholders and all.
+
 What each Tavily key has used is read from `GET /usage` with that key
 ([`search_quota.go`](../../internal/gateway/search_quota.go),
 `readTavilyUsage`): the key's own `limit` when it has one, else its account
@@ -455,7 +465,7 @@ cover it.
 
 Covered by `TestSearchMCPServesWebSearch`, `TestSearchMCPWithNoSearcher`,
 `TestSearchMCPGuarded`, `TestSearchMCPHeldToKeyLimit`,
-`TestSearchMCPRoutedAsTheAgentsCall` and `search-mcp.test.cjs`.
+`TestSearchMCPRoutedAsTheAgentsCall`, `TestSearchQueryMasked` and `search-mcp.test.cjs`.
 
 ## Image recognition as an MCP server
 
