@@ -1271,9 +1271,14 @@ func claudeIn(at place) *Agent {
 			// ones given a model of their own keep it, the one the new
 			// main model is too, so it stays when the main model moves
 			// on again (#1050: a sonnet tier on Sonnet went to Opus with
-			// the main model's next move)
+			// the main model's next move). The new main model itself is
+			// one too where the tier would follow another or none: a fable
+			// tier given GPT-6.1 Sol, the main model moved onto it, read as
+			// following and was lost on the next move (#2257), as was a
+			// haiku tier given Opus (it follows Opus on its Haiku).
 			same := func(t, m string) bool {
-				return strings.TrimSuffix(m, "[1m]") == strings.TrimSuffix(follow(t, v), "[1m]")
+				m = strings.TrimSuffix(m, "[1m]")
+				return m == strings.TrimSuffix(v, "[1m]") || m == strings.TrimSuffix(follow(t, v), "[1m]")
 			}
 			if !routed() {
 				forget(ownKey("subagent"))

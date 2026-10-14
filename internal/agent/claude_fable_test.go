@@ -95,10 +95,10 @@ func TestClaudeFableTierOnClaude(t *testing.T) {
 		}
 	}
 	// the reporter's settings.json, the fable tier on Sol, from 0.1.1229:
-	// Follow takes it out
-	if err := edit.SetJSON(path, edit.KV{Path: "env.ANTHROPIC_DEFAULT_FABLE_MODEL", Value: "cx/gpt-6.1-sol"}); err != nil {
-		t.Fatal(err)
-	}
+	// Follow takes it out. 0.1.1229 wrote it there following the main
+	// model on Sol; a fable tier on Sol before the main model moved onto
+	// it is one given Sol, which stays (#2257,
+	// TestClaudeOwnTierOnTheNewMainModelStays)
 	if err := a.Field("model").Set("cx/gpt-6.1-sol"); err != nil {
 		t.Fatal(err)
 	}
