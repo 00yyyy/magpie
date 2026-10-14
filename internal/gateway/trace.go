@@ -61,6 +61,9 @@ type Route struct {
 	// Subagent is a Codex or Claude Desktop subagent's request put on
 	// the model set for its subagents, or kept on the one asked for and why
 	Subagent *SubagentPick `json:"subagent,omitempty"`
+	// Sub: the Claude Code subagent the request is of (subagentOf), whose
+	// session header is its conversation's; "" for the conversation's own
+	Sub string `json:"sub,omitempty"`
 	// Nested: the rules of the groups in the group, down the way to the
 	// one that went first, each as it decided
 	Nested   []NestedRule `json:"nested,omitempty"`
