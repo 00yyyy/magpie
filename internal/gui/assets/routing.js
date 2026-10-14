@@ -1471,7 +1471,10 @@
     const on = r.order.filter((x) => !x.fallback).length;
     const pool = !g && f ? poolOf(f.provider) : null;
     const lone = !g && on <= 1 && !pool;
-    chip.textContent = t(m[0]);
+    // the head is told again every second: a chip whose text node is
+    // swapped while it is pressed gets no click in WebKit (#2151), so
+    // only what changed is written
+    setText(chip, t(m[0]));
     chip.hidden = lone;
     goTo(chip, g ? "group:" + g.id : pool ? "pool:" + f.provider : "", g ? g.name : f?.name || r.provider);
     hubText();
@@ -1484,12 +1487,13 @@
   // goTo makes what names a routing a way to where it is set: a provider's
   // own under Several accounts or keys, a group's its card
   function goTo(e, go, name) {
-    e.dataset.go = go;
     e.classList.toggle("rt-go", !!go);
     if (go) {
-      e.tabIndex = 0;
-      e.setAttribute("role", "button");
-      e.title = t("Change how {name} routes", { name });
+      const title = t("Change how {name} routes", { name });
+      if (e.dataset.go !== go) e.dataset.go = go;
+      if (e.tabIndex !== 0) e.tabIndex = 0;
+      if (e.getAttribute("role") !== "button") e.setAttribute("role", "button");
+      if (e.title !== title) e.title = title;
     } else for (const a of ["data-go", "tabindex", "role", "title"]) e.removeAttribute(a);
   }
   function goRouting(e, go) {
@@ -3209,7 +3213,7 @@
     }
   }
 
-  function hubText() { hubSub.textContent = (providers?.gateway?.url || "").replace(/^https?:\/\//, "") || t("gateway"); }
+  function hubText() { setText(hubSub, (providers?.gateway?.url || "").replace(/^https?:\/\//, "") || t("gateway")); }
 
   // labels in the page's language, and again when it changes
   function words() {
