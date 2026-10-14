@@ -864,12 +864,13 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			http.Error(rw, "unknown field", http.StatusBadRequest)
 			return
 		}
+		wired := a.Wired()
 		if err := a.Pick(f.Key, strings.TrimSpace(in.Value)); err != nil {
 			fail(rw, err)
 			return
 		}
 		s := state()
-		if a.Notice != nil {
+		if a.Notice != nil && (!f.Live || !wired) {
 			s.Notice = a.Notice()
 		}
 		writeJSON(rw, s)
@@ -1210,8 +1211,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.CodexPredictions = cur.CodexPredictions   // and codex-predictions
 		// and so is the model Codex's auto-review runs on (codex-auto-review)
 		in.CodexAutoReview = cur.CodexAutoReview
-		// and the model Codex's subagents are put on, set in Codex's row
+		// and the models Codex's and Desktop's subagents are put on, set
+		// in their Agents rows
 		in.CodexSubagentModel = cur.CodexSubagentModel
+		in.DesktopSubagentModel = cur.DesktopSubagentModel
 		in.ChinaMirror = cur.ChinaMirror // the Plugins page's, set on its own
 		// which Codex accounts spend a reset by themselves, set on the Usage card
 		in.CodexAutoReset = cur.CodexAutoReset

@@ -419,6 +419,17 @@ model and "unless the lead names another" beside it. Picking a model posts
 unsets it again. A click doesn't scroll the page. Claude Code's subagents
 still say "same as model".
 
+`desktop-subagent-model.test.cjs` checks Claude Desktop's gateway-applied
+subagent model in its row opened from the agent link: one square, hidden
+when unwired with no options or value, opening the app's model picker (no
+native select), translated title and Default note, a model posted as
+`subagent_model` and Default as "". No click scrolls, no square or picker
+row has a coloured left border, and the picker fits at 1100px and 560px.
+Desktop routing stories with no kind explain the moved model or the kept
+model with a translated disabled reason. Chromium and WebKit, English,
+Chinese, Traditional Chinese, Japanese and German; all APIs are faked.
+Run with `node --test internal/gui/tests/desktop-subagent-model.test.cjs`.
+
 `tier-effort.test.cjs` draws Claude Code's per-tier effort (#536) in Chromium
 and WebKit, English and Chinese: no tier's effort is a field of its own; the
 tiers' square lists each tier's model and then its effort (the bars, and "the

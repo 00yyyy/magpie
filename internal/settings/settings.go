@@ -416,6 +416,10 @@ type Settings struct {
 	// is sealed for one (willz on Discord). "" leaves each on the model its
 	// lead asked for.
 	CodexSubagentModel string `json:"codexSubagentModel,omitempty"`
+	// DesktopSubagentModel is the model the gateway puts Claude Desktop's
+	// subagent tool turns on. "" leaves them on the model their lead asks
+	// for; tool-less helpers and the lead's own turns are never moved.
+	DesktopSubagentModel string `json:"desktopSubagentModel,omitempty"`
 	// FullContext has Codex and Claude Code told a model's whole context
 	// window. Off, a window above WorkingWindow is told as WorkingWindow,
 	// so they compact a long conversation there instead of sending ever
@@ -1193,6 +1197,10 @@ func save(s Settings, recording bool) error {
 	s.CodexSubagentModel = strings.TrimSpace(s.CodexSubagentModel)
 	if s.CodexSubagentModel != "" && !strings.Contains(s.CodexSubagentModel, "/") {
 		return fmt.Errorf("the model for Codex's subagents must be a model's id such as codex/gpt-5.5, not %q", s.CodexSubagentModel)
+	}
+	s.DesktopSubagentModel = strings.TrimSpace(s.DesktopSubagentModel)
+	if s.DesktopSubagentModel != "" && !strings.Contains(s.DesktopSubagentModel, "/") {
+		return fmt.Errorf("the model for Claude Desktop's subagents must be a model's id such as deepseek/deepseek-v4, not %q", s.DesktopSubagentModel)
 	}
 	s.Searcher = strings.TrimSpace(s.Searcher)
 	for _, e := range []*string{&s.VisionEffort, &s.SearcherEffort} {

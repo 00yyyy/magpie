@@ -90,6 +90,11 @@ type Field struct {
 	// Quiet fields are left out of listings while empty: they follow
 	// another field until set (Claude Code's per-tier models).
 	Quiet bool
+	// Live fields are magpie's own settings, read by the gateway on each
+	// request (Claude Desktop's subagent model): a change to one needs no
+	// restart of the agent, so its Notice isn't shown after it, unless
+	// the pick connected the agent to magpie as well.
+	Live bool
 	// Follows is the key of the field a Quiet one takes after while empty
 	// ("model" for Claude Code's tiers and subagents): a profile's details
 	// say so, and Drift reads the field as on that one's model (#1050).

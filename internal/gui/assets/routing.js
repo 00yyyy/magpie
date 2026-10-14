@@ -505,7 +505,7 @@
   }
 
   // the model a request went on: the one asked for, or the one set for
-  // Codex's subagents that magpie put a subagent on in its place
+  // an agent's subagents that magpie put a subagent on in its place
   const wentOn = (r) => (r.subagent && !r.subagent.kept ? r.subagent.to : r.model);
 
   // why routing put the first where it did
@@ -1808,6 +1808,7 @@
       ? t("{agent} asked for {model}: {name} serves it, and the vendor is asked for {sent}", { agent: agentName(r.agent), model: r.model, name: main.name, sent: main.model })
       : t("{agent} asked for {model}", { agent: agentName(r.agent), model: r.model }) + " → " + (main?.name || r.provider), ""]);
     if (r.kind) items.push([kindWhy(r), "aside kind"]);
+    else if (r.subagent) items.push([subagentWhy(r), "aside"]);
     if (r.sealedTask) items.push([t(r.group
       ? "This subagent task is encrypted. Only ChatGPT accounts can read it; other providers (such as Claude) are excluded regardless of quota."
       : "This subagent task is encrypted. Only ChatGPT accounts can read it."), "aside"]);
@@ -1958,13 +1959,17 @@
     return k;
   }
   const upstreamWhy = (tr) => t("The aggregator passed the request on to {upstream}, as its reply says: the provider that actually answered it.", { upstream: tr.upstream });
-  function kindWhy(r) {
+  // the model set for an agent's subagents in place of the lead's pick,
+  // or why the lead's pick stood
+  function subagentWhy(r) {
     const agent = agentName(r.agent);
-    // the model set for Codex's subagents in place of the lead's pick, or
-    // why the lead's pick stood
-    if (purposeOf(r.kind) === "kind:collab_spawn" && r.subagent) return r.subagent.kept
+    return r.subagent.kept
       ? t("{agent} requested a subagent on {model} and it stayed there: its subagents are set to {to}, but {why}.", { agent, model: r.subagent.asked, to: r.subagent.to, why: t(r.subagent.kept) })
       : t("{agent} requested a subagent on {model}; magpie put it on {to}, the model set for its subagents.", { agent, model: r.subagent.asked, to: r.subagent.to });
+  }
+  function kindWhy(r) {
+    const agent = agentName(r.agent);
+    if (purposeOf(r.kind) === "kind:collab_spawn" && r.subagent) return subagentWhy(r);
     if (purposeOf(r.kind) === "kind:collab_spawn") return r.group
       ? t("{agent} requested a subagent; magpie selects its model within this routing group.", { agent })
       : t("{agent} requested a subagent on {model}.", { agent, model: r.model });

@@ -1091,6 +1091,7 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	plain := body
 	w, body, unmask := redacted(w, body)
 	defer unmask()
+	named := unprefixed(model)
 	if m := claudeTierStandIn(r, agentOf(r), model); m != "" {
 		model = m // counted on the model the request will go to
 	}
@@ -1098,6 +1099,9 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	id := unprefixed(model)
 	if sid, ok := provider.AutoStandIn(id); ok {
 		id = sid
+	}
+	if pick := desktopSubagentPick(r, agentOf(r), named, id, body); pick.Moved() {
+		id = pick.To
 	}
 	p, model, ok := provider.Resolve(id)
 	// a gateway key held to some models (#882) counts no tokens on one it
@@ -1509,11 +1513,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		asked = m
 	}
 	// a Codex subagent on the model set for Codex's subagents, whatever
-	// its lead asked for (willz on Discord); one already put on it by the
-	// ChatGPT backend's route is recorded as asked for the model it was
+	// its lead asked for (willz on Discord), and a Claude Desktop
+	// subagent's tool turn on the one set for Desktop's; one already put
+	// on it by the ChatGPT backend's route is recorded as asked for the
+	// model it was
 	subagent := subagentPickOf(r)
 	if subagent == nil {
 		subagent = codexSubagentPick(r, agent, call.Kind, call.Model, body)
+	}
+	if subagent == nil {
+		subagent = desktopSubagentPick(r, agent, call.Model, asked, body)
 	}
 	if subagent.Moved() {
 		call.Model, asked = subagent.Asked, subagent.To

@@ -43,6 +43,7 @@ import (
 	"github.com/yetone/magpie/internal/desktopdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // desktopProfileID is magpie's profile in Desktop's configLibrary: a
@@ -169,7 +170,7 @@ func claudeDesktop(home string) *Agent {
 				return []Option{{Value: magpieID, Label: "magpie", Icon: "magpie",
 					Note: "Desktop's third-party gateway: Code and Cowork on magpie's models, no Anthropic sign-in (restart Desktop)"}}
 			},
-		}}, desktopTierFields(ps)...),
+		}}, append(desktopTierFields(ps), desktopSubagentField(ps))...),
 	}
 }
 
@@ -237,6 +238,32 @@ func desktopTierFields(ps []desktopPaths) []Field {
 		})
 	}
 	return fields
+}
+
+// desktopSubagentField picks the model every subagent turn in Desktop's
+// Code tab and Cowork runs on, whatever its lead or tier asked for. It
+// writes nothing to Desktop's config, which has no key for it, and the
+// Claude Code it runs ignores CLAUDE_CODE_SUBAGENT_MODEL in ~/.claude
+// while Desktop manages its provider: it is magpie's setting
+// (settings.DesktopSubagentModel), which the gateway reads on each
+// request (gateway desktopSubagentPick), so it is Live and a change needs
+// no restart of Desktop. Labelled as Codex's "subagent model", it gets the
+// same square on the Agents page. A Desktop alias picked is kept by its
+// catalog id.
+func desktopSubagentField(ps []desktopPaths) Field {
+	return Field{
+		Key: "subagent_model", Label: "subagent model", Quiet: true, Live: true,
+		Get: provider.DesktopSubagentModel,
+		Set: func(v string) error {
+			return provider.SetDesktopSubagentModel(gateway.DesktopCatalogID(v))
+		},
+		Options: func(map[string]string) []Option {
+			if !desktopWiredAny(ps) {
+				return nil
+			}
+			return viaMagpie("claude-desktop", "")
+		},
+	}
 }
 
 // desktopWired: _meta.json lists magpie's profile.
