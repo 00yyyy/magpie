@@ -1539,6 +1539,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// Settings › Proxy's Test (#2076): the address Cloudflare sees a request
+	// from through the proxy in force, and without it
+	mux.HandleFunc("POST /api/proxy/check", handleProxyCheck)
 	mux.HandleFunc("POST /api/settings/codex-titles", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ Model string }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {

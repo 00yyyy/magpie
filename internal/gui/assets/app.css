@@ -3902,3 +3902,7 @@ input[type="checkbox"]:disabled { opacity: .45; }
 .disabled-model .name { font-family: var(--code); font-size: 12px; overflow-wrap: anywhere; }
 /* Settings › Images: the way to the Magpie Image tool, under its words (#2091) */
 .image-gen-how .link { padding-left: 0; padding-right: 0; white-space: normal; text-align: start; }
+/* Settings › Proxy's Test result (#2076): under the row's text */
+.row.pref .sub.proxy-check { margin-top: 3px; white-space: normal; overflow-wrap: anywhere; }
+.proxy-check[hidden] { display: none; }
+.row.pref .sub.proxy-check.err { color: var(--red); }

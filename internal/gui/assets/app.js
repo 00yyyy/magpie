@@ -21988,6 +21988,65 @@ function renderProxy(s, keep) {
   modes.onpointerdown = () => { picking = true; };
   for (const button of modes.querySelectorAll("button")) button.onblur = saveOnLeave;
   row.append(modes);
+  renderProxyCheck(s, row);
+}
+
+// renderProxyCheck: Test (#2076, c4ex), whether the proxy in force is the
+// way magpie's requests leave. POST /api/proxy/check asks Cloudflare's
+// trace page through it, as a vendor request goes, and direct; the line
+// under the row's text says the address each left from. The same address
+// both ways says the proxy isn't taking them. A result is kept until the
+// proxy changes, so a redraw doesn't drop it.
+let proxyCheck = null; // { key, busy, out, err }
+function renderProxyCheck(s, row) {
+  const key = (s.proxySource || "") + "|" + (s.proxyNow || "");
+  if (proxyCheck && proxyCheck.key !== key && !proxyCheck.busy) proxyCheck = null;
+  const test = el("button", "text proxy-test", proxyCheck?.busy ? t("Testing…") : t("Test"));
+  test.title = t("Ask Cloudflare through the proxy and direct, and compare the addresses the two leave from");
+  test.disabled = !!proxyCheck?.busy;
+  test.onclick = () => {
+    proxyCheck = { key, busy: true };
+    renderProxyCheck(s, row);
+    api("proxy/check", {})
+      .then((out) => { proxyCheck = { key, out }; })
+      .catch((e) => { proxyCheck = { key, err: t(e.message) }; })
+      .finally(() => {
+        // Settings may have been drawn again meanwhile: draw on the row there now
+        const now = row.isConnected ? row : document.querySelector("#proxySegs .proxy-controls");
+        if (now) renderProxyCheck(now === row ? s : prefs, now);
+      });
+  };
+  row.querySelector(".proxy-test")?.remove();
+  row.prepend(test);
+  let line = document.getElementById("proxyCheck");
+  if (!line) {
+    line = el("div", "sub proxy-check");
+    line.id = "proxyCheck";
+    line.setAttribute("role", "status");
+    $("#proxySub").after(line);
+  }
+  const [text, bad] = proxyCheckText(proxyCheck);
+  line.hidden = !text;
+  line.textContent = line.title = text;
+  line.classList.toggle("err", bad);
+}
+
+// proxyCheckText: what the test found, and whether it is a failure.
+function proxyCheckText(c) {
+  if (!c || c.busy) return ["", false];
+  if (c.err) return [t("The test couldn't run: {error}", { error: c.err }), true];
+  const where = (leg) => leg.loc ? `${leg.ip} (${leg.loc})` : leg.ip;
+  const d = c.out?.direct || {};
+  const direct = d.ip ? where(d) : t("nowhere, they fail ({error})", { error: d.error || "" });
+  const via = c.out?.through;
+  if (!via) {
+    return d.ip
+      ? [t("No proxy in force: requests leave from {where}, {ms} ms", { where: where(d), ms: d.ms || 0 }), false]
+      : [t("No proxy in force, and a direct request failed: {error}", { error: d.error || "" }), true];
+  }
+  if (!via.ip) return [t("The proxy failed: {error}. Direct requests leave from {direct}", { error: via.error || "", direct }), true];
+  if (d.ip && via.ip === d.ip) return [t("Through the proxy requests leave from {where}, the same address as direct ones: they leave as if there were no proxy", { where: where(via) }), true];
+  return [t("Works: through the proxy requests leave from {where}, {ms} ms; direct ones from {direct}", { where: where(via), ms: via.ms || 0, direct }), false];
 }
 
 // renderGitHubToken: the GitHub token the library's requests to GitHub's
