@@ -60,8 +60,10 @@ var claudeAboutEnv = func() []string {
 // claudeOwnEnv are the models of claudeEnv a user may have set for their
 // own endpoint, which magpie's take the place of while it is wired in and
 // gives back when it steps out, with what the user's env says about each
-// tier's model
+// tier's model. ANTHROPIC_MODEL, their main model, too: magpie takes it
+// out while wired in (writeTiers), and it was lost for good.
 var claudeOwnEnv = append([]string{
+	"ANTHROPIC_MODEL",
 	"ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL",
 	"ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_FABLE_MODEL",
 	"ANTHROPIC_SMALL_FAST_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL",

@@ -28,13 +28,13 @@ func claudeCloudHome(t *testing.T, settings string) (home, path string, parse fu
 
 // claudeClouded is each settings.json of a Claude Code on a cloud, as jw1dev
 // on X had Bedrock: the switch on beside the cloud's own variables, and an
-// endpoint of the user's own for magpie to give back.
+// endpoint and Bedrock main model of the user's own for magpie to give back.
 var claudeClouded = []struct {
 	name, settings, key, raw string
 	cloud                    []string
 }{
 	{"bedrock", `{"model":"opus","env":{"ANTHROPIC_BASE_URL":"https://relay.example","ANTHROPIC_AUTH_TOKEN":"sk-relay",
-		"CLAUDE_CODE_USE_BEDROCK":"1","AWS_REGION":"us-west-2","AWS_PROFILE":"work","AWS_BEARER_TOKEN_BEDROCK":"bedrock-key"}}`,
+		"CLAUDE_CODE_USE_BEDROCK":"1","AWS_REGION":"us-west-2","AWS_PROFILE":"work","AWS_BEARER_TOKEN_BEDROCK":"bedrock-key","ANTHROPIC_MODEL":"us.anthropic.claude-sonnet-4-5-20250929-v1:0"}}`,
 		"CLAUDE_CODE_USE_BEDROCK", `"1"`, []string{"AWS_REGION", "AWS_PROFILE", "AWS_BEARER_TOKEN_BEDROCK"}},
 	// a JSON true, which Claude Code takes as on too, comes back a true
 	{"bedrock-bool", `{"env":{"CLAUDE_CODE_USE_BEDROCK":true,"AWS_REGION":"eu-central-1"}}`,
