@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -477,17 +478,19 @@ func pairFunctionTurns(contents []map[string]any, ag, agClaude bool) []map[strin
 }
 
 // thinkingConfig says how hard the model should think: a level for
-// Gemini 3, a budget for the rest. A model that doesn't think gets none,
-// and one whose id already says its level, at (Antigravity's
-// gemini-3.7-flash-low), is told that level and no other — the effort
-// asked for picked that id. Told no level, Antigravity's variants all but
+// Gemini 3 and later (geminiGeneration), a budget for the rest. A model
+// that doesn't think gets none, and one whose id already says its level,
+// at (Antigravity's gemini-3.7-flash-low), is told that level and no
+// other — the effort asked for picked that id. Told no level, Antigravity's variants all but
 // stop thinking once the request has tools, and give none of it back
 // (#636); Antigravity's own tiered ids, sent a level, don't.
 //
 // Gemini 3's levels: medium goes as medium to Flash, and up to high to
-// Pro, which took low and high only (3 Pro). Minimal goes only to a Flash
-// variant at minimal: 3.7 and 3.8 Flash have none (AI Studio answers 3.8's
-// with a 400), and the id here doesn't say which Flash serves it (Gemini
+// Pro, which took low and high only (3 Pro). A later Gemini is sent the
+// medium it was asked, already fitted to its own levels (fitFor):
+// gemini-4-argon has low, medium and high (#2083). Minimal goes only to a
+// Flash variant at minimal: 3.7 and 3.8 Flash have none (AI Studio
+// answers 3.8's with a 400), and the id here doesn't say which Flash serves it (Gemini
 // CLI's 3.5 Flash goes out as 3.8 Flash where that is rolled out).
 // Reasoning off otherwise (the auto mode classifier's least level) goes at
 // low, which every Gemini 3 text model takes; an image model may have no
@@ -504,7 +507,7 @@ func thinkingConfig(r *Request, model string, claude bool, at string) map[string
 		}
 	}
 	tc := map[string]any{"includeThoughts": true}
-	if strings.HasPrefix(m, "gemini-3") || strings.HasPrefix(m, "gemini-pro-agent") {
+	if gen := geminiGeneration(m); gen >= 3 || strings.HasPrefix(m, "gemini-pro-agent") {
 		effort := r.Effort
 		if at != "" {
 			effort = at
@@ -518,7 +521,7 @@ func thinkingConfig(r *Request, model string, claude bool, at string) map[string
 				level = "minimal"
 			case offEffort(effort) && !catalog.DrawsID(m):
 				level = "low"
-			case effort == "medium" && strings.Contains(m, "flash"):
+			case effort == "medium" && (strings.Contains(m, "flash") || gen > 3):
 				level = "medium"
 			}
 			tc["thinkingLevel"] = level
@@ -534,6 +537,25 @@ func thinkingConfig(r *Request, model string, claude bool, at string) map[string
 	}
 	tc["thinkingBudget"] = budget
 	return tc
+}
+
+// geminiVersion is the major version in a Gemini model's id, as the id
+// names it: gemini-4-argon, models/gemini-3.8-flash, gemini-2.5-pro.
+var geminiVersion = regexp.MustCompile(`(?:^|/)gemini-(\d+)`)
+
+// geminiGeneration is the generation of Gemini model names, 0 for an id
+// that names none (a non-Gemini model, or an alias such as
+// gemini-flash-latest, which may still be a 2.5). From Gemini 3 a model is
+// told a thinking level; Gemini 4 turns a budget away with "Thinking
+// budget is not supported for this model. Use thinking level instead."
+// (#2083), so a new generation isn't sent one either.
+func geminiGeneration(model string) int {
+	m := geminiVersion.FindStringSubmatch(model)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
 }
 
 // plainSchema is a JSON schema cut down to what Antigravity's function
