@@ -1364,7 +1364,9 @@ result for every request: who went first, and why.
    across turns while the last request read from the vendor's cache and
    wrote to it at least 1,024 tokens between them, and it answered in the
    last 5 minutes. A first turn reads nothing and writes the whole prompt,
-   so the second stays to read it. This
+    so the second stays to read it; a vendor that keeps a prompt cached
+    without reporting it (OpenAI's automatic prefix cache, Gemini) is taken
+    to have written what it was sent. This
    never brings back an account that is resting, nor one that has used 98%
    of a window (100% In order). *Stays: Strict* does, and asks no other:
    the conversation stays on its account, resting, spent or past its cap,

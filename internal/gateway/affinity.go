@@ -15,7 +15,11 @@ package gateway
 // worth keeping and not yet gone cold. Written counts as read: a first
 // turn reads nothing and writes the whole prompt, which the next turn
 // reads if it stays (vilicvane on Discord: the second turn moved, and the
-// cache just built was thrown away).
+// cache just built was thrown away). A vendor that keeps a prompt cached
+// without reporting it — OpenAI's automatic prefix cache, Gemini — says
+// neither of a turn that read nothing, and what its cache holds then is
+// the prompt that turn was sent: that counts as written too, so its next
+// turn stays rather than building the cache afresh elsewhere.
 //
 // Who answered is kept on disk as well (affinity.json, next to the
 // providers), so a restart — an update's included — doesn't hand a
@@ -41,8 +45,8 @@ import (
 
 const (
 	// cacheWorth is how many tokens read from the vendor's cache, or
-	// written to it, make a conversation worth keeping where it is across
-	// turns.
+	// written to it — or, from a vendor that reports neither, sent — make
+	// a conversation worth keeping where it is across turns.
 	cacheWorth = 1024
 	// cacheCold is how long a vendor keeps a prompt cached without it being
 	// read: five minutes at Anthropic and at OpenAI, the shortest there is.
@@ -63,11 +67,12 @@ type Affinity struct {
 	LastTurn   int       `json:"lastTurn,omitempty"`
 	At         time.Time `json:"at,omitempty"`         // when
 	CacheRead  int       `json:"cacheRead,omitempty"`  // tokens that answer read from the vendor's cache
-	CacheWrite int       `json:"cacheWrite,omitempty"` // and wrote to it
+	CacheWrite int       `json:"cacheWrite,omitempty"` // and wrote to it, or was sent where none is
 	Kept       bool      `json:"kept,omitempty"`       // Last was put first for it
 	// Why it was kept — "session", "turn", "cache" — or not: "off", "first"
 	// (nobody has answered it yet), "new-turn", "no-cache" (the vendor
-	// read and wrote too little of its cache to keep), "cold" (too long
+	// read and wrote too little of its cache to keep, or was sent too
+	// little for a cache it keeps without saying so), "cold" (too long
 	// ago), "resting", "spent", "gone" (no longer one to route to).
 	Why string `json:"why"`
 }
@@ -524,8 +529,18 @@ func after(cs []candidate, pl planned, at int) ([]candidate, planned) {
 }
 
 // answered remembers who answered a conversation, and what it read from
-// the vendor's cache and wrote to it doing so.
-func answered(key string, c candidate, turn, cacheRead, cacheWrite int) {
+// the vendor's cache and wrote to it doing so — u. A vendor that keeps a
+// prompt cached without reporting it — OpenAI's automatic prefix cache,
+// Gemini — says neither of a turn that read none: what its cache holds
+// then is the prompt that turn was sent, and that stands for the write, so
+// the next turn stays to read it rather than moving as no-cache and
+// building it afresh elsewhere. A reply that reports no usage at all
+// (Input 0) counts as no cache, as it did.
+func answered(key string, c candidate, turn int, u Usage) {
+	cacheRead, cacheWrite := u.CacheRead, u.CacheWrite
+	if cacheRead == 0 && cacheWrite == 0 {
+		cacheWrite = u.Input
+	}
 	now := time.Now()
 	sticks.Lock()
 	sticks.m[key] = stick{rest: c.rest, who: c.who(), model: c.model, effort: c.effort, turn: turn, at: now, cacheRead: cacheRead, cacheWrite: cacheWrite}
