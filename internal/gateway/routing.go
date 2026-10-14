@@ -755,7 +755,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	if (why == failCredit || why == failQuota) && c.p.PaidBesideFree(c.model) {
 		id = c.restID()
 	}
-	if remoteModelRest(c, why) {
+	if remoteModelRest(c, why, header) {
 		id = c.restID()
 	}
 	r.Key = id
@@ -780,9 +780,10 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 // of quota there says nothing of the others (bigsteven on Discord: the
 // remote's 429 for one model rested every model on it for the 3 hours it
 // named). Its key refused, or the computer unreachable, still rests it
-// whole.
-func remoteModelRest(c candidate, why string) bool {
-	if !c.p.IsRemoteMagpie() {
+// whole, and so does the key's own limit there (keyLimited's 429, with
+// remoteKeyLimitHeader), which refuses every model alike (#2077).
+func remoteModelRest(c candidate, why string, header http.Header) bool {
+	if !c.p.IsRemoteMagpie() || header.Get(remoteKeyLimitHeader) != "" {
 		return false
 	}
 	return why == failQuota || why == failCredit || why == failRate
@@ -799,7 +800,7 @@ func remoteModelRest(c candidate, why string) bool {
 // count where it is, so one request's own retries don't stretch it.
 func (s *Server) rateRest(c candidate, header http.Header, body []byte, sharedPool bool, now time.Time) (time.Duration, string, int) {
 	id := c.restKey()
-	if c.isOpenRouterFree() && sharedPool || remoteModelRest(c, failRate) {
+	if c.isOpenRouterFree() && sharedPool || remoteModelRest(c, failRate, header) {
 		id = c.restID()
 	}
 	n := 1

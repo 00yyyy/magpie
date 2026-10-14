@@ -19,6 +19,11 @@ import (
 // the tests.
 var limitClock = time.Now
 
+// remoteKeyLimitHeader marks a 429 as the gateway key's own limit, not a
+// provider's: a magpie that uses this one as a remote rests its key on it,
+// and only its model on any other refusal (#2077).
+const remoteKeyLimitHeader = "X-Magpie-Limit-Reset"
+
 // keyLimited holds a gateway key's requests to its limit (#585, see
 // package budget for the rules): one that would go over is refused with a
 // 429 before any provider is asked, saying the key, the limit and when it
@@ -49,7 +54,7 @@ func keyLimited(next http.Handler) http.Handler {
 			w.Header().Set("Retry-After", strconv.Itoa(refused.RetryAfter(now)))
 			// the Anthropic and OpenAI SDKs would otherwise retry a 429
 			w.Header().Set("X-Should-Retry", "false")
-			w.Header().Set("X-Magpie-Limit-Reset", refused.Reset.Format(time.RFC3339))
+			w.Header().Set(remoteKeyLimitHeader, refused.Reset.Format(time.RFC3339))
 			writeError(w, protoOfPath(r.URL.Path), http.StatusTooManyRequests, msg)
 			c := callerOf(r)
 			appendUsage(r, usage.Record{Time: now, Agent: c.agent, Via: c.via, Requested: model, Status: http.StatusTooManyRequests, Rejected: true,
