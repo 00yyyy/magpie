@@ -13788,6 +13788,9 @@ function closeProtoMenu() {
 // whose header takes two rows.
 function scrollCloses(box, e) {
   if (box.contains(e.target)) return false;
+  // a box scrolling its own text (a long one goes back to its start as it
+  // loses focus to the click that opened the menu) moves nothing
+  if (e.target.matches?.("input, textarea")) return false;
   return !e.target.classList?.contains("view") || performance.now() < purposeUntil && purposeUntil !== guardUntil;
 }
 // openProtoMenu picks one of opts, or several when value is a list: each
