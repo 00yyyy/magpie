@@ -12,7 +12,8 @@ import (
 // An agent whose settings are left but whose CLI is gone (#843: dsh
 // uninstalled, ~/.dsh kept) is still listed, and Install another agent
 // offers it again, marked; one found where users' tools go though not on
-// PATH (#839) isn't missing, nor one whose folder an app keeps too.
+// PATH (#839) isn't missing. Codex's folder with neither its CLI nor
+// anything else that reads it is a leftover too (#2177).
 func TestCLIMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -34,8 +35,11 @@ func TestCLIMissing(t *testing.T) {
 	if !dsh.Detected() || !dsh.CLIMissing() {
 		t.Fatalf("dsh with ~/.dsh and no dsh: detected %v, missing %v", dsh.Detected(), dsh.CLIMissing())
 	}
-	if codex.CLIMissing() || never.CLIMissing() || wsl.CLIMissing() {
-		t.Fatalf("missing: codex %v, crush not here %v, wsl %v", codex.CLIMissing(), never.CLIMissing(), wsl.CLIMissing())
+	if !codex.CLIMissing() {
+		t.Fatal("codex's folder alone, nothing reading it, not taken for missing")
+	}
+	if never.CLIMissing() || wsl.CLIMissing() {
+		t.Fatalf("missing: crush not here %v, wsl %v", never.CLIMissing(), wsl.CLIMissing())
 	}
 	got := installsOf([]*Agent{dsh, codex, never, wsl}, "darwin", true)
 	ids := map[string]Install{}
@@ -48,8 +52,8 @@ func TestCLIMissing(t *testing.T) {
 	if x, ok := ids["crush"]; !ok || x.Missing {
 		t.Fatalf("crush, not here at all, offered as %+v", x)
 	}
-	if _, ok := ids["codex"]; ok {
-		t.Fatal("codex, its folder here, offered")
+	if x, ok := ids["codex"]; !ok || !x.Missing {
+		t.Fatalf("codex, its folder left, offered as %+v", x)
 	}
 
 	// installed in ~/.local/bin, which magpie's PATH hasn't: found
@@ -68,4 +72,172 @@ func TestCLIMissing(t *testing.T) {
 	for _, x := range installsOf([]*Agent{dsh}, "darwin", true) {
 		t.Fatalf("installed dsh offered: %+v", x)
 	}
+}
+
+// noApps points the app folders at an empty folder of the test's, so
+// whatever this machine has installed counts for nothing.
+func noApps(t *testing.T) string {
+	t.Helper()
+	apps := t.TempDir()
+	was := appFolders
+	appFolders = func() []string { return []string{apps} }
+	t.Cleanup(func() { appFolders = was })
+	return apps
+}
+
+func mkdirT(t *testing.T, p string) {
+	t.Helper()
+	if err := os.MkdirAll(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeT(t *testing.T, p, body string) {
+	t.Helper()
+	mkdirT(t, filepath.Dir(p))
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// #2173 (SkyTodInfi): Hermes uninstalled, ~/.hermes/config.yaml left with
+// 37 bytes, no hermes anywhere: listed, as gone. Its own install.sh's
+// checkout, or hermes in ~/.local/bin, is Hermes installed.
+func TestCLIMissingHermes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", t.TempDir())
+	noApps(t)
+	dir := filepath.Join(home, ".hermes")
+	writeT(t, filepath.Join(dir, "config.yaml"), "custom_providers: []\nmcp_servers: {}\n")
+	h := &Agent{ID: "hermes", Name: "Hermes Agent", Bin: "magpie-test-gone-hermes", Dir: dir, Path: filepath.Join(dir, "config.yaml")}
+	if !h.Detected() || !h.CLIMissing() {
+		t.Fatalf("hermes by its config.yaml alone: detected %v, missing %v", h.Detected(), h.CLIMissing())
+	}
+	// no install command magpie knows: not offered, though gone
+	for _, x := range installsOf([]*Agent{h}, runtime.GOOS, true) {
+		t.Fatalf("hermes offered: %+v", x)
+	}
+	mkdirT(t, filepath.Join(dir, "hermes-agent"))
+	if h.CLIMissing() {
+		t.Fatal("hermes with its checkout taken for missing")
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "hermes-agent")); err != nil {
+		t.Fatal(err)
+	}
+	name := h.Bin
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	local := filepath.Join(home, ".local", "bin")
+	mkdirT(t, local)
+	testenv.Program(t, filepath.Join(local, name), "#!/bin/sh\n")
+	if h.CLIMissing() {
+		t.Fatal("hermes in ~/.local/bin taken for missing")
+	}
+}
+
+// An agent whose folder isn't only its CLI's is gone only when nothing
+// else that reads it is here: an editor's extension, a desktop app, an
+// IDE whose agents bring their own program. Never one magpie can't tell
+// about (OpenCode off a Mac, Gemini, detected its own way).
+type goneCase struct {
+	id      string
+	folder  string
+	with    func(t *testing.T, home, apps string)
+	missing bool
+}
+
+func TestCLIMissingSharedFolders(t *testing.T) {
+	cases := []goneCase{
+		{"claude", ".claude", nil, true},
+		{"claude", ".claude", func(t *testing.T, home, _ string) {
+			mkdirT(t, filepath.Join(home, ".vscode", "extensions", "anthropic.claude-code-2.1.3-darwin-arm64"))
+		}, false},
+		{"claude", ".claude", func(t *testing.T, home, _ string) {
+			mkdirT(t, filepath.Join(home, ".cursor", "extensions", "anthropic.claude-code-2.1.3"))
+		}, false},
+		{"claude", ".claude", func(t *testing.T, home, _ string) {
+			writeT(t, filepath.Join(home, ".claude", "local", exe("claude")), "")
+		}, false},
+		{"claude", ".claude", func(t *testing.T, home, _ string) {
+			mkdirT(t, jetBrainsDirFor(home))
+		}, false},
+		{"codex", ".codex", nil, true},
+		{"codex", ".codex", func(t *testing.T, home, _ string) {
+			mkdirT(t, filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-26.5.1"))
+		}, false},
+		{"codex", ".codex", func(t *testing.T, home, _ string) {
+			mkdirT(t, filepath.Join(home, ".codex", "packages", "standalone"))
+		}, false},
+		{"codex", ".codex", func(t *testing.T, home, _ string) {
+			mkdirT(t, zedAgentsDirFor(home))
+		}, false},
+		// another extension's folder of the same prefix is not Codex's
+		{"codex", ".codex", func(t *testing.T, home, _ string) {
+			mkdirT(t, filepath.Join(home, ".vscode", "extensions", "openai.chatgpt.other"))
+		}, true},
+		{"cline", ".cline", nil, true},
+		{"cline", ".cline", func(t *testing.T, home, _ string) {
+			mkdirT(t, filepath.Join(home, ".windsurf", "extensions", "saoudrizwan.claude-dev-3.40.0"))
+		}, false},
+	}
+	if runtime.GOOS == "darwin" {
+		cases = append(cases,
+			goneCase{"claude", ".claude", func(t *testing.T, _, apps string) { mkdirT(t, filepath.Join(apps, "Claude.app")) }, false},
+			goneCase{"opencode", ".opencode-config", nil, true},
+			goneCase{"opencode", ".opencode-config", func(t *testing.T, _, apps string) { mkdirT(t, filepath.Join(apps, "OpenCode.app")) }, false},
+		)
+	} else {
+		cases = append(cases, goneCase{"opencode", ".opencode-config", nil, false})
+	}
+	for i, c := range cases {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+		t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+		t.Setenv("PATH", t.TempDir())
+		apps := noApps(t)
+		dir := filepath.Join(home, c.folder)
+		writeT(t, filepath.Join(dir, "settings.json"), "{}")
+		a := &Agent{ID: c.id, Name: c.id, Bin: "magpie-test-gone-" + c.id, Dir: dir, Path: filepath.Join(dir, "settings.json")}
+		if c.with != nil {
+			c.with(t, home, apps)
+		}
+		if got := a.CLIMissing(); got != c.missing {
+			t.Errorf("case %d (%s): missing %v, want %v", i, c.id, got, c.missing)
+		}
+	}
+
+	// detected its own way: never taken for gone
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	g := &Agent{ID: "gemini", Bin: "magpie-test-gone-gemini", Dir: home, Path: filepath.Join(home, "x"), detect: func() bool { return true }}
+	if g.CLIMissing() {
+		t.Fatal("gemini, detected its own way, taken for missing")
+	}
+}
+
+// jetBrainsDirFor and zedAgentsDirFor are where jetBrainsHere and
+// zedAgentsHere look on this system.
+func jetBrainsDirFor(home string) string {
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", "JetBrains")
+	case "windows":
+		return filepath.Join(home, "AppData", "Roaming", "JetBrains")
+	}
+	return filepath.Join(home, ".config", "JetBrains")
+}
+
+func zedAgentsDirFor(home string) string {
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", "Zed", "external_agents")
+	case "windows":
+		return filepath.Join(home, "AppData", "Local", "Zed", "external_agents")
+	}
+	return filepath.Join(home, ".local", "share", "zed", "external_agents")
 }

@@ -614,6 +614,11 @@ func list(agents []*agent.Agent, detectedOnly bool, dimFrom int) error {
 			r.name = faint.Render(a.Name)
 			r.vals = faint.Render("not detected")
 			r.path = ""
+		} else if a.CLIMissing() {
+			// its folder left by an uninstall (#2173): what it holds is
+			// read by nothing
+			r.name = faint.Render(a.Name)
+			r.vals = faint.Render("CLI not found")
 		} else {
 			vals := a.Values()
 			dim := dimFrom >= 0 && i >= dimFrom

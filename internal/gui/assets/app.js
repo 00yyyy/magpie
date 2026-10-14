@@ -564,6 +564,27 @@ function renderAgents() {
       back.onclick = (e) => { e.stopPropagation(); setAgentHidden(a, false); };
       who.append(back);
     }
+    // its CLI uninstalled, its folder left behind (#2177, #2173): none of
+    // its settings is offered, as nothing would read them, only that it is
+    // gone; one still connected keeps its switch, which puts back what it
+    // had before magpie (its menu's Disconnect too)
+    if (a.cliMissing) {
+      row.classList.add("gone");
+      row.classList.remove("open");
+      row.removeAttribute("aria-expanded");
+      row.onclick = null;
+      row.append(agentHandle(a, row, inFold), who);
+      if (mode === "panel") {
+        const gone = el("span", "ag-sum");
+        gone.append(el("span", "v empty", t("CLI not found")), el("span"), el("span"));
+        gone.onmouseenter = () => { gone.title = goneSaid(a); };
+        row.append(gone);
+        return row;
+      }
+      who.append(cliTag(a));
+      if (a.wired && connectable(a)) row.append(connectSwitch(a));
+      return row;
+    }
     // on the name's own line, so the row keeps its height and the pickers
     // their columns
     // a row with 「接入」 says it on its line under the name instead
@@ -607,9 +628,11 @@ function renderAgents() {
   };
   // the extras column is there for every row once any agent has one, so the
   // pickers keep lining up down the list
-  list.classList.toggle("extras", state.agents.some((a) => a.fields.some(extra) || tierMenu(a) || a.launch));
+  // (a row whose CLI is gone has none)
+  const setUp = state.agents.filter((a) => !a.cliMissing);
+  list.classList.toggle("extras", setUp.some((a) => a.fields.some(extra) || tierMenu(a) || a.launch));
   // as wide as the row with the most squares
-  list.style.setProperty("--extras", Math.max(1, ...state.agents.map((a) => a.fields.filter((f) => extra(f) && !grouped(a, f)).length + (tierMenu(a) ? 1 : 0) + (a.launch ? 1 : 0))));
+  list.style.setProperty("--extras", Math.max(1, ...setUp.map((a) => a.fields.filter((f) => extra(f) && !grouped(a, f)).length + (tierMenu(a) ? 1 : 0) + (a.launch ? 1 : 0))));
   if (!folded.length) {
     for (const a of used) list.append(agentRow(a));
   } else {
@@ -1174,8 +1197,10 @@ const anyMagpieModels = () => state.agents.some((a) => connectField(a)?.options.
 
 // connectKind: "ok" (a switch), "empty" (a switch for when magpie has
 // models), "no" (never), "link" (an app magpie is added to by a link of its
-// own: Cindy), "" (the row as it was)
+// own: Cindy), "" (the row as it was); an agent whose CLI is gone is
+// offered to no one: only its own row keeps the switch while it is wired
 function connectKind(a) {
+  if (a.cliMissing) return "no";
   if (a.import) return "link";
   if (connectable(a)) return "ok";
   if (NATIVE_ONLY[a.id]) return "no";
@@ -2102,7 +2127,10 @@ function cliTag(a) {
   // behind (#843); Install another agent has it again
   if (a.cliMissing) {
     const m = el("span", "ag-missing", t("CLI not found"));
-    m.title = t("{agent}'s settings are still here ({path}), but its command-line program isn't found: it may have been uninstalled. Install another agent, below the list, has its install command.", { agent: a.name, path: a.path });
+    // said as the pointer comes: Install another agent's list comes after
+    // the rows
+    m.title = goneSaid(a);
+    m.onmouseenter = () => { m.title = goneSaid(a); };
     box.append(m);
     return box;
   }
@@ -2305,6 +2333,15 @@ function updatedSay() {
 // for things in the terminal. Folded unless no agent is here at all.
 
 let installInfo = []; // [{ id, name, icon, commands: [{ via, command }] }]
+
+// goneSaid: why an agent whose CLI is gone has nothing to set, and where
+// it is installed again, when Install another agent knows (Hermes has no
+// command there)
+function goneSaid(a) {
+  return installInfo.some((x) => x.id === a.id)
+    ? t("{agent}'s settings are still here ({path}), but its command-line program isn't found: it may have been uninstalled. Install another agent, below the list, has its install command.", { agent: a.name, path: a.path })
+    : t("{agent}'s settings are still here ({path}), but its command-line program isn't found: it may have been uninstalled. Its settings are offered here again once it is installed.", { agent: a.name, path: a.path });
+}
 let installsOpen = null; // null: as the list has it (open with no agents)
 const VIA = { script: "Installer", powershell: "PowerShell", brew: "Homebrew", npm: "npm" };
 
@@ -2420,7 +2457,9 @@ const tweak = (f) => f.key === "ultracode" || f.key === "effort" || f.key.endsWi
 const onMagpie = (a) => !!(a.added || a.wired || a.drift);
 // one whose only control is its launch command (Cursor Private Inference)
 // has nothing set to tell by, and stays up while it is there
-const agentUsed = (a) => onMagpie(a) || (!connectable(a) && a.fields.some((f) => f.value && !tweak(f))) || (!!a.launch && !a.fields.length && !a.import);
+// one whose CLI is gone has nothing to set, and stays up only while
+// it is connected, to be disconnected
+const agentUsed = (a) => a.cliMissing ? onMagpie(a) : onMagpie(a) || (!connectable(a) && a.fields.some((f) => f.value && !tweak(f))) || (!!a.launch && !a.fields.length && !a.import);
 
 // importButton: the one control of an app magpie is added to by its import
 // link: magpie, once the app has it, or an offer to add it
@@ -3478,7 +3517,7 @@ function openAgentMenu(anchor, a, inFold) {
   if (again) return;
   const { shown } = arrangeAgents();
   const i = shown.findIndex((x) => x.id === a.id);
-  const reapply = a.drift || a.fields.some((f) => optionFor(f, f.value)?.ref);
+  const reapply = !a.cliMissing && (a.drift || a.fields.some((f) => optionFor(f, f.value)?.ref));
   const acts = inFold && isHidden(a)
     ? [{ name: "Show", icon: EYE, run: () => setAgentHidden(a, false) }]
     : inFold

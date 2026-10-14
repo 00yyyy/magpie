@@ -220,7 +220,8 @@ type agentJSON struct {
 	// account failover alone (agent.Agent.FailingOver, #1385)
 	Failover bool `json:"failover,omitempty"`
 	// CLIMissing: its settings are here, its CLI isn't (#843), which
-	// the row says, and Install another agent offers it again
+	// the row says with none of its settings offered (#2177), and Install
+	// another agent offers it again where magpie knows how
 	CLIMissing bool               `json:"cliMissing,omitempty"`
 	Native     *agent.NativeState `json:"native,omitempty"`
 }

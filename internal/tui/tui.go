@@ -176,10 +176,11 @@ func Run(ready func()) error {
 func newModel() model {
 	// in the order the app lists them, those hidden there last
 	// an app magpie has no fields in (Cindy, which takes it by a link) has
-	// nothing to pick here
+	// nothing to pick here, nor one whose CLI is gone, its folder left
+	// behind (#2177): nothing would read what is picked
 	var set []*agent.Agent
 	for _, a := range agent.Detected() {
-		if len(a.Fields) > 0 {
+		if len(a.Fields) > 0 && !a.CLIMissing() {
 			set = append(set, a)
 		}
 	}
