@@ -13,6 +13,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"math"
 	"net/http"
@@ -424,6 +425,45 @@ func init() { provider.OnRenewed(renewed) }
 // staleAllowance is provider.StaleAllowance, swapped in tests.
 var staleAllowance = provider.StaleAllowance
 
+// awaitAllowance is provider.AwaitAllowance, swapped in tests.
+var awaitAllowance = provider.AwaitAllowance
+
+// allowanceWait is how long a quota rest made before the account's
+// windows were read waits for a reading to narrow it (narrowWhenRead).
+const allowanceWait = time.Minute
+
+// narrowing counts the narrowWhenRead still waiting, for a test to wait on.
+var narrowing sync.WaitGroup
+
+// narrowWhenRead narrows an account's quota rest, made while its windows
+// were unknown (a start, or a reading that failed), to the model alone
+// once a reading says the model's pool is the one used up (#2036,
+// Ziqi-Cui): Factory's Standard pool used up leaves Droid Core's models
+// in. A reading that says nothing of pools, or none in time, leaves the
+// account's rest as it is, and so does a rest lifted or made again since.
+// It waits off the request, which has failed over already.
+func narrowWhenRead(c candidate, r Rest) {
+	defer narrowing.Done()
+	ctx, done := context.WithTimeout(context.Background(), allowanceWait)
+	defer done()
+	if !awaitAllowance(ctx, r.agent, r.user) || !c.pooled(time.Now()) {
+		return
+	}
+	id, rid := c.restKey(), c.restID()
+	restingUntil.Lock()
+	defer restingUntil.Unlock()
+	if now, ok := restingUntil.note[id]; !ok || now.Why != failQuota || !restingUntil.m[id].Equal(r.Until) {
+		return
+	}
+	delete(restingUntil.m, id)
+	delete(restingUntil.note, id)
+	r.Key, r.Model = rid, c.model
+	if until, ok := restingUntil.m[rid]; !ok || until.Before(r.Until) {
+		restingUntil.m[rid] = r.Until
+		restingUntil.note[rid] = r
+	}
+}
+
 // keyAllowance and staleKeyAllowance are provider.KeyAllowance and
 // provider.StaleKeyAllowance, swapped in tests.
 var (
@@ -591,6 +631,8 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// counts some models only, the account's others are still in theirs
 	// (Cursor's Auto with Other Models used up)
 	pooled := why == failQuota && c.pooled(now)
+	// and none to tell from: the account rests, narrowed once read (#2036)
+	unread := why == failQuota && c.p.Account != nil && len(allowances(c.p.Account.UsageAgent())[c.p.Account.User]) == 0
 	// a model the key's plan doesn't serve rests alone, counted by itself
 	// (#1235): the key's other models are still served
 	unserved := why == failOther && modelRefused(status, body)
@@ -721,6 +763,10 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	restingUntil.m[id] = r.Until
 	restingUntil.note[id] = r
 	restingUntil.Unlock()
+	if unread && id == c.restKey() && id != c.restID() {
+		narrowing.Add(1)
+		go narrowWhenRead(c, r)
+	}
 	return r
 }
 

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -100,6 +101,9 @@ func isolatedTests(m *testing.M) (int, error) {
 	// key would, in the background (a plan key's windows, #1016), and a
 	// plugin host's first start fetched models.dev
 	testenv.Offline()
+	// and no rest waits on a reading in the background: it would ask a
+	// test's fake upstream after the test ended (#2036, CodeAlex52)
+	awaitAllowance = func(context.Context, string, string) bool { return false }
 	return m.Run(), nil
 }
 
