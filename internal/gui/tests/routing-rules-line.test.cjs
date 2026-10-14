@@ -159,6 +159,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         });
         assert.deepEqual(over, []);
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "no sideways scroll");
+        // a field is set in its line's size, a phone's page too (where a
+        // page's own boxes are 16px): the intent, tokens, folders, hours
+        const sizes = await page.evaluate(() => [...document.querySelectorAll(".rt-rule .rt-cond input, .rt-rule .rt-cond textarea")]
+          .filter((x) => getComputedStyle(x).fontSize !== getComputedStyle(x.closest(".rt-cond")).fontSize)
+          .map((x) => `${x.closest(".rt-cond").className} ${x.tagName} ${getComputedStyle(x).fontSize}`));
+        assert.deepEqual(sizes, [], "every field in its line's size");
 
         // a condition added from the rule's + menu: the app's, the ones
         // the rule hasn't, and the pick shows set

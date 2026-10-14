@@ -634,8 +634,10 @@ button.rt-session { cursor: pointer; }
   background: transparent; color: inherit; outline: none; box-shadow: none; border-radius: 0;
 }
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
-  /* a phone's page sets its boxes at 16px (no zoom on focus): the copy too */
-  body.web .rt-grow { font-size: 16px; }
+  /* a phone's page sets its boxes at 16px; a rule's fields keep the line's
+     own size (iOS gets maximum-scale=1 from layout.js, so focus doesn't zoom) */
+  body.web .rt-cond input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+  body.web .rt-grow, body.web .rt-grow > textarea { font-size: inherit; }
   body.web .rt-cond.in { padding-top: 11px; padding-bottom: 11px; } /* the first line in the middle of the 44px pill */
   body.web .rt-grow > textarea { min-height: 0; }
 }
