@@ -8096,9 +8096,12 @@ function modalBackground(inert) {
   if (inert) {
     // A fresh editor may interrupt its closing animation; keep the original background.
     if (modalBackgroundElements.length) return;
-    const modal = $("#modal");
+    // the picker (#pop) is the dialog's too: a chip in the editor opens it
+    // over the dialog, and made inert it let every click through to the
+    // fields beneath (#2188)
+    const modal = $("#modal"), pop = $("#pop");
     modalBackgroundElements = [...document.body.children].filter((element) =>
-      element !== modal && element.tagName !== "SCRIPT" && !element.inert);
+      element !== modal && element !== pop && element.tagName !== "SCRIPT" && !element.inert);
     for (const element of modalBackgroundElements) element.inert = true;
   } else {
     for (const element of modalBackgroundElements) element.inert = false;
