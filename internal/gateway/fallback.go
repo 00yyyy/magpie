@@ -1175,9 +1175,11 @@ func tooLongUnsaid(p provider.Provider, model string, tokens, status int, body [
 }
 
 // windowOf is the tokens a provider's model takes, where known: the
-// user's (Provider.ContextOf), else its catalog entry's.
+// user's for the model, else its catalog entry's (Provider.WindowOf, where
+// the one set for all the provider's models is no larger than the model's
+// own, #2112), else the one set for all of them.
 func windowOf(p provider.Provider, model string) int {
-	if n := p.ContextOf(model); n > 0 {
+	if n := p.Contexts[model]; n > 0 {
 		return n
 	}
 	for _, e := range provider.Served() {
@@ -1185,7 +1187,7 @@ func windowOf(p provider.Provider, model string) int {
 			return e.Context
 		}
 	}
-	return 0
+	return p.ContextOf(model)
 }
 
 const (

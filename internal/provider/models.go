@@ -2326,14 +2326,26 @@ func ListedWindow(m catalog.Model) int {
 }
 
 // WindowOf is the window one of the provider's models takes, as agents are
-// told it and requests are routed on it: the one the user set (ContextOf)
-// over ListedWindow. The catalog's entries and the Providers page's model
-// lists both read it, so the page shows the window agents are told.
+// told it and requests are routed on it: the one the user set for the
+// model over ListedWindow. The one set for all of the provider's models
+// ("*") is no larger than a model's own, where that is known (its listed
+// window, or the most it may be asked for, MaxContext): set to 512K to
+// spend less, it told opencode-go's cat-jam-free, which takes 262K, 512K
+// (#2112). One set for the model itself is the user's word on it, larger
+// or not. The catalog's entries and the Providers page's model lists both
+// read it, so the page shows the window agents are told.
 func (p Provider) WindowOf(m catalog.Model) int {
-	if n := p.ContextOf(m.ID); n > 0 {
+	if n := p.Contexts[m.ID]; n > 0 {
 		return n
 	}
-	return ListedWindow(m)
+	listed := ListedWindow(m)
+	if n := p.Contexts["*"]; n > 0 {
+		if most := max(listed, m.MaxContext); most > 0 && most < n {
+			return most
+		}
+		return n
+	}
+	return listed
 }
 
 // ContextOf is the context the user set for the provider's model: its own,
