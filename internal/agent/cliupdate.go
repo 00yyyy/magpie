@@ -702,7 +702,13 @@ func offPath(bin string, dirs []string) bool {
 }
 
 // cliBin is where the agent's CLI is, "" when it has none magpie knows or
-// it isn't on PATH.
+// none is installed. One not on magpie's PATH is looked for where a user's
+// tools are installed (proc.FindTool), on every system as on Windows: a
+// `magpie serve` or a service started with a PATH that lacks ~/.bun/bin, an
+// npm prefix or an nvm Node other than the default never found omp there,
+// so its version stayed unknown and its models offered xhigh in place of
+// max (whqtian on Discord: fixed on Windows and in WSL, still xhigh on
+// Ubuntu).
 func (a *Agent) cliBin() (string, cliSpec) {
 	spec, ok := cliSpecs[a.ID]
 	if !ok || a.WSL != "" {
@@ -724,6 +730,9 @@ func (a *Agent) cliBin() (string, cliSpec) {
 		return "", spec
 	}
 	bin := binAt(a.Bin)
+	if bin == "" {
+		bin = proc.FindTool(a.Bin)
+	}
 	if bin == "" {
 		return "", spec
 	}
