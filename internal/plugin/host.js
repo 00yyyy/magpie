@@ -1232,8 +1232,14 @@ function mdev() {
       const st = fs.statSync(modelsDevPath, { throwIfNoEntry: false })
       const mtime = st ? st.mtimeMs : 0
       if (modelsDev === undefined || (mtime > 0 && mtime !== modelsDevMtime) || (Object.keys(modelsDev).length === 0 && mtime > 0)) {
-        modelsDev = readJSON(modelsDevPath) || {}
-        modelsDevMtime = mtime
+        // a file caught half written (catalog.Sync writes it in place)
+        // reads as unknown: keep what was read before, rather than list the
+        // providers without models.dev, and read it again next time
+        const md = readJSON(modelsDevPath)
+        if (md) {
+          modelsDev = md
+          modelsDevMtime = mtime
+        } else if (modelsDev === undefined) modelsDev = {}
       }
     } catch {
       if (modelsDev === undefined) modelsDev = {}

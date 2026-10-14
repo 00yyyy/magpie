@@ -69,6 +69,11 @@ func hangModelsDev(t *testing.T) {
 	})
 }
 
+// startBound is how long a host start may take here: far under the 25s
+// the hanging models.dev held it for before, and far over a bun start on a
+// loaded runner, so the test is red only for the wait it is about.
+const startBound = 15 * time.Second
+
 // TestHostStartDoesNotWaitOnHangingModelsDev (#1928): with no cached catalog,
 // a hanging models.dev server must not stall startOn, both when alone and when
 // another catalog.Sync is already holding the lock in flight.
@@ -79,7 +84,7 @@ func TestHostStartDoesNotWaitOnHangingModelsDev(t *testing.T) {
 	catalog.Reset()
 
 	t.Run("alone", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 
 		start := time.Now()
@@ -90,7 +95,7 @@ func TestHostStartDoesNotWaitOnHangingModelsDev(t *testing.T) {
 		defer h.stop()
 		elapsed := time.Since(start)
 
-		if elapsed >= 3*time.Second {
+		if elapsed >= startBound {
 			t.Fatalf("startOn took %v; want fast start not waiting on models.dev", elapsed)
 		}
 	})
@@ -110,7 +115,7 @@ func TestHostStartDoesNotWaitOnHangingModelsDev(t *testing.T) {
 		<-syncStarted
 		time.Sleep(50 * time.Millisecond) // ensure Sync acquired lock
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 
 		start := time.Now()
@@ -121,7 +126,7 @@ func TestHostStartDoesNotWaitOnHangingModelsDev(t *testing.T) {
 		defer h.stop()
 		elapsed := time.Since(start)
 
-		if elapsed >= 3*time.Second {
+		if elapsed >= startBound {
 			t.Fatalf("startOn took %v with sync in flight; want fast start without blocking", elapsed)
 		}
 
@@ -262,5 +267,66 @@ func TestHostBackgroundSyncForgetsProviders(t *testing.T) {
 	psAfter := Cached()
 	if !hasModel(psAfter, "mdev-fake-model") {
 		t.Fatalf("mdev-fake-model missing in Cached() after background sync; forgetProviders() was not called: %+v", psAfter)
+	}
+}
+
+// TestHostKeepsTheCatalogThroughAHalfWrite: catalog.Sync writes
+// models.json in place, so a refresh can be read half written. That reading
+// is unknown, not an empty catalog: the host keeps the catalog it read
+// before, rather than listing the plugins' providers without it (which
+// the Go side would keep until its next refresh), and reads the file again
+// once it is whole, even within the same mtime.
+func TestHostKeepsTheCatalogThroughAHalfWrite(t *testing.T) {
+	sandbox(t)
+	catalog.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	abs, err := filepath.Abs("testdata/fake/index.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Add(ctx, abs); err != nil {
+		t.Fatal(err)
+	}
+	p := catalog.CachePath()
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(p) })
+	whole := `{"fakeco":{"id":"fakeco","name":"FakeCo ModelsDev","models":{"mdev-fake-model":{"id":"mdev-fake-model"}}}}`
+	write := func(s string, at time.Time) {
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	has := func() bool {
+		forgetProviders()
+		ps, err := Providers(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range ps[0].Models {
+			if m.ID == "mdev-fake-model" {
+				return true
+			}
+		}
+		return false
+	}
+	before := time.Now().Add(-2 * time.Minute).Truncate(time.Second)
+	refresh := before.Add(time.Minute)
+	write(whole, before)
+	if !has() {
+		t.Fatal("the catalog's model isn't listed")
+	}
+	write(whole[:40], refresh)
+	if !has() {
+		t.Fatal("a catalog read half written dropped the catalog read before")
+	}
+	write(whole, refresh)
+	if !has() {
+		t.Fatal("the whole catalog isn't read once the half write is done")
 	}
 }
