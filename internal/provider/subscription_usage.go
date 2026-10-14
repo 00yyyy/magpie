@@ -86,6 +86,10 @@ type QuotaWindow struct {
 	// HoldsCredits. Empty where no whole is ever told (a pool, a family,
 	// money aside, another magpie's card).
 	HoldsWhy string `json:"holdsWhy,omitempty"`
+	// StartsAt is when the window began (Bounds), for the GUI only
+	// (WithWindowStarts): with ResetsAt it places an even pace through the
+	// window, which the card's Pace number is measured from (fflake33).
+	StartsAt *time.Time `json:"startsAt,omitempty"`
 	// matches further scopes pools whose membership isn't one model word.
 	matches func(string) bool
 	// partial is set on the windows of a reading that may leave some out:

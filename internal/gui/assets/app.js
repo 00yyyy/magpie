@@ -13036,6 +13036,36 @@ function quotaText(w) {
   const count = quotaCount(w);
   return count ? count + " · " + pct : pct;
 }
+// quotaPace: how far a window is from an even pace through it, as a
+// number (fflake33 on Discord): the figure the meter shows less what an
+// even pace would show by now, in points of the window, rounded — used
+// 60% halfway through is +10, and left it is −10; null where the window's
+// start or reset isn't known (startsAt is the gateway's,
+// provider.WithWindowStarts). over says more is used than an even pace
+// would have, whichever way the meter reads.
+function quotaPace(w, now = Date.now()) {
+  if (w.unlimited || w.historyMissing || !w.startsAt || !w.resetsAt) return null;
+  const s = Date.parse(w.startsAt), e = Date.parse(w.resetsAt);
+  if (!(e > s) || now < s || now >= e) return null;
+  const d = Math.max(0, Math.min(100, w.used)) - (100 * (now - s)) / (e - s);
+  const n = Math.round(quotaLeft ? -d : d);
+  return { n: n === 0 ? 0 : n, over: Math.round(d) > 0, under: Math.round(d) < 0, by: Math.abs(Math.round(d)) };
+}
+// paceNumber: +12%, −8% (a true minus), ±0%
+function paceNumber(n) {
+  return (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n) + "%";
+}
+// paceLine: a window's Pace number for its reset line, with what it means
+// in its tooltip; null with none
+function paceLine(w) {
+  const p = quotaPace(w);
+  if (!p) return null;
+  const span = el("span", "quota-pace" + (p.over ? " over" : ""), t("Pace {n}", { n: paceNumber(p.n) }));
+  span.title = p.over ? t("{n} more of this window is used than an even pace through it would have used by now: at this rate it runs out before it resets", { n: p.by + "%" })
+    : p.under ? t("{n} less of this window is used than an even pace through it would have used by now: at this rate it lasts until it resets", { n: p.by + "%" })
+    : t("Right on an even pace through this window");
+  return span;
+}
 // quotaCount: a window's own count, when its vendor counts in amounts
 // (WorkBuddy's credits, #659) — "355 / 500 credits" used, or what is left
 // of them, as the share beside it says; the vendor's own text otherwise.
@@ -17009,6 +17039,13 @@ function quotaWindows(sub) {
       if (!sub.history && at > Date.now()) r.append(" ", el("span", "", untilText(at)));
       quota.append(r);
       quota.title = sub.history ? t("Last reading {when}", { when: quotaCycleDate(w.recordedAt) }) : resetText(at, at.toLocaleString(intlLang()));
+    }
+    // how far it is from an even pace through the window, as a number
+    // (fflake33 on Discord), on the reset's line
+    const pace = !sub.history && r ? paceLine(w) : null;
+    if (pace) {
+      r.lastChild.textContent += " ·";
+      r.append(" ", pace);
     }
     // credits that run out before then, or with no reset at all
     const out = runsOutText(w);
@@ -21753,6 +21790,11 @@ function renderTrayUsage(s, keep) {
   $("#trayBirdRow").hidden = !ids.length || !mac;
   $("#trayBirdSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.trayNoBird ? "off" : "on",
     (v) => savePrefs({ ...keep, trayNoBird: v === "off" })));
+  // and each window's Pace number beside its figure (fflake33), off unless
+  // asked for, as it widens every card; not where the tray shows no text
+  $("#trayPaceRow").hidden = !ids.length || document.documentElement.classList.contains("win");
+  $("#trayPaceSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.trayPace ? "on" : "off",
+    (v) => savePrefs({ ...keep, trayPace: v === "on" })));
 }
 const TRAY_EVERY = [1, 3, 5, 10, 30];
 // the totals the menu bar can show beside the allowances (gui.trayTotal)
@@ -23644,7 +23686,7 @@ function prefsKeep(s) {
     codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, noStats: !!s.noStats, noUsageStats: !!s.noUsageStats,
     memberModel: !!s.memberModel, noLoopGuard: !!s.noLoopGuard, refusalRetries: s.refusalRetries ?? null,
     noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360,
-    trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, vision: s.vision || "", visionEffort: s.visionEffort || "", searcherEffort: s.searcherEffort || "", imageGen: s.imageGen || "", searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",
+    trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, trayPace: !!s.trayPace, vision: s.vision || "", visionEffort: s.visionEffort || "", searcherEffort: s.searcherEffort || "", imageGen: s.imageGen || "", searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",
     chineseUnits: !!s.chineseUnits, usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0, resetReminder: s.resetReminder || 0,
     turnDoneAlert: s.turnDoneAlert || 0 };
 }

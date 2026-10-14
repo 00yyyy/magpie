@@ -29,7 +29,7 @@ func TestTrayTotals(t *testing.T) {
 	if !slices.Equal(asked, []usage.Period{usage.Week, usage.Today}) {
 		t.Fatalf("summed %v, want 7d then today", asked)
 	}
-	cells, label, tip := trayUsageView(cards, time.Now(), false)
+	cells, label, tip := trayUsageView(cards, time.Now(), false, false)
 	if label != "47M · $128 | 1.2M · $3.40+" {
 		t.Errorf("label %q", label)
 	}
@@ -87,7 +87,7 @@ func TestTrayTotalsBesideCards(t *testing.T) {
 	t.Cleanup(func() { trayTotalSum = old })
 	cards := append(trayCards(), trayTotalCard("usage:today", trayTotalSum(usage.Today), "usd", 0))
 	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
-	cells, label, _ := trayUsageView(trayPick(cards, []string{"usage:today", "claude|a@b.c"}, now), now, false)
+	cells, label, _ := trayUsageView(trayPick(cards, []string{"usage:today", "claude|a@b.c"}, now), now, false, false)
 	if label != "6.0K · $0.120 | 42% · 18%" {
 		t.Errorf("label %q", label)
 	}

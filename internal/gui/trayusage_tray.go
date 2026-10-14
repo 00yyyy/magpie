@@ -40,7 +40,7 @@ func (h *host) watchTrayUsage() {
 		for {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			s := settings.Load()
-			cells, label, tip := trayUsageView(trayUsageCards(ctx, s.TrayUsages), time.Now(), s.QuotaLeft)
+			cells, label, tip := trayUsageView(trayUsageCards(ctx, s.TrayUsages), time.Now(), s.QuotaLeft, s.TrayPace)
 			cancel()
 			if s.TrayNoLogos {
 				cells = trayPlain(cells)

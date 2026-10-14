@@ -63,8 +63,9 @@ func trayWindows(q provider.SubscriptionQuota) []provider.QuotaWindow {
 
 // trayUsageText is the menu bar's text for a card and the tooltip that
 // spells it out: each window's use, or what is left of it (left), and when
-// it starts again.
-func trayUsageText(q provider.SubscriptionQuota, now time.Time, left bool) (label, tip string) {
+// it starts again. With pace (settings.TrayPace) each window's Pace number
+// follows its figure, in both, as the Usage page's cards show it.
+func trayUsageText(q provider.SubscriptionQuota, now time.Time, left, pace bool) (label, tip string) {
 	if strings.HasPrefix(q.Provider, trayTotal) {
 		return q.Balance, q.Name // trayTotalCard's: its rows, and its tooltip
 	}
@@ -79,6 +80,10 @@ func trayUsageText(q provider.SubscriptionQuota, now time.Time, left bool) (labe
 		}
 		return q.Balance, q.Name + " · " + q.Balance + trayAsOf(q)
 	}
+	readAt := now
+	if q.ReadAt != nil && !q.ReadAt.After(now) {
+		readAt = *q.ReadAt
+	}
 	var short, long []string
 	for _, w := range ws {
 		used := math.Max(0, math.Min(100, w.Used))
@@ -89,7 +94,12 @@ func trayUsageText(q provider.SubscriptionQuota, now time.Time, left bool) (labe
 			n, word = 100-n, "left"
 		}
 		pct := fmt.Sprintf("%d%%", n)
-		short = append(short, pct)
+		row, paceNote := pct, ""
+		if p, ok := w.Pace(readAt, now); pace && ok {
+			row = pct + " " + trayPace(p, left)
+			paceNote = " · pace " + trayPace(p, left)
+		}
+		short = append(short, row)
 		tipPct := pct
 		if used != math.Trunc(used) {
 			tipPct = fmt.Sprintf("%.1f%%", used)
@@ -98,6 +108,7 @@ func trayUsageText(q provider.SubscriptionQuota, now time.Time, left bool) (labe
 		if c := w.Count(left); c != "" {
 			line = w.Name + " " + c + " · " + tipPct + " " + word
 		}
+		line += paceNote
 		if at := resetAt(w, now); !at.IsZero() && at.After(now) {
 			line += " · resets in " + until(at.Sub(now))
 		}
@@ -107,6 +118,25 @@ func trayUsageText(q provider.SubscriptionQuota, now time.Time, left bool) (labe
 		short = short[:2]
 	}
 	return strings.Join(short, " · "), q.Name + "\n" + strings.Join(long, "\n") + trayAsOf(q)
+}
+
+// trayPace is a window's Pace number as the Usage page writes it
+// (paceNumber in app.js): "+12%", "−8%" with a true minus, "±0%". It
+// follows the figure beside it, so where what is left is shown (left) its
+// sign is turned: +12% left is twelve points more to spare than an even
+// pace would have.
+func trayPace(p float64, left bool) string {
+	if left {
+		p = -p
+	}
+	switch n := int(math.Round(p)); {
+	case n > 0:
+		return fmt.Sprintf("+%d%%", n)
+	case n < 0:
+		return fmt.Sprintf("−%d%%", -n)
+	default:
+		return "±0%"
+	}
 }
 
 // trayAsOf is the tooltip's word that a card stands in for one that
@@ -352,10 +382,10 @@ func trayPlain(cells []trayCell) []trayCell {
 // trayUsageView is what the tray shows for the cards: a cell for each
 // that has a label, with its stable identity for clicks; labels joined by
 // " | " for a tray that shows text; and a tooltip spelling each out.
-func trayUsageView(cards []provider.SubscriptionQuota, now time.Time, left bool) (cells []trayCell, label, tip string) {
+func trayUsageView(cards []provider.SubscriptionQuota, now time.Time, left, pace bool) (cells []trayCell, label, tip string) {
 	var labels, tips []string
 	for _, q := range cards {
-		l, t := trayUsageText(q, now, left)
+		l, t := trayUsageText(q, now, left, pace)
 		if t != "" {
 			tips = append(tips, t)
 		}
