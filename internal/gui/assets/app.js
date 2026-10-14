@@ -5584,7 +5584,7 @@ function renderProviders() {
     const n = p.models.filter((m) => m.on).length;
     // a provider that only draws images (Settings → Image generation) says so
     const models = n ? t(n === 1 ? "{n} model" : "{n} models", { n })
-      : p.draws ? t(p.draws === 1 ? "{n} image model" : "{n} image models", { n: p.draws }) : t("no models exposed");
+      : p.draws ? t(p.draws === 1 ? "{n} image model" : "{n} image models", { n: p.draws }) : t(p.noModels ? "usage only" : "no models exposed");
     // every account in use refused by its vendor: signed out, as the
     // accounts list says of each, not a green "signed in"
     const inUse = (p.account?.logins || []).filter((l) => l.on || l.active);
@@ -10703,21 +10703,27 @@ function renderModels(p) {
   // that one unpicked every model again, while Select none served none and
   // looked nearly the same): the vendor's list, or the models picked, none
   // when none are. A click on a model, Select all or Select none is
-  // "Picked"; only "Vendor's list" goes back to the vendor's list
+  // "Picked"; only "Vendor's list" goes back to the vendor's list. None
+  // picked is Usage only, its own option (#2068, keleus: a subscription
+  // kept for its usage alone took Picked only, then Select none, then Save
+  // to find): nothing routed to it, its balance and usage still shown.
+  // Picked only with none picked starts from what the vendor's list serves
+  // (the dashed ones), to unpick from
   const serves = el("div", "segs mserves");
-  const servesOpts = [["list", "Vendor's list", "Serve the vendor's list, up to {n} of it (dashed), models it lists later too"], ["picked", "Picked only", "Serve only the models picked: none while none are, its balance and usage still shown"]].map(([v, name, tip]) => {
+  const servesOpts = [["list", "Vendor's list", "Serve the vendor's list, up to {n} of it (dashed), models it lists later too"], ["picked", "Picked only", "Serve only the models picked"], ["none", "Usage only", "Route nothing to it: no agent or routing group uses its models, and those it lists later aren't added. Its balance and usage still show."]].map(([v, name, tip]) => {
     const b = el("button", "opt", t(name));
     b.dataset.serves = v;
     b.title = t(tip, { n: 24 });
     b.onclick = () => {
       if (v === "list") { draft.chosen = []; draft.typed = ""; draft.none = false; }
-      else if (!draft.chosen.length) draft.none = true;
+      else if (v === "none") { draft.chosen = []; draft.typed = ""; draft.none = true; }
+      else if (!draft.chosen.length) { draft.chosen = p.models.filter((m) => !noAPI(m)).slice(0, 24).map((m) => m.id); draft.none = true; }
       draw();
     };
     serves.append(b);
     return b;
   });
-  const servesMode = () => draft.chosen.length || draft.none ? "picked" : "list";
+  const servesMode = () => draft.chosen.length ? "picked" : draft.none ? "none" : "list";
   const drawServes = () => {
     const now = servesMode();
     for (const b of servesOpts) { b.classList.toggle("on", b.dataset.serves === now); b.setAttribute("aria-pressed", b.dataset.serves === now); }
