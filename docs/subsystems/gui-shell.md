@@ -328,7 +328,13 @@ in [`cursor_editor_test.go`](../../internal/sessions/cursor_editor_test.go).
 
 Messages without tokens or an active-time estimate still count as sessions
 in the overview. Cursor and OpenCode conversations can be opened through
-the existing transcript API, including CLI reasoning and tool calls. When the selected date range is empty but
+the existing transcript API, including CLI reasoning and tool calls. So can
+Kimi Code's main agent, from its `wire.jsonl`: a turn's `turn.prompt` and
+loop events from protocol 1.4 on (so a turn still running shows), and the
+untimed `context.append_message` records of a session imported from
+kimi-cli; Kimi Code's own timed messages repeat those and are skipped
+([`transcript_kimi.go`](../../internal/sessions/transcript_kimi.go),
+`TestKimiCodeTranscript`). When the selected date range is empty but
 matching history exists, Usage offers **All sessions**, preserving the agent,
 model, folder and search filters. See `sessions-empty-range.test.cjs`.
 
