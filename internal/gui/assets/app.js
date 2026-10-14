@@ -15419,7 +15419,7 @@ function drawQuotaPlot(g, lines, x0, x1, w, h, now, thin) {
       g.append(e);
     }
     const d = quotaPaths(l.points, x0, x1, w, h);
-    if (d) g.append(sv("path", { d, class: "qc-line" + (short ? " qc-short" : ""), "data-name": l.name }, { stroke: color }));
+    if (d) g.append(sv("path", { d, class: "qc-line" + (short ? " qc-short" : ""), "data-name": l.name, "data-series": i }, { stroke: color }));
   });
   // a spark ends at now already, and in 16px the dotted now line read as a
   // stray mark under the curve (#1601); the large curve keeps it
@@ -15448,8 +15448,11 @@ function quotaCurve(sub) {
     legend.replaceChildren();
     shown.forEach((l, i) => {
       const k = el("span", "qc-key");
+      k.dataset.series = i;
       const sw = el("i");
-      sw.style.background = `var(--c${(i % 7) + 1})`;
+      const color = `var(--c${(i % 7) + 1})`;
+      sw.style.setProperty("--sw", color);
+      sw.style.background = color;
       const last = l.points[l.points.length - 1];
       if (!last) return;
       k.append(sw, el("span", "", l.label), el("b", "", Math.round(last.left) + "%"));
@@ -20527,6 +20530,8 @@ function applyPrefs(s, rate) {
       if (applyPrefs.ready) { tintPanel(450); tintTitleBar(460); }
     }
   }
+  if (s.colorblind) root.dataset.colorblind = "1";
+  else delete root.dataset.colorblind;
   applyPrefs.ready = true;
   // accounts hidden while personal data is masked, until chosen otherwise
   window.hideAccounts?.follow(!!s.redactPersonal);
@@ -20927,6 +20932,8 @@ function renderSettings() {
   prefsBase = keep;
   renderFonts(s);
   $("#themeSegs").replaceChildren(segs(THEMES.map(([id, name]) => [id, t(name)]), s.theme, (theme) => savePrefs({ ...keep, theme })));
+  $("#colorblindSegs").title = t("High-contrast chart palette with distinct line styles and legend shapes");
+  $("#colorblindSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.colorblind ? "on" : "off", (v) => savePrefs({ ...keep, colorblind: v === "on" })));
   renderLangPick(s, keep);
   renderGatewayMode(s);
   // a browser tab has its own zoom, and magpie leaves it to it
@@ -23840,7 +23847,7 @@ function wbCheckinLine(r) {
 
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
-  return { theme: s.theme, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, lightweight: !!s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, proxy: s.proxy || "",
+  return { theme: s.theme, colorblind: !!s.colorblind, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, lightweight: !!s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, proxy: s.proxy || "",
     sessionTerminal: s.sessionTerminal || "",
     uiFont: s.uiFont || null, codeFont: s.codeFont || null,
     otel: s.otel || {},

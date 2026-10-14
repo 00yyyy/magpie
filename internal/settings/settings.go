@@ -37,8 +37,11 @@ import (
 // Settings is what the user chose. "" and "system" both mean "follow the OS".
 type Settings struct {
 	Theme string `json:"theme,omitempty"` // system | light | dark
-	Lang  string `json:"lang,omitempty"`  // system | en | zh
-	Tray  string `json:"tray,omitempty"`  // what clicking the tray icon opens: panel | window
+	// Colorblind switches chart series (--c1…--c7) to an Okabe–Ito palette
+	// and gives quota curve lines and legend keys distinct shapes (#2073).
+	Colorblind bool   `json:"colorblind,omitempty"`
+	Lang       string `json:"lang,omitempty"` // system | en | zh
+	Tray       string `json:"tray,omitempty"` // what clicking the tray icon opens: panel | window
 	// SessionTerminal is the Mac app that opens a resumed session, by bundle
 	// id. "" and "system" follow the .command file association.
 	SessionTerminal string `json:"sessionTerminal,omitempty"`

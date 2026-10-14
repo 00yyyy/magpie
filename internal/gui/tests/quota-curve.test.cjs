@@ -367,3 +367,125 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
   }
 }
+
+const cbWords = {
+  en: { label: "Colorblind mode", off: "Off", on: "On" },
+  zh: { label: "色盲模式", off: "关闭", on: "开启" },
+  "zh-TW": { label: "色盲模式", off: "關閉", on: "開啟" },
+  ja: { label: "色覚サポート", off: "オフ", on: "オン" },
+  de: { label: "Farbenblind-Modus", off: "Aus", on: "An" },
+};
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const [lang, w] of Object.entries(cbWords)) {
+    test(`${engine} ${lang}: colorblind mode separates quota series by colour, dash and legend shape (#2073)`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const data = fixtures(Date.now());
+      const posts = [];
+      let st = { theme: "light", colorblind: false, lang, tray: "panel", quotaLeft: false, currency: "usd" };
+      const context = await browser.newContext({ viewport: { width: 900, height: 640 }, reducedMotion: "reduce" });
+      const page = await context.newPage();
+      page.setDefaultTimeout(5000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      const base = serve(lang, "light", false, data);
+      await page.route("**/*", async (route) => {
+        const req = route.request(), url = new URL(req.url());
+        const json = (body) => route.fulfill({ json: body });
+        if (url.pathname === "/boot.js") {
+          const boot = { lang, theme: st.theme, web: true, ...(st.colorblind ? { colorblind: true } : {}) };
+          return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify(boot)};` });
+        }
+        if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: st });
+        if (url.pathname === "/api/settings") {
+          if (req.method() === "POST") {
+            const b = req.postDataJSON();
+            posts.push(b);
+            st = { ...st, ...b };
+          }
+          return json(st);
+        }
+        return base(route);
+      });
+
+      await page.goto("http://magpie.test/?view=settings&tab=general");
+      const row = page.locator("#colorblindRow");
+      await row.waitFor();
+      assert.equal(await row.locator(".name").innerText(), w.label);
+      assert.deepEqual(await row.locator("#colorblindSegs .opt").allInnerTexts(), [w.off, w.on]);
+      assert.equal(await row.locator("#colorblindSegs .opt.on").innerText(), w.off, "off by default");
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.colorblind), undefined);
+
+      const readCurve = () => page.evaluate(() => {
+        const parse = (s) => s.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
+        const lum = ([r, g, b]) => {
+          const [R, G, B] = [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+          return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+        };
+        const hue = ([r, g, b]) => {
+          r /= 255; g /= 255; b /= 255;
+          const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+          if (!d) return 0;
+          const h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+          return h * 60;
+        };
+        const curve = document.querySelector('.subscription-card[data-key="codex"] .quota-curve');
+        const lines = [...curve.querySelectorAll("path.qc-line")].map((p) => {
+          const cs = getComputedStyle(p);
+          const rgb = parse(cs.stroke);
+          return { series: p.dataset.series, stroke: cs.stroke, dash: cs.strokeDasharray, opacity: +cs.opacity, lum: lum(rgb), hue: hue(rgb) };
+        });
+        const keys = [...curve.querySelectorAll(".qc-key")].map((k) => {
+          const cs = getComputedStyle(k.querySelector("i"));
+          return { series: k.dataset.series, radius: cs.borderRadius, bg: cs.backgroundColor, shadow: cs.boxShadow, borderLeft: parseFloat(cs.borderLeftWidth) };
+        });
+        const root = getComputedStyle(document.documentElement);
+        const palette = [1, 2, 3, 4, 5, 6, 7].map((i) => root.getPropertyValue("--c" + i).trim());
+        return { cb: document.documentElement.dataset.colorblind || "", lines, keys, palette };
+      });
+
+      const scroll0 = await page.locator("#view-settings").evaluate((v) => v.scrollTop);
+      await row.locator("#colorblindSegs .opt", { hasText: w.on }).click();
+      for (let i = 0; i < 50 && !posts.length; i++) await page.waitForTimeout(40);
+      assert.equal(posts.at(-1)?.colorblind, true);
+      assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), scroll0, "toggling colorblind mode never scrolls");
+      await page.waitForFunction(() => document.documentElement.dataset.colorblind === "1");
+
+      await page.goto("http://magpie.test/?view=usage");
+      await page.locator('.subscription-card[data-key="codex"] .quota-curve').first().waitFor();
+      for (const theme of ["light", "dark"]) {
+        st.theme = theme;
+        await page.evaluate((th) => { document.documentElement.dataset.theme = th; }, theme);
+        const got = await readCurve();
+        assert.equal(got.cb, "1");
+        assert.equal(got.lines.length, 2);
+        assert.deepEqual(got.lines.map((l) => l.series), ["0", "1"]);
+        // 5h and 7d are separated in both hue (>100 deg apart, not two blues) and luminance
+        const hueDiff = Math.abs(got.lines[0].hue - got.lines[1].hue);
+        assert.ok(Math.min(hueDiff, 360 - hueDiff) > 100, `${theme}: hues too close: ${JSON.stringify(got.lines)}`);
+        assert.ok(Math.abs(got.lines[0].lum - got.lines[1].lum) > 0.12, `${theme}: luminance too close: ${JSON.stringify(got.lines)}`);
+        // 5h and 7d have different dash styles, and the short 5h window isn't washed out
+        assert.equal(got.lines[0].dash, "none");
+        assert.notEqual(got.lines[1].dash, "none");
+        assert.ok(got.lines[0].opacity >= 0.8, `${theme}: short window stays legible: ${got.lines[0].opacity}`);
+        // Legend keys have distinct shapes and fills, with no left border
+        assert.notEqual(got.keys[0].radius, got.keys[1].radius, "circle vs square");
+        assert.notEqual(got.keys[0].bg, got.keys[1].bg, "filled vs hollow");
+        assert.notEqual(got.keys[1].shadow, "none", "hollow ring drawn with inset box-shadow");
+        assert.ok(got.keys.every((k) => k.borderLeft === 0), "no left border");
+      }
+
+      // Reload applies colorblind mode from boot.js before the first paint, and turning it off restores defaults
+      await page.goto("http://magpie.test/?view=settings&tab=general");
+      await row.waitFor();
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.colorblind), "1", "kept across reload via boot.js");
+      assert.equal(await row.locator("#colorblindSegs .opt.on").innerText(), w.on);
+      await row.locator("#colorblindSegs .opt", { hasText: w.off }).click();
+      for (let i = 0; i < 50 && posts.at(-1)?.colorblind !== false; i++) await page.waitForTimeout(40);
+      assert.equal(posts.at(-1)?.colorblind, false);
+      await page.waitForFunction(() => !document.documentElement.dataset.colorblind);
+      assert.deepEqual(errors, []);
+    });
+  }
+}
