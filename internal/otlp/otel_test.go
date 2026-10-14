@@ -1,11 +1,10 @@
-package usage
+package otlp
 
 import (
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 func otelConfig(t *testing.T, config settings.OTel) {
@@ -47,11 +47,11 @@ func TestOTelBatchWireAndPrivacy(t *testing.T) {
 	t.Cleanup(stop)
 	r := Record{RouteID: 42, Time: time.Now(), Agent: "pi", Provider: "deepseek", Model: "deepseek-chat", Requested: "group/mine", Served: "deepseek-v4", Input: 10, CacheRead: 3, CacheWrite: 2, Output: 4, Reasoning: 1, Millis: 1200, TTFT: 200, Status: 200,
 		ProviderKeyName: "PRIVATE-ACCOUNT", ProviderKeyID: "PRIVATE-KEY", Session: "PRIVATE-SESSION", Via: "PRIVATE-HOST"}
-	Append(r)
+	usage.Append(r)
 	r.Error, r.ErrType = "PRIVATE-ERROR", "PRIVATE-ERROR-TYPE"
-	Append(r) // an error in a stream whose HTTP status is already 200
+	usage.Append(r) // an error in a stream whose HTTP status is already 200
 	r.Status = 502
-	Append(r)
+	usage.Append(r)
 	stop() // drain without waiting for the periodic batch
 	receive := func() received {
 		select {
@@ -281,7 +281,7 @@ func TestOTelShutdownCancelsSlowCollector(t *testing.T) {
 	defer collector.Close()
 	otelConfig(t, settings.OTel{Endpoint: collector.URL})
 	stop := StartOTel()
-	Append(Record{Time: time.Now(), Status: 200})
+	usage.Append(Record{Time: time.Now(), Status: 200})
 	start := time.Now()
 	stop()
 	if time.Since(start) > 4*time.Second {
@@ -336,7 +336,7 @@ func TestOTelRetryAfterBound(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				e.send(cfg, "traces", e.traces([]Record{{Time: start, Status: 200}}))
+				e.send(cfg, "traces", e.traces([]otelItem{{record: Record{Time: start, Status: 200}}}))
 				if calls != 3 {
 					t.Fatalf("attempts=%d, want 3", calls)
 				}
@@ -345,21 +345,11 @@ func TestOTelRetryAfterBound(t *testing.T) {
 	}
 }
 
-// a call's bodies go only to the OTLP export (#538), never to usage.jsonl
-func TestBodiesStayOutOfTheLog(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	Append(Record{Time: time.Now(), Model: "m1", Status: 200, BodyIn: "PRIVATE-PROMPT", BodyOut: "PRIVATE-REPLY"})
-	b, err := os.ReadFile(Path())
-	if err != nil || !strings.Contains(string(b), `"model":"m1"`) || strings.Contains(string(b), "PRIVATE-") {
-		t.Fatalf("usage.jsonl: %s %v", b, err)
-	}
-}
-
 func TestOTelReplyText(t *testing.T) {
 	for _, c := range []struct{ body, want string }{
 		{`{"choices":[{"message":{"content":"hi"}}]}`, `{"choices":[{"message":{"content":"hi"}}]}`},
 		{"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"he\"}}\n\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"llo\"}}\n\n", "hello"},
-		{"data: {\"type\":\"response.output_text.delta\",\"delta\":\"he\"}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"llo\"}\n\n" + BodyCut, "hello" + BodyCut},
+		{"data: {\"type\":\"response.output_text.delta\",\"delta\":\"he\"}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"llo\"}\n\n" + usage.BodyCut, "hello" + usage.BodyCut},
 		{"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"t\"}]}}]}\n\n", "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"t\"}]}}]}\n\n"},
 	} {
 		if got := otelReplyText(c.body); got != c.want {

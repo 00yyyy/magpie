@@ -26,7 +26,7 @@ func TestWorkBuddySessionHeader(t *testing.T) {
 	h.Set("X-Conversation-Message-ID", "message-1")
 	for name, got := range map[string]string{
 		"session": sessionOf(h), "native": nativeSessionOf(h),
-		"conversation": conversationID(h, []byte(body)), "otel": otelSessionOf(h),
+		"conversation": conversationID(h, []byte(body)), "otel": observedSession(h),
 	} {
 		if got != "workbuddy-session" {
 			t.Errorf("%s = %q, want WorkBuddy's actual session", name, got)
@@ -36,7 +36,7 @@ func TestWorkBuddySessionHeader(t *testing.T) {
 		t.Errorf("an explicit WorkBuddy session still has an inferred conversation %q", got)
 	}
 	h.Set(SessionHeader, "override")
-	if sessionOf(h) != "override" || nativeSessionOf(h) != "workbuddy-session" || otelSessionOf(h) != "workbuddy-session" || conversationID(h, []byte(body)) != "workbuddy-session" {
+	if sessionOf(h) != "override" || nativeSessionOf(h) != "workbuddy-session" || observedSession(h) != "workbuddy-session" || conversationID(h, []byte(body)) != "workbuddy-session" {
 		t.Fatal("the explicit override lost WorkBuddy's native session")
 	}
 	for _, header := range []string{"x-opencode-session", "x-session-affinity", "x-session-id", "session_id", "session-id", "x-claude-code-session-id"} {

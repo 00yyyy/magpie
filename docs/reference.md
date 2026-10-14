@@ -2444,7 +2444,9 @@ Settings → Observability can export gateway request metadata over OTLP/HTTP
 (JSON). Export is off by default. Set the collector's base URL and optional
 headers, then enable **OTLP export**. **Export metrics** is separately off by
 default; enable it for a collector that accepts duration and token histograms.
-No restart is needed for saved settings.
+No restart is needed for saved settings. The export is the built-in plugin
+`otel` (Observability in Plugins › Built-in), which stays on while settings
+or the environment say to export.
 
 For `magpie serve`, environment variables override the saved preferences:
 

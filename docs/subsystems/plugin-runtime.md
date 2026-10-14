@@ -9,7 +9,8 @@ runtime, the file and the window's switch) and P1 (the window's kernel: a
 plugin's page, its error boundary, the kit it draws with and its settings
 form, with the Gateway page as the first plugin to draw its own page), and
 P2 so far (a page moved out of the core whole: its code, styles and words:
-Sessions, Library, Routing and Usage). OpenCode plugins (npm packages in
+Sessions, Library, Routing and Usage), and P3 so far (the gateway's
+extension points: the observer, with OTel export as its first plugin). OpenCode plugins (npm packages in
 the plugin host) are a different thing; see
 [provider and plugin ownership](provider-plugins.md) and
 [gateway middleware](gateway-middleware.md).
@@ -152,6 +153,28 @@ says one of its words, which goes back to i18n.js.
   usage. A `show("usage")` left anywhere gives way to Agents. The panel's
   Allowances tab stays.
 
+## Gateway extension points (P3): observer
+
+P3 opens the gateway to plugins at four points: observer, router strategy,
+middleware and tool. The observer is the first. It only reads, so it is
+the safest to move first. `plugins/otel` is its first consumer, and with the
+plugin off the gateway does no observing work.
+
+| Part | What it does | Source |
+| --- | --- | --- |
+| `usage.Observer` | `Serve() (stop)`, `Bodies()`, `Begin(Request) Watch` and `Ledger(Record)`. An observer watches what the gateway serves and what the ledger is written, and never changes either. `Observe(o)` registers one until its remove; `Observers` lists them. It lives in `internal/usage`, not the gateway, because every row is a usage `Record` and the ledger's other writers reach it too. | [`observe.go`](../../internal/usage/observe.go) |
+| Serving | `ServeObservers()` starts every observer registered, and each one registered later, until the last of its stops (it is counted). Only the process serving the gateway calls it (`Server.ListenAndServe`), so a CLI that writes a usage row exports nothing. Remove stops a serving observer. | [`observe.go`](../../internal/usage/observe.go), [`gateway.go`](../../internal/gateway/gateway.go) |
+| `Begin` and `Watch` | As a request starts the gateway asks each observer (`observeRequest`) with `usage.Request`: its header, agent, session (the native one when the agent names it), call kind (`auxiliary` for Claude's tool-less helper calls) and `Plain` (loopback, no gateway key, not passed on from another magpie). A `Watch` it returns gets `Attempt` for each routing attempt, unbilled failures and retries too, and `End` once. With no observer, or none watching, the request carries nothing. | [`observe.go`](../../internal/gateway/observe.go) |
+| Bodies | `Bodies()` is `NoBodies`, `CapturedBodies` (the first 256 KiB, cut with `usage.BodyCut`) or `WholeBodies` (the reply spooled whole as it streams, #538). The gateway takes the most any observer wants now (`ObservedBodies`): it keeps the whole reply only when one asks for it, and puts bodies on an attempt's record only when one asks for any. | [`observe.go`](../../internal/gateway/observe.go), [`capture.go`](../../internal/gateway/capture.go) |
+| `Ledger` and `Watched` | Every row `Append` writes is passed to each observer. A row of a request some observer watched has `Watched` set (`appendUsage`), so an observer that sent the request's attempts doesn't send its row again. | [`usage.go`](../../internal/usage/usage.go), [`lan.go`](../../internal/gateway/lan.go) |
+| `internal/otlp` | The OTLP/HTTP exporter, moved whole out of `internal/usage`: `otlp.New()` is an `Exporter`, a `usage.Observer`. Its Begin leaves a local agent's own turn to the agent's transcript when session tracing reads it, and takes a W3C `traceparent` as the parent. Settings are read on each call, as before. | [`otlp/`](../../internal/otlp) |
+| `plugins/otel` | Requires `window`, `settings` and `gateway`. Apply registers `otlp.New()` and disposes of it when turned off. `InUse` is 1 while `settings.OTelExport` says to send (settings.json or `MAGPIE_OTEL_*`), so a user who exports only through the environment keeps it on under Essentials. | [`otel.go`](../../plugins/otel/otel.go) |
+
+The other points follow in this order: router strategy (groups, rotation),
+middleware (the JS gateway middleware becomes one consumer of it, with its
+place, API and fail-open policy unchanged; redaction fails closed), then
+tool (search) and budget.
+
 ## Source of truth and composing
 
 What a plugin runs with is composed field by field (`Compose`), each value
@@ -186,6 +209,11 @@ remembering its layer (`Source`):
   (`magpie plugin preset essentials|all`). Off is refused while the plugin
   is in use.
 - **The window**: see [GUI app shell](gui-shell.md), "Built-in plugins".
+- **The gateway**: the process serving it runs `pluginrt.KeepFresh` (every
+  2s), which refreshes when plugins.yml or settings.json changes, so a
+  plugin turned on or off in the window or by `magpie plugin builtin` comes
+  and goes in the gateway without a restart, and a headless `magpie serve`
+  follows the file too.
 
 ## Failure and compatibility
 
@@ -202,9 +230,11 @@ remembering its layer (`Source`):
   with the reason; the rest run.
 - A plugin's page whose code throws breaks only that page (the boundary
   above); a POST of a config the schema refuses is a 400 and writes nothing.
-- A plugin's off is the window's alone: its page, sections and rows
+- A page plugin's off is the window's alone: its page, sections and rows
   leave the window. The gateway, the TUI and the CLI serve the same either
-  way, and nothing the user made is deleted. Davsync doesn't carry
+  way, and nothing the user made is deleted. A gateway plugin's off is the
+  gateway's: with `otel` off nothing is exported and no reply is kept
+  whole for it. An observer can't fail a request; it only reads. Davsync doesn't carry
   plugins.yml.
 
 ## Verification
@@ -223,5 +253,10 @@ remembering its layer (`Source`):
   boot.js and from a change) in Chromium and WebKit, every language, 1100,
   800 and 420 points; the Gateway page's own tests (`gateway-*`,
   `recent-calls-*`) unchanged.
+- P3 observer: `go test ./internal/usage/ -run 'TestObserver|TestBodiesStayOutOfTheLog'`,
+  `go test ./internal/gateway/ -run 'TestObserverPoint|OTel|Deferred'`,
+  `go test ./internal/otlp/ ./plugins/otel/`
+  (`TestOnExportsOffSendsNothing`, `TestInUseByEnvironment`) and
+  `go test ./internal/pluginrt/ -run TestKeepFreshFollowsPluginsYml`.
 - By hand, under a sandbox HOME: `magpie plugin builtin`, `magpie plugin
   builtin on groups`, `magpie plugin dump`, and a plugins.yml broken by hand.

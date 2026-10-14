@@ -1,10 +1,13 @@
 package pluginrt
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func home(t *testing.T) {
@@ -124,4 +127,39 @@ func TestBrokenFileIsKept(t *testing.T) {
 	if _, _, err := Load(); err == nil || !strings.Contains(err.Error(), "slim") {
 		t.Fatalf("an unknown preset: %v", err)
 	}
+}
+
+// A plugin turned off or on in plugins.yml by another process is disposed
+// or applied in the one keeping fresh, without a restart.
+func TestKeepFreshFollowsPluginsYml(t *testing.T) {
+	home(t)
+	var applied atomic.Int32
+	Register(Manifest{ID: "fresh-test", Apply: func(c *Ctx) error {
+		applied.Add(1)
+		c.OnDispose(func() { applied.Add(-1) })
+		return nil
+	}})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { KeepFresh(ctx, 10*time.Millisecond); close(done) }()
+	defer func() { cancel(); <-done; Set("fresh-test", false); Refresh() }()
+	wait := func(want int32) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for applied.Load() != want && time.Now().Before(deadline) {
+			time.Sleep(5 * time.Millisecond)
+		}
+		if got := applied.Load(); got != want {
+			t.Fatalf("applied = %d, want %d", got, want)
+		}
+	}
+	wait(1) // no plugins.yml: every plugin on
+	if err := Set("fresh-test", false); err != nil {
+		t.Fatal(err)
+	}
+	wait(0)
+	if err := Set("fresh-test", true); err != nil {
+		t.Fatal(err)
+	}
+	wait(1)
 }

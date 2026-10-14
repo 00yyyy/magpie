@@ -1,4 +1,4 @@
-package usage
+package otlp
 
 import (
 	"encoding/json"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 func TestOTelGenerationCosts(t *testing.T) {
@@ -45,7 +46,7 @@ func TestOTelGenerationCosts(t *testing.T) {
 		{name: "legacy generation", input: 0.00405, output: 0.0016},
 		{name: "gateway attempt", context: &OTelSpan{}, input: 0.00405, output: 0.0016},
 		{name: "billed failure", context: &OTelSpan{}, status: 502, input: 0.00405, output: 0.0016},
-		{name: "local session generation", provider: UnknownProvider, context: &OTelSpan{Session: true, Type: "generation"}, input: 0.006075, output: 0.003},
+		{name: "local session generation", provider: usage.UnknownProvider, context: &OTelSpan{Session: true, Type: "generation"}, input: 0.006075, output: 0.003},
 		{name: "free model", provider: "free"},
 		{name: "unknown price", model: "magpie-unpriced-test-model", omit: true},
 		{name: "gateway parent", context: &OTelSpan{Root: true}, omit: true},
@@ -55,7 +56,7 @@ func TestOTelGenerationCosts(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := base
-			r.OTel, r.Rejected = tc.context, tc.rejected
+			r.Rejected = tc.rejected
 			if tc.provider != "" {
 				r.Provider = tc.provider
 			}
@@ -67,7 +68,7 @@ func TestOTelGenerationCosts(t *testing.T) {
 			}
 			// Decode the serialized OTLP envelope, including the nested JSON
 			// string Langfuse expects for costs, rather than testing helpers.
-			body, err := json.Marshal(exporter.traces([]Record{r}))
+			body, err := json.Marshal(exporter.traces([]otelItem{{record: r, span: tc.context}}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -118,7 +119,7 @@ func TestOTelGenerationCosts(t *testing.T) {
 	if err := settings.Save(config); err != nil {
 		t.Fatal(err)
 	}
-	body, err := json.Marshal(exporter.traces([]Record{base}))
+	body, err := json.Marshal(exporter.traces([]otelItem{{record: base}}))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -194,16 +194,16 @@ type Record struct {
 	// said nothing: the call is then priced at magpie's own prices, as the
 	// gateway's calls are, and priced again when those change.
 	OwnCost *float64 `json:"cost,omitempty"`
-	// OTel is transient trace context; SkipOTel avoids exporting ledger records
-	// when the gateway exports its attempts separately. Neither is persisted.
-	OTel     *OTelSpan `json:"-"`
-	SkipOTel bool      `json:"-"`
+	// Watched is a row of a request an Observer watched (observe.go): it
+	// has the request's attempts already, so it can pass the row over.
+	// Never persisted.
+	Watched bool `json:"-"`
 	// Local is true only for verified loopback gateway requests. It is used
 	// for local-session deduplication, never persisted or exported.
 	Local bool `json:"-"`
 	// BodyIn and BodyOut are the request and reply as the gateway
-	// captured them, filled only for an OTLP export with bodies on (#538)
-	// and never written to usage.jsonl.
+	// captured them, filled only while an Observer wants them (an OTLP
+	// export with bodies on, #538) and never written to usage.jsonl.
 	BodyIn  string `json:"-"`
 	BodyOut string `json:"-"`
 }
@@ -223,7 +223,7 @@ func Append(r Record) {
 	if r.Time.IsZero() {
 		r.Time = Clock()
 	}
-	offerOTel(r)
+	observeLedger(r)
 	b, err := json.Marshal(r)
 	if err != nil {
 		return
@@ -801,7 +801,7 @@ func summarizeFrom(p Period, now time.Time, first time.Time, historicalKeys map[
 	s.Since, s.Bucket, s.Series = timeline(p, now, first)
 	s.Period = p.shown()
 
-	priceOf := pricer()
+	priceOf := Pricer()
 	// the places each provider id went in the period, and goes now
 	hosts := map[string]map[string]bool{}
 	// the providers whose calls are told apart by account: those an

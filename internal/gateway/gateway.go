@@ -32,6 +32,7 @@ import (
 	"github.com/yetone/magpie/internal/awake"
 
 	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/pluginrt"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
@@ -339,11 +340,11 @@ type Call struct {
 	// when it was on (archive.go); wire what it keeps besides
 	Archive string `json:"archive,omitempty"`
 	wire    *wire
-	// otelIn/otelOut are the whole bodies for the OTLP export when it asks
-	// for them uncut (#538): nil leaves it to the 256 KiB bodies above,
-	// which is all the Recent-calls page keeps
-	otelIn, otelOut       []byte
-	otelInCut, otelOutCut bool
+	// wholeIn/wholeOut are the whole bodies for an observer that asks for
+	// them uncut (the OTLP export, #538): nil leaves it to the 256 KiB
+	// bodies above, which is all the Recent-calls page keeps
+	wholeIn, wholeOut       []byte
+	wholeInCut, wholeOutCut bool
 }
 
 // Server is the gateway.
@@ -427,7 +428,7 @@ func (s *Server) RecentCall(id uint64) (Call, bool) {
 func (s *Server) record(c Call) {
 	// Whole bodies belong only to the export, never to the Recent-calls ring.
 	// This is a copy: the serving call still needs them for withBodies.
-	c.otelIn, c.otelOut = nil, nil
+	c.wholeIn, c.wholeOut = nil, nil
 	if c.wire != nil {
 		c.Archive = c.wire.name
 		archive(c)
@@ -471,8 +472,14 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	s.lnMu.Lock()
 	s.ln = ln
 	s.lnMu.Unlock()
-	stopOTel := usage.StartOTel()
-	defer stopOTel()
+	// the observers plugins registered (usage.Observer) run while this
+	// process serves, and plugins turned on or off elsewhere (the window,
+	// `magpie plugin builtin`) come and go here too
+	stopObservers := usage.ServeObservers()
+	defer stopObservers()
+	freshCtx, stopFresh := context.WithCancel(ctx)
+	defer stopFresh()
+	go pluginrt.KeepFresh(freshCtx, 2*time.Second, settings.Path())
 	srv := &http.Server{Handler: lanGuard(s.Handler()), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 5 * time.Minute}
 	// the magpie serving the gateway, and only it, keeps the saved accounts
 	// signed in, so two never refresh one sign-in at once
@@ -1450,13 +1457,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	w, r, named := withMemberNames(w, r)
 	defer named()
 	requestBody, requestTruncated := captureRequestBody(body)
-	// the OTLP export may want the bodies uncut (#538): the request is
-	// already whole in memory, so keep it as it came, and the reply goes to
-	// a spool as it streams
-	wholeBodies := usage.OTelWhole()
-	var otelIn []byte
+	// an observer may want the bodies uncut (the OTLP export, #538): the
+	// request is already whole in memory, so keep it as it came, and the
+	// reply goes to a spool as it streams
+	wholeBodies := usage.ObservedBodies() == usage.WholeBodies
+	var wholeIn []byte
 	if wholeBodies {
-		otelIn = body
+		wholeIn = body
 	}
 	// a model asked for at an effort of its own (a Claude Code tier, #536)
 	// is the model, every try of it asked for that effort
@@ -1467,7 +1474,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	}
 	capture := &captureResponseWriter{ResponseWriter: w}
 	if wholeBodies {
-		capture.otel = &spool{limit: wholeBodyLimit, pattern: "magpie-otel-*"}
+		capture.whole = &spool{limit: wholeBodyLimit, pattern: "magpie-whole-*"}
 	}
 	w = capture
 	// the agent it is recorded as, the one on the computer it was passed
@@ -1477,10 +1484,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	metadata := requestSessionMetadata(r.Header, body)
 	var clientResponseID string // only a reply released to the client owns this ID
 	call := Call{Time: start, From: from, Model: unprefixed(modelOf(body)), Agent: who.agent, Via: who.via, Kind: requestCallKind(r.Header, metadata),
-		RequestBody: requestBody, RequestTruncated: requestTruncated, otelIn: otelIn, wire: archiving(r, capture, start, body)}
+		RequestBody: requestBody, RequestTruncated: requestTruncated, wholeIn: wholeIn, wire: archiving(r, capture, start, body)}
 	defer discardArchive(capture)
-	r, telemetry := beginOTelRequest(r, call.Kind, body)
-	defer func() { telemetry.end(call, time.Since(start).Milliseconds()) }()
+	r, watched := observeRequest(r, call.Kind, body)
+	defer func() { watched.end(call, time.Since(start).Milliseconds()) }()
 	switch call.Kind {
 	case "web_search":
 		call.For = searchFor(r.Context())
@@ -1491,10 +1498,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	finishCapture := func() {
 		call.ResponseBody = capture.body.text()
 		call.ResponseTruncated = capture.body.truncated
-		if capture.otel != nil {
-			call.otelOutCut = capture.otel.cut()
-			if b, err := capture.otel.read(); err == nil {
-				call.otelOut = b
+		if capture.whole != nil {
+			call.wholeOutCut = capture.whole.cut()
+			if b, err := capture.whole.read(); err == nil {
+				call.wholeOut = b
 			}
 		}
 	}
@@ -2086,8 +2093,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	}
 	tierAsked := bodyTier(from, body) // the service tier the client asked for (#1784)
 	tr := s.trace.beginFor(r, Route{turn: turn, dirOf: dirOf(from, plain), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, call.Agent), TitleLink: link, Pinned: pin, Time: start, Agent: call.Agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, call.Kind), Kind: call.Kind, For: call.For, Model: call.Model, Effort: requestEffort(from, body), Tier: tierAsked, Provider: p.ID, Group: group, Rule: hit, Nested: nested, SealedTask: sealedTask, LeadAccount: leadAccount, Subagent: subagent, SubagentEffort: subagentEffort, Sub: subOf(r.Header), SubagentID: subagentID, Affinity: shown, Order: pl.order, Left: pl.left})
-	if telemetry != nil {
-		telemetry.routeID = tr.ID
+	if watched != nil {
+		watched.routeID = tr.ID
 	}
 	// the card's text is the masked body, even where the request went
 	// unmasked
@@ -2582,7 +2589,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// the agent went away: nobody failed, and nobody else is asked
 			call.Status, call.Error = 499, "the agent canceled the request"
 			try.Status, try.Error, try.Fail = call.Status, call.Error, failCanceled
-			telemetry.attempt(call, try, c.p.ID, sent, hw, capture)
+			watched.attempt(call, try, c.p.ID, sent, hw, capture)
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			break
 		}
@@ -2593,7 +2600,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			call.Status, call.Error = http.StatusGatewayTimeout, fmt.Sprintf("%s: no first token in %ds", c.p.Name, firstToken)
 			try.Status, try.Error, try.Fail = call.Status, call.Error, failSlow
 			call.TTFT, call.FirstText, call.Flow, call.FirstReasoning = 0, 0, 0, 0
-			telemetry.attempt(call, try, c.p.ID, sent, hw, capture)
+			watched.attempt(call, try, c.p.ID, sent, hw, capture)
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			if other == nil {
 				other = &Try{Status: call.Status, Error: call.Error}
@@ -2601,7 +2608,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			skipped = append(skipped, c.label()+": "+call.Error)
 			continue
 		}
-		telemetry.attempt(call, try, c.p.ID, sent, hw, capture)
+		watched.attempt(call, try, c.p.ID, sent, hw, capture)
 		if autoPicks(c) && repicked < 2 && !hw.passing && hw.code() == http.StatusBadRequest &&
 			(provider.CopilotRefusal(hw.errBody()) || wrongEndpoint(hw.code(), hw.errBody())) {
 			// Copilot refused the model its Auto picked, and Auto has
@@ -2700,8 +2707,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				// what this account answered is its refusal, the reply
 				// captured so far being no one's yet
 				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody())}
-				if call.otelIn != nil {
-					refusal.otelIn, refusal.otelOut = call.otelIn, hw.errBody()
+				if call.wholeIn != nil {
+					refusal.wholeIn, refusal.wholeOut = call.wholeIn, hw.errBody()
 				}
 				withBodies(&rec, refusal)
 				appendUsage(r, rec)
@@ -2744,8 +2751,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				// what this account answered is its refusal, the reply
 				// captured so far being no one's yet
 				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody())}
-				if call.otelIn != nil {
-					refusal.otelIn, refusal.otelOut = call.otelIn, hw.errBody()
+				if call.wholeIn != nil {
+					refusal.wholeIn, refusal.wholeOut = call.wholeIn, hw.errBody()
 				}
 				withBodies(&rec, refusal)
 				appendUsage(r, rec)

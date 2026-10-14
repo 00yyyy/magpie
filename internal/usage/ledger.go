@@ -415,7 +415,7 @@ func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessi
 	// judged by the names standing today, which is what Ledger says, and
 	// the rows here are what a reader compares a bill against
 	wires := settings.Load().ModelWires
-	priceOf := pricer()
+	priceOf := Pricer()
 	codexIdentities := sessions.CodexIdentities()
 	rows = make([]Row, 0, len(recs)+len(logs))
 	agents, providers = []string{}, []string{}
@@ -498,12 +498,12 @@ func ledgerMatched(since, until time.Time, f Filter, recs []Record, logs []sessi
 	return rows, sum, agents, providers
 }
 
-// ownPrice is what pricer answers for a reported call that said what it
+// ownPrice is what Pricer answers for a reported call that said what it
 // cost: a price, so the call counts as priced, which Record.CostAt passes
 // over for the call's own cost.
 var ownPrice catalog.Price
 
-// pricer uses the same effective price as the model CLI and session totals:
+// Pricer uses the same effective price as the model CLI and session totals:
 // explicit provider/model or provider-wide prices (including zero), then the
 // provider catalog, then the maker catalog. Settings are read once per query.
 //
@@ -513,7 +513,7 @@ var ownPrice catalog.Price
 // is listed (#1498). The model asked for keeps its own price whenever it
 // has one, a zero set by the user included, so a ledger that matched the
 // vendor's bill still does.
-func pricer() func(Record) *catalog.Price {
+func Pricer() func(Record) *catalog.Price {
 	prices := map[[3]string]*catalog.Price{}
 	s := settings.Load()
 	return func(r Record) *catalog.Price {
@@ -547,7 +547,7 @@ func pricer() func(Record) *catalog.Price {
 // effective prices used by the ledger. Reuse it for one page of routes;
 // make it again on the next read so a changed tariff re-prices history.
 func NewPricer() func([]Record) Totals {
-	priceOf, renamed := pricer(), provider.Renamed()
+	priceOf, renamed := Pricer(), provider.Renamed()
 	return func(recs []Record) Totals {
 		var sum Totals
 		for _, r := range recs {
@@ -1033,7 +1033,7 @@ func Visit(since time.Time, fn func(Record)) { readLogSnapshot().visit(since, fn
 // ledger uses, read once: its cost in USD, and false for a call with
 // tokens but no known price.
 func NewCoster() func(Record) (float64, bool) {
-	priceOf, renamed := pricer(), provider.Renamed()
+	priceOf, renamed := Pricer(), provider.Renamed()
 	return func(r Record) (float64, bool) {
 		if id, ok := renamed[r.Provider]; ok {
 			r.Provider = id

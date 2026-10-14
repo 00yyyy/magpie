@@ -448,7 +448,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	idx = &requestIndex{root: idx.root, meta: idx.meta, key: idx.key, tick: idx.tick,
 		chunks: maps.Clone(idx.chunks)}
 	shared.Unlock()
-	price := pricer()
+	price := Pricer()
 	priceRow := func(r Record, source string) Row {
 		sent := r.Model
 		if source == "" {

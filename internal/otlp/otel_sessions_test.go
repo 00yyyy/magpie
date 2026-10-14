@@ -1,4 +1,4 @@
-package usage
+package otlp
 
 import (
 	"encoding/json"
@@ -14,6 +14,7 @@ import (
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/testenv"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 func TestSessionTraceWirePrivacyAndTokenOwnership(t *testing.T) {
@@ -33,7 +34,7 @@ func TestSessionTraceWirePrivacyAndTokenOwnership(t *testing.T) {
 		root.Kind = "span"
 		root.Name = "pi interaction"
 		e := newOTelExporter()
-		payload := e.traces([]Record{sessionRecord(root, cfg), sessionRecord(model, cfg), sessionRecord(tool, cfg)})
+		payload := e.traces(sessionItems(cfg, root, model, tool))
 		e.cancel()
 		wire, _ := json.Marshal(payload)
 		s := string(wire)
@@ -46,7 +47,7 @@ func TestSessionTraceWirePrivacyAndTokenOwnership(t *testing.T) {
 	}
 	cfg := settings.OTel{Bodies: true}
 	long := strings.Repeat("A", 300<<10)
-	if got := sessionBody(long, cfg); !strings.HasSuffix(got, BodyCut) {
+	if got := sessionBody(long, cfg); !strings.HasSuffix(got, usage.BodyCut) {
 		t.Fatal("body limit not applied")
 	}
 	// Scrub secret-named fields before cutting: truncation must not disable JSON masking.
@@ -77,8 +78,7 @@ func TestSessionExporterDefersPendingRoot(t *testing.T) {
 	if len(e.queue) != 1 {
 		t.Fatal("completed root missing")
 	}
-	record := (<-e.queue).record
-	wire, err := json.Marshal(e.traces([]Record{record}))
+	wire, err := json.Marshal(e.traces([]otelItem{<-e.queue}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestOTelSessionWatcherExportsNewInteractionWithoutGatewayDuplicates(t *test
 	if !OTelSessionAgent("pi") {
 		t.Fatal("reader did not become available")
 	}
-	Append(Record{Time: time.Now(), Agent: "pi", Local: true, Model: "gateway-duplicate", Input: 999, Status: 200})
+	usage.Append(Record{Time: time.Now(), Agent: "pi", Local: true, Model: "gateway-duplicate", Input: 999, Status: 200})
 	select {
 	case b := <-received:
 		text := string(b)
@@ -203,7 +203,7 @@ func TestSessionTracingRetainsRemoteGatewayTraces(t *testing.T) {
 	t.Setenv("MAGPIE_OTEL_SESSIONS", "true")
 	stop := StartOTel()
 	t.Cleanup(stop)
-	Append(Record{Time: time.Now(), Agent: "pi", Via: "office", Model: "remote-model", Input: 10, Status: 200})
+	usage.Append(Record{Time: time.Now(), Agent: "pi", Via: "office", Model: "remote-model", Input: 10, Status: 200})
 	stop()
 	select {
 	case b := <-received:
@@ -249,7 +249,7 @@ func TestSessionTracingSuppressesSupportedLocalClientsOnly(t *testing.T) {
 	}
 	offerOTel(Record{Agent: "cursor", Time: time.Now(), Status: 200})
 	offerOTel(Record{Agent: "opencode", Via: "remote", Time: time.Now(), Status: 200})
-	offerOTel(Record{Agent: "claude", OTel: &OTelSpan{Session: true}, Time: time.Now(), Status: 200})
+	testX.offerSpan(Record{Agent: "claude", Time: time.Now(), Status: 200}, &OTelSpan{Session: true})
 	if len(e.queue) != 3 {
 		t.Fatal("fallback, remote or session record suppressed")
 	}
@@ -261,7 +261,7 @@ func TestSessionTracingSuppressesSupportedLocalClientsOnly(t *testing.T) {
 		t.Fatal("remote or keyed gateway trace suppressed")
 	}
 	// Gateway spans already started before availability changed must finish.
-	offerOTel(Record{Agent: "codex", OTel: &OTelSpan{TraceID: "existing"}, Time: time.Now(), Status: 200})
+	testX.offerSpan(Record{Agent: "codex", Time: time.Now(), Status: 200}, &OTelSpan{TraceID: "existing"})
 	if len(e.queue) != 6 {
 		t.Fatal("in-flight gateway span suppressed")
 	}
@@ -296,10 +296,9 @@ func TestSessionObservationUpdatesDoNotDuplicateMetrics(t *testing.T) {
 	defer e.cancel()
 	now := time.Now()
 	span := sessions.TraceSpan{Agent: "gemini", Session: "s", Turn: "t", ID: "1111111111111111", Parent: "2222222222222222", Kind: "generation", Model: "m", Start: now, End: now.Add(time.Second), Tokens: sessions.Tokens{Input: 10, Output: 2}}
-	first := sessionRecord(span, cfg)
+	first := sessionItems(cfg, span)
 	span.Update = true
-	second := sessionRecord(span, cfg)
-	e.flush([]otelItem{{record: first, config: cfg}, {record: second, config: cfg}})
+	e.flush(append(first, sessionItems(cfg, span)...))
 	if metric == "" || strings.Contains(metric, `"count":"2"`) {
 		t.Fatalf("update metrics: %s", metric)
 	}
@@ -380,4 +379,13 @@ func TestSessionTracingRetainsUnrepresentedCalls(t *testing.T) {
 		}
 		<-e.queue
 	}
+}
+
+func sessionItems(cfg settings.OTel, spans ...sessions.TraceSpan) []otelItem {
+	var items []otelItem
+	for _, s := range spans {
+		r, span := sessionRecord(s, cfg)
+		items = append(items, otelItem{record: r, span: span, config: cfg})
+	}
+	return items
 }
