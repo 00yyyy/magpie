@@ -185,10 +185,13 @@ function notJSON(res, text) {
   return t("A proxy in front of magpie answered, not magpie ({what})", { what });
 }
 
+// el makes a tag with a class and its content: text, or a node put inside
+// it as it is, never written out as "[object HTMLButtonElement]" (#2181).
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
+  if (text instanceof Node) e.append(text);
+  else if (text !== undefined) e.textContent = text;
   return e;
 }
 // replaceKeeping is parent.replaceChildren(...nodes) that leaves a node
