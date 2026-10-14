@@ -1263,6 +1263,20 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 		if from == provider.Chat {
 			body = thinkingEffort(body)
 		}
+		// Claude Code's headers, for a test asked as Claude Code to ask
+		// with (provider.TestAs), whatever serves this model: a
+		// subscription's, a Chat provider's or a translated one's request
+		// never takes them on, and Claude Code may never be on a relay's
+		// Messages model before the test is asked (neiko on Discord)
+		if from == provider.Anthropic && fromClaudeCode(r.Header) {
+			seen := http.Header{}
+			for k, vs := range r.Header {
+				if claudeCodeHeader(k) {
+					seen[k] = vs
+				}
+			}
+			provider.SawClient(provider.ClientClaudeCode, seen)
+		}
 		// Codex with magpie as its provider asks for a thread's title
 		// here (#743)
 		if from == provider.Responses {
@@ -3437,16 +3451,12 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		if p.Account == nil && fromClaudeCode(in) {
 			// a relay that serves only Claude Code (#179: "only accessible
 			// via the official Claude CLI") knows it by its own headers,
-			// which go on as it sent them; its key to magpie never does.
-			// A test asked as Claude Code asks with them (provider.TestAs)
-			seen := http.Header{}
+			// which go on as it sent them; its key to magpie never does
 			for k, vs := range in {
 				if claudeCodeHeader(k) {
 					req.Header[k] = slices.Clone(vs)
-					seen[k] = vs
 				}
 			}
-			provider.SawClient(provider.ClientClaudeCode, seen)
 		}
 		if len(betas) > 0 {
 			req.Header.Set("anthropic-beta", strings.Join(betas, ","))
