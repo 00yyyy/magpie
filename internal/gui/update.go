@@ -552,7 +552,7 @@ func updateRoutes(mux *http.ServeMux, w Windows) {
 				go updates.run()
 			}
 		case j.State == "available" && j.URL != "":
-			w.OpenURL(j.URL)
+			_ = w.OpenURL(j.URL) // nothing waits on the page: the card still shows the update
 		}
 		writeJSON(rw, updates.json())
 	})

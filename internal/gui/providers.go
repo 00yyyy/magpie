@@ -1974,12 +1974,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		if st.URL != "" {
-			// one that installs a CLI first has no URL yet: the window
-			// opens it once there is one
-			w.OpenURL(st.URL)
-		}
-		writeJSON(rw, st)
+		// one that installs a CLI first has no URL yet: the window opens it
+		// once there is one
+		writeJSON(rw, signInOpened{st, openError(w, st.URL)})
 	})
 	mux.HandleFunc("GET /api/signin/{id}", func(rw http.ResponseWriter, r *http.Request) {
 		st, ok := provider.SignInStatus(r.PathValue("id"))
@@ -2102,7 +2099,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		var in struct{ URL string }
 		_ = json.NewDecoder(r.Body).Decode(&in)
 		if strings.HasPrefix(in.URL, "https://") || strings.HasPrefix(in.URL, "http://") || strings.HasPrefix(in.URL, agent.CindyScheme) {
-			w.OpenURL(in.URL)
+			// Open again on a sign-in says why it didn't open (#2043)
+			if err := w.OpenURL(in.URL); err != nil {
+				fail(rw, err)
+				return
+			}
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	})

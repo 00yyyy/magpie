@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
@@ -664,18 +663,10 @@ func importAccounts(args []string) error {
 var openInBrowser = openURLInBrowser
 
 func openURLInBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = proc.Command("open", url)
-	case "windows":
-		cmd = proc.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	case "android":
-		cmd = proc.Command("termux-open-url", url)
-	default:
-		cmd = proc.Command("xdg-open", url)
+	// the link is printed beside it, to open by hand when this fails (#2043)
+	if err := proc.OpenBrowser(url); err != nil {
+		fmt.Fprintln(os.Stderr, "magpie couldn't open the browser:", err)
 	}
-	_ = cmd.Start()
 }
 
 // refreshAccounts: `magpie accounts refresh` renews the sign-in of every

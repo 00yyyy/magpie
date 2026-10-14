@@ -39,6 +39,7 @@ import (
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/library"
+	"github.com/yetone/magpie/internal/mcpauth"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
@@ -145,8 +146,9 @@ type Windows interface {
 	// ShowMain brings the window up, on the named tab when view is set.
 	ShowMain(view string)
 	Quit()
-	// OpenURL hands a link to the system browser.
-	OpenURL(url string)
+	// OpenURL hands a link to the system browser. The error is the browser's
+	// not starting, which a sign-in shows with its link (#2043).
+	OpenURL(url string) error
 	// OpenFolder shows a folder in the system file manager.
 	OpenFolder(path string) error
 	// ChooseFolder asks for a folder in the system's picker: "" when the
@@ -2219,6 +2221,32 @@ func state() stateJSON {
 	}
 	s.Recovered = lastgood.Recovered()
 	return s
+}
+
+// signInOpened is a sign-in as it starts, with why its page didn't open in
+// the browser: the window then shows the link to open by hand, instead of
+// waiting on a page that never opened until the sign-in times out (#2043).
+type signInOpened struct {
+	provider.SignInState
+	OpenError string `json:"openError,omitempty"`
+}
+
+// mcpSignInOpened is signInOpened for a sign-in to an MCP server.
+type mcpSignInOpened struct {
+	mcpauth.State
+	OpenError string `json:"openError,omitempty"`
+}
+
+// openError opens url in the browser, and says why it didn't open: "" when
+// it did, or when there is no url.
+func openError(w Windows, url string) string {
+	if url == "" {
+		return ""
+	}
+	if err := w.OpenURL(url); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 func writeJSON(rw http.ResponseWriter, v any) {

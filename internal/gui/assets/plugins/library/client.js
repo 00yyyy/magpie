@@ -1731,6 +1731,18 @@ magpie.plugin("library", (ctx) => {
         line.append(button(ready?.saves?.() ? t("Save and sign in") : cur.dead ? t("Sign in again") : t("Sign in"), "action", start));
       }
       box.append(line);
+      // the browser didn't start (#2043): the page to open by hand, rather
+      // than waiting on one that never opened until the sign-in times out
+      if (sg?.state === "waiting" && sg.openError && sg.url) {
+        box.append(el("div", "lib-signin-err", t("magpie couldn't open your browser: {error}. Open the sign-in link below in a browser yourself.", { error: sg.openError })));
+        const link = el("div", "lib-signin-link");
+        const u = el("code", "", sg.url);
+        u.title = sg.url;
+        const cp = copyBtn(sg.url, t("Sign-in link"));
+        cp.title = t("Copy link");
+        link.append(u, cp);
+        box.append(link);
+      }
       if (sg?.state === "failed") box.append(el("div", "lib-signin-err", sg.error));
     };
     async function start() {

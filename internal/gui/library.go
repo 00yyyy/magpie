@@ -353,8 +353,7 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		w.OpenURL(st.URL)
-		writeJSON(rw, st)
+		writeJSON(rw, mcpSignInOpened{st, openError(w, st.URL)})
 	})
 	mux.HandleFunc("GET /api/library/mcp-signin/{id}", func(rw http.ResponseWriter, r *http.Request) {
 		st, ok := mcpauth.Progress(r.PathValue("id"))

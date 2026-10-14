@@ -154,8 +154,19 @@ func inDock(s settings.Settings, shown, fullscreen bool) bool {
 	return s.Dock || s.DockWindow && shown || fullscreen
 }
 
-func (h *host) Quit()                        { h.app.Quit() }
-func (h *host) OpenURL(url string)           { _ = h.app.Browser.OpenURL(url) }
+func (h *host) Quit() { h.app.Quit() }
+func (h *host) OpenURL(url string) error {
+	err := h.app.Browser.OpenURL(url)
+	if err == nil {
+		return nil
+	}
+	// Wails starts Windows' rundll32 by its bare name, which a PATHEXT
+	// without .EXE can't find (#2043); proc names it by its path
+	if proc.OpenBrowser(url) == nil {
+		return nil
+	}
+	return err
+}
 func (h *host) OpenFolder(path string) error { return openFolder(h.app, path) }
 func (h *host) Copy(text string) bool        { return copyText(h.app, text) }
 func (h *host) ChooseFolder(title string) (string, error) {
@@ -375,7 +386,7 @@ func Run(version string, showMain bool, link string) error {
 		appMenu := application.DefaultApplicationMenu()
 		help := appMenu.FindByRole(application.HelpMenu).GetSubmenu()
 		help.Clear()
-		help.Add("Learn More").OnClick(func(*application.Context) { h.OpenURL("https://usemagpie.ai") })
+		help.Add("Learn More").OnClick(func(*application.Context) { _ = h.OpenURL("https://usemagpie.ai") })
 		h.app.Menu.Set(appMenu)
 	}
 	if Started != nil {

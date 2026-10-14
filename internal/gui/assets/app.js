@@ -11198,7 +11198,11 @@ async function followSignIn(id) {
     if (signing?.id !== id) continue;
     if (st.state === "waiting" || st.state === "installing") {
       // the CLI it needed is in: now the vendor's page can open
-      if (signing.state === "installing" && st.state === "waiting" && st.url) api("open", { url: st.url }).catch(() => {});
+      if (signing.state === "installing" && st.state === "waiting" && st.url) {
+        api("open", { url: st.url }).catch((e) => {
+          if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
+        });
+      }
       if (signing.state !== st.state || signing.url !== st.url || signing.code !== st.code) { signing = { ...st, ...signingKept() }; renderProviders(); }
       continue;
     }
@@ -11213,7 +11217,7 @@ async function followSignIn(id) {
 // again and a proxy picked for it — its site and way, the account signed
 // in to again, the proxy picked
 function signingKept() {
-  return { site: signing.site, method: signing.method, inputs: signing.inputs, forUser: signing.forUser, picked: signing.picked, askProxy: signing.askProxy, customProxy: signing.customProxy };
+  return { site: signing.site, method: signing.method, inputs: signing.inputs, forUser: signing.forUser, picked: signing.picked, askProxy: signing.askProxy, customProxy: signing.customProxy, openError: signing.openError };
 }
 
 // signInProxyOf: the proxy an account's sign-in goes through when none is
@@ -11712,6 +11716,7 @@ function renderSigning(sub) {
   }
   tt.append(el("span", "n", t("Finish signing in to {name} in your browser", { name: sub.name })),
     el("span", "s", signing.state === "starting" ? t("Starting the sign-in…")
+      : signing.openError ? t("magpie couldn't open your browser: {error}. Open the sign-in link below in a browser yourself.", { error: signing.openError })
       : sub.plugin ? (signing.instructions || (signing.pasteCode ? t("magpie opened the sign-in page. Paste the code it shows below.") : t("magpie opened the sign-in page. The account shows up here as soon as you're done.")))
       : signing.pasteCode ? t("magpie opened the sign-in page. Paste the code it shows below.")
       : signing.code && sub.agent === "factory" ? t("magpie opened Factory's sign-in page. Check it shows this code and confirm it; the account shows up here as soon as you're done.")
@@ -11734,7 +11739,15 @@ function renderSigning(sub) {
     tt.append(link);
     const acts = el("span", "acts");
     const open = el("button", "link", t("Open again"));
-    open.onclick = () => api("open", { url: signing.url }).catch(() => {});
+    // one that fails says why, where "magpie opened the sign-in page" was (#2043)
+    // a poll may have put a fresh copy of the same sign-in in its place
+    const flow = signing;
+    const same = () => signing && signing.id === flow.id && signing.agent === flow.agent;
+    open.onclick = () => api("open", { url: flow.url }).then(() => {
+      if (same() && signing.openError) { signing = { ...signing, openError: "" }; renderProviders(); }
+    }, (e) => {
+      if (same()) { signing = { ...signing, openError: e.message }; renderProviders(); }
+    });
     acts.append(open);
     const ghe = copilotHostSwitch(sub);
     if (ghe) acts.append(ghe);
