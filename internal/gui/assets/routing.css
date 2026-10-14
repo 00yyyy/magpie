@@ -538,15 +538,62 @@ button.rt-session { cursor: pointer; }
 /* Add a rule, and beside it a rule by what the message asks for */
 .rt-gadds { display: flex; flex-wrap: wrap; gap: 6px; }
 .rt-gadds > [hidden] { display: none; }
-/* a group's rules: when, and the model it sends that turn to first */
-.rt-rules .fbl { gap: 6px; }
-.rt-rule { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
-.rt-rule:first-child { border-top: 0; padding-top: 0; }
-.rt-rule > .i { color: var(--muted); font-variant-numeric: tabular-nums; }
-.rt-rule .when, .rt-rule .rt-use { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
-.rt-rule .rt-use { grid-column: 2; }
-.rt-rule .ctl { grid-column: 3; grid-row: 1; display: flex; }
-.rt-rule .w { color: var(--muted); font-size: 12px; }
+/* a group's rules, each one line read as a sentence: the conditions it
+   has, → and the model it sends that turn to first; its acts under ⋯ */
+.rt-rules .fbl:empty { display: none; }
+.rt-rules .fbl:not(:empty) + .rt-gadds { margin-top: 2px; }
+/* the rules share their columns (each rule a subgrid of the list), so
+   every rule's → and model start at one x: the number, the conditions
+   (as wide as the widest rule's, to at most half the width before they wrap), what
+   it does, the ⋯. Where subgrid isn't, each rule keeps the same columns
+   on its own */
+.rt-rules .fbl { display: grid; grid-template-columns: 16px fit-content(50%) minmax(0, 1fr) auto; gap: 0; }
+.rt-rule { grid-column: 1 / -1; display: grid; grid-template-columns: 16px fit-content(50%) minmax(0, 1fr) auto; align-items: start; column-gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+@supports (grid-template-columns: subgrid) { .rt-rule { grid-template-columns: subgrid; } }
+.rt-rule:first-child { border-top: 0; padding-top: 2px; }
+.rt-rule > .i { line-height: 26px; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; }
+.rt-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+/* on a narrow page what it does goes under the conditions */
+@media (max-width: 640px) {
+  .rt-rules .fbl { display: flex; flex-direction: column; }
+  .rt-rule { grid-template-columns: 16px minmax(0, 1fr) auto; row-gap: 6px; }
+  .rt-rule > .rt-then { grid-column: 2; grid-row: 2; }
+  .rt-rule > .rt-rmore { grid-column: 3; grid-row: 1; }
+}
+.rt-arrow { color: var(--muted); font-size: 12px; padding: 0 1px; }
+/* a set condition, and the × on its corner that takes it off: shown on
+   hover or focus, always where nothing hovers */
+.rt-c { position: relative; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.rt-cx {
+  position: absolute; top: -5px; right: -5px; z-index: 1; display: grid; place-items: center;
+  width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--card); color: var(--muted); cursor: pointer;
+  opacity: 0; pointer-events: none; transition: opacity .12s, color .12s;
+}
+.rt-cx:hover { color: var(--fg); border-color: var(--muted); }
+.rt-c:hover > .rt-cx, .rt-c:focus-within > .rt-cx { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .rt-cx { opacity: 1; pointer-events: auto; } }
+/* the quiet + that adds a condition; in words while the rule has none */
+.rt-addc {
+  display: inline-grid; grid-auto-flow: column; place-items: center; gap: 5px;
+  width: 24px; height: 24px; padding: 0; border-radius: 999px; border: 1px solid transparent;
+  background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.rt-addc.wide { width: auto; height: 26px; padding: 0 10px 0 8px; border: 1px dashed var(--line); }
+.rt-addc:hover, .rt-addc.open, .rt-addc:focus-visible { color: var(--fg); background: var(--card-2); }
+.rt-addc.wide:hover, .rt-addc.wide.open { border-color: var(--muted); }
+/* the rule's ⋯: on hover, as the usage rows' */
+.rt-rule > .rt-rmore { align-self: start; opacity: 0; transition: opacity .12s, background .12s, color .12s; }
+.rt-rule:hover > .rt-rmore, .rt-rule > .rt-rmore:focus-visible, .rt-rule > .rt-rmore.open { opacity: 1; }
+@media (hover: none) { .rt-rule > .rt-rmore { opacity: 1; } }
+/* how a part works, under an ⓘ beside it */
+.rt-info { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: var(--muted); cursor: help; outline: none; }
+.rt-info:hover, .rt-info:focus-visible { color: var(--fg); }
+.rt-info:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent); }
+.rt-info[hidden] { display: none; }
+.rt-gadds { align-items: center; }
+.rt-pickrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rt-cond {
   display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 999px;
   border: 1px dashed var(--line); background: transparent; color: var(--muted);
@@ -562,11 +609,36 @@ button.rt-session { cursor: pointer; }
 .rt-cond > .ic-stack { overflow: visible; }
 .rt-cond.tk { cursor: text; }
 .rt-cond.in { cursor: text; }
-.rt-cond.in input, .editor .rt-cond.in input[type="text"] { width: 24ch; }
 .rt-cond.fd { cursor: text; }
 .rt-cond.fd input, .editor .rt-cond.fd input[type="text"] { width: 24ch; }
 .rt-cond.xf { cursor: text; }
 .rt-cond.xf input, .editor .rt-cond.xf input[type="text"] { width: 24ch; }
+/* a narrow line squeezes what was typed (it scrolls in its box), never
+   the word that says what the box is */
+.rt-cond.in > span:not(.rt-grow), .rt-cond.fd > span, .rt-cond.xf > span { flex: none; }
+.rt-cond.fd > input, .rt-cond.xf > input { min-width: 0; flex: 0 1 auto; }
+/* the intent, a sentence, shown whole: its box as wide as the words and
+   onto more lines where the line ends. A hidden copy of the words, in the
+   same cell and font, gives the box its size; the pill rounds less once
+   it is more than one line */
+.rt-cond.in { height: auto; min-height: 26px; padding-top: 2px; padding-bottom: 2px; border-radius: 13px; white-space: normal; }
+.rt-cond.in > span:first-child { align-self: flex-start; line-height: 20px; }
+.rt-cond > .rt-grow { align-self: flex-start; display: inline-grid; flex: 0 1 auto; min-width: min(6ch, 100%); max-width: 100%; overflow: visible; }
+.rt-grow::after, .rt-grow > textarea, .editor .rt-grow > textarea {
+  grid-area: 1 / 1; box-sizing: border-box; margin: 0; padding: 0 2px; border: 0; min-width: 0;
+  font: inherit; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.rt-grow::after { content: attr(data-v) " "; visibility: hidden; }
+.rt-grow > textarea, .editor .rt-grow > textarea {
+  width: 100%; height: 100%; min-height: 20px; resize: none; overflow: hidden;
+  background: transparent; color: inherit; outline: none; box-shadow: none; border-radius: 0;
+}
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
+  /* a phone's page sets its boxes at 16px (no zoom on focus): the copy too */
+  body.web .rt-grow { font-size: 16px; }
+  body.web .rt-cond.in { padding-top: 11px; padding-bottom: 11px; } /* the first line in the middle of the 44px pill */
+  body.web .rt-grow > textarea { min-height: 0; }
+}
 /* a rule's hours: two times in the pill, typed; one that isn't a time is marked */
 .rt-cond.tm { cursor: text; }
 .rt-cond.tm input.clock, .editor .rt-cond.tm input.clock[type="text"] { width: 5.5ch; text-align: center; }
@@ -583,10 +655,10 @@ button.rt-session { cursor: pointer; }
 .rt-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; }
 .rt-levels[hidden] { display: none; }
 /* the field is the pill: the editor's boxed input (its border and focus ring) stays off it */
-.rt-cond input, .editor .rt-cond input[type="text"], .editor .rt-cond input:focus { box-shadow: none; border-radius: 0; }
+.rt-cond input, .editor .rt-cond input[type="text"], .editor .rt-cond input[type="number"], .editor .rt-cond input:focus { box-shadow: none; border-radius: 0; }
 .editor .rt-cond input:focus-visible { box-shadow: none; border-radius: 0; }
 .rt-cond:focus-within { border-style: solid; border-color: var(--accent); color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
-.rt-cond input, .editor .rt-cond input[type="text"] { width: 7ch; height: 20px; padding: 0 2px; border: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; outline: none; -moz-appearance: textfield; }
+.rt-cond input, .editor .rt-cond input[type="text"], .editor .rt-cond input[type="number"] { width: 7ch; height: 20px; padding: 0 2px; border: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; outline: none; -moz-appearance: textfield; }
 .rt-cond input::-webkit-outer-spin-button, .rt-cond input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .rt-rwarn { color: var(--amber, var(--muted)); font-size: 11.5px; }
 .rt-rwarn:empty { display: none; }

@@ -4540,149 +4540,301 @@
     aw.append(segs(AFF_OPTS.map(([id, n]) => [id, t(n)]), d.affinity, (v) => { d.affinity = v; aHint.textContent = t(AFF_HINT[v] || AFF_HINT[""]); }), aHint);
     ed.append(el("label", "", t("Stays")), aw);
 
-    // rules: which member a turn goes to first, by what the request shows
+    // rules: which member a turn goes to first, by what the request shows.
+    // A rule reads as one line, a sentence: the conditions it has, then →
+    // and the model. A condition that isn't set isn't drawn at all; the
+    // quiet + beside them adds one from the app's menu, and a set one is
+    // taken off with its ×. A new rule starts as an intent, the common case
+    // (the owner, 10-14: every rule showed all ten conditions, empty —
+    // "用户要输入、填写这么多东西，太恐怖了"; CherryL1quor on X took Jev for
+    // the effort alone while the intent sat among the others).
+    const RULE_PAUSE = "M6 4.5v7M10 4.5v7", RULE_SEND = "M3 8h9M8.5 4.5 12 8l-3.5 3.5";
+    // how a part works, said under an ⓘ beside it rather than in a
+    // paragraph under it: on hover, and read out with focus
+    const infoTip = (text) => {
+      const s = el("span", "rt-info");
+      s.tabIndex = 0;
+      s.setAttribute("role", "img");
+      const set = (v) => { s.title = v; s.setAttribute("aria-label", v); };
+      set(text);
+      s.set = set;
+      s.append(svg(INFO_I, 14, 1.5));
+      return s;
+    };
     const rbox = el("div", "fallback rt-rules");
     const rlist = el("div", "fbl");
     const rAdd = el("button", "rt-gadd");
     rAdd.append(svg(PLUS, 11, 1.8), el("span", "", t("Add a rule")));
-    // a rule by what the message asks for, offered beside it: told only as
-    // one of a rule's conditions, an intent went unseen (CherryL1quor on X
-    // took Jev for effort alone)
-    const rIntent = el("button", "rt-gadd");
-    rIntent.append(svg(PLUS, 11, 1.8), el("span", "", t("Route by what it asks for")));
+    const RULES_TIP = "Checked top first when you send a message: the first that matches sends that turn to its model first; the rest stay behind it if it fails. A turn under way is never moved.";
+    const rTip = infoTip(t(RULES_TIP));
     const rAdds = el("div", "rt-gadds");
-    rAdds.append(rAdd, rIntent);
-    // the rule just added by intent, its intent not yet typed: the
-    // classifier shows for it all the same, so it is seen to be needed
-    let asking = null;
+    rAdds.append(rAdd, rTip);
     const rHint2 = el("div", "hint");
+    // the conditions opened on each rule while the editor is open: one just
+    // added, or emptied while typing, stays in its place until it is taken
+    // off, rather than vanishing under the cursor
+    const opened = new WeakMap();
+    const openedOf = (r) => { let s = opened.get(r); if (!s) opened.set(r, s = new Set()); return s; };
+    // the condition to open once the rules are drawn: {r, k}
+    let focusCond = null;
+    // what a rule can hold, in the order a rule reads: [kind, its name in
+    // the menu, whether a pause takes it]. A pause holds by hours, days,
+    // agents and folders only: the others are about a request, and a pause
+    // keeps the model out of every one.
+    const COND_KINDS = [
+      ["intent", "asks for", false],
+      ["tokens", "Conversation length", false],
+      ["images", "has an image", false],
+      ["effort", "Reasoning level", false],
+      ["compact", "compacting", false],
+      ["agents", "Agents", true],
+      ["folders", "in folder", true],
+      ["exceptFolders", "not in folder", true],
+      ["time", "Hours and days", true],
+    ];
+    const condSet = (r, k) => k === "time" ? !!(r.time && (r.time.from || r.time.to || r.time.days?.length))
+      : Array.isArray(r[k]) ? r[k].length > 0 : !!r[k];
+    // a condition taken off is the value saved for none, as before
+    const condNone = { intent: "", tokens: 0, images: false, effort: "", compact: false, agents: [], folders: [], exceptFolders: [], time: null };
+    const addCond = (r, k) => {
+      openedOf(r).add(k);
+      if (k === "images" || k === "compact") r[k] = true;
+      if (k === "intent" && !d.classifier && deciders.length) d.classifier = deciders[0].id;
+      focusCond = { r, k };
+      drawRules();
+    };
+    const dropCond = (r, k) => {
+      openedOf(r).delete(k);
+      r[k] = Array.isArray(condNone[k]) ? [] : condNone[k];
+      focusCond = { r, k: "+" };
+      drawRules();
+    };
+    // a text box as wide as what is in it (or its placeholder), measured
+    // in the box's own font (a phone's page sets inputs at 16px), between
+    // 6 and 44 columns; a box not yet on the page is measured once it is
+    const fitCanvas = document.createElement("canvas").getContext("2d");
+    const fitBox = (b) => {
+      const s = b.value || b.placeholder || "";
+      const cs = getComputedStyle(b.isConnected ? b : document.body);
+      fitCanvas.font = `${b.isConnected ? cs.fontSize : "12px"} ${cs.fontFamily}`;
+      const w = Math.ceil(fitCanvas.measureText(s).width) + 8; // its 2px sides, and room for the caret so the text never scrolls in its box
+      b.style.width = `clamp(6ch, ${w}px, 44ch)`;
+      if (!b.isConnected) requestAnimationFrame(() => { if (b.isConnected) fitBox(b); });
+    };
     const drawRules = () => {
       drawCtx(); // the members' windows changed with them
       rlist.replaceChildren();
-      rAdd.hidden = rIntent.hidden = d.members.length < 2;
-      rHint2.textContent = t(d.members.length < 2 ? "With two models or more, a rule can send some turns to one of them first."
-        : d.routing === "manual" ? "The rules wait while you pick the model by hand."
-        : "Checked top first when you send a message: the first that matches sends that turn to its model first; the rest stay behind it if it fails. A turn under way is never moved.");
+      rAdd.hidden = rTip.hidden = d.members.length < 2;
+      // only what holds the rules back is said in a line: how they work is
+      // under the ⓘ beside Add a rule
+      rHint2.textContent = d.members.length < 2 ? t("With two models or more, a rule can send some turns to one of them first.")
+        : d.routing === "manual" ? t("The rules wait while you pick the model by hand.") : "";
+      rHint2.hidden = !rHint2.textContent;
+      let focus = null;
       d.rules.forEach((r, i) => {
-        const row = el("div", "rt-rule");
-        const when = el("div", "when");
-        when.append(el("span", "w", t("When")));
-        // tokens: at least this long
-        const tk = el("span", "rt-cond tk" + (r.tokens ? " on" : ""));
-        tk.onclick = () => ti.focus();
-        const ti = input(r.tokens ? String(r.tokens) : "", "", "number");
-        ti.min = "0"; ti.step = "1000";
-        ti.oninput = () => { r.tokens = Math.max(0, parseInt(ti.value, 10) || 0); tk.classList.toggle("on", !!r.tokens); warn(); };
-        ti.onkeydown = (e) => e.stopPropagation();
-        tk.append(el("span", "", "≥"), ti, el("span", "", t("tokens")));
-        // images
-        const im = el("button", "rt-cond" + (r.images ? " on" : ""), t("has an image"));
-        im.onclick = () => { r.images = !r.images; im.classList.toggle("on", r.images); warn(); };
-        // reasoning
-        const effortName = (v) => v === "on" ? t("reasoning on") : v ? t("reasoning ≥ {level}", { level: v }) : t("any reasoning");
-        const ef = el("button", "rt-cond" + (r.effort ? " on" : ""), effortName(r.effort));
-        ef.onclick = (ev) => pickFrom("reasoning", ef, ev, [
-          { value: "", label: t("any reasoning"), note: t("not a condition") },
-          { value: "on", label: t("reasoning on"), note: t("thinking or any effort level") },
-          ...EFFORTS.map((v) => ({ value: v, label: t("reasoning ≥ {level}", { level: v }) })),
-        ], (v) => { r.effort = v; ef.textContent = effortName(v); ef.classList.toggle("on", !!v); });
-        // agents
-        const clients = state.clients || state.agents || [];
-        const agentsName = () => r.agents.length ? r.agents.map((id) => clients.find((a) => a.id === id)?.name || id).join(", ") : t("any agent");
-        const ag = el("button", "rt-cond" + (r.agents.length ? " on" : ""), agentsName());
-        ag.onclick = (ev) => pickFrom("agent", ag, ev, [
-          { value: "", label: t("any agent"), note: t("not a condition") },
-          ...clients.map((a) => ({ value: a.id, label: a.name, icon: a.icon, note: r.agents.includes(a.id) ? "✓" : "" })),
-        ], (v) => {
-          r.agents = !v ? [] : r.agents.includes(v) ? r.agents.filter((x) => x !== v) : [...r.agents, v];
-          ag.textContent = agentsName(); ag.classList.toggle("on", r.agents.length > 0);
-        });
-        // intent: what the message asks for, as the classifier judges it
-        const it = el("span", "rt-cond in" + (r.intent ? " on" : ""));
-        it.onclick = () => ii.focus();
-        const ii = input(r.intent || "", t("what it asks for, e.g. writing tests"));
-        ii.maxLength = 200;
-        ii.oninput = () => {
-          r.intent = ii.value; it.classList.toggle("on", !!r.intent.trim());
-          // Jev, when there is one, as the effort picked per turn takes it
-          if (r.intent.trim() && !d.classifier && deciders.length) d.classifier = deciders[0].id;
-          drawClassifier();
+        const row = el("div", "rt-rule" + (r.pause ? " pause" : ""));
+        const line = el("div", "rt-line when");
+        const shown = (k, pauses) => (pauses || !r.pause) && (condSet(r, k) || openedOf(r).has(k));
+        const kinds = COND_KINDS.filter(([k, , p]) => shown(k, p)).map(([k]) => k);
+        const mine = focusCond?.r === r ? focusCond.k : null;
+        // a set condition in its pill, and the × that takes it off
+        const wrap = (k, ...els) => {
+          openedOf(r).add(k); // emptied, it stays until its × takes it off
+          const w = el("span", "rt-c");
+          w.dataset.k = k;
+          const x = el("button", "rt-cx");
+          x.type = "button";
+          x.title = t("Remove condition");
+          x.setAttribute("aria-label", x.title);
+          x.append(svg(CROSS, 8, 2));
+          x.onclick = (e) => { e.stopPropagation(); dropCond(r, k); };
+          w.append(...els, x);
+          line.append(w);
         };
-        if (r === asking) focusIntent = ii;
-        ii.onkeydown = (e) => e.stopPropagation();
-        it.append(el("span", "", t("asks for")), ii);
+        // intent: what the message asks for, as the classifier judges it.
+        // Told in a sentence, so it is shown whole: the box is as wide as
+        // what is in it and wraps onto more lines where the line ends
+        // (a hidden copy of the text sizes it), never cut off
+        if (kinds.includes("intent")) {
+          const it = el("span", "rt-cond in" + (r.intent ? " on" : ""));
+          it.onclick = (e) => { if (e.target === it || e.target.tagName === "SPAN") ii.focus(); };
+          const grow = el("span", "rt-grow");
+          const ii = el("textarea");
+          ii.rows = 1; ii.cols = 1; // sized by the copy of its words, not by columns
+          ii.value = r.intent || "";
+          ii.placeholder = t("what it asks for, e.g. writing tests");
+          ii.spellcheck = false;
+          ii.autocomplete = "off";
+          ii.maxLength = 200;
+          const size = () => { grow.dataset.v = ii.value || ii.placeholder; };
+          ii.oninput = () => {
+            // one line of words: a pasted line break is a space
+            if (/[\r\n]/.test(ii.value)) { const at = ii.selectionStart; ii.value = ii.value.replace(/\r?\n|\r/g, " "); ii.setSelectionRange(at, at); }
+            r.intent = ii.value; it.classList.toggle("on", !!r.intent.trim());
+            size();
+            // Jev, when there is one, as the effort picked per turn takes it
+            if (r.intent.trim() && !d.classifier && deciders.length) d.classifier = deciders[0].id;
+            drawClassifier();
+          };
+          ii.onkeydown = (e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") e.preventDefault(); // nothing to break the line for
+          };
+          size();
+          grow.append(ii);
+          it.append(el("span", "", t("asks for")), grow);
+          wrap("intent", it);
+          if (mine === "intent") focus = () => ii.focus({ preventScroll: true });
+        }
+        // tokens: at least this long
+        if (kinds.includes("tokens")) {
+          const tk = el("span", "rt-cond tk" + (r.tokens ? " on" : ""));
+          tk.onclick = (e) => { if (e.target === tk || e.target.tagName === "SPAN") ti.focus(); };
+          const ti = input(r.tokens ? String(r.tokens) : "", "", "number");
+          ti.min = "0"; ti.step = "1000";
+          ti.oninput = () => { r.tokens = Math.max(0, parseInt(ti.value, 10) || 0); tk.classList.toggle("on", !!r.tokens); warn(); };
+          ti.onkeydown = (e) => e.stopPropagation();
+          tk.append(el("span", "", "≥"), ti, el("span", "", t("tokens")));
+          wrap("tokens", tk);
+          if (mine === "tokens") focus = () => ti.focus({ preventScroll: true });
+        }
+        // images
+        if (kinds.includes("images")) {
+          const im = el("button", "rt-cond" + (r.images ? " on" : ""), t("has an image"));
+          im.onclick = () => { r.images = !r.images; im.classList.toggle("on", r.images); warn(); };
+          wrap("images", im);
+          if (mine === "images") focus = () => im.focus({ preventScroll: true });
+        }
+        // reasoning
+        if (kinds.includes("effort")) {
+          const effortName = (v) => v === "on" ? t("reasoning on") : v ? t("reasoning ≥ {level}", { level: v }) : t("any reasoning");
+          const ef = el("button", "rt-cond" + (r.effort ? " on" : ""), effortName(r.effort));
+          ef.onclick = (ev) => pickFrom("reasoning", ef, ev, [
+            { value: "", label: t("any reasoning"), note: t("not a condition") },
+            { value: "on", label: t("reasoning on"), note: t("thinking or any effort level") },
+            ...EFFORTS.map((v) => ({ value: v, label: t("reasoning ≥ {level}", { level: v }) })),
+          ], (v) => { r.effort = v; ef.textContent = effortName(v); ef.classList.toggle("on", !!v); });
+          wrap("effort", ef);
+          if (mine === "effort") focus = () => { ef.focus({ preventScroll: true }); ef.onclick({ stopPropagation() {} }); };
+        }
         // compacting: the agent summarizing its conversation (/compact),
         // which a cheaper, faster model can do
-        const cp = el("button", "rt-cond" + (r.compact ? " on" : ""), t("compacting"));
-        cp.title = t("The agent summarizes the conversation to go on in less room (Claude Code's /compact, Codex, OpenCode…): a cheaper, faster model can do it");
-        cp.onclick = () => { r.compact = !r.compact; cp.classList.toggle("on", r.compact); warn(); };
-        // hours of the day, on this computer's clock (a vendor's peak
-        // hours, say): typed as 09:00 and 18:00, past midnight when the
-        // second comes first; the days are picked like the agents
-        const tm = el("span", "rt-cond tm");
-        const tw = () => r.time || (r.time = { from: "", to: "", days: [] });
-        const tFrom = input(r.time?.from || "", "09:00"), tTo = input(r.time?.to || "", "18:00");
-        tm.title = t("The turn begins within these hours, on this computer's clock — a provider's peak-price hours sent to another, say");
-        tm.onclick = (e) => { if (e.target === tm || e.target.tagName === "SPAN") (tFrom.value ? tTo : tFrom).focus({ preventScroll: true }); };
-        const dayBtn = el("button", "rt-cond");
-        const drawTime = () => {
-          const w = r.time, from = clockOf(w?.from), to = clockOf(w?.to);
-          const typed = !!(w && (w.from || w.to));
-          tm.classList.toggle("on", !!(from && to));
-          // a time typed that isn't one, once its field is left
-          tm.classList.toggle("bad", [[tFrom, w?.from], [tTo, w?.to]].some(([b, v]) => v && !clockOf(v) && document.activeElement !== b));
-          dayBtn.hidden = !typed && !w?.days?.length;
-          dayBtn.textContent = daysText(w?.days) || t("every day");
-          dayBtn.classList.toggle("on", !!daysText(w?.days));
-        };
-        for (const [box, key] of [[tFrom, "from"], [tTo, "to"]]) {
-          box.className = "clock";
-          box.maxLength = 5;
-          box.inputMode = "numeric";
-          box.oninput = () => { tw()[key] = box.value.trim(); drawTime(); warn(); };
-          box.onblur = () => { const v = clockOf(box.value); if (v) { box.value = v; tw()[key] = v; } drawTime(); warn(); };
-          box.onkeydown = (e) => e.stopPropagation();
+        if (kinds.includes("compact")) {
+          const cp = el("button", "rt-cond" + (r.compact ? " on" : ""), t("compacting"));
+          cp.title = t("The agent summarizes the conversation to go on in less room (Claude Code's /compact, Codex, OpenCode…): a cheaper, faster model can do it");
+          cp.onclick = () => { r.compact = !r.compact; cp.classList.toggle("on", r.compact); warn(); };
+          wrap("compact", cp);
+          if (mine === "compact") focus = () => cp.focus({ preventScroll: true });
         }
-        tm.append(el("span", "", t("from")), tFrom, el("span", "", t("to")), tTo);
-        const presets = [["", "every day", []], ["weekdays", "weekdays", WEEK.slice(0, 5)], ["weekends", "weekends", WEEK.slice(5)]];
-        dayBtn.onclick = (ev) => pickFrom("days", dayBtn, ev, [
-          ...presets.map(([v, label, ds]) => ({ value: "=" + v, label: t(label), note: ds.length ? daysText(ds) : t("not a condition") })),
-          ...WEEK.map((d) => ({ value: d, label: t(DAY_NAMES[d]), note: r.time?.days?.includes(d) ? "✓" : "" })),
-        ], (v) => {
-          const w = tw();
-          if (v.startsWith("=")) w.days = [...presets.find(([id]) => "=" + id === v)[2]];
-          else w.days = w.days.includes(v) ? w.days.filter((x) => x !== v) : WEEK.filter((x) => x === v || w.days.includes(x));
-          if (w.days.length === 7) w.days = [];
-          drawTime(); warn();
-        });
-        drawTime();
+        // agents
+        if (kinds.includes("agents")) {
+          const clients = state.clients || state.agents || [];
+          const agentsName = () => r.agents.length ? r.agents.map((id) => clients.find((a) => a.id === id)?.name || id).join(", ") : t("any agent");
+          const ag = el("button", "rt-cond" + (r.agents.length ? " on" : ""), agentsName());
+          ag.onclick = (ev) => pickFrom("agent", ag, ev, [
+            { value: "", label: t("any agent"), note: t("not a condition") },
+            ...clients.map((a) => ({ value: a.id, label: a.name, icon: a.icon, note: r.agents.includes(a.id) ? "✓" : "" })),
+          ], (v) => {
+            r.agents = !v ? [] : r.agents.includes(v) ? r.agents.filter((x) => x !== v) : [...r.agents, v];
+            ag.textContent = agentsName(); ag.classList.toggle("on", r.agents.length > 0);
+          });
+          wrap("agents", ag);
+          if (mine === "agents") focus = () => { ag.focus({ preventScroll: true }); ag.onclick({ stopPropagation() {} }); };
+        }
         // folders: the project the agent works in, as it tells its model
         // (Cario0x on X), typed comma separated; a folder inside one counts
-        const fd = el("span", "rt-cond fd" + (r.folders?.length ? " on" : ""));
-        fd.onclick = () => fi.focus();
-        const fi = input((r.folders || []).join(", "), "~/work/acme, ~/oss");
-        fd.title = t("The agent works in one of these folders or a folder inside one, as it tells the model (Claude Code, Codex, OpenCode, Pi); an agent that doesn't say isn't matched");
-        fi.oninput = () => { r.folders = fi.value.split(",").map((x) => x.trim()).filter(Boolean); fd.classList.toggle("on", r.folders.length > 0); };
-        fi.onkeydown = (e) => e.stopPropagation();
-        fd.append(el("span", "", t("in folder")), fi);
+        if (kinds.includes("folders")) {
+          const fd = el("span", "rt-cond fd" + (r.folders?.length ? " on" : ""));
+          fd.onclick = (e) => { if (e.target === fd || e.target.tagName === "SPAN") fi.focus(); };
+          const fi = input((r.folders || []).join(", "), "~/work/acme, ~/oss");
+          fd.title = t("The agent works in one of these folders or a folder inside one, as it tells the model (Claude Code, Codex, OpenCode, Pi); an agent that doesn't say isn't matched");
+          fi.oninput = () => { r.folders = fi.value.split(",").map((x) => x.trim()).filter(Boolean); fd.classList.toggle("on", r.folders.length > 0); fitBox(fi); };
+          fi.onkeydown = (e) => e.stopPropagation();
+          fitBox(fi);
+          fd.append(el("span", "", t("in folder")), fi);
+          wrap("folders", fd);
+          if (mine === "folders") focus = () => fi.focus({ preventScroll: true });
+        }
         // outside folders (#1606, Ti800): a model kept for the task in one
         // folder is paused for every other; an agent that doesn't say its
         // folder isn't known to be in one, so it counts as outside
-        const xf = el("span", "rt-cond xf" + (r.exceptFolders?.length ? " on" : ""));
-        xf.onclick = () => xi.focus();
-        const xi = input((r.exceptFolders || []).join(", "), "~/big-task");
-        xf.title = t("The agent works in none of these folders, nor a folder inside one, as it tells the model; an agent that doesn't say counts as outside them");
-        xi.oninput = () => { r.exceptFolders = xi.value.split(",").map((x) => x.trim()).filter(Boolean); xf.classList.toggle("on", r.exceptFolders.length > 0); };
-        xi.onkeydown = (e) => e.stopPropagation();
-        xf.append(el("span", "", t("not in folder")), xi);
-        // a pause holds by hours, days, agents and folders only: the others
-        // are about a request, and a pause keeps the model out of every one
-        const byRequest = [tk, im, ef, it, cp];
-        for (const c of byRequest) c.hidden = !!r.pause;
-        when.append(tk, im, ef, ag, it, cp, fd, xf, tm, dayBtn);
+        if (kinds.includes("exceptFolders")) {
+          const xf = el("span", "rt-cond xf" + (r.exceptFolders?.length ? " on" : ""));
+          xf.onclick = (e) => { if (e.target === xf || e.target.tagName === "SPAN") xi.focus(); };
+          const xi = input((r.exceptFolders || []).join(", "), "~/big-task");
+          xf.title = t("The agent works in none of these folders, nor a folder inside one, as it tells the model; an agent that doesn't say counts as outside them");
+          xi.oninput = () => { r.exceptFolders = xi.value.split(",").map((x) => x.trim()).filter(Boolean); xf.classList.toggle("on", r.exceptFolders.length > 0); fitBox(xi); };
+          xi.onkeydown = (e) => e.stopPropagation();
+          fitBox(xi);
+          xf.append(el("span", "", t("not in folder")), xi);
+          wrap("exceptFolders", xf);
+          if (mine === "exceptFolders") focus = () => xi.focus({ preventScroll: true });
+        }
+        // hours of the day, on this computer's clock (a vendor's peak
+        // hours, say): typed as 09:00 and 18:00, past midnight when the
+        // second comes first; the days are picked like the agents, and
+        // days alone are all day
+        if (kinds.includes("time")) {
+          const tm = el("span", "rt-cond tm");
+          const tw = () => r.time || (r.time = { from: "", to: "", days: [] });
+          const tFrom = input(r.time?.from || "", "09:00"), tTo = input(r.time?.to || "", "18:00");
+          tm.title = t("The turn begins within these hours, on this computer's clock — a provider's peak-price hours sent to another, say");
+          tm.onclick = (e) => { if (e.target === tm || e.target.tagName === "SPAN") (tFrom.value ? tTo : tFrom).focus({ preventScroll: true }); };
+          const dayBtn = el("button", "rt-cond");
+          const drawTime = () => {
+            const w = r.time, from = clockOf(w?.from), to = clockOf(w?.to);
+            tm.classList.toggle("on", !!(from && to));
+            // a time typed that isn't one, once its field is left
+            tm.classList.toggle("bad", [[tFrom, w?.from], [tTo, w?.to]].some(([b, v]) => v && !clockOf(v) && document.activeElement !== b));
+            dayBtn.textContent = daysText(w?.days) || t("every day");
+            dayBtn.classList.toggle("on", !!daysText(w?.days));
+          };
+          for (const [box, key] of [[tFrom, "from"], [tTo, "to"]]) {
+            box.className = "clock";
+            box.maxLength = 5;
+            box.inputMode = "numeric";
+            box.oninput = () => { tw()[key] = box.value.trim(); drawTime(); warn(); };
+            box.onblur = () => { const v = clockOf(box.value); if (v) { box.value = v; tw()[key] = v; } drawTime(); warn(); };
+            box.onkeydown = (e) => e.stopPropagation();
+          }
+          tm.append(el("span", "", t("from")), tFrom, el("span", "", t("to")), tTo);
+          const presets = [["", "every day", []], ["weekdays", "weekdays", WEEK.slice(0, 5)], ["weekends", "weekends", WEEK.slice(5)]];
+          dayBtn.onclick = (ev) => pickFrom("days", dayBtn, ev, [
+            ...presets.map(([v, label, ds]) => ({ value: "=" + v, label: t(label), note: ds.length ? daysText(ds) : t("not a condition") })),
+            ...WEEK.map((d) => ({ value: d, label: t(DAY_NAMES[d]), note: r.time?.days?.includes(d) ? "✓" : "" })),
+          ], (v) => {
+            const w = tw();
+            if (v.startsWith("=")) w.days = [...presets.find(([id]) => "=" + id === v)[2]];
+            else w.days = w.days.includes(v) ? w.days.filter((x) => x !== v) : WEEK.filter((x) => x === v || w.days.includes(x));
+            if (w.days.length === 7) w.days = [];
+            drawTime(); warn();
+          });
+          drawTime();
+          wrap("time", tm, dayBtn);
+          if (mine === "time") focus = () => tFrom.focus({ preventScroll: true });
+        }
+        // the quiet + that adds a condition: what the rule doesn't show yet,
+        // in the app's menu; said in words while the rule has none
+        const free = COND_KINDS.filter(([k, , p]) => (p || !r.pause) && !kinds.includes(k));
+        if (free.length) {
+          const add = el("button", "rt-addc" + (kinds.length ? "" : " wide"));
+          add.type = "button";
+          add.setAttribute("aria-haspopup", "menu");
+          add.setAttribute("aria-label", t("Add a condition"));
+          add.title = t("Add a condition");
+          add.append(svg(PLUS, 11, 1.8));
+          if (!kinds.length) add.append(el("span", "", t("Add a condition")));
+          add.onclick = () => openProtoMenu(add, free.map(([k, name]) => ({ v: k, name, note: "" })), null, (k) => addCond(r, k), "Add a condition");
+          line.append(add);
+          if (mine === "+") focus = () => add.focus({ preventScroll: true });
+        }
+        // what it does, in a column of its own so every rule's → and model
+        // line up down the list
+        const then = el("div", "rt-line rt-then");
+        then.append(el("span", "rt-arrow", "→"));
+        then.lastChild.setAttribute("aria-hidden", "true");
         // the member it sends to
-        const use = el("div", "rt-use");
-        const ub = el("button", "rt-cond on");
+        const ub = el("button", "rt-cond on rt-model");
         const drawUse = () => { const note = memberNote(r.use); ub.replaceChildren(memberIcon(r.use), el("span", "", note ? `${memberName(r.use)} · ${note}` : r.use)); };
         drawUse();
         ub.onclick = (ev) => pickFrom("member", ub, ev, d.members.map((id) => { const s = subOf(id); return { value: id, label: memberName(id), note: memberNote(id), icon: s ? undefined : modelOf(id)?.icon, icons: s ? groupIcons(s) : undefined }; }),
@@ -4702,40 +4854,66 @@
         warn();
         // what it does: send the turn there first, or keep the model out
         // of the group while the rule holds (John on Discord: a model
-        // paused in its vendor's peak hours)
-        const act = el("button", "rt-cond rt-act" + (r.pause ? " on" : ""), t(r.pause ? "pause" : "send to"));
-        act.onclick = (ev) => pickFrom("action", act, ev, [
-          { value: "send", label: t("send to"), note: t("goes first; the others stay behind it") },
-          { value: "pause", label: t("pause"), note: t("left out of the group: not tried, not a fallback") },
-        ], (v) => {
+        // paused in its vendor's peak hours). Sending is the plain case and
+        // goes unsaid; a pause says so before the model, and turns back
+        // from there or from the rule's menu.
+        const setAct = (v) => {
           r.pause = v === "pause";
           // what a pause doesn't take is cleared, not kept out of sight
-          if (r.pause) Object.assign(r, { tokens: 0, images: false, effort: "", intent: "", compact: false });
+          if (r.pause) {
+            Object.assign(r, { tokens: 0, images: false, effort: "", intent: "", compact: false });
+            for (const [k, , p] of COND_KINDS) if (!p) openedOf(r).delete(k);
+          }
           drawRules();
-        }, r.pause ? "pause" : "send");
-        use.append(act, ub, hint);
-        const ctl = el("span", "ctl");
-        if (i) { const up = el("button", "text", t("Up")); up.onclick = () => { d.rules.splice(i - 1, 0, d.rules.splice(i, 1)[0]); drawRules(); }; ctl.append(up); }
-        const rm = el("button", "text", t("Remove"));
-        rm.onclick = () => { d.rules.splice(i, 1); drawRules(); };
-        ctl.append(rm);
-        row.append(el("span", "i", String(i + 1)), when, use, ctl);
+        };
+        if (r.pause) {
+          const act = el("button", "rt-cond rt-act on", t("pause"));
+          act.onclick = (ev) => pickFrom("action", act, ev, [
+            { value: "send", label: t("send to"), note: t("goes first; the others stay behind it") },
+            { value: "pause", label: t("pause"), note: t("left out of the group: not tried, not a fallback") },
+          ], setAct, "pause");
+          then.append(act);
+        }
+        then.append(ub, hint);
+        // the rule's own acts, under ⋯ as on the groups' cards: its place
+        // in the order, sending or pausing, and taking it out
+        const more = el("button", "icon rt-rmore");
+        more.type = "button";
+        more.setAttribute("aria-haspopup", "menu");
+        more.setAttribute("aria-label", t("Actions for rule {n}", { n: i + 1 }));
+        more.title = t("Actions for rule {n}", { n: i + 1 });
+        more.append(svg(DOTS, 14, 2.2));
+        const move = (to) => { d.rules.splice(to, 0, d.rules.splice(i, 1)[0]); drawRules(); rlist.querySelectorAll(".rt-rmore")[to]?.focus({ preventScroll: true }); };
+        more.onclick = () => {
+          const again = agentMenu?.anchor === more;
+          closeAgentMenu();
+          if (again) return;
+          openRowMenu(more, [
+            { name: "Move up", icon: MOVE_UP, off: i === 0, run: () => move(i - 1) },
+            { name: "Move down", icon: MOVE_DOWN, off: i === d.rules.length - 1, run: () => move(i + 1) },
+            r.pause
+              ? { name: "Send to the model instead", icon: RULE_SEND, sep: true, run: () => setAct("send") }
+              : { name: "Pause the model instead", icon: RULE_PAUSE, sep: true, run: () => setAct("pause") },
+            { name: "Remove rule", icon: CROSS, sep: true, run: () => { d.rules.splice(i, 1); drawRules(); } },
+          ]);
+        };
+        row.append(el("span", "i", String(i + 1)), line, then, more);
         rlist.append(row);
       });
       drawClassifier();
-      focusIntent?.focus({ preventScroll: true });
-      focusIntent = null;
+      focusCond = null;
+      focus?.();
     };
-    let focusIntent = null;
     const newRule = () => ({ use: d.members[d.members.length - 1], pause: false, tokens: 0, images: false, effort: "", agents: [], intent: "", compact: false, folders: [], exceptFolders: [], time: null });
-    rAdd.onclick = () => { d.rules.push(newRule()); drawRules(); };
+    // a new rule asks for an intent first, its box focused and the
+    // classifier shown (Jev picked when there is one); any other condition
+    // is a + away, and the intent an × away
     const addIntentRule = () => {
-      asking = newRule();
-      d.rules.push(asking);
-      if (!d.classifier && deciders.length) d.classifier = deciders[0].id;
-      drawRules();
+      const r = newRule();
+      d.rules.push(r);
+      addCond(r, "intent");
     };
-    rIntent.onclick = addIntentRule;
+    rAdd.onclick = addIntentRule;
     // the classifier, once a rule has an intent or the effort is picked
     // per turn: the model asked which intent a turn's message is and how
     // hard it is. Jev (a decision provider's model) answers both in one
@@ -4761,7 +4939,7 @@
     };
     const drawClassifier = () => {
       const auto = d.effort === "auto";
-      const intents = d.rules.some((r) => r.intent?.trim() || (r === asking && d.rules.includes(r)));
+      const intents = d.rules.some((r) => r.intent?.trim() || (!r.pause && opened.get(r)?.has("intent")));
       const on = auto || intents;
       cls.hidden = cw.hidden = clabel.hidden = !on;
       if (!on) return;
@@ -4779,9 +4957,10 @@
         .map((x) => ({ value: "group/" + x.id, label: x.name, note: "group/" + x.id, icons: groupIcons(x), group: ROUTING_GROUPS, ref: "group/" + x.id }));
       cb.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "classifier", label: "model", value: d.classifier, options: [...deciders.map(opt), ...subs, ...groups.models.map(opt)],
         onPick: (id) => { if (id) d.classifier = id; drawClassifier(); } }, cb, ev);
-      cls.replaceChildren(cb,
-        ...(sg ? [el("div", "hint", t("A routing group classifies as any request to it goes: if its first model fails, the next is asked."))] : []),
-        el("div", "hint", t(isJev(d.classifier) && !intents
+      // how it is asked goes under the ⓘ beside it: a paragraph under the
+      // pick was most of the editor's words
+      const how = [...(sg ? [t("A routing group classifies as any request to it goes: if its first model fails, the next is asked.")] : []),
+        t(isJev(d.classifier) && !intents
           ? "Jev is asked once as each turn begins, with the message and what it said of the turn before. Its calls show in the usage as magpie’s own."
           : isJev(d.classifier)
           ? "As a turn begins, Jev is asked once which of the intents the message is, and how hard the turn is when it picks the effort. An intent it isn't sure of matches no rule. Its calls show in the usage as magpie’s own."
@@ -4789,7 +4968,10 @@
           ? "As a turn begins, this model is asked how hard the turn is — once; a small, fast one without reasoning is best. If it fails or can't say, the turn reasons as the agent asked. Its calls show in the usage as magpie’s own."
           : auto
           ? "As a turn begins, this model is asked which of the intents the message is and how hard the turn is, each once; a small, fast one without reasoning is best. If it can't say, no intent matches and the turn reasons as the agent asked. Its calls show in the usage as magpie’s own."
-          : "As a turn begins, this model is asked which of the intents the message is — once; a small, fast one without reasoning is best. If it fails or can't say, no intent matches. Its calls show in the usage as magpie’s own.")));
+          : "As a turn begins, this model is asked which of the intents the message is — once; a small, fast one without reasoning is best. If it fails or can't say, no intent matches. Its calls show in the usage as magpie’s own.")];
+      const pickRow = el("div", "rt-pickrow");
+      pickRow.append(cb, infoTip(how.join(" ")));
+      cls.replaceChildren(pickRow);
       // a subscription asked as every turn begins spends its allowance
       // on it, beside the agent's own requests (#1839): said beside the
       // pick, once for a model, for a group when the one it asks first is
@@ -4809,15 +4991,15 @@
     };
     rbox.append(rlist, rAdds);
     const rw2 = el("div");
-    rw2.append(rbox, rHint2);
+    rw2.append(rHint2, rbox);
     ed.append(el("label", "", t("Rules")), rw2);
     // the effort: the agent's, or the classifier's pick for each turn
-    const eHint = el("div", "hint");
-    const ew = el("div");
+    const eHint = infoTip("");
+    const ew = el("div", "rt-pickrow");
     const drawEffort = () => {
-      eHint.textContent = t(d.effort === "auto"
+      eHint.set(t(d.effort === "auto"
         ? "As a turn begins, the classifier rates how hard it is and the turn's requests ask their model for low, medium, high or xhigh reasoning — the level each model has nearest. Only where the agent asked for reasoning: a request without any (a session title) stays without."
-        : "Each request reasons as much as the agent asked.");
+        : "Each request reasons as much as the agent asked."));
     };
     ew.append(segs([["", t("Agent's")], ["auto", t("Picked per turn")]], d.effort, (v) => {
       d.effort = v;
