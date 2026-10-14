@@ -80,6 +80,12 @@ type QuotaWindow struct {
 	// calls through the account (usage.WithWindowHolds), for the GUI only;
 	// nil where that can't be told honestly.
 	Holds *WindowHolds `json:"holds,omitempty"`
+	// HoldsWhy is, where Holds is nil on a window of an account's own card
+	// that runs out and starts again, why its whole isn't told (#2045):
+	// HoldsLow, HoldsNoClock, HoldsBeforeLog, HoldsNoneRouted or
+	// HoldsCredits. Empty where no whole is ever told (a pool, a family,
+	// money aside, another magpie's card).
+	HoldsWhy string `json:"holdsWhy,omitempty"`
 	// matches further scopes pools whose membership isn't one model word.
 	matches func(string) bool
 	// partial is set on the windows of a reading that may leave some out:

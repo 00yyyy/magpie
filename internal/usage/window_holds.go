@@ -22,8 +22,8 @@ import (
 // it stood at now. qs itself, which the caller may share, is left as it is.
 func WithWindowHolds(qs []provider.SubscriptionQuota, now time.Time) []provider.SubscriptionQuota {
 	since, ok := holdsSince(qs, now)
-	if !ok {
-		return qs
+	if !ok { // none can be reckoned: each one only says why
+		return windowHolds(qs, now, time.Time{}, nil, nil, nil, func(func(Record)) {})
 	}
 	s := readLogSnapshot()
 	dry := dryRuns(qs, provider.QuotaHistories(since, "", ""), now)
@@ -37,7 +37,7 @@ func holdsSince(qs []provider.SubscriptionQuota, now time.Time) (time.Time, bool
 	for _, q := range qs {
 		at := readAtOf(q, now)
 		for _, w := range q.Windows {
-			if start, _, ok := holdsBounds(q, w, at); ok && (!found || start.Before(since)) {
+			if start, _, why := holdsBounds(q, w, at); why == "" && (!found || start.Before(since)) {
 				since, found = start, true
 			}
 		}
@@ -52,22 +52,30 @@ func readAtOf(q provider.SubscriptionQuota, now time.Time) time.Time {
 	return now
 }
 
-// holdsBounds is the window of q's account to reckon w's whole over, ok
-// only where w can be: an account's own card, a window that runs out and
-// starts again on a known clock, counts a whole account's or some named
-// models' calls, and is used enough, and a reading not past its reset.
-func holdsBounds(q provider.SubscriptionQuota, w provider.QuotaWindow, at time.Time) (time.Time, time.Time, bool) {
+// holdsBounds is the window of q's account to reckon w's whole over, where
+// w can be: an account's own card, a window that runs out and starts again
+// on a known clock, counts a whole account's or some named models' calls,
+// and is used enough, and a reading not past its reset. why is empty where
+// it can be, else the provider.Holds* reason it can't, or "-" for a window
+// whose whole is never told (no reason worth a line on the card).
+func holdsBounds(q provider.SubscriptionQuota, w provider.QuotaWindow, at time.Time) (start, end time.Time, why string) {
 	if q.Error != "" || q.From != "" || q.User == "" || q.Balance != "" {
-		return time.Time{}, time.Time{}, false
+		return time.Time{}, time.Time{}, "-"
 	}
-	if w.Unlimited || w.Aside || w.Family != "" || w.Pool != "" || math.IsNaN(w.Used) || w.Used < provider.HoldsFloor {
-		return time.Time{}, time.Time{}, false
+	if w.Unlimited || w.Aside || w.Family != "" || w.Pool != "" || math.IsNaN(w.Used) {
+		return time.Time{}, time.Time{}, "-"
+	}
+	if w.Used < provider.HoldsFloor {
+		return time.Time{}, time.Time{}, provider.HoldsLow
 	}
 	start, end, ok := w.Bounds(at)
-	if !ok || !end.After(at) || !start.Before(at) {
-		return time.Time{}, time.Time{}, false
+	if !ok {
+		return time.Time{}, time.Time{}, provider.HoldsNoClock
 	}
-	return start, end, true
+	if !end.After(at) || !start.Before(at) {
+		return time.Time{}, time.Time{}, "-"
+	}
+	return start, end, ""
 }
 
 // dryRun is a stretch in which one of an account's windows had nothing
@@ -144,12 +152,20 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 	type slot struct{ q, w int }
 	type span struct{ start, end time.Time }
 	want := map[slot]span{}
+	why := map[slot]string{} // a window not reckoned, and why
 	byAccount := map[string][]slot{}
 	for i, q := range qs {
 		at := readAtOf(q, now)
 		for j, w := range q.Windows {
-			start, _, ok := holdsBounds(q, w, at)
-			if !ok || first.IsZero() || first.After(start) {
+			start, _, no := holdsBounds(q, w, at)
+			switch {
+			case no == "-":
+				continue
+			case no != "":
+				why[slot{i, j}] = no
+				continue
+			case first.IsZero() || first.After(start):
+				why[slot{i, j}] = provider.HoldsBeforeLog
 				continue
 			}
 			k := q.Provider + "\x00" + strings.ToLower(q.User)
@@ -157,7 +173,7 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 			want[slot{i, j}] = span{start, at}
 		}
 	}
-	if len(want) == 0 {
+	if len(want) == 0 && len(why) == 0 {
 		return qs
 	}
 	sums := map[slot]*provider.WindowHolds{}
@@ -209,21 +225,33 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 			}
 		}
 	})
-	if len(sums) == 0 {
-		return qs
-	}
 	out := make([]provider.SubscriptionQuota, len(qs))
 	copy(out, qs)
 	cloned := map[int]bool{}
-	for s, h := range sums {
-		if h.Routed.Tokens <= 0 || slices.ContainsFunc(inRun[s], func(k runKey) bool { return paidOtherwise[k] }) {
-			continue
-		}
+	window := func(s slot) *provider.QuotaWindow {
 		q := &out[s.q]
 		if !cloned[s.q] { // the caller's windows are left as they are
 			q.Windows, cloned[s.q] = append([]provider.QuotaWindow(nil), q.Windows...), true
 		}
-		w := &q.Windows[s.w]
+		return &q.Windows[s.w]
+	}
+	for s := range want {
+		h := sums[s]
+		switch {
+		case h == nil || h.Routed.Tokens <= 0:
+			why[s] = provider.HoldsNoneRouted
+		case slices.ContainsFunc(inRun[s], func(k runKey) bool { return paidOtherwise[k] }):
+			why[s] = provider.HoldsCredits
+		}
+	}
+	for s, no := range why {
+		window(s).HoldsWhy = no
+	}
+	for s, h := range sums {
+		if why[s] != "" {
+			continue
+		}
+		w := window(s)
 		h.Used = w.Used
 		scale := 100 / w.Used
 		h.Tokens = int64(math.Round(float64(h.Routed.Tokens) * scale))

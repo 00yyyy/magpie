@@ -111,15 +111,32 @@ func TestWindowHoldsReckonsWhatMagpieRouted(t *testing.T) {
 			t.Errorf("%s %s: cost %v (priced %v), want %v", got[x.q].Provider, w.Name, h.Cost, h.Priced, x.cost)
 		}
 	}
-	for _, x := range [][2]int{{0, 3}, {1, 1}, {2, 1}, {3, 0}} {
-		if h := got[x[0]].Windows[x[1]].Holds; h != nil {
-			t.Errorf("%s %s: reckoned %+v, want none", got[x[0]].Provider, got[x[0]].Windows[x[1]].Name, h)
+	// and where it isn't, why, for the card's "not enough data" (#2045):
+	// money aside and a card with an error say nothing
+	for _, x := range []struct {
+		q, w int
+		why  string
+	}{{0, 3, ""}, {1, 1, provider.HoldsLow}, {2, 1, provider.HoldsNoClock}, {3, 0, ""}} {
+		w := got[x.q].Windows[x.w]
+		if w.Holds != nil || w.HoldsWhy != x.why {
+			t.Errorf("%s %s: reckoned %+v, why %q; want none, why %q", got[x.q].Provider, w.Name, w.Holds, w.HoldsWhy, x.why)
 		}
+	}
+	for _, x := range want {
+		if why := got[x.q].Windows[x.w].HoldsWhy; why != "" {
+			t.Errorf("%s %s: reckoned, and why not %q", got[x.q].Provider, got[x.q].Windows[x.w].Name, why)
+		}
+	}
+	// with no window that can be reckoned, each still says why
+	low := []provider.SubscriptionQuota{{Provider: "codex", User: "sam@example.com", Windows: []provider.QuotaWindow{
+		{Name: "7 days", Used: 4, ResetsAt: at(4 * 24 * time.Hour), Span: 7 * 24 * time.Hour}}}}
+	if w := WithWindowHolds(low, now)[0].Windows[0]; w.Holds != nil || w.HoldsWhy != provider.HoldsLow || low[0].Windows[0].HoldsWhy != "" {
+		t.Errorf("4%% used, none reckonable: %+v why %q (the caller's %q), want why %q", w.Holds, w.HoldsWhy, low[0].Windows[0].HoldsWhy, provider.HoldsLow)
 	}
 	// the cards the caller passed, which a cache may share, are as they were
 	for _, q := range qs {
 		for _, w := range q.Windows {
-			if w.Holds != nil {
+			if w.Holds != nil || w.HoldsWhy != "" {
 				t.Fatalf("the caller's %s %s was written to", q.Provider, w.Name)
 			}
 		}
@@ -140,15 +157,15 @@ func TestWindowHoldsNeedsTheWholeWindowLogged(t *testing.T) {
 		}
 	}
 	priceOf := func(Record) *catalog.Price { return nil }
-	if got := windowHolds(qs, now, now.Add(-2*24*time.Hour), priceOf, nil, nil, read); got[0].Windows[0].Holds != nil {
-		t.Fatalf("the log began 2 days into the week, and the week was reckoned: %+v", got[0].Windows[0].Holds)
+	if got := windowHolds(qs, now, now.Add(-2*24*time.Hour), priceOf, nil, nil, read); got[0].Windows[0].Holds != nil || got[0].Windows[0].HoldsWhy != provider.HoldsBeforeLog {
+		t.Fatalf("the log began 2 days into the week, and the week was reckoned: %+v, why %q", got[0].Windows[0].Holds, got[0].Windows[0].HoldsWhy)
 	}
 	got := windowHolds(qs, now, now.Add(-30*24*time.Hour), priceOf, nil, nil, read)
 	if h := got[0].Windows[0].Holds; h == nil || h.Tokens != 500 || h.Priced {
 		t.Fatalf("logged since before the week: %+v, want 500 tokens, unpriced", h)
 	}
-	if got := windowHolds(qs, now, now.Add(-30*24*time.Hour), priceOf, nil, nil, func(func(Record)) {}); got[0].Windows[0].Holds != nil {
-		t.Fatalf("nothing routed, and the week was reckoned: %+v", got[0].Windows[0].Holds)
+	if got := windowHolds(qs, now, now.Add(-30*24*time.Hour), priceOf, nil, nil, func(func(Record)) {}); got[0].Windows[0].Holds != nil || got[0].Windows[0].HoldsWhy != provider.HoldsNoneRouted {
+		t.Fatalf("nothing routed, and the week was reckoned: %+v, why %q", got[0].Windows[0].Holds, got[0].Windows[0].HoldsWhy)
 	}
 	// a provider since renamed: its calls under the old id are the account's
 	recs[0].Provider = "claude-old"
@@ -203,14 +220,19 @@ func TestWindowHoldsLeavesOutCallsPaidOtherwise(t *testing.T) {
 	pt := func(ago time.Duration, left float64) provider.QuotaPoint {
 		return provider.QuotaPoint{At: now.Add(-ago), Left: left}
 	}
+	var whys [2]string
 	holds := func(qs []provider.SubscriptionQuota, h []provider.QuotaHistory, recs ...Record) (five, week *provider.WindowHolds) {
 		got := windowHolds(qs, now, first, priceOf, nil, dryRuns(qs, h, now), reads(recs...))
+		whys = [2]string{got[0].Windows[0].HoldsWhy, got[0].Windows[1].HoldsWhy}
 		return got[0].Windows[0].Holds, got[0].Windows[1].Holds
 	}
 
 	// the report's case: the 5 hours at 100%, no reading of when it ran dry
 	if five, week := holds(card(100, time.Hour), nil, subscription, credits); five != nil || week != nil {
 		t.Fatalf("a window ran dry at an unknown time and was reckoned: 5 hours %+v, week %+v", five, week)
+	}
+	if whys != [2]string{provider.HoldsCredits, provider.HoldsCredits} {
+		t.Fatalf("why not reckoned: %q, want credits for both (#2045)", whys)
 	}
 	// read dry 90 minutes ago, some left 3 hours ago: the call an hour ago was credits
 	dry := hist(pt(3*time.Hour, 40), pt(90*time.Minute, 0))

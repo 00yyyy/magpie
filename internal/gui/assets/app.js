@@ -16911,6 +16911,24 @@ function holdsLine(h) {
   return line;
 }
 
+// holdsWhy: why a window's whole isn't told (provider.Holds*), for
+// holdsUnknownLine's tooltip; a reason not listed here says nothing.
+const holdsWhy = {
+  low: () => t("Under {n}% of it is used: a rounded share that small is too coarse to scale up", { n: 5 }),
+  clock: () => t("Its reset time isn't known, so neither is when it began"),
+  log: () => t("It began before magpie's request log, so some of its calls weren't seen"),
+  none: () => t("magpie hasn't routed a call through this account in it yet"),
+  credits: () => t("A call in it may have been paid from credits or extra usage, not from the window"),
+};
+// holdsUnknownLine: a window whose whole the server couldn't reckon
+// (#2045): "not enough data", muted, and why in its tooltip, where it said
+// nothing before and a reader couldn't tell a gap from a fault.
+function holdsUnknownLine(why) {
+  const line = el("span", "quota-holds-why", t("Whole: not enough data"));
+  line.title = t("The whole window can't be estimated from magpie's calls yet") + "\n" + holdsWhy[why]();
+  return line;
+}
+
 // isKeyCard: the card of a remote magpie's gateway keys (#1547,
 // remote_key_limits.go), "<remote>/~keys", one account per key; quotaName
 // says so by its name, which is the remote's.
@@ -17005,6 +17023,10 @@ function quotaWindows(sub) {
     if (w.holds) {
       if (!r) quota.append(r = el("div", "quota-reset"));
       r.append(holdsLine(w.holds));
+    } else if (w.holdsWhy && holdsWhy[w.holdsWhy] && !sub.history) {
+      // and where it can't be told, so, and why in its tooltip (#2045)
+      if (!r) quota.append(r = el("div", "quota-reset"));
+      r.append(holdsUnknownLine(w.holdsWhy));
     }
     // a model family's figure: its models, level by level, in its tooltip
     if (w.tiers) quota.title = t("{family}: the most used of its models", { family: w.name }) + "\n" + tiersText(w);
