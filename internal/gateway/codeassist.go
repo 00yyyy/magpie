@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
@@ -71,6 +72,29 @@ func antigravityRefuses(said string) bool {
 // after …") — is the quota it says, whatever the system prompt (#1425).
 func antigravityTurnedAway(p provider.Provider, system, said string) bool {
 	return accountAgent(p) == "antigravity" && antigravityTurnsAway(system) && antigravityRefuses(said)
+}
+
+// agForeseeing is how long after Antigravity last turned that system prompt
+// away a group still skips it for one, without asking: long enough that a
+// conversation doesn't wait on the same refusal turn after turn, short
+// enough that a block Google lifts is noticed on the next request after it.
+const agForeseeing = 6 * time.Hour
+
+// antigravityForeseen says whether p is an Antigravity account that would
+// turn body away: it carries the system prompt Antigravity refuses, and
+// Antigravity has refused it within agForeseeing. It holds for exactly the
+// requests antigravityTurnedAway would tell as the refusal, and it changes
+// nothing about the account.
+func (s *Server) antigravityForeseen(p provider.Provider, from provider.Protocol, body []byte) bool {
+	if accountAgent(p) != "antigravity" {
+		return false
+	}
+	at := s.agTurnedAway.Load()
+	if at == 0 || time.Since(time.Unix(0, at)) > agForeseeing {
+		return false
+	}
+	req, err := parse(from, body)
+	return err == nil && antigravityTurnsAway(req.System)
 }
 
 // antigravityTurnedAwayHint is what magpie adds to Antigravity's words, after
