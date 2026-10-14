@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -42,6 +43,12 @@ func TestZenFreeProbe(t *testing.T) {
 		}
 		if _, ok := tools[0].(map[string]any)[key]; !ok {
 			t.Fatalf("%v: tool %v", proto, tools[0])
+		}
+		// each takes a parameter: Zen refuses one with none
+		for _, tl := range tools {
+			if !strings.Contains(fmt.Sprint(tl), "properties:map[") || strings.Contains(fmt.Sprint(tl), "properties:map[]") {
+				t.Fatalf("%v: tool %v takes no parameter", proto, tl)
+			}
 		}
 	}
 }
@@ -120,5 +127,32 @@ func TestZenAddKeyEmptyIsPublic(t *testing.T) {
 	}
 	if err := AddKey("kilo", "", "", ""); err == nil {
 		t.Fatal("Kilo took an empty key")
+	}
+}
+
+// Zen's free tier is asked at the inference API's root, on every API's
+// URL Zen's own is saved with; Go's and other URLs are as they were.
+func TestOpenCodeFreeURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://opencode.ai/zen/v1":           "https://opencode.ai/inference/v1",
+		"https://opencode.ai/zen/v1/":          "https://opencode.ai/inference/v1/",
+		"https://opencode.ai/zen/v1/responses": "https://opencode.ai/inference/v1/responses",
+		"https://opencode.ai/zenith/v1":        "https://opencode.ai/zenith/v1",
+		"https://opencode.ai/zen":              "https://opencode.ai/inference",
+		"https://opencode.ai/inference/v1":     "https://opencode.ai/inference/v1",
+		"https://opencode.ai/zen/go/v1":        "https://opencode.ai/zen/go/v1",
+		"https://relay.test/zen/v1":            "https://relay.test/zen/v1",
+		"https://api.opencode.ai/zen/v1":       "https://api.opencode.ai/inference/v1",
+	} {
+		if got := OpenCodeFreeURL(in); got != want {
+			t.Errorf("%s: %s, want %s", in, got, want)
+		}
+	}
+	p, _ := FromPreset("opencode-zen")
+	if url, _ := tiny(p, Responses, "muse-spark-1.3-contributor-free"); url != "https://opencode.ai/inference/v1/responses" {
+		t.Fatalf("probe %s", url)
+	}
+	if url, _ := tiny(p, Responses, "gpt-5.5"); url != "https://opencode.ai/zen/v1/responses" {
+		t.Fatalf("paid probe %s", url)
 	}
 }

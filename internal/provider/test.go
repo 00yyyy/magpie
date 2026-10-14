@@ -89,7 +89,7 @@ func tiny(q Provider, proto Protocol, model string) (url, body string) {
 		body = strings.TrimSuffix(body, "}") + `,"stream":true}`
 	}
 	if q.OpenCodeFree(model) && body != "" {
-		body = zenFreeProbe(proto, body)
+		url, body = OpenCodeFreeURL(url), zenFreeProbe(proto, body)
 	}
 	if q.IsCline() && body != "" {
 		body = clineProbe(body)

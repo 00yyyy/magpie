@@ -3451,7 +3451,12 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// the tier it goes at, the user's own fields in it (#1784)
 		noteWireTier(ctx, to, body)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.Base(to)+path, bytes.NewReader(body))
+	base := p.Base(to)
+	if p.IsOpenCode() && p.OpenCodeFree(gjson.GetBytes(body, "model").String()) {
+		// Zen's free tier answers at the inference API's URL alone (zenfree.go)
+		base = provider.OpenCodeFreeURL(base)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
