@@ -1726,6 +1726,18 @@ only with a gateway key. A key held to a budget, to some models or to some
 accounts is told its own calls alone: `/v1/magpie/usage` refuses it with a
 403, and `/v1/magpie/usage/requests` keeps only its rows and filter lists.
 
+What is in flight now, for a status bar such as SketchyBar (#2132):
+`GET /v1/magpie/concurrency` answers `requests`, every agent request the
+gateway is working on, whether or not any limit is set (those waiting for a
+slot among them); `waiting`, how many of those wait for a slot under a
+provider's or account's limit; and `tools`, Claude Code turns run through a
+Claude subscription that wait on their caller's tool results, which are not
+requests. Each is `0` when idle. `data` is each limited key's or account's
+own count, empty when no limit is set. The read asks no vendor and isn't
+counted itself, so it can be polled every second. It answers as
+`/v1/magpie/quotas` does: this machine, another only with a gateway key,
+and never a held key.
+
 An app that calls its vendor itself, not through magpie, can report those
 calls so the Usage page counts them: `POST /v1/magpie/usage/requests` with
 `Content-Type: application/json`. The body is one record or an array of up

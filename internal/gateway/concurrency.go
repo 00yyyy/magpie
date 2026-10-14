@@ -233,7 +233,13 @@ type Lane struct {
 
 // concurrency tells each key's or account's Lane. It names the accounts,
 // so it answers as quotas does: this machine, or one with the key of the
-// gateway shared on the local network.
+// gateway shared on the local network. Beside them it tells the whole
+// gateway's count, limit or none (#2132, for a status bar): requests is
+// every agent request in flight, the ones waiting for a slot among them
+// (Busy.Requests, a GET like this one never counted), waiting is how many
+// of those wait for a slot, and tools the Claude Code turns waiting on
+// their caller's tool results, which are not requests. Each is 0 when
+// idle, never left out.
 func (s *Server) concurrency(w http.ResponseWriter, r *http.Request) {
 	if !local(r) && !sharedWith(r) {
 		writeError(w, provider.Chat, http.StatusForbidden, "magpie's concurrency is told to another machine only when magpie is shared on the local network and the request carries its API key")
@@ -242,7 +248,13 @@ func (s *Server) concurrency(w http.ResponseWriter, r *http.Request) {
 	if refuseHeld(w, r, heldRefused) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"object": "concurrency", "data": s.Lanes()})
+	lanes := s.Lanes()
+	waiting := 0
+	for _, ln := range lanes {
+		waiting += ln.Waiting
+	}
+	b := s.Busy()
+	writeJSON(w, 200, map[string]any{"object": "concurrency", "data": lanes, "requests": b.Requests, "waiting": waiting, "tools": b.Tools})
 }
 
 // Lanes is how each key or account with requests out or waiting under a
