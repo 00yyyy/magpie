@@ -293,22 +293,21 @@ func recordHash(path string, n int64) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func QueryPage(p Period, f Filter, offset, limit int) RequestPage {
-	return queryPage(p, f, offset, limit, sessions.ReadCallSource)
+// requestState is what the calls read at now depend on: the gateway log's
+// snapshot, the agents' call files, other computers' days, Codex's thread
+// identities and what prices and names a call. A change to meta drops the
+// request index's chunks; a change to key, its pages.
+type requestState struct {
+	sources         []sessions.CallSource
+	codexIdentities map[string]sessions.CodexIdentity
+	cfg             settings.Settings
+	snapshot        *logSnapshot
+	days            []sharedSource
+	someShared      bool
+	root, meta, key string
 }
-func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.CallSource) []sessions.Call) (page RequestPage) {
-	if limit <= 0 {
-		limit = 100
-	}
-	limit = min(limit, 500)
-	offset = max(0, offset)
-	// The time is read once, so that the rows, the chart and the day the page
-	// is kept for are of one day when midnight falls while it is worked out.
-	now := Clock()
-	// A replacement reader remains useful to callers supplying synthetic logs.
-	if LogCalls != nil {
-		return pageFromLedgerAt(p, f, offset, limit, LedgerOfAt(p, Filter{}, now), now)
-	}
+
+func readRequestState(now time.Time) requestState {
 	sources := sessions.CallSources()
 	codexIdentities := sessions.CodexIdentities()
 	slices.SortFunc(sources, func(a, b sessions.CallSource) int {
@@ -340,8 +339,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	meta += fmt.Sprintf("|%x|%s", h.Sum(nil), statKey(catalog.LivePath("antigravity")))
 	h.Reset()
 	snapshot := readLogSnapshot()
-	version := snapshot.version
-	fmt.Fprint(h, meta, version, now.Format("2006-01-02 MST"))
+	fmt.Fprint(h, meta, snapshot.version, now.Format("2006-01-02 MST"))
 	for _, s := range sources {
 		fmt.Fprintf(h, "%s:%d:%d;", s.Path, s.Size, s.Modified.UnixNano())
 	}
@@ -349,8 +347,29 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	for _, s := range days {
 		fmt.Fprintf(h, "%s:%d:%d;", s.path, s.size, s.mod.UnixNano())
 	}
-	key := fmt.Sprintf("%x", h.Sum(nil))
-	root := Path() + "|" + catalog.CachePath()
+	return requestState{sources: sources, codexIdentities: codexIdentities, cfg: cfg, snapshot: snapshot, days: days, someShared: someShared,
+		root: Path() + "|" + catalog.CachePath(), meta: meta, key: fmt.Sprintf("%x", h.Sum(nil))}
+}
+
+func QueryPage(p Period, f Filter, offset, limit int) RequestPage {
+	return queryPage(p, f, offset, limit, sessions.ReadCallSource)
+}
+func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.CallSource) []sessions.Call) (page RequestPage) {
+	if limit <= 0 {
+		limit = 100
+	}
+	limit = min(limit, 500)
+	offset = max(0, offset)
+	// The time is read once, so that the rows, the chart and the day the page
+	// is kept for are of one day when midnight falls while it is worked out.
+	now := Clock()
+	// A replacement reader remains useful to callers supplying synthetic logs.
+	if LogCalls != nil {
+		return pageFromLedgerAt(p, f, offset, limit, LedgerOfAt(p, Filter{}, now), now)
+	}
+	st := readRequestState(now)
+	sources, codexIdentities, cfg, snapshot, days, someShared := st.sources, st.codexIdentities, st.cfg, st.snapshot, st.days, st.someShared
+	version, meta, key, root := snapshot.version, st.meta, st.key, st.root
 	idx := &requestCache
 	idx.Lock()
 

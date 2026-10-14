@@ -452,3 +452,45 @@ func TestCodexActorSurvivesPackedRequestChunk(t *testing.T) {
 		t.Fatal("query identity changed the source chunk")
 	}
 }
+
+// The Sessions page asks for every Codex thread's consumption over all
+// history each time it refreshes: the ledger is read again only when a call
+// changed, and a changed rollout shows at once.
+func TestCodexModelEffortReadsLedgerOnlyWhenCallsChange(t *testing.T) {
+	pageHome(t)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC))
+	Append(Record{Time: now.Add(-2 * time.Hour), Agent: "claude-code", Provider: "openai", Model: "m", Input: 1, Output: 1, Status: 200})
+	path := filepath.Join(sessions.CodexDir(), "sessions", "2026", "09", "30", "rollout-2026-09-30T10-00-00-main-a.jsonl")
+	writeCodexCall(t, path, "main-a", "main-a", `"vscode"`, "resp-1", "m", "low", now.Add(-time.Hour), 20, 3)
+	built := 0
+	effortBuilt = func() { built++ }
+	t.Cleanup(func() { effortBuilt = nil })
+
+	first := CodexModelEffort(All)
+	if got, ok := findModelEffort(first["main-a"], "m", "low"); !ok || got.Input != 20 {
+		t.Fatalf("first read = %+v", first)
+	}
+	first["main-a"][0].Input = 999 // a caller's copy is its own
+	again := CodexModelEffort(All)
+	if built != 1 {
+		t.Fatalf("ledger read %d times for an unchanged history, want 1", built)
+	}
+	if got, _ := findModelEffort(again["main-a"], "m", "low"); got.Input != 20 {
+		t.Fatalf("cached answer was changed through a caller's copy: %+v", again)
+	}
+
+	writeCodexCall(t, path, "main-a", "main-a", `"vscode"`, "resp-1", "m", "low", now.Add(-time.Hour), 2000, 30)
+	later := now.Add(time.Minute)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	changed := CodexModelEffort(All)
+	if got, _ := findModelEffort(changed["main-a"], "m", "low"); built != 2 || got.Input != 2000 {
+		t.Fatalf("after the rollout changed: built %d, %+v", built, changed)
+	}
+	Append(Record{Time: now.Add(-time.Minute), Agent: "codex", Provider: "openai", Model: "m", Input: 5, Output: 1, Status: 200, ResponseID: "resp-2"})
+	CodexModelEffort(All)
+	if built != 3 {
+		t.Fatalf("a new gateway call did not read the ledger again: built %d", built)
+	}
+}

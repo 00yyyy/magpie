@@ -3,6 +3,7 @@ package usage
 import (
 	"slices"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/yetone/magpie/internal/sessions"
@@ -240,15 +241,60 @@ func codexActorBytes(actors []string) int64 {
 	return bytes
 }
 
+// codexEffortCache keeps CodexModelEffort's last answer for each period: the
+// Sessions page asks for all history every 15s, and the ledger under it is
+// read again only when a call, a price or an identity changed.
+var codexEffortCache struct {
+	sync.Mutex
+	key    string
+	values map[Period]map[string][]sessions.ModelEffort
+}
+
+// effortBuilt, in tests, is told each time CodexModelEffort reads the ledger.
+var effortBuilt func()
+
 // CodexModelEffort reports each Codex thread's own priced ledger consumption.
 func CodexModelEffort(p Period) map[string][]sessions.ModelEffort {
+	if LogCalls != nil { // synthetic logs carry no state to key on
+		return codexModelEffort(LedgerOf(p, Filter{}).Rows)
+	}
+	now := Clock()
+	st := readRequestState(now)
+	codexEffortCache.Lock()
+	cached, ok := codexEffortCache.values[p]
+	if codexEffortCache.key != st.key {
+		ok = false
+	}
+	codexEffortCache.Unlock()
+	if !ok {
+		if effortBuilt != nil {
+			effortBuilt()
+		}
+		cached = codexModelEffort(LedgerOfAt(p, Filter{}, now).Rows)
+		if st.snapshot.info != nil && st.snapshot.off == st.snapshot.info.Size() {
+			codexEffortCache.Lock()
+			if codexEffortCache.key != st.key {
+				codexEffortCache.key, codexEffortCache.values = st.key, map[Period]map[string][]sessions.ModelEffort{}
+			}
+			codexEffortCache.values[p] = cached
+			codexEffortCache.Unlock()
+		}
+	}
+	out := make(map[string][]sessions.ModelEffort, len(cached))
+	for actor, values := range cached {
+		out[actor] = slices.Clone(values)
+	}
+	return out
+}
+
+func codexModelEffort(rows []Row) map[string][]sessions.ModelEffort {
 	type modelEffortKey struct{ model, effort string }
 	type total struct {
 		value  sessions.ModelEffort
 		priced bool
 	}
 	groups := map[string]map[modelEffortKey]*total{}
-	for _, row := range LedgerOf(p, Filter{}).Rows {
+	for _, row := range rows {
 		if row.codexActor == "" || row.IsRejected() ||
 			row.Input+row.Output+row.CacheRead+row.CacheWrite == 0 {
 			continue
