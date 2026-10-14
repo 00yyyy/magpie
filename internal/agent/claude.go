@@ -341,15 +341,15 @@ func claudeCapabilities(first []string, own, desktop bool) string {
 // subscription costs a fraction of Opus's limits (X, AncientTwo: the limits
 // went much faster through magpie than in Claude Code itself).
 //
-// For fable, on a Claude model that is no Fable, it is none: the fable tier
-// is left unset. Claude Code takes the model ANTHROPIC_DEFAULT_FABLE_MODEL
+// For fable, on any model that is no Fable, it is none: the fable tier is
+// left unset. Claude Code takes the model ANTHROPIC_DEFAULT_FABLE_MODEL
 // names for a Fable model (2.1.293: a model id equal to it is Fable), so the
-// main model written there made Claude Opus a Fable model to it, and on a
-// Claude Pro sign-in without Fable it asked for usage credits and fell back
-// to Haiku (Zhenzhen on Discord). Claude Code's own /model fable, asked of
-// the gateway, still runs on the main model (claudeStandInAt). Another
-// vendor's model, which Claude Code knows nothing of, the fable tier still
-// follows, as it does the others.
+// main model written there made it a Fable model to Claude Code, and on a
+// Claude Pro sign-in without Fable it asked for usage credits before the
+// first turn: Claude Opus fell back to Haiku (Zhenzhen on Discord), and
+// another vendor's model, GPT-6.1 Sol through Codex, didn't run at all
+// (#2090). Claude Code's own /model fable, asked of the gateway, still runs
+// on the main model (claudeStandInAt).
 func follow(tier, main string) string {
 	switch tier {
 	case "haiku":
@@ -357,7 +357,7 @@ func follow(tier, main string) string {
 			return l
 		}
 	case "fable":
-		if n := claudeName(main); n != "" && !strings.HasPrefix(n, "claude-fable-") {
+		if !strings.HasPrefix(claudeName(main), "claude-fable-") {
 			return ""
 		}
 	}
