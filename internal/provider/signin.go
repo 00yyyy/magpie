@@ -48,6 +48,18 @@ const codexScopes = "openid profile email offline_access api.connectors.read api
 // signInTimeout is how long a sign-in waits for the browser.
 var signInTimeout = 10 * time.Minute
 
+// devicePollFloor is the least a device sign-in (Copilot, Factory, ZCode)
+// waits between asking whether the user is done, whatever interval the
+// vendor gave, 0 among them. A var: the tests' fakes give 0, and a second
+// for each of their polls was most of their time (#2051).
+var devicePollFloor = time.Second
+
+// devicePoll is the wait between a device sign-in's polls for a vendor's
+// interval in seconds.
+func devicePoll(seconds int) time.Duration {
+	return max(time.Duration(seconds)*time.Second, devicePollFloor)
+}
+
 // SignInState is where a sign-in stands, for the window to show.
 type SignInState struct {
 	ID            string `json:"id"`

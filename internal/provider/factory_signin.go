@@ -49,7 +49,7 @@ func startFactorySignIn(s *signInFlow) error {
 	s.st.URL, s.st.Code = firstNonEmpty(dc.Complete, dc.URI), dc.UserCode
 	s.stop = cancel
 	s.mu.Unlock()
-	interval := time.Duration(max(dc.Interval, 1)) * time.Second
+	interval := devicePoll(dc.Interval)
 	go func() {
 		defer cancel()
 		fail := func(msg string) { s.finish(SignInState{State: "failed", Error: msg}) }

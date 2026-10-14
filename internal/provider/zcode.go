@@ -752,7 +752,7 @@ func startZCodeSignIn(s *signInFlow, site string) error {
 	s.st.URL = u.String()
 	s.stop = cancel
 	s.mu.Unlock()
-	interval := time.Duration(max(flow.Interval, 1)) * time.Second
+	interval := devicePoll(int(flow.Interval))
 	deadline := time.Unix(int64(flow.Expires), 0)
 	if flow.Expires == 0 {
 		deadline = time.Now().Add(5 * time.Minute)
