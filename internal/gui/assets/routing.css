@@ -437,7 +437,7 @@ button.rt-session { cursor: pointer; }
 .rt-gsel { display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 14px; }
 .rt-group.rt-gpick { cursor: default; }
 .rt-group.rt-gpick.on { background: var(--card-2); }
-.rt-gedit { cursor: default; }
+.rt-gedit { cursor: default; scroll-margin-top: 12px; }
 .rt-gedit .ehead.fold { cursor: pointer; }
 .rt-gedit .segs { max-width: 100%; }
 .rt-gedit .ctx-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

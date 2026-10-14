@@ -3509,7 +3509,9 @@ function openRowMenu(anchor, acts) {
     if (o.tip) b.title = o.tip;
     // an item that is off can say why, under its name and as its title
     if (o.why) { b.classList.add("has-why"); b.title = o.why; b.querySelector(".rm-name").append(el("span", "rm-why", o.why)); }
-    b.onclick = (e) => { e.stopPropagation(); closeAgentMenu(); o.run(); };
+    // the click goes along, so an item that opens something below can
+    // bring it into view (scrollOnPurpose)
+    b.onclick = (e) => { e.stopPropagation(); closeAgentMenu(); o.run(e); };
     b.onmouseenter = () => b.focus({ preventScroll: true });
     box.append(b);
     if (!o.off) items.push(b);

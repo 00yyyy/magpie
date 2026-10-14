@@ -3678,15 +3678,18 @@
     const name = tplName(tp);
     groupAction("template", { kind: tp.kind, name }, t("Added {name}", { name }));
   }
-  // editTemplate: the template in the editor, to change before it is saved
-  async function editTemplate(tp) {
+  // editTemplate: the template in the editor, filled in, to change before
+  // it is saved, brought into view: the groups can sit well below the
+  // click that asked for it. Its top, name first: the editor is taller
+  // than the window, and centred it opens halfway down the form
+  async function editTemplate(tp, ev) {
     if (groupDirty() && !(await confirmDiscard())) return;
     const g = tp.group;
     gSel = null;
     gEdit = { id: "", draft: { name: tplName(tp), slug: g.id, members: [...g.members], match: [], matched: [], fast: [], off: [], routing: g.routing || "", affinity: "", rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])], folders: [], exceptFolders: [], time: null })), classifier: g.classifier || "", effort: "", levels: [] } };
     renderGroups();
     const ed = gList.querySelector(".rt-gedit");
-    ed?.scrollIntoView({ block: "nearest" });
+    if (ed && window.scrollOnPurpose?.(ev)) ed.scrollIntoView({ block: "start", behavior: "smooth" });
     ed?.querySelector("input")?.focus({ preventScroll: true });
   }
   function templateCards(tpls) {
@@ -3710,7 +3713,7 @@
         add.onclick = () => addTemplate(tp);
         const edit = el("button", "text rt-gtpl-edit", t("Edit first"));
         edit.type = "button";
-        edit.onclick = () => editTemplate(tp);
+        edit.onclick = (e) => editTemplate(tp, e);
         acts.append(add, edit);
         c.append(mem, acts);
       }
@@ -3719,8 +3722,10 @@
     box.append(cards);
     return box;
   }
-  // templateButton: the templates as a menu by New group, each added in a
-  // click, once the user has groups of their own
+  // templateButton: the templates as a menu by New group, once the user
+  // has groups of their own. A pick opens the template filled in, in the
+  // editor and in view, rather than adding a group out of sight (owner,
+  // 10-14: a group added somewhere below left the user lost)
   function templateButton(tpls) {
     const b = el("button", "text rt-gtplbtn");
     b.type = "button";
@@ -3733,7 +3738,7 @@
       if (again) return;
       openRowMenu(b, tpls.map((tp) => tp.need
         ? { name: tplName(tp), icon: PLUS, off: true, why: tplNeed(tp), run: () => {} }
-        : { name: tplName(tp), icon: PLUS, tip: t(TPL[tp.kind]?.[1] || "") + "\n" + tplMembers(tp), run: () => addTemplate(tp) }));
+        : { name: tplName(tp), icon: PLUS, tip: t(TPL[tp.kind]?.[1] || "") + "\n" + tplMembers(tp), run: (e) => editTemplate(tp, e) }));
     };
     return b;
   }
