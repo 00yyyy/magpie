@@ -507,9 +507,14 @@ func (s *Server) UnrestAll(key string) int {
 }
 
 // verifyHeld is the error to give again, without asking, for a candidate
-// its vendor refused a moment ago until the account is verified.
-func verifyHeld(key string) (string, bool) {
-	r, ok := restOf(key)
+// its vendor refused a moment ago until the account is verified: rested
+// whole, or only its model where that is how it rests (a Remote magpie's
+// model, remoteModelRest).
+func verifyHeld(c candidate) (string, bool) {
+	r, ok := restOf(c.restKey())
+	if !ok && c.restID() != c.restKey() {
+		r, ok = restOf(c.restID())
+	}
 	if !ok || r.Why != failVerify || r.said == "" || !time.Now().Before(r.hold) {
 		return "", false
 	}
@@ -791,14 +796,18 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 // models from its own providers and rests them itself, so one of them out
 // of quota there says nothing of the others (bigsteven on Discord: the
 // remote's 429 for one model rested every model on it for the 3 hours it
-// named). Its key refused, or the computer unreachable, still rests it
-// whole, and so does the key's own limit there (keyLimited's 429, with
-// remoteKeyLimitHeader), which refuses every model alike (#2077).
+// named). A restricted account, or one its vendor wants verified first, is
+// that computer's account too, on the model it serves there (#1849: the
+// restricted one says so in magpie's own words, which no vendor uses, so
+// the refusal is read whoever answered). Its key refused, or the computer
+// unreachable, still rests it whole, and so does the key's own limit there
+// (keyLimited's 429, with remoteKeyLimitHeader), which refuses every model
+// alike (#2077).
 func remoteModelRest(c candidate, why string, header http.Header) bool {
 	if !c.p.IsRemoteMagpie() || header.Get(remoteKeyLimitHeader) != "" {
 		return false
 	}
-	return why == failQuota || why == failCredit || why == failRate
+	return why == failQuota || why == failCredit || why == failRate || why == failRestricted || why == failVerify
 }
 
 // rateRest is how long a rate-limited candidate sits out: as long as the
