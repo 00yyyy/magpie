@@ -563,7 +563,7 @@ func (l *Library) linkable(file string) (string, error) {
 			return "", fmt.Errorf("the set %q is kept in %s already", s.Name, file)
 		}
 	}
-	for _, t := range Targets() {
+	for _, t := range everyTarget() {
 		for _, p := range []string{t.Instructions, t.Override} {
 			if p != "" && realBelow(p) == real {
 				return "", fmt.Errorf("%s is %s's own instructions, which magpie writes into: a set can't be kept there", file, t.Agent.Name)

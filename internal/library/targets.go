@@ -650,7 +650,14 @@ func apps() []*agent.Agent {
 
 // Targets are the agents on this machine that magpie can give any of the
 // three to, in the order the rest of magpie lists them.
-func Targets() []*Target {
+func Targets() []*Target { return targets(false) }
+
+// everyTarget is Targets with the agents gone for their CLI too: a folder
+// an uninstall left behind is still that agent's own, which a project or
+// an instruction set is never kept in.
+func everyTarget() []*Target { return targets(true) }
+
+func targets(gone bool) []*Target {
 	var out []*Target
 	own := map[string]bool{}
 	for _, a := range apps() {
@@ -660,6 +667,12 @@ func Targets() []*Target {
 		// an app magpie also sets up as an agent (Claude Desktop) keeps its
 		// MCP servers where apps says, once
 		if own[a.ID] {
+			continue
+		}
+		// an uninstall that left the folder behind (#2177, #2173): the
+		// Agents page calls the agent gone and offers none of its settings,
+		// since nothing reads them; the library gives nothing to it either
+		if !gone && a.CLIMissing() {
 			continue
 		}
 		if t := targetOf(a); t != nil && t.open() {
@@ -750,9 +763,14 @@ func Takes(q, kind string) (string, error) {
 			return "", err
 		}
 	}
+	what := map[string]string{"instructions": "instructions", "mcp": "MCP servers", "skills": "skills"}[kind]
+	// gone for its CLI, as Targets leaves it out (#2254): told so, not
+	// recorded and then given nothing ("every agent already has it")
+	if a.CLIMissing() {
+		return "", fmt.Errorf("%s's CLI isn't installed here; nothing reads its %s until it is installed again%s", a.Name, what, takenBy(kind, what))
+	}
 	t := targetOf(a)
 	var has bool
-	what := map[string]string{"instructions": "instructions", "mcp": "MCP servers", "skills": "skills"}[kind]
 	if t == nil && a.WSL != "" && (a.Home == "" || !agent.WSLRunning(a.WSL)) {
 		return "", fmt.Errorf("WSL %s isn't running: start it, and %s can be given %s", a.WSL, a.Name, what)
 	}

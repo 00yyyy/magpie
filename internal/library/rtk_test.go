@@ -467,6 +467,7 @@ func TestRTKHermesHome(t *testing.T) {
 	h := sandbox(t)
 	bin := filepath.Join(h, "bin")
 	testenv.Program(t, filepath.Join(bin, "rtk"), fakeRTKHermes)
+	holdCLI(t, h, "hermes") // the config alone is gone (#2254)
 	t.Setenv("PATH", bin)
 	for _, c := range []struct{ name, env string }{
 		// the reporter's layout: Hermes's folder isn't ~/.hermes

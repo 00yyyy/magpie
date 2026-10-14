@@ -660,7 +660,11 @@ func rtkAgents(agents []*agent.Agent) []*agent.Agent {
 	}
 	var out []*agent.Agent
 	for _, a := range agents {
-		if _, ok := rtkSpecs[a.ID]; ok {
+		sp, ok := rtkSpecs[a.ID]
+		// an uninstall that left the folder behind (#2254) isn't given rtk,
+		// as the library gives it nothing (Targets); one with rtk's hook
+		// still shows, so the hook can be taken out
+		if ok && (!a.CLIMissing() || sp.has(a)) {
 			out = append(out, a)
 		}
 	}
@@ -687,7 +691,7 @@ func ReadRTK() *RTKView {
 		v.Agents = append(v.Agents, ra)
 	}
 	for _, a := range agents {
-		if why, ok := rtkNoHook[a.ID]; ok {
+		if why, ok := rtkNoHook[a.ID]; ok && !a.CLIMissing() {
 			v.Agents = append(v.Agents, RTKAgent{ID: a.ID, Name: a.Name, Icon: a.Icon, Blocked: why, NoHook: true})
 		}
 	}

@@ -3,6 +3,7 @@ package davsync
 import (
 	"context"
 	"fmt"
+	"github.com/yetone/magpie/internal/testenv"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -143,7 +144,17 @@ func (c computer) use(t *testing.T) {
 	t.Setenv("USERPROFILE", string(c))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(string(c), ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(string(c), ".cache"))
-	t.Setenv("PATH", "")
+	// Claude Code's and Codex's CLIs are here: an agent whose CLI is gone
+	// is no Library target (#2254), and a computer's library is synced to
+	// them
+	bin := filepath.Join(string(c), "bin")
+	for _, cli := range []string{"claude", "codex"} {
+		testenv.Program(t, filepath.Join(bin, cli), "#!/bin/sh\n")
+		if err := os.WriteFile(filepath.Join(bin, cli+".exe"), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
 	for _, v := range agentenv.Vars {
 		t.Setenv(v, "")
 	}
