@@ -1079,7 +1079,13 @@
   // provider's in its own order — so the column holds still while the one
   // put first moves.
   // One whose vendor doesn't list the model to it is never asked, so it
-  // isn't drawn — only told of, among why it went where it did.
+  // isn't drawn — only told of, among why it went where it did. One held
+  // at its usage cap, or used up and set not to spend credits, is drawn,
+  // faded and saying so, as a resting one is: it is the user's own and
+  // comes back when its window renews, and a group member held so would
+  // otherwise vanish from the stage (#2129, wyq0x55: d-task's gpt-sol-6.1,
+  // used up, wasn't shown while a used-up Claude was).
+  const heldOut = (w) => !w.held && !!(w.capped || w.noCredits);
   function seated(r) {
     const members = r.group?.members || [];
     const key = (w) => {
@@ -1092,7 +1098,8 @@
       for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return typeof x[i] === "number" ? x[i] - y[i] : String(x[i]).localeCompare(String(y[i]));
       return 0;
     };
-    return [...r.order].sort(cmp);
+    const on = new Set(r.order.map(seat));
+    return [...r.order, ...(r.left || []).filter((w) => heldOut(w) && !on.has(seat(w)))].sort(cmp);
   }
 
   // a seat is one of a route's keys or accounts for one model: two of a
@@ -1577,15 +1584,17 @@
     const together = (f, ms) => {
       const has = (m, c) => m.li.classList.contains(c);
       const on = ms.find((m) => has(m, "on")), resting = ms.filter((m) => has(m, "rest")).length;
+      const held = ms.filter((m) => !has(m, "rest") && has(m, "left")).length; // at a cap, or used up (#2129)
       const parts = [];
       if (on) parts.push(`${who(on.w)}: ${on.st.textContent}`);
-      if (resting < ms.length) parts.push(t("{n} available", { n: ms.length - resting }));
+      if (resting + held < ms.length) parts.push(t("{n} available", { n: ms.length - resting - held }));
       if (resting) parts.push(t("{n} resting", { n: resting }));
+      if (held) parts.push(t("{n} held", { n: held }));
       setText(f.st, parts.join(" · "));
       f.li.classList.toggle("on", !!on);
       f.wire.classList.toggle("live", !!on);
       if (on) f.wire.style.setProperty("--agent", on.wire.style.getPropertyValue("--agent"));
-      return !!ms.length && resting === ms.length;
+      return !!ms.length && resting + held === ms.length;
     };
     for (const f of folds.values()) {
       const ms = (f.ids || []).map((id) => rows.get(id)).filter(Boolean);
