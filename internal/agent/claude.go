@@ -213,6 +213,11 @@ const claudeCapsEnv = "CLAUDE_CODE_MODEL_CAPABILITIES"
 // while one is. One the user set is theirs.
 const claudeReviewEnv = "CLAUDE_CODE_AUTO_MODE_SERVER"
 
+// Claude Code 2.1.295's Explore inherit cap can replace Desktop's
+// mythos-magpie compatibility alias with Opus. Disable that cap while
+// Desktop is on magpie, without forcing other subagents onto a model.
+const claudeExploreEnv = "CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP"
+
 // claudeReviewed reports whether a model Claude Code can reach through
 // magpie has its actions reviewed by Anthropic (gateway.AutoModeReviewed):
 // one shown to the agents in catalogs (Claude Code, Claude Desktop whose
@@ -880,6 +885,36 @@ func claudeIn(at place) *Agent {
 	desktopOn := func() bool {
 		return at.id == "" && at.sys == nil && desktopWiredAny(desktopSets(desktopdir.OS, at.home, os.Getenv))
 	}
+	// Desktop's Explore compatibility flag has its own ownership: taking
+	// Claude Code off magpie must leave it while Desktop still needs it.
+	exploreKey := at.key("claude.explore_inherit_cap")
+	writeExplore := func() error {
+		cur, has := edit.GetJSON(path, "env."+claudeExploreEnv)
+		ours := has && cur == "1" && stashLoad()[exploreKey] == "1"
+		if !desktopOn() {
+			if ours {
+				if err := edit.DelJSON(path, "env."+claudeExploreEnv); err != nil {
+					return err
+				}
+			}
+			if stashLoad()[exploreKey] != "" {
+				forget(exploreKey)
+			}
+			return nil
+		}
+		// Presence matters: an explicit empty value is the user's too.
+		if has {
+			if !ours && stashLoad()[exploreKey] != "" {
+				forget(exploreKey)
+			}
+			return nil
+		}
+		if err := edit.SetJSON(path, edit.KV{Path: "env." + claudeExploreEnv, Value: "1"}); err != nil {
+			return err
+		}
+		stash(map[string]string{exploreKey: "1"})
+		return nil
+	}
 	// putCaps is writeCaps with own saying whether Claude Code's own
 	// models are among them, as they are while it runs on magpie
 	putCaps := func(own bool, models ...string) error {
@@ -1072,6 +1107,9 @@ func claudeIn(at place) *Agent {
 	// Claude Code's being wired in wrote them before, so a user who wired
 	// in Desktop alone had 200K for every Desktop model (#1458).
 	desktopOnly := func() error {
+		if err := writeExplore(); err != nil {
+			return err
+		}
 		// the review is turned off only for Claude Code's own requests to
 		// magpie
 		if err := dropReview(); err != nil {
@@ -1366,6 +1404,9 @@ func claudeIn(at place) *Agent {
 			return err
 		}
 		if err := writeReview(models...); err != nil {
+			return err
+		}
+		if err := writeExplore(); err != nil {
 			return err
 		}
 		return writeCaps(models...)
@@ -1767,6 +1808,9 @@ func claudeIn(at place) *Agent {
 				return err
 			}
 			if err := writeReview(models...); err != nil {
+				return err
+			}
+			if err := writeExplore(); err != nil {
 				return err
 			}
 			return writeCaps(models...)

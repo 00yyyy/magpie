@@ -214,6 +214,117 @@ func TestClaudeDesktopContextWindow(t *testing.T) {
 	}
 }
 
+// Desktop's compatibility aliases must not send Explore to the Opus tier.
+// The setting is shared with Claude Code, but only owned while Desktop is
+// on magpie; an existing user value, including an empty one, stays theirs.
+func TestClaudeDesktopExploreInheritCap(t *testing.T) {
+	const key = "env.CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP"
+	for _, routed := range []bool{false, true} {
+		name := "desktop-alone"
+		if routed {
+			name = "beside-cli"
+		}
+		t.Run(name, func(t *testing.T) {
+			home, path := desktopWindowSandbox(t)
+			a := claude(home)
+			must := func(err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			check := func(want string, present bool) {
+				t.Helper()
+				got, has := edit.GetJSON(path, key)
+				if got != want || has != present {
+					t.Fatalf("Explore inherit cap: value %q, present %v; want %q, %v", got, has, want, present)
+				}
+			}
+			if routed {
+				must(a.Field("model").Set("v/gpt"))
+				must(a.Field("model").Set("v/grok"))
+			}
+			must(a.Sync())
+			check("", false)
+			d := claudeDesktop(home)
+			must(d.Field("provider").Set("magpie"))
+			check("1", true)
+			must(a.Sync())
+			check("1", true)
+			// A model pick goes through writeTiers, not the regular Sync.
+			must(a.Field("model").Set("v/gpt"))
+			check("1", true)
+			if !routed {
+				must(a.Unwire())
+				check("1", true)
+				must(a.Sync())
+				check("1", true)
+			}
+			must(d.Field("provider").Set(""))
+			check("", false)
+			must(a.Sync())
+			check("", false)
+			// Reconnecting must acquire and release ownership again.
+			must(d.Field("provider").Set("magpie"))
+			check("1", true)
+			must(a.Field("model").Set(""))
+			check("1", true)
+			must(d.Field("provider").Set(""))
+			check("", false)
+		})
+	}
+}
+
+func TestClaudeDesktopExploreKeepsUserValue(t *testing.T) {
+	const key = "env.CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP"
+	for _, mine := range []string{"0", "1", ""} {
+		for _, changed := range []bool{false, true} {
+			// Writing the same value after magpie cannot be distinguished
+			// from leaving its value alone; test an existing user's 1 instead.
+			if changed && mine == "1" {
+				continue
+			}
+			name := "existing-" + mine
+			if changed {
+				name = "changed-" + mine
+			}
+			t.Run(name, func(t *testing.T) {
+				home, path := desktopWindowSandbox(t)
+				a, d := claude(home), claudeDesktop(home)
+				must := func(err error) {
+					t.Helper()
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				check := func() {
+					t.Helper()
+					if got, has := edit.GetJSON(path, key); !has || got != mine {
+						t.Fatalf("user's Explore value %q lost: %q, present %v", mine, got, has)
+					}
+				}
+				if changed {
+					must(d.Field("provider").Set("magpie"))
+					if got, has := edit.GetJSON(path, key); !has || got != "1" {
+						t.Fatalf("Desktop did not install Explore compatibility: %q, %v", got, has)
+					}
+				}
+				must(edit.SetJSON(path, edit.KV{Path: key, Value: mine}))
+				must(d.Field("provider").Set("magpie"))
+				check()
+				must(a.Field("model").Set("v/gpt"))
+				check()
+				must(a.Sync())
+				check()
+				must(d.Field("provider").Set(""))
+				check()
+				must(a.Unwire())
+				check()
+			})
+		}
+	}
+}
+
 // TestClaudeDesktopContextWindow1M: a model Desktop lists by its 1M id
 // (settings.DesktopLongest) runs at 1M whatever the value says, so it adds
 // nothing to it; listed plain too, it runs at the value, its own 1M when it
