@@ -275,6 +275,10 @@ type Agent struct {
 	// not one another tool wrote there first: a JetBrains plugin's
 	// settings.json in Qoder CN's folder (#1495).
 	pathOwn func() bool
+	// sign, when set, is one more sign the agent is here, for a folder
+	// that is dirShared: a file only the agent (or its own app) writes
+	// there (the Qoder app's status file, #2138).
+	sign func() bool
 }
 
 // Running reports whether a process whose command line matches any pattern
@@ -313,6 +317,9 @@ func (a *Agent) Detected() bool {
 		return true
 	}
 	if a.Dir != "" && !a.dirShared && agentDir(a.Dir) {
+		return true
+	}
+	if a.sign != nil && a.sign() {
 		return true
 	}
 	if a.Bin != "" && binAt(a.Bin) != "" {

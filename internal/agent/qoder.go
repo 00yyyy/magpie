@@ -124,8 +124,14 @@ func qoderAt(at place, b qoderBuild) *Agent {
 		// the same folder, and writes a settings.json of enabledPlugins
 		// alone, with no CLI installed (#1495): neither is a sign of the
 		// CLI. Its command, or a settings.json with any other key, is.
+		// The Qoder app (Qoder-win-x64-user.exe, Qoder.app, not the IDE)
+		// runs the CLI as its agent with the same folder, so magpie's
+		// provider reaches it too; its settings.json can hold only
+		// enabledPlugins (its bundled qoder-context plugin), and its status
+		// file says it is there (#2138).
 		dirShared: true,
 		pathOwn:   func() bool { return !qoderPluginOnly(path) },
+		sign:      func() bool { return qoderApp(dir) },
 		Sync: func() error {
 			ref, ok := cutMagpie(get("model.name"))
 			if !ok {
@@ -327,6 +333,19 @@ func qoderKeyed(key, agent string) bool {
 
 // what Qoder's builds say after a change (notice.go)
 var noticeQoder = newNotice("{agent} reads its settings as a session starts — open sessions keep the model they have; new ones use this.")
+
+// qoderApp reports whether the Qoder app keeps its status in dir: it
+// writes .qoder-app-status.json (-canary-, -dev- for its other channels)
+// into ~/.qoder, or ~/.qoder-cn for the China build, as it signs in, and
+// runs Qoder's CLI as its agent with that folder's settings.
+func qoderApp(dir string) bool {
+	for _, f := range []string{".qoder-app-status.json", ".qoder-app-canary-status.json", ".qoder-app-dev-status.json"} {
+		if fi, err := os.Stat(filepath.Join(dir, f)); err == nil && fi.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
+}
 
 // qoderPluginOnly reports whether the settings file at path is the one
 // Qoder's JetBrains plugin writes, an object holding enabledPlugins and
