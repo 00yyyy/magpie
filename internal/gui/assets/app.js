@@ -12382,7 +12382,11 @@ function renderLoginImport(sub) {
     box.append(tt);
     const done = el("button", "text", t("Done"));
     done.onclick = cancelSignIn;
-    box.append(done);
+    // the next batch is one click away, beside the last one's results,
+    // rather than behind Done (#2131: several Antigravity exports in a row)
+    const more = el("button", "text primary", t("Import more…"));
+    more.onclick = () => startImport(sub.agent);
+    box.append(done, more);
     return box;
   }
   box.append(el("span", "mark", "↑"));
