@@ -133,7 +133,7 @@ func (r *Request) inSystem() *Request {
 		return r
 	}
 	q := *r
-	q.Format = nil
+	q.Format, q.FormatTold = nil, true
 	if !r.Format.told {
 		q.System = withLine(q.System, r.Format.instruction())
 	}
@@ -281,3 +281,7 @@ func withSystemLine(v any, s string) []any {
 	}
 	return append([]any{map[string]any{"role": "system", "content": s}}, msgs...)
 }
+
+// wantsJSON is whether the client asked for structured output, in a field
+// or told in the system prompt.
+func (r *Request) wantsJSON() bool { return r.Format != nil || r.FormatTold }

@@ -5454,6 +5454,11 @@ func encoder(proto provider.Protocol, w *sseWriter, r *Request, usage ...*Usage)
 		// outside usageEncoder, which reads its encoder's reply id
 		enc = &wholeEncoder{streamEncoder: enc}
 	}
+	if r.wantsJSON() {
+		// a fenced JSON answer reaches a structured-output client as the
+		// JSON it asked for (format_fence.go)
+		enc = &fenceEncoder{streamEncoder: enc}
+	}
 	return enc
 }
 
@@ -5475,6 +5480,7 @@ func render(proto provider.Protocol, res Result, r *Request) []byte {
 	if r.Grok {
 		res = wholeResult(res)
 	}
+	res = unfencedResult(res, r)
 	switch proto {
 	case provider.Chat:
 		return renderChat(res, model)
