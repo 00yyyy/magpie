@@ -49,6 +49,25 @@ func accountCard(agent string) cardFace {
 	return cardFace{}
 }
 
+// KnownFace is the name and icon magpie knows the provider id by while it
+// isn't set up: a built-in subscription signed out of, or with account
+// discovery off ("claude" is Claude Code), or a preset's removed since.
+// The usage log keeps the id of every provider a call went to, and the
+// Usage page names those by this rather than by the bare id (@ByronVon1
+// on X: "claude" in the Provider filter). "" for an id magpie doesn't
+// know, such as a custom provider removed since.
+func KnownFace(id string) (name, icon string) {
+	if !strings.HasPrefix(id, "plugin:") {
+		if f := accountCard(id); f.name != "" {
+			return f.name, f.icon
+		}
+	}
+	if pr := Preset(id); pr != nil {
+		return pr.Name, pr.Icon
+	}
+	return "", ""
+}
+
 func pluginCardFace(pp plugin.Provider) cardFace {
 	name, icon := pluginCard(pp)
 	return cardFace{name, icon}
