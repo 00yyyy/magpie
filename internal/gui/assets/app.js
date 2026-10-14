@@ -23987,9 +23987,12 @@ const pinSizes = new ResizeObserver(() => {
 function backToReader(v) {
   if (v.hidden) return;
   const pinned = pinnedAt(v);
-  const want = Math.max(0, Math.min(pinned ?? readerAt.get(v) ?? 0, v.scrollHeight - v.clientHeight));
+  // to the nearest whole pixel: WebKit's scrollTop drops the fraction, so
+  // the part kept slid by up to a pixel each time what's above it grew by
+  // one, and two of those by nearly two (#1804)
+  const want = Math.round(Math.max(0, Math.min(pinned ?? readerAt.get(v) ?? 0, v.scrollHeight - v.clientHeight)));
   if (pinned != null) readerAt.set(v, want);
-  if (Math.abs(v.scrollTop - want) < 1) return;
+  if (Math.abs(v.scrollTop - want) < 0.5) return;
   v.scrollTop = want;
   // a field focused out of sight still comes into view, no further than needed
   const f = document.activeElement;
