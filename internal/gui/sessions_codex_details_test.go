@@ -42,7 +42,10 @@ func TestCodexSubagentDetailsReachSessionAPIs(t *testing.T) {
 	home := sandboxHome(t)
 	codex := filepath.Join(home, ".codex")
 	t.Setenv("CODEX_HOME", codex)
-	now := holdUsageClock(t, time.Date(2026, 10, 15, 12, 0, 0, 0, time.Local))
+	// sessions.StatsFor counts the last days up to the real today, so the
+	// rollouts are written now, not on a fixed date that is in the future
+	// in one time zone and past the 7-day window a week later.
+	now := holdUsageClock(t, time.Now().Truncate(time.Second))
 	catalog.Reset()
 	t.Cleanup(catalog.Reset)
 	sessions.Reset()
