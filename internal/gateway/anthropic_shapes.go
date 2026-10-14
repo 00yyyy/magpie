@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"regexp"
+	"strings"
 
 	"github.com/tidwall/gjson"
 
@@ -49,6 +50,15 @@ import (
 // "messages[1].content: unknown variant `tool_removal`". A provider that
 // refuses one is sent none of them (withoutDeferredTools); Kimi, whose 400
 // names nothing, is never sent them (forwardOnce, #2042).
+//
+// ToolSearch's answer is a tool_result whose content is tool_reference
+// blocks alone. OpenDesign's Anthropic endpoint can't read one: 422 "Failed
+// to deserialize the JSON body into the target type: messages[4]: missing
+// field `content`" (#2124), while it takes the same result with a text block
+// beside the references. A provider that refuses one is sent each such
+// result with a text block first, saying which tools are loaded, in the
+// words a translated route tells a model (stringOrText); the references and
+// the tool_use/tool_result pairing stay.
 
 // The refusals, remembered in unfit under the provider's id as betas are.
 const (
@@ -58,6 +68,7 @@ const (
 	shapeTurnSystem = "shape:messages[].role=system"
 	shapeSafeguards = "shape:safeguards"
 	shapeDeferred   = "shape:messages[].content[].tool_addition"
+	shapeRefsOnly   = "shape:tool_result.content=tool_reference"
 )
 
 var (
@@ -67,6 +78,7 @@ var (
 	turnRoleRefused     = regexp.MustCompile(`messages\.(\d+)\.role\b`)
 	safeguardsRefused   = regexp.MustCompile(`\bsafeguards:? Extra inputs are not permitted`)
 	deferredRefused     = regexp.MustCompile("messages\\[\\d+\\]\\.content: unknown variant `(?:tool_addition|tool_removal|tool_definition|tool_reference)`")
+	refsOnlyRefused     = regexp.MustCompile("missing field `content`")
 )
 
 // knownDisplay is a thinking.display every Anthropic endpoint has taken.
@@ -99,6 +111,9 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 	if deferredRefused.Match(errBody) && hasDeferredTools(body) {
 		mark(shapeDeferred)
 	}
+	if refsOnlyRefused.Match(errBody) && hasRefsOnlyResult(body) {
+		mark(shapeRefsOnly)
+	}
 	// a role refused at a message that is a system one, counted in the
 	// messages as they were sent; a refusal naming a user or assistant
 	// message is over something else
@@ -116,6 +131,9 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 func (s *Server) withoutRefusedShapes(p provider.Provider, body []byte) []byte {
 	if !s.fits(p.ID, shapeDeferred, provider.Anthropic) {
 		body = withoutDeferredTools(body)
+	}
+	if !s.fits(p.ID, shapeRefsOnly, provider.Anthropic) {
+		body = withRefsSaid(body)
 	}
 	if !s.fits(p.ID, shapeTurnSystem, provider.Anthropic) {
 		body = withSystemOnTop(body)
@@ -363,6 +381,117 @@ func withoutDeferredTools(body []byte) []byte {
 			return body
 		}
 		out = append(out, b)
+	}
+	return withFields(body, map[string]any{"messages": out})
+}
+
+// toolLoadedText is what a model is told of a tool ToolSearch loaded, where
+// the tool_reference that names it can't go as it is.
+func toolLoadedText(name string) string {
+	return "Tool " + name + " is loaded and can be called now."
+}
+
+// refsOnly is a tool_result's content that is tool_reference blocks and
+// nothing else, as ToolSearch answers.
+func refsOnly(c gjson.Result) bool {
+	if !c.IsArray() || len(c.Array()) == 0 {
+		return false
+	}
+	only := true
+	c.ForEach(func(_, b gjson.Result) bool {
+		only = b.Get("type").String() == "tool_reference"
+		return only
+	})
+	return only
+}
+
+// hasRefsOnlyResult is a request with a tool_result holding only
+// tool_reference blocks.
+func hasRefsOnlyResult(body []byte) bool {
+	if !bytes.Contains(body, []byte(`"tool_reference"`)) {
+		return false
+	}
+	found := false
+	gjson.GetBytes(body, "messages").ForEach(func(_, m gjson.Result) bool {
+		m.Get("content").ForEach(func(_, b gjson.Result) bool {
+			found = b.Get("type").String() == "tool_result" && refsOnly(b.Get("content"))
+			return !found
+		})
+		return !found
+	})
+	return found
+}
+
+// withRefsSaid is body with a text block first in each tool_result that
+// holds only tool_reference blocks, naming the tools they load; the
+// references stay after it. A body with none is sent as it was.
+func withRefsSaid(body []byte) []byte {
+	if !hasRefsOnlyResult(body) {
+		return body
+	}
+	var v struct {
+		Messages []json.RawMessage `json:"messages"`
+	}
+	if json.Unmarshal(body, &v) != nil {
+		return body
+	}
+	out := make([]json.RawMessage, 0, len(v.Messages))
+	for _, raw := range v.Messages {
+		c := gjson.GetBytes(raw, "content")
+		if !c.IsArray() {
+			out = append(out, raw)
+			continue
+		}
+		changed := false
+		blocks := make([]json.RawMessage, 0, len(c.Array()))
+		for _, b := range c.Array() {
+			rc := b.Get("content")
+			if b.Get("type").String() != "tool_result" || !refsOnly(rc) {
+				blocks = append(blocks, json.RawMessage(b.Raw))
+				continue
+			}
+			var said []string
+			for _, r := range rc.Array() {
+				said = append(said, toolLoadedText(r.Get("tool_name").String()))
+			}
+			content := []any{map[string]any{"type": "text", "text": strings.Join(said, "\n")}}
+			for _, r := range rc.Array() {
+				content = append(content, json.RawMessage(r.Raw))
+			}
+			var m map[string]json.RawMessage
+			if json.Unmarshal([]byte(b.Raw), &m) != nil {
+				return body
+			}
+			cb, err := marshalPlain(content)
+			if err != nil {
+				return body
+			}
+			m["content"] = cb
+			nb, err := marshalPlain(m)
+			if err != nil {
+				return body
+			}
+			blocks = append(blocks, nb)
+			changed = true
+		}
+		if !changed {
+			out = append(out, raw)
+			continue
+		}
+		var m map[string]json.RawMessage
+		if json.Unmarshal(raw, &m) != nil {
+			return body
+		}
+		cb, err := marshalPlain(blocks)
+		if err != nil {
+			return body
+		}
+		m["content"] = cb
+		nb, err := marshalPlain(m)
+		if err != nil {
+			return body
+		}
+		out = append(out, nb)
 	}
 	return withFields(body, map[string]any{"messages": out})
 }

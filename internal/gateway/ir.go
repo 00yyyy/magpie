@@ -627,7 +627,7 @@ func stringOrText(raw json.RawMessage) string {
 				if b.Len() > 0 {
 					b.WriteString("\n")
 				}
-				b.WriteString("Tool " + x.ToolName + " is loaded and can be called now.")
+				b.WriteString(toolLoadedText(x.ToolName))
 			}
 		}
 		return b.String()
