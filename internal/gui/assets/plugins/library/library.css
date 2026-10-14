@@ -608,8 +608,14 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
    as the dialog lets them be */
 .lib-hookedit .lib-menu { max-width: 100%; height: 28px; color: var(--fg); }
 .lib-hookedit .lib-hooktimeout { max-width: 140px; }
-/* a hook's description (#2011): its own words under its name, a line at most */
-.lib-hook .lib-hookdesc { font-size: 12px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+/* a hook's description (#2011): its own words under its name, all of them,
+   wrapped (#2085) — at most 200 characters the user wrote, not a skill
+   author's paragraph */
+/* its words wrapped, the hook's name stays beside its glyph: the text's
+   whole length is not what the row lays out by */
+.lib-hook > .who { flex-basis: 240px; }
+.lib-hook .lib-hookdesc { font-size: 12px; line-height: 1.45; color: var(--fg); white-space: normal; overflow-wrap: anywhere; margin-top: 1px; }
+.lib-hookedit .lib-hookdescin { width: 100%; box-sizing: border-box; resize: none; font: inherit; font-size: 12.5px; line-height: 1.45; }
 
 /* a chip whose agent has the item whatever is ticked (it reads
    ~/.agents/skills itself, #595): lit, as it has it, with a lock on its
