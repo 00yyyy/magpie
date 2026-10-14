@@ -148,9 +148,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // automatic updates off: kept, dimmed, says when it works
         // (the version row above then says automatic updates are off, a
         // line that can grow it by a pixel or two: what is held is the
-        // control clicked, where it is on the screen; at the view's top
-        // WebKit scrolls it by those pixels, #2134)
+        // control clicked, where it is on the screen, unless the view is at
+        // its top, which stays at its top and lets the switch move down by
+        // those pixels, #2134)
         await showRow(page, auto);
+        const settings = page.locator("#view-settings");
+        const atTop = await settings.evaluate((v) => v.scrollTop < 1);
         const y0 = (await auto.locator(".opt").nth(0).boundingBox()).y;
         await auto.locator(".opt").nth(0).click();
         await restart.locator(".sub", { hasText: w.whileOn }).waitFor();
@@ -159,7 +162,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(ctl.saves.at(-1).autoRestart, true);
         await page.waitForTimeout(400);
         const y1 = (await auto.locator(".opt").nth(0).boundingBox()).y;
-        assert.ok(Math.abs(y1 - y0) <= 1, `the clicked switch moved ${y1 - y0}px`);
+        if (atTop) {
+          assert.equal(await settings.evaluate((v) => v.scrollTop), 0, "a view at its top stays at its top");
+          assert.ok(y1 - y0 >= -1 && y1 - y0 <= 4, `the clicked switch moved ${y1 - y0}px`);
+        } else assert.ok(Math.abs(y1 - y0) <= 1, `the clicked switch moved ${y1 - y0}px`);
 
         // and off again
         await showRow(page, restart);

@@ -164,6 +164,35 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await scrolls(page), before, "the click must not scroll the page");
         assert.deepEqual(errors, []);
       });
+
+      // A view at its top stays at its top (#2134): at 420 wide Settings
+      // scrolls, and turning updates off gives the Version row above the
+      // switch its "are off" line once the save answers. That moves the
+      // switch down; it must not scroll the view, then or after the redraw.
+      await t.test(lang + ": 420 wide at the top, Off moves the switch down, not the page", async () => {
+        const ctl = { off: false, every: 0, state: "", checks: 0, saves: [] };
+        const errors = [];
+        const page = await (await browser.newContext({ viewport: { width: 420, height: 640 } })).newPage();
+        page.setDefaultTimeout(5000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.route("**/*", server(lang, ctl));
+        await watchSettingsReads(page);
+        await page.goto("http://magpie.test/?view=settings");
+        await settingsDrawn(page);
+        await page.locator(":is(#setTab-about, .nav-s[data-of=setTab-about]):visible").click();
+        await page.locator("#setPage-about").waitFor({ state: "visible" });
+        const auto = page.locator("#about .row.pref", { has: page.locator(".name", { hasText: new RegExp("^" + w.auto + "$") }) });
+        await auto.waitFor();
+        await page.waitForTimeout(300);
+        const view = page.locator("#view-settings");
+        assert.equal(await view.evaluate((v) => v.scrollTop), 0);
+        assert.ok(await view.evaluate((v) => v.scrollHeight > v.clientHeight + 10), "Settings must be able to scroll at 420");
+        await auto.locator(".opt", { hasText: w.off }).click();
+        await page.locator("#about .sub", { hasText: w.isOff }).waitFor();
+        await page.waitForTimeout(600); // past the save's redraw and the switch's play
+        assert.equal(await view.evaluate((v) => v.scrollTop), 0, "a view at its top stays at its top");
+        assert.deepEqual(errors, []);
+      });
     }
   });
 }

@@ -24225,6 +24225,11 @@ function hold(h) {
   if (Math.abs(d) >= 1) {
     let want = v.scrollTop + d;
     const max = v.scrollHeight - v.clientHeight;
+    // a view at its top when clicked stays at its top: what comes in above
+    // what was clicked moves it down rather than scrolling the view to follow
+    // it. Turning automatic updates off grew the Version row above the
+    // switch once the save answered, and the view slid 2px off its top (#2134)
+    if (h.top && want > 0) want = 0;
     // a view at its top when clicked stays there rather than be given room
     // to scroll down: a chip saved in the panel's Profiles came in above the
     // button held, and room made for the button slid the chip up under the
