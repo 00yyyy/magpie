@@ -1448,15 +1448,32 @@ func Titles(keys []string) map[string]string {
 		return out
 	}
 	want := make(map[string]bool, len(keys))
-	var desktopIDs []string
+	var desktopIDs, piDesktopIDs []string
 	for _, k := range keys {
 		want[k] = true
 		if id, ok := strings.CutPrefix(k, "claude-desktop:"); ok {
 			desktopIDs = append(desktopIDs, id)
+			continue
+		}
+		// PI-Desktop names its chats in pi.sqlite, which none of their files
+		// holds (#1967); a request it sent without a User-Agent of its own
+		// was counted as Pi's, so both of its names are looked up
+		if agent, id, ok := strings.Cut(k, ":"); ok && isPIDesktop(agent) {
+			piDesktopIDs = append(piDesktopIDs, id)
 		}
 	}
 	for id, name := range DesktopTitles(desktopIDs) {
 		out["claude-desktop:"+id] = name
+	}
+	if len(piDesktopIDs) > 0 {
+		names := PIDesktopTitles(piDesktopIDs)
+		for _, k := range keys {
+			if agent, id, ok := strings.Cut(k, ":"); ok && isPIDesktop(agent) {
+				if name := names[id]; name != "" {
+					out[k] = name
+				}
+			}
+		}
 	}
 	mu.Lock()
 	defer mu.Unlock()
