@@ -177,8 +177,9 @@ func TestCORSKeyThroughTheServer(t *testing.T) {
 // http(s) origin isn't listed, on this computer or the gateway's own
 // address is refused on every route before anything reaches a vendor;
 // pages on this computer, listed ones, the gateway's own origin, agents
-// (no Origin) and desktop apps, webviews and extensions (null and
-// non-http origins) are answered as before.
+// (no Origin) and apps and extensions (non-http schemes) are answered as
+// before. Origin "null" is a page's too (TestOpaqueOriginNeedsAKey): a
+// key is asked of it, so it is gone from the rows below.
 func TestForeignPagesRefused(t *testing.T) {
 	fresh(t)
 	var hits atomic.Int64
@@ -260,6 +261,11 @@ func TestForeignPagesRefused(t *testing.T) {
 	if w := do(chat, "https://evil.example", "127.0.0.1:3425", loop, secret); w.Code != http.StatusForbidden {
 		t.Errorf("unlisted page with a key: %d", w.Code)
 	}
+	// ... nor does one sandboxed frame, whose Origin "null" any page can
+	// send: it is refused with the others, and asks for a gateway key
+	if w := do(chat, "null", "127.0.0.1:3425", loop, ""); w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "gateway key") {
+		t.Errorf("a sandboxed frame with no key: %d %s", w.Code, w.Body)
+	}
 	if n := hits.Load(); n != 0 {
 		t.Fatalf("a refused page reached the vendor %d times", n)
 	}
@@ -274,7 +280,7 @@ func TestForeignPagesRefused(t *testing.T) {
 		{"https://app.example.com", "127.0.0.1:3425", loop, secret},                  // listed, with its key
 		{"http://192.168.1.5:3425", "192.168.1.5:3425", "192.168.1.9:50123", secret}, // the gateway's own origin, shared on the LAN
 		{"https://magpie.example.com", "magpie.example.com", loop, secret},           // its own origin behind a port-443 name, with a key (without one, a rebound page: TestReboundPageRefused)
-		{"null", "127.0.0.1:3425", loop, ""},                                         // a sandboxed frame, a file:// page
+		{"null", "127.0.0.1:3425", loop, secret},                                     // a sandboxed frame or a file:// page, with its key
 		{"app://cherry", "127.0.0.1:3425", loop, ""},                                 // an Electron renderer
 		{"file://", "127.0.0.1:3425", loop, ""},
 		{"tauri://localhost", "127.0.0.1:3425", loop, ""},
@@ -288,6 +294,92 @@ func TestForeignPagesRefused(t *testing.T) {
 	// usemagpie.ai still reads the Omarchy theme, and only that
 	if w := do(call{"GET", "/v1/magpie/omarchy", ""}, "https://usemagpie.ai", "127.0.0.1:3425", loop, ""); w.Code == http.StatusForbidden {
 		t.Errorf("usemagpie.ai's Omarchy theme: %d %s", w.Code, w.Body)
+	}
+}
+
+// Origin "null" is not an app's: a sandboxed frame sends it on any web
+// page's behalf (a file:// page and some webviews send it too), so one
+// iframe on a page the user visits could send the "simple" text/plain
+// POST and spend a subscription with no key, which is the case corsGuard
+// exists for. It is held to an enabled gateway key, as a listed page is
+// Real browsers proved the request and its null Origin arrive with no
+// preflight (2026-10-15): a sandboxed frame on a public https page
+// reached loopback in WebKit 27.2 — Chromium 156 and Firefox 157 refuse
+// the cross-site request themselves (Local Network Access) — and a
+// file:// page reached it in all three. A scheme only an app or an
+// extension can send is answered as before.
+func TestOpaqueOriginNeedsAKey(t *testing.T) {
+	fresh(t)
+	var hits atomic.Int64
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)
+	}))
+	defer up.Close()
+	if err := provider.Save(provider.Provider{ID: "plan", Name: "Plan", Key: "upstream-secret", Chat: up.URL + "/v1", Models: []string{"m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := access.Update("add-key", access.Change{Name: "Local page"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// what a browser sends from a sandboxed frame or an opened file: a
+	// "simple" POST, so no preflight comes first
+	do := func(method, path, origin, key string) *httptest.ResponseRecorder {
+		t.Helper()
+		var body io.Reader
+		if method == "POST" {
+			body = strings.NewReader(chatReq)
+		}
+		r := httptest.NewRequest(method, path, body)
+		r.RemoteAddr = "127.0.0.1:50123"
+		r.Host = "127.0.0.1:3425"
+		r.Header.Set("Origin", origin)
+		r.Header.Set("Sec-Fetch-Site", "cross-site")
+		r.Header.Set("Sec-Fetch-Mode", "no-cors")
+		r.Header.Set("Sec-Fetch-Dest", "empty")
+		r.Header.Set("Content-Type", "text/plain;charset=UTF-8")
+		r.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Safari/605.1.15")
+		if key != "" {
+			r.Header.Set("Authorization", "Bearer "+key)
+		}
+		w := httptest.NewRecorder()
+		lanGuard(New().Handler()).ServeHTTP(w, r)
+		return w
+	}
+	for _, p := range []struct{ method, path string }{
+		{"POST", "/v1/chat/completions"},
+		{"POST", "/v1/messages"},
+		{"POST", "/v1/images/generations"},
+		{"POST", "/v1/embeddings"},
+		{"GET", "/v1/models"},
+	} {
+		if w := do(p.method, p.path, "null", ""); w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "gateway key") || w.Header().Get("Access-Control-Allow-Origin") != "" {
+			t.Errorf("%s %s with no key: %d %v %s", p.method, p.path, w.Code, w.Header(), w.Body)
+		}
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("a sandboxed frame with no key reached the vendor %d times", hits.Load())
+	}
+	// with an enabled key it is answered as before, and reads nothing
+	// either way (no CORS headers: only a listed origin the user named
+	// gets those)
+	if w := do("POST", "/v1/chat/completions", "null", secret); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "ok") || w.Header().Get("Access-Control-Allow-Origin") != "" || hits.Load() != 1 {
+		t.Errorf("with its key: %d %v %s", w.Code, w.Header(), w.Body)
+	}
+	// a key turned off is no key
+	keys, _ := access.List()
+	access.Update("off-key", access.Change{Key: keys[len(keys)-1].ID})
+	if w := do("POST", "/v1/chat/completions", "null", secret); w.Code != http.StatusForbidden {
+		t.Errorf("with a key turned off: %d %s", w.Code, w.Body)
+	}
+	access.Update("on-key", access.Change{Key: keys[len(keys)-1].ID})
+	// a scheme only that app or extension can send is untouched
+	for _, o := range []string{"app://cherry", "tauri://localhost", "vscode-webview://1abc", "chrome-extension://abcdefghijklmnop"} {
+		if w := do("POST", "/v1/chat/completions", o, ""); w.Code != http.StatusOK {
+			t.Errorf("%s as before: %d %s", o, w.Code, w.Body)
+		}
 	}
 }
 
