@@ -242,7 +242,8 @@ function gatewayModelsBadge(k) {
     : ms.length ? (ms.length === 1 && !as.length ? ms[0] : t("{n} models", { n: ms.length }))
       : (as.length === 1 ? accountShown(as[0]) : t("{n} accounts", { n: as.length }));
   b.title = (ms.length ? t("Only these models: {list}", { list: ms.join(", ") }) : t("Pick the models this key may use"))
-    + (as.length ? "\n" + t("Only these accounts: {list}", { list: as.map(accountShown).join(", ") }) : "");
+    + (as.length ? "\n" + t("Only these accounts: {list}", { list: as.map(accountShown).join(", ") })
+      + "\n" + t("A provider with no account picked is used on every account; to keep the key off it, pick only other providers' models") : "");
   b.setAttribute("aria-label", t("Models this key may use"));
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-expanded", "false");
@@ -255,9 +256,17 @@ function gatewayModelsBadge(k) {
     // by who is signed in, a key by its fingerprint
     const accountsSet = new Set();
     const ofProvider = new Map();
+    // the list holds the key only to the accounts of the providers it
+    // names (#905): a provider none of whose accounts is picked is used on
+    // every one, and its unticked accounts say so (#2077: unticking all of
+    // Codex's left Codex's models served)
+    const named = new Set(as.map((v) => v.split("/")[0].toLowerCase()));
     for (const a of accounts || []) {
       accountsSet.add(a.id);
-      const o = { v: a.id, name: a.name, note: a.plan ? a.providerName + " · " + a.plan : a.providerName, literalName: true };
+      const note = as.length && !named.has(String(a.provider).toLowerCase())
+        ? t("Used: no {provider} account is picked", { provider: a.providerName })
+        : a.plan ? a.providerName + " · " + a.plan : a.providerName;
+      const o = { v: a.id, name: a.name, note, literalName: true };
       ofProvider.set(a.provider, [...(ofProvider.get(a.provider) || []), o]);
     }
     let listed = "";  // the provider whose models the list is in
