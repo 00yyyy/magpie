@@ -78,7 +78,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         point(-16, 90, -10), point(-14, 20, -10),
         point(-13, 100, -6), point(-12, 70, -6),
         point(-11, 100, -6), point(-9, 30, -6),
-        point(-5, 95, 1), point(-1 / 24, 65, 1),
+        point(-5, 95, 1), point(-3, 80, 1), point(-1 / 24, 65, 1),
       ];
       const shortReset = now - 12 * D + H;
       data.history[0].lines[0].points.unshift({ at: iso(now - 12 * D), left: 12, start: iso(shortReset - 5 * H), resetsAt: iso(shortReset) });
@@ -101,6 +101,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await meters.locator(".quota-holds").count(), 1, "the current view keeps upstream's whole-window estimate");
       const otherMeters = await card.locator(".quota-windows").nth(1).locator(".quota-n").allTextContents();
       const pick = curve.getByRole("button", { name: w.choose });
+      // this cycle's pace is said; a past cycle's is over and says none (#2079)
+      assert.notEqual(await curve.locator(".qc-pace").textContent(), "", "the current cycle tells its pace");
       for (const [index, left] of [[1, 30], [2, 70], [3, 20]]) {
         const before = await page.locator("#view-usage").evaluate((v) => v.scrollTop);
         await pick.click();
@@ -111,6 +113,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.notEqual(notes[1], notes[2], "a regular week and an early reset have different lengths");
         await items.nth(index).click();
         assert.equal(await pick.textContent(), w.past);
+        assert.equal(await curve.locator(".qc-pace").textContent(), "", "a past cycle has no pace to tell");
         assert.equal(await meters.locator(".quota-holds").count(), 0, "today's whole-window estimate is not presented as a historical estimate");
         const hasShort = index === 2;
         assert.deepEqual(await curve.locator(".qc-key b").allTextContents(), hasShort ? ["12%", left + "%"] : [left + "%"], "the historical legend uses that cycle's final reading");
@@ -163,6 +166,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
   }
 }
 
+test("quotaEta: said only from a falling run of this cycle, never for one that is over (#2079)", async () => {
+  const source = await fs.readFile(path.join(assets, "app.js"), "utf8");
+  const start = source.indexOf("const quotaEtaSpan");
+  const end = source.indexOf("\n}\n", source.indexOf("function quotaEta(l, now) {"));
+  const inVm = vm.runInNewContext(source.slice(start, end + 2) + "; quotaEta");
+  const eta = (l, now) => JSON.parse(JSON.stringify(inVm(l, now))); // out of the vm's realm
+  const now = Date.parse("2026-10-14T12:00:00Z"), D = 86400e3;
+  const line = (cycle, ...pts) => ({ cycle, points: pts.map(([d, left]) => ({ at: now + d * D, left })) });
+  const open = { start: now - 5 * D, reset: now + 2 * D };
+  // 10 a day from 60: empty in 4 days, after the reset two days off
+  assert.deepEqual(eta(line(open, [-2, 60], [-1, 50], [0, 40]), now), { out: now + 4 * D, lasts: true });
+  // 20 a day from 40: empty in 2 days less a little, before that reset
+  const r = eta(line({ ...open, reset: now + 3 * D }, [-2, 80], [-1, 60], [0, 40]), now);
+  assert.equal(r.lasts, false); assert.equal(Math.round((r.out - now) / 36e5), 48);
+  assert.equal(eta(line(open, [-1, 50], [0, 40]), now), null, "two readings say nothing");
+  assert.equal(eta(line(open, [-1 / 48, 50], [-1 / 96, 45], [0, 40]), now), null, "half an hour says nothing");
+  assert.equal(eta(line(open, [-2, 20], [-1, 10], [0, 0]), now), null, "nothing left says nothing");
+  assert.deepEqual(eta(line(open, [-2, 50], [-1, 50], [0, 50]), now), { lasts: true, out: null }, "not falling lasts the cycle");
+  // a cycle that is over (a past one picked) says nothing, flat or falling
+  const past = { start: now - 9 * D, reset: now - 2 * D };
+  assert.equal(eta(line(past, [-5, 50], [-4, 50], [-3, 50]), now), null);
+  assert.equal(eta(line(past, [-5, 60], [-4, 50], [-3, 40]), now), null);
+});
+
 test("quota curve distinguishes fixed refills, rolling recovery and clock rounding", async () => {
   const source = await fs.readFile(path.join(assets, "app.js"), "utf8");
   const start = source.indexOf("function quotaCycleBreak(a, b) {");
@@ -207,8 +234,10 @@ function serve(lang, theme, panel, data) {
 }
 
 const words = {
-  en: { head: "Left over time", two: "2 days", cycle: "Cycle", off: "Off", trend: (r) => "Trends: " + r, five: "5 hours", week: "Weekly", dashes: /Dashed: an even pace/ },
-  zh: { head: "剩余额度走势", two: "2 天", cycle: "本周期", off: "关闭", trend: (r) => "走势：" + r, five: "5 小时", week: "每周", dashes: /虚线：匀速用量/ },
+  en: { head: "Left over time", two: "2 days", cycle: "Cycle", off: "Off", trend: (r) => "Trends: " + r, five: "5 hours", week: "Weekly", dashes: /Dashed: an even pace/,
+    lasts: "Lasts past the reset at this pace", runsOut: /^Runs out .+ at this pace$/ },
+  zh: { head: "剩余额度走势", two: "2 天", cycle: "本周期", off: "关闭", trend: (r) => "走势：" + r, five: "5 小时", week: "每周", dashes: /虚线：匀速用量/,
+    lasts: "按此速度，能撑到重置", runsOut: /^按此速度，预计 .+ 用完$/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -226,12 +255,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
       const errors = [];
       const data = fixtures(Date.now());
-      const open = async (name, url, theme, viewport) => {
+      const open = async (name, url, theme, viewport, over) => {
         const page = await (await browser.newContext({ viewport, reducedMotion: "reduce" })).newPage();
         pages.push([name, page]);
         page.setDefaultTimeout(5000);
         page.on("pageerror", (e) => errors.push(e.message));
-        await page.route("**/*", serve(lang, theme, url.includes("mode=panel"), data));
+        await page.route("**/*", serve(lang, theme, url.includes("mode=panel"), over || data));
         await page.goto(url);
         return page;
       };
@@ -248,6 +277,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await pick.textContent(), w.trend(w.cycle), "Cycle first");
         assert.equal(await page.locator(".quota-curve .segs, .quota-curve button:not(.qc-range), .quota-curve select").count(), 0, "only the account's cycle picker on a card");
         assert.equal(await curve.locator(".qc-range").textContent(), w.cycle);
+        // the window whose reset is furthest off, in words: a 52px plot
+        // leaves the reader to work out which side of the dashes it is on,
+        // and that is the only question the curve is asked (#2079)
+        assert.equal(await curve.locator(".qc-pace").textContent(), w.lasts);
         // a line a window, now; the 5-hour window, a comb over the week's
         // cycle, faint and without its upright even burn
         assert.equal(await curve.locator("path.qc-line").count(), 2);
@@ -314,7 +347,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
       assert.notEqual(strokes.light, strokes.dark, "dark has its own line colour");
 
+      // the same card, a week emptying before its reset: the words turn
+      // around, and a reading taken this cycle is all a pace needs (#2079)
+      const rw = Date.parse(data.quotas[0].windows[1].resetsAt), t0 = Date.now();
+      data.history[0].lines[1].points = [
+        { at: iso(t0 - 48 * H), left: 60, start: iso(rw - 168 * H), resetsAt: iso(rw) },
+        { at: iso(t0 - 24 * H), left: 40, start: iso(rw - 168 * H), resetsAt: iso(rw) },
+        { at: iso(t0), left: 20, start: iso(rw - 168 * H), resetsAt: iso(rw) },
+      ];
+      const counting = await open("counting", "http://magpie.test/?view=usage", "light", { width: 900, height: 620 });
+      const countingCurve = counting.locator(".subscription-card", { hasText: "Codex" }).locator(".quota-curve").first();
+      await countingCurve.waitFor();
+      assert.match(await countingCurve.locator(".qc-pace").textContent(), w.runsOut);
+
       // the tray: a thin line of the 5-hour window's cycle, across the card
+      // Its own readings, three over three hours: clearly slower than the
+      // window's even burn, so the pace has one answer rather than landing
+      // exactly on the deadline (a tie, and a tie is no test) (#2079)
+      const p0 = Date.now();
+      data.history[0].lines[0].points = [
+        { at: iso(p0 - 3 * H), left: 100, start: iso(p0 - 3 * H), resetsAt: iso(p0 + 2 * H) },
+        { at: iso(p0 - 2 * H), left: 85, start: iso(p0 - 3 * H), resetsAt: iso(p0 + 2 * H) },
+        { at: iso(p0 - 1 * H), left: 70, start: iso(p0 - 3 * H), resetsAt: iso(p0 + 2 * H) },
+      ];
       const panel = await open("panel", "http://magpie.test/?mode=panel", "dark", { width: 440, height: 640 });
       await panel.locator('#ptabs [data-ptab="usage"]').click();
       const pcard = panel.locator(".pq-card", { hasText: "a@x.com" });
@@ -323,6 +378,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await spark.locator("path.qc-line").count(), 1);
       assert.equal((((await spark.locator("path.qc-line").getAttribute("d")).match(/M/g)) || []).length, 1, "the current cycle only");
       assert.equal(await spark.locator("line.qc-even").count(), 1);
+      // Both windows begun: the line reads "↻ 14:26 · Weekly …", and a pace
+      // after it would read as the week's, so none is said there (#2079)
+      assert.equal(await pcard.locator(".pq-pace").count(), 0, "no pace beside another window's deadline");
+      // the 5-hour window the only one begun: its pace, by its deadline
+      const single = JSON.parse(JSON.stringify(data));
+      single.quotas[0].windows[1].used = 0;
+      const one = await open("one", "http://magpie.test/?mode=panel", "dark", { width: 440, height: 640 }, single);
+      await one.locator('#ptabs [data-ptab="usage"]').click();
+      const ocard = one.locator(".pq-card", { hasText: "a@x.com" });
+      await ocard.waitFor();
+      assert.equal(await ocard.locator(".pq-pace").textContent(), " · " + w.lasts);
+      // a window magpie has read nothing of this cycle says nothing, rather
+      // than reading a pace from nothing (#2079)
+      const quiet = JSON.parse(JSON.stringify(single));
+      quiet.history[0].lines[0].points = [];
+      const silent = await open("silent", "http://magpie.test/?mode=panel", "dark", { width: 440, height: 640 }, quiet);
+      await silent.locator('#ptabs [data-ptab="usage"]').click();
+      const scard = silent.locator(".pq-card", { hasText: "a@x.com" });
+      await scard.waitFor();
+      assert.equal(await scard.locator(".pq-pace").count(), 0, "nothing to say, nothing said");
+      assert.ok((await scard.locator(".pq-sub").textContent()).includes("↻"), "the deadline is still said");
       // the line ends at now already; in 16px a dotted now line read as a
       // stray mark under the curve (#1601)
       assert.equal(await spark.locator("line.qc-now").count(), 0, "no now line in the thin spark");

@@ -15367,6 +15367,46 @@ function quotaCycle(l, now) {
   if (reset != null && reset <= now) reset = null;
   return { start: Math.min(start, now), reset };
 }
+// the week a pace is fitted over, as balanceTrend fits a balance's
+// (balanceFitSpan): what a window is spending now, not what its whole cycle
+// averaged, and never a run long enough to have changed its mind
+const quotaEtaSpan = 7 * 86400e3;
+// quotaEta: where a window's own readings are taking it — the points since
+// it last refilled, within the week, fitted to a line and carried to where
+// they meet zero: {out} the hour that is, {lasts} whether it is after the
+// reset. null where there is nothing to say: fewer than three readings, an
+// hour of them, nothing left, a line that is not falling, or one already
+// past zero. A shape in a 52px box cannot be read off; this can (#2079).
+function quotaEta(l, now) {
+  const c = l.cycle || quotaCycle(l, now);
+  // a cycle already over (a past one picked) has no pace left to tell
+  if (c.reset != null && c.reset <= now) return null;
+  const cycle = l.points.filter((p) => p.at >= c.start && p.at <= now);
+  let i = cycle.length - 1;
+  while (i > 0 && cycle[i - 1].left >= cycle[i].left && now - cycle[i - 1].at <= quotaEtaSpan) i--;
+  const pts = cycle.slice(i), last = pts[pts.length - 1];
+  if (pts.length < 3 || !last || !(last.left > 0) || last.at - pts[0].at < 3600e3) return null;
+  const t0 = pts[0].at, n = pts.length;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const p of pts) { const x = (p.at - t0) / 86400e3; sx += x; sy += p.left; sxx += x * x; sxy += x * p.left; }
+  const den = n * sxx - sx * sx;
+  if (!(den > 0)) return null;
+  const slope = (n * sxy - sx * sy) / den; // what is left a day, falling
+  if (!(slope < 0)) return c.reset ? { lasts: true, out: null } : null;
+  const out = t0 + (-(sy - slope * sx) / n / slope) * 86400e3;
+  if (!(out > now)) return null;
+  return { out, lasts: !!c.reset && out >= c.reset };
+}
+// quotaEtaText: that pace as one phrase — the hour the window empties, in
+// the reader's own clock, or the reset it outlasts. A shape in a 52px plot
+// cannot be read off; this answers the only question the curve is asked
+// (#2079)
+function quotaEtaText(l, now) {
+  const p = l && quotaEta(l, now);
+  if (!p) return "";
+  return p.lasts ? t("Lasts past the reset at this pace")
+    : t("Runs out {when} at this pace", { when: quotaTimeText(Math.max(p.out, now + 60e3), now) });
+}
 function quotaSpan(lines, range, now) {
   if (range === "2d") return [now - 48 * 3600e3, now];
   let x0 = Infinity, x1 = now;
@@ -15452,7 +15492,8 @@ function quotaCurve(sub) {
   const range = el("button", "text qc-range");
   range.type = "button";
   const key = usageAcctKey(sub);
-  head.append(el("span", "", t("Left over time")), range);
+  const pace = el("span", "qc-pace");
+  head.append(el("span", "", t("Left over time")), pace, range);
   const W = 300, H = 60;
   const g = sv("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", class: "qc-plot", role: "img" });
   curveZoom(box, g);
@@ -15504,6 +15545,21 @@ function quotaCurve(sub) {
     g.setAttribute("aria-label", t("Left over time") + " · " + r);
     axis.replaceChildren(el("span", "", picked ? quotaCycleDate(x0) : quotaTimeText(x0, now)), el("span", "", picked ? quotaCycleDate(x1) : quotaTimeText(x1, now)));
     drawLegend(shown, now);
+    // The window whose deadline is furthest off answers for the card: the
+    // head has room for the pace a shape in 52px only hints at (#2079). It
+    // is the window the legend's last key is, and a window with no readings
+    // of the picked cycle carries a cycle of nothing to be asked about. A
+    // past cycle picked has no pace to tell: it is over.
+    let longest = null, latest = -Infinity;
+    if (!picked) shown.forEach((l) => {
+      const c = l.cycle || quotaCycle(l, now);
+      if (c?.reset != null && c.reset > latest) { latest = c.reset; longest = l; }
+    });
+    const p = longest ? quotaEta(longest, now) : null;
+    pace.textContent = p ? quotaEtaText(longest, now) : "";
+    // which window it is, and the instant with its year, behind a line
+    // that holds day and minute and is cut short rather than wrapped
+    pace.title = p ? [shown.length > 1 ? longest.label : "", pace.textContent, p.out != null ? new Date(p.out).toLocaleString(intlLang()) : ""].filter(Boolean).join("\n") : "";
   };
   box.append(head, g, axis, legend);
   box.draw();
@@ -15609,6 +15665,12 @@ function setQuotaRange(id) {
   // A range also restores today's meters when leaving a historical cycle.
   renderQuotas();
 }
+// quotaWindowLine: the readings one of a card's own windows is drawn from —
+// the line quotaSpark's thin curve is, and the one its pace is read from
+function quotaWindowLine(q, w) {
+  if (!w) return null;
+  return quotaLines({ ...q, windows: [w.window ? { ...w, name: w.window } : w] })[0] || null;
+}
 // quotaSpark: the tray card's line of a window's current cycle, the even
 // burn faint under it; none while the curves are off. In a card's width a
 // month drawn in a few pixels' height read as one straight line, its dashes
@@ -15619,16 +15681,16 @@ function setQuotaRange(id) {
 let sparkClips = 0;
 function quotaSpark(q, w) {
   if (quotaRange === "off") return null;
-  const lines = quotaLines({ ...q, windows: [w.window ? { ...w, name: w.window } : w] });
-  if (!lines.length) return null;
-  const now = Date.now(), c = quotaCycle(lines[0], now);
+  const line = quotaWindowLine(q, w);
+  if (!line) return null;
+  const now = Date.now(), c = quotaCycle(line, now);
   const x1 = c.reset || now;
   if (!(c.start < x1)) return null;
   const W = 200, H = 30;
   const g = sv("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", class: "pq-spark", role: "img" });
   g.setAttribute("aria-label", t("{name}: this cycle", { name: t(w.name) }));
-  drawQuotaPlot(g, lines, c.start, x1, W, H, now, true);
-  const gap = c.reset && sparkGap(lines[0].points, c.start, c.reset, now, W, H);
+  drawQuotaPlot(g, [line], c.start, x1, W, H, now, true);
+  const gap = c.reset && sparkGap(line.points, c.start, c.reset, now, W, H);
   if (gap) g.prepend(gap);
   const s = el("span", "pq-spark-box");
   s.title = t("{name}: what was left this cycle, against an even burn", { name: t(w.name) });
@@ -16336,13 +16398,23 @@ function panelQuotaCard(q) {
   const ws = fam.slice(0, fam.some((w) => w.members) ? 4 : 3);
   // when the windows begun start again: the first bare, the others by name
   const begun = ws.filter((w) => w.resetsAt && w.used > 0);
-  card.append(el("span", "pq-sub", begun.length
+  const sub = el("span", "pq-sub", begun.length
     ? begun.map((w, i) => {
       const at = new Date(w.resetsAt);
       return at <= Date.now() ? (i || w.members ? ringName(w) + " " : "") + resetText(at)
         : (i || w.members ? ringName(w) + " " : "↻ ") + resetClock(at);
     }).join(" · ")
-    : t("Not used yet")));
+    : t("Not used yet"));
+  // The first window's own pace as well, in the line already about its
+  // deadline: the thin line under it has no room for what it only hints at,
+  // and a card with no readings of that window has nothing to say (#2079).
+  // Only while that line is drawn (curves on), and only when the deadline
+  // the line names is that window's alone: after "↻ 14:26 · Weekly Oct 31"
+  // it would read as the week's.
+  const line = quotaRange !== "off" && begun.length === 1 && begun[0] === ws[0] && !ws[0].tiers ? quotaWindowLine(q, ws[0]) : null;
+  const pace = line ? quotaEtaText(line, Date.now()) : "";
+  if (pace) sub.append(el("span", "pq-pace", " · " + pace));
+  card.append(sub);
   const rings = el("span", "pq-rings");
   for (const w of ws) {
     const used = Math.max(0, Math.min(100, w.used));
