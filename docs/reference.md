@@ -1744,8 +1744,14 @@ slot among them); `waiting`, how many of those wait for a slot under a
 provider's or account's limit; and `tools`, Claude Code turns run through a
 Claude subscription that wait on their caller's tool results, which are not
 requests. Each is `0` when idle. `data` is each limited key's or account's
-own count, empty when no limit is set. The read asks no vendor and isn't
-counted itself, so it can be polled every second. It answers as
+own count, empty when no limit is set. `active` lists those requests one
+by one, oldest first, `[]` when idle: `id`, `agent`, `model` and
+`provider` (once routed), `session` when the agent sends one, `started`
+and `ms` since, and `phase` only where the gateway knows it: `slot`
+waiting in a key's or account's queue, `rpm` waiting for room in the
+minute, `upstream` out at the vendor (sent, or its reply streaming). No
+prompt, reply or key is in it. The read asks no vendor and isn't counted
+itself, so it can be polled every second. It answers as
 `/v1/magpie/quotas` does: this machine, another only with a gateway key,
 and never a held key.
 

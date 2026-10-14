@@ -111,6 +111,7 @@ func (l *lanes) take(ctx context.Context, who string, limit, queue int, wait tim
 	ch := make(chan struct{})
 	ln.queue = append(ln.queue, ch)
 	l.mu.Unlock()
+	defer notePhase(ctx, "slot")()
 	queued := time.Now()
 	var timeout <-chan time.Time
 	if wait > 0 {
@@ -244,6 +245,7 @@ type Lane struct {
 // of those wait for a slot, and tools the Claude Code turns waiting on
 // their caller's tool results, which are not requests. Each is 0 when
 // idle, never left out.
+// active lists those requests one by one (Active), [] when idle.
 func (s *Server) concurrency(w http.ResponseWriter, r *http.Request) {
 	if !local(r) && !sharedWith(r) {
 		writeError(w, provider.Chat, http.StatusForbidden, "magpie's concurrency is told to another machine only when magpie is shared on the local network and the request carries its API key")
@@ -258,7 +260,7 @@ func (s *Server) concurrency(w http.ResponseWriter, r *http.Request) {
 		waiting += ln.Waiting
 	}
 	b := s.Busy()
-	writeJSON(w, 200, map[string]any{"object": "concurrency", "data": lanes, "requests": b.Requests, "waiting": waiting, "tools": b.Tools})
+	writeJSON(w, 200, map[string]any{"object": "concurrency", "data": lanes, "requests": b.Requests, "waiting": waiting, "tools": b.Tools, "active": s.Active()})
 }
 
 // Lanes is how each key or account with requests out or waiting under a

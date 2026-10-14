@@ -454,7 +454,9 @@ func (t *trace) changed() {
 // told it: one begun without (begin alone) is told to no held key.
 func (t *trace) beginFor(req *http.Request, r Route) *Route {
 	r.callerKey = access.Caller(req.Context()).KeyID
-	return t.begin(r)
+	rt := t.begin(r)
+	noteRoute(req.Context(), rt)
+	return rt
 }
 
 func (t *trace) begin(r Route) *Route {
