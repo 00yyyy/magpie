@@ -321,7 +321,7 @@ func Update(action string, in Change) (string, error) {
 			keys[i].Limit = lim
 		case "reset-limit-key":
 			// what the key has used is counted again from now (#1509),
-			// its tokens and cost together: a "days" cycle starts anew,
+			// its tokens and cost together: a "days" or "hours" cycle starts anew,
 			// a calendar window keeps its end
 			if !keys[i].Limit.Limited() {
 				return "", errors.New("This key has no limit to reset")

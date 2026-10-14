@@ -218,3 +218,128 @@ func TestLimitSetAndReset(t *testing.T) {
 		t.Fatal("reset a missing key")
 	}
 }
+
+// An "hours" limit (#2102) runs cycles of N hours from when it was set,
+// in absolute time like a "days" one: a 5-hour key turns over every 5
+// hours whatever the clock or zone says.
+func TestLimitHoursCycle(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no tz database:", err)
+	}
+	// set at 23:10 the night New York's clocks went back (2026-11-01 02:00)
+	since := time.Date(2026, 10, 31, 23, 10, 0, 0, ny)
+	h := time.Hour
+	l := &Limit{Period: "hours", Hours: 5, Tokens: 200_000, Since: since}
+	for _, c := range []struct {
+		now         time.Time
+		start, rest time.Duration // from since
+	}{
+		{since, 0, 5 * h},
+		{since.Add(5*h - time.Nanosecond), 0, 5 * h},
+		{since.Add(5 * h), 5 * h, 10 * h},
+		{since.Add(23*h + 59*time.Minute), 20 * h, 25 * h},
+		{since.Add(24 * 7 * h), 165 * h, 170 * h},
+	} {
+		for _, loc := range []*time.Location{ny, time.UTC, time.FixedZone("UTC+8", 8*3600)} {
+			start, reset := l.Window(c.now.In(loc))
+			if !start.Equal(since.Add(c.start)) || !reset.Equal(since.Add(c.rest)) {
+				t.Errorf("at %s: %s – %s, want %s – %s", c.now.In(loc), start, reset, since.Add(c.start), since.Add(c.rest))
+			}
+		}
+	}
+	if got := l.Per(); got != "5-hour cycle" {
+		t.Errorf("Per: %q", got)
+	}
+	for _, c := range []struct {
+		in Limit
+		ok bool
+	}{
+		{Limit{Period: "hours", Hours: 5, Tokens: 1}, true},
+		{Limit{Period: "hours", Hours: 1, Tokens: 1}, true},
+		{Limit{Period: "hours", Hours: MaxHours, Tokens: 1}, true},
+		{Limit{Period: "hours", Hours: 0, Tokens: 1}, false},
+		{Limit{Period: "hours", Hours: MaxHours + 1, Tokens: 1}, false},
+		{Limit{Period: "hours", Hours: -5, Tokens: 1}, false},
+	} {
+		v, err := c.in.Valid()
+		if (err == nil) != c.ok {
+			t.Errorf("%+v: %v", c.in, err)
+		}
+		if err == nil && (v.Hours != c.in.Hours || v.Days != 0) {
+			t.Errorf("%+v kept as %+v", c.in, v)
+		}
+	}
+	// a stray Hours on another period isn't kept
+	if v, _ := (&Limit{Period: "days", Days: 2, Hours: 5, Tokens: 1}).Valid(); v.Hours != 0 {
+		t.Errorf("days kept hours: %+v", v)
+	}
+	if v, _ := (&Limit{Period: "day", Hours: 5, Tokens: 1}).Valid(); v.Hours != 0 {
+		t.Errorf("day kept hours: %+v", v)
+	}
+}
+
+// Setting an "hours" limit starts its cycle; a new cap keeps it, a new N
+// or a switch from N days to N hours starts a new one, and Reset usage
+// starts one from then (#2102).
+func TestLimitHoursSetAndReset(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	clock := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
+	Now = func() time.Time { return clock }
+	t.Cleanup(func() { Now = time.Now })
+	k := Key{ID: "k2"}
+	keys := `[{"id":"k2","name":"Family","secret":"sk-magpie-key-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]`
+	if err := os.MkdirAll(strings.TrimSuffix(Path(), "caller-keys.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Path(), []byte(keys), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	limitOf := func() *Limit {
+		t.Helper()
+		keys, err := List()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, x := range keys {
+			if x.ID == k.ID {
+				return x.Limit
+			}
+		}
+		t.Fatal("no key")
+		return nil
+	}
+	set := func(l *Limit) {
+		t.Helper()
+		if _, err := Update("limit-key", Change{Key: k.ID, Limit: l}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	set(&Limit{Period: "days", Days: 5, Tokens: 1000})
+	clock = clock.Add(time.Hour)
+	set(&Limit{Period: "hours", Hours: 5, Tokens: 1000})
+	if l := limitOf(); l.Period != "hours" || l.Hours != 5 || l.Days != 0 || !l.Since.Equal(clock) {
+		t.Fatalf("5 days to 5 hours: %+v", l)
+	}
+	set1 := clock
+	clock = clock.Add(3 * time.Hour)
+	set(&Limit{Period: "hours", Hours: 5, Tokens: 2000})
+	if l := limitOf(); !l.Since.Equal(set1) {
+		t.Fatalf("a new cap restarted the cycle: %+v", l)
+	}
+	set(&Limit{Period: "hours", Hours: 6, Tokens: 2000})
+	if l := limitOf(); !l.Since.Equal(clock) {
+		t.Fatalf("a new N kept the old start: %+v", l)
+	}
+	clock = clock.Add(2 * time.Hour)
+	if _, err := Update("reset-limit-key", Change{Key: k.ID}); err != nil {
+		t.Fatal(err)
+	}
+	l := limitOf()
+	if !l.Since.Equal(clock) || l.Hours != 6 {
+		t.Fatalf("reset: %+v", l)
+	}
+	if start, reset := l.Window(clock.Add(time.Minute)); !start.Equal(clock) || !reset.Equal(clock.Add(6*time.Hour)) {
+		t.Fatalf("after reset: %s – %s", start, reset)
+	}
+}

@@ -503,6 +503,7 @@ magpie gateway-key remove <id>         # revokes remote access
 magpie gateway-key limit <id> week --tokens 2m --cost 5   # its own limit
 magpie gateway-key limit <id>          # limit, used, left and reset
 magpie gateway-key limit <id> 10d --tokens 5m   # every 10 days, from now
+magpie gateway-key limit <id> 5h --tokens 200k  # every 5 hours, from now
 magpie gateway-key limit <id> reset    # count its usage from 0 again
 magpie gateway-key limit <id> off      # no limit
 magpie gateway-key models <id> openai/gpt-5 anthropic/*   # only these models
@@ -513,10 +514,12 @@ magpie gateway-key accounts <id> all    # every account
 
 Each gateway key can have its own **limit**: a token total, an estimated
 cost in US$, or both, per day, week or month (calendar windows in local
-time: from midnight, from Monday, from the 1st), or every N days (#1509;
-N from 1 to 3650). An N-day cycle starts when the limit is set and runs
-N×24 hours, then the next one starts where it ended, so a restart, a
-time-zone change or a daylight-saving shift doesn't move it. Changing only
+time: from midnight, from Monday, from the 1st), every N days (#1509;
+N from 1 to 3650) or every N hours (#2102; N from 1 to 8760, such as 5 for
+a subscription's 5-hour pace). An N-day or N-hour cycle starts when the
+limit is set and runs N×24 or N hours, then the next one starts where it
+ended, so a restart, a time-zone change or a daylight-saving shift doesn't
+move it. Changing only
 the caps or **Count cache reads too** keeps the cycle; changing N or the
 period, or turning the limit on, starts a new one then. Set it with **Limit** on
 the key's row (saved with Save) or `magpie gateway-key limit`; the row shows
@@ -533,7 +536,7 @@ output per call), so requests sent at once overshoot by about one call; a
 streamed reply is settled when it ends with the usage its vendor reported.
 **Reset usage** in the key's limit editor (or `magpie gateway-key limit
 <id> reset`) counts the key's tokens and cost from 0 together, from now. An
-N-day key starts a new N-day cycle then. A day, week or month key keeps
+N-day or N-hour key starts a new cycle then. A day, week or month key keeps
 its window's end (midnight, Monday, the 1st): only the calls before the
 reset stop counting, so it doesn't drift off the calendar. The reset is
 stored with the key (`since` in caller-keys.json, magpie's own: a value a

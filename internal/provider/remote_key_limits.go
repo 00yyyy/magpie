@@ -40,9 +40,11 @@ const errRemoteNoKeyLimit = "remote magpie is too old to tell this key's limit; 
 type GatewayKeyLimit struct {
 	// Limited is false for a key the remote holds to no limit.
 	Limited bool `json:"limited"`
-	// Period is "day", "week", "month" or "days" (a cycle of Days days).
+	// Period is "day", "week", "month", "days" (a cycle of Days days) or
+	// "hours" (of Hours hours).
 	Period string    `json:"period,omitempty"`
 	Days   int       `json:"days,omitempty"`
+	Hours  int       `json:"hours,omitempty"`
 	Start  time.Time `json:"start,omitzero"`
 	Reset  time.Time `json:"reset,omitzero"`
 	Calls  int       `json:"calls,omitempty"`
@@ -63,6 +65,7 @@ type remoteKeyAnswer struct {
 	Limit   *struct {
 		Period     string    `json:"period"`
 		Days       int       `json:"days"`
+		Hours      int       `json:"hours"`
 		Start      time.Time `json:"start"`
 		Reset      time.Time `json:"reset"`
 		Calls      int       `json:"calls"`
@@ -173,7 +176,7 @@ func keyLimitCard(a *remoteKeyAnswer) (*GatewayKeyLimit, []QuotaWindow) {
 	if !*a.Limited || l == nil {
 		return &GatewayKeyLimit{}, []QuotaWindow{{Name: "Limit", Unlimited: true}}
 	}
-	g := &GatewayKeyLimit{Limited: true, Period: l.Period, Days: l.Days, Start: l.Start, Reset: l.Reset, Calls: l.Calls, Spent: l.Spent, Unpriced: l.Unpriced}
+	g := &GatewayKeyLimit{Limited: true, Period: l.Period, Days: l.Days, Hours: l.Hours, Start: l.Start, Reset: l.Reset, Calls: l.Calls, Spent: l.Spent, Unpriced: l.Unpriced}
 	reset := l.Reset
 	var ws []QuotaWindow
 	share := func(used, limit float64) float64 { return math.Min(100, math.Round(used/limit*1000)/10) }

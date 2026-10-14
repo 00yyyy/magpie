@@ -445,3 +445,72 @@ func TestKeyLimitCalendarReset(t *testing.T) {
 		t.Fatalf("after Reset: %+v", st)
 	}
 }
+
+// A key on a 5-hour cycle (#2102) is refused once spent, named so, until
+// 5 hours after the limit was set; /v1/magpie/limit tells the key its
+// cycle; Reset lets it in again with a new 5 hours from then.
+func TestKeyLimitHoursCycle(t *testing.T) {
+	fresh(t)
+	budget.Forget()
+	t.Cleanup(budget.Forget)
+	calls := limitedUpstream(t, 0)
+	in, zero := 1000.0, 0.0
+	if err := settings.Save(settings.Settings{ModelPrices: map[string]settings.ModelPrice{
+		"plan/m1": {Input: &in, Output: &zero, CacheRead: &zero, CacheWrite: &zero},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	keys, secrets := newCaller(t, "Family")
+	set := time.Now().Add(-time.Hour).Round(0)
+	access.Now = func() time.Time { return set }
+	t.Cleanup(func() { access.Now = time.Now })
+	setLimit(t, keys[0].ID, &access.Limit{Period: "hours", Hours: 5, Cost: 0.5})
+	access.Now = time.Now
+	h := New().Handler()
+	call := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+secrets[0])
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	// 6 hours before it was set: a cycle's length back, never counted
+	budget.Append(usage.Record{Time: set.Add(-6 * time.Hour), Provider: "plan", Model: "m1", Input: 900000, Status: 200, CallerKeyID: keys[0].ID})
+	for i := range 2 {
+		if w := call("POST", "/v1/chat/completions", chatReq); w.Code != 200 {
+			t.Fatal("within the limit", i, w.Code, w.Body.String())
+		}
+	}
+	w := call("POST", "/v1/chat/completions", chatReq)
+	if w.Code != 429 || calls.Load() != 2 || !strings.Contains(w.Body.String(), "this 5-hour cycle") {
+		t.Fatal("spent key:", w.Code, calls.Load(), w.Body.String())
+	}
+	if got := w.Header().Get("X-Magpie-Limit-Reset"); got != set.Add(5*time.Hour).Format(time.RFC3339) {
+		t.Fatal("resets at", got, "not 5 hours after", set)
+	}
+	lim := call("GET", "/v1/magpie/limit", "")
+	if lim.Code != 200 || !strings.Contains(lim.Body.String(), `"period":"hours"`) || !strings.Contains(lim.Body.String(), `"hours":5`) {
+		t.Fatal("/v1/magpie/limit:", lim.Code, lim.Body.String())
+	}
+	ks, _ := access.List()
+	who := access.Identity{KeyID: keys[0].ID, KeyName: "Family", Limit: ks[0].Limit}
+	if _, refused := budget.Reserve(who, 10, "", set.Add(5*time.Hour-time.Second)); refused == nil {
+		t.Fatal("let in before the cycle ended")
+	}
+	release, refused := budget.Reserve(who, 10, "", set.Add(5*time.Hour))
+	if refused != nil {
+		t.Fatal("the next 5 hours still spent", refused)
+	}
+	release()
+	if _, err := access.Update("reset-limit-key", access.Change{Key: keys[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	ks, _ = access.List()
+	st := budget.Of(ks[0], time.Now())
+	if st.Spent || st.Cost != 0 || !st.Reset.Equal(st.Start.Add(5*time.Hour)) || st.Hours != 5 {
+		t.Fatalf("after Reset: %+v", st)
+	}
+	if w := call("POST", "/v1/chat/completions", chatReq); w.Code != 200 {
+		t.Fatal("refused after Reset", w.Code, w.Body.String())
+	}
+}

@@ -16977,13 +16977,14 @@ function quotaName(q) {
   return isKeyCard(q) ? t("Gateway keys · {name}", { name: q.name }) : q.name;
 }
 // keyLimitLine: what a gateway key's windows don't say: the length of a
-// cycle of days, the calls made in it, that it is used up, and calls with
+// cycle of days or hours, the calls made in it, that it is used up, and calls with
 // no known price that leave its spend low.
 function keyLimitLine(sub) {
   const g = sub.gatewayKey;
   if (!g?.limited || sub.error) return null;
   const parts = [];
   if (g.period === "days" && g.days) parts.push(t(g.days === 1 ? "1-day cycle" : "{n}-day cycle", { n: g.days }));
+  if (g.period === "hours" && g.hours) parts.push(t(g.hours === 1 ? "1-hour cycle" : "{n}-hour cycle", { n: g.hours }));
   if (g.calls) parts.push(t(g.calls === 1 ? "1 call" : "{n} calls", { n: g.calls }));
   if (g.spent) parts.push(t("Used up: that computer refuses this key until it resets"));
   if (g.unpriced && g.costLeft != null) parts.push(t(g.unpriced === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n: g.unpriced }));

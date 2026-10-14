@@ -151,8 +151,9 @@ func Append(rec usage.Record) {
 // Status is a key's limit and what it has used of it.
 type Status struct {
 	Period string `json:"period"`
-	// Days is a "days" period's cycle
+	// Days is a "days" period's cycle, Hours an "hours" one's
 	Days     int       `json:"days,omitempty"`
+	Hours    int       `json:"hours,omitempty"`
 	Start    time.Time `json:"start"`
 	Reset    time.Time `json:"reset"`
 	Calls    int       `json:"calls"`
@@ -174,7 +175,7 @@ type Status struct {
 }
 
 func status(keyID string, l *access.Limit, s *sums, h *held, reset time.Time) Status {
-	st := Status{Period: l.Period, Days: l.Days, Start: s.start, Reset: reset, Calls: s.calls, Tokens: s.tokens(l), Cost: s.cost, Unpriced: s.unpriced,
+	st := Status{Period: l.Period, Days: l.Days, Hours: l.Hours, Start: s.start, Reset: reset, Calls: s.calls, Tokens: s.tokens(l), Cost: s.cost, Unpriced: s.unpriced,
 		TokenLimit: l.Tokens, CostLimit: l.Cost, CacheReads: l.CacheReads}
 	if h != nil {
 		st.InFlight, st.Reserved, st.ReservedCost = h.n, h.tokens, h.cost
@@ -229,7 +230,7 @@ func (r *Refusal) Error() string {
 		what += fmt.Sprintf(", with %d requests in flight holding the rest", r.InFlight)
 	}
 	return fmt.Sprintf("magpie gateway key %q has used %s for this %s; it resets at %s",
-		r.Key, what, (&access.Limit{Period: r.Period, Days: r.Days}).Per(), r.Reset.Format("2006-01-02 15:04 MST"))
+		r.Key, what, (&access.Limit{Period: r.Period, Days: r.Days, Hours: r.Hours}).Per(), r.Reset.Format("2006-01-02 15:04 MST"))
 }
 
 // RetryAfter is how long until the window resets, in whole seconds.

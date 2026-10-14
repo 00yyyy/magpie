@@ -6,8 +6,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/budget"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -182,6 +184,29 @@ func TestGatewayKeyLimitCLI(t *testing.T) {
 	}
 	if keys, _ = access.List(); keys[0].Limit.Since.Before(since) || keys[0].Limit.Cost != 800 {
 		t.Fatalf("reset kept %+v", keys[0].Limit)
+	}
+	// every 5 hours (#2102): a new cycle from now, then Reset starts another
+	if got, err = call("limit", id, "5h", "--tokens", "200k"); err != nil || !strings.Contains(got, "this 5-hour cycle") {
+		t.Fatal(got, err)
+	}
+	keys, _ = access.List()
+	if l := keys[0].Limit; l == nil || l.Period != "hours" || l.Hours != 5 || l.Days != 0 || l.Tokens != 200_000 || l.Since.IsZero() || l.Since.Before(since) {
+		t.Fatalf("limit kept as %+v", keys[0].Limit)
+	}
+	if st := budget.Of(keys[0], keys[0].Limit.Since.Add(time.Minute)); st == nil || st.Reset.Sub(st.Start) != 5*time.Hour || st.Hours != 5 {
+		t.Fatalf("a 5-hour key's window: %+v", st)
+	}
+	if got, _ := call("list"); !strings.Contains(got, "0/200000 tokens every 5 hours") {
+		t.Fatal(got)
+	}
+	if got, err = call("limit", id, "reset"); err != nil || !strings.Contains(got, "this 5-hour cycle") {
+		t.Fatal(got, err)
+	}
+	for _, args := range [][]string{{"limit", id, "0h", "--tokens", "5"}, {"limit", id, "8761h", "--tokens", "5"}, {"limit", id, "xh", "--tokens", "5"},
+		{"limit", id, "1.5h", "--tokens", "5"}, {"limit", id, "hours", "--tokens", "5"}} {
+		if _, err := call(args...); err == nil {
+			t.Error("accepted", args)
+		}
 	}
 	if got, err := call("limit", id, "off"); err != nil || !strings.Contains(got, "no limit") {
 		t.Fatal(got, err)
