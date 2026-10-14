@@ -181,6 +181,9 @@ func minTime(a, b time.Time) time.Time {
 // SpendExpiringCodexResets goes over the Codex accounts the user lets
 // spend their resets and spends one about to run out unused (see check).
 func SpendExpiringCodexResets(ctx context.Context) {
+	if leftAlone("codex") {
+		return // switched off or removed: its allowance isn't read nor a reset spent (#2226)
+	}
 	for _, user := range settings.Load().CodexAutoReset {
 		if ctx.Err() != nil {
 			return
