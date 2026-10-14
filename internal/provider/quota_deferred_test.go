@@ -40,6 +40,9 @@ func TestQuotaDeferredReadIsNotFailure(t *testing.T) {
 		{"saved", errClaudeSaved.Error(), true},
 		{"not asked", errClaudeNotAsked.Error(), true},
 		{"manual only", errNotAsked.Error(), true},
+		// holdUnasked stops the vendor's request itself, so the error
+		// arrives wrapped by the HTTP client.
+		{"held request", `Get "https://api.example.com/usage": ` + errNotAsked.Error(), true},
 		{"rate limited", "HTTP 429 Too Many Requests", false},
 		{"unavailable", errClaudeUsageUnavailable.Error(), false},
 		{"network", "connection refused", false},

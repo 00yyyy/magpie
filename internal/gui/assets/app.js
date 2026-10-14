@@ -17129,6 +17129,10 @@ function quotaRefresh(q) {
         const kept = quotas || [];
         quotas = kept.some(x => usageAcctKey(x) === key) ? kept.map(x => usageAcctKey(x) === key ? fresh : x) : [...kept, fresh];
         quotasAt = Date.now();
+      } else if (Array.isArray(qs)) {
+        // The card came back under another key (an account first read
+        // under its name): the reply's list is taken as it was before.
+        quotas = qs; quotasAt = Date.now();
       }
     } catch (err) {
       status(err.message, "err");

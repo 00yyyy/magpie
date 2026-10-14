@@ -88,3 +88,13 @@ test("a failed card refresh leaves background readings usable", async () => {
   assert.equal(p.cards()[0].windows[0].used, 32);
   assert.deepEqual(plain(p.errors), ["offline"]);
 });
+
+test("a card that comes back under another key still shows the reply", async () => {
+  // A card read before its account was known has no user; its refresh
+  // answers under the account's name.
+  const p = page(), unnamed = card("", 0);
+  p.seed([unnamed]);
+  const refresh = p.refresh(unnamed);
+  p.answer(0, [card("a@x.com", 32)]); await refresh;
+  assert.deepEqual(plain(p.cards()).map(q => [q.user, q.windows[0].used]), [["a@x.com", 32]], "the refreshed card's reply was dropped");
+});
