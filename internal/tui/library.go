@@ -8,6 +8,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"path"
 	"runtime"
 	"slices"
 	"strings"
@@ -456,6 +457,18 @@ func (m *model) openProbe(p *library.Probe) {
 	m.pk.refilter()
 	m.mode = modePick
 	m.back = modeList
+	// skills too big to install on their own, not in the list (#2062)
+	var left []string
+	for _, l := range p.Left {
+		name := p.Source
+		if l.Path != "" {
+			name = path.Base(l.Path)
+		}
+		left = append(left, fmt.Sprintf("%s (%d MB)", name, l.Size>>20))
+	}
+	if len(left) > 0 {
+		m.flash = "too big to install, over 200 MB a skill: " + strings.Join(left, ", ")
+	}
 }
 
 // editedMsg is the shared instructions as the editor left them.

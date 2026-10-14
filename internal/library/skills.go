@@ -621,8 +621,11 @@ type Probe struct {
 	Source     string      `json:"source"`
 	Kind       string      `json:"kind"`
 	Candidates []Candidate `json:"candidates"`
-	root       string      // the folder the candidates' paths are in
-	src        Source
+	// Left is the skills there too big to install on their own, left out
+	// of the candidates (#2062)
+	Left []LeftOut `json:"left,omitempty"`
+	root string    // the folder the candidates' paths are in
+	src  Source
 }
 
 var probes = struct {
@@ -917,6 +920,7 @@ func ProbeSkills(input string) (*Probe, error) {
 			return nil, fmt.Errorf("%s has no folder %s", src.Repo, src.Path)
 		}
 		p.Candidates = candidates(tmp, src.Path)
+		p.Left = tookLeftOut(tmp, src.Path)
 		probes.Lock()
 		if old := probes.m[input]; old != nil {
 			os.RemoveAll(old.tmp)

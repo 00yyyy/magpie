@@ -311,6 +311,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-empty b { font-weight: 600; font-size: 13px; }
 .lib-empty p { margin: 0 0 8px; font-size: 12px; color: var(--muted); max-width: 380px; line-height: 1.5; }
 .lib-none { padding: 14px; font-size: 12px; color: var(--muted); }
+.lib-none.lib-left { padding: 4px 4px 2px; overflow-wrap: anywhere; }
 /* the page in outline while the library loads: it comes in only after a
    moment, so a quick load goes straight to the page; one sweep of light
    runs across every bar at once */

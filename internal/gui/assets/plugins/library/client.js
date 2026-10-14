@@ -4178,7 +4178,9 @@ magpie.plugin("library", (ctx) => {
   function probeResult(p) {
     const box = el("div", "lib-probe");
     const c = p.found.candidates;
-    if (!c.length) { box.append(el("div", "lib-none", t("No skills there — a skill is a folder with a SKILL.md in it."))); return box; }
+    // skills too big to install on their own, left out of the list (#2062)
+    const left = (p.found.left || []).map((x) => el("div", "lib-none lib-left", t("{name} is too big to install: {size}, over the {limit} a skill may be", { name: x.path.split("/").pop() || p.found.source, size: Math.round(x.size / 1048576) + " MB", limit: "200 MB" })));
+    if (!c.length) { box.append(...(left.length ? left : [el("div", "lib-none", t("No skills there — a skill is a folder with a SKILL.md in it."))])); return box; }
     const head = el("div", "lib-probehead");
     const src = p.found.kind === "github" ? "github.com/" + p.found.source.replace(/^https?:\/\/github\.com\//, "") : tilde(p.found.source);
     head.append(el("span", "note", c.length === 1 ? t("1 skill in {src}", { src }) : t("{n} skills in {src}", { n: c.length, src })));
@@ -4188,7 +4190,7 @@ magpie.plugin("library", (ctx) => {
       const allOn = fresh.every((x) => p.pick.has(x.path));
       head.append(button(allOn ? t("Select none") : t("Select all"), "", () => { for (const x of fresh) allOn ? p.pick.delete(x.path) : p.pick.add(x.path); render(); }));
     }
-    box.append(head);
+    box.append(head, ...left);
     if (c.length > 8) {
       const f = el("input", "lib-filter");
       f.type = "text";
