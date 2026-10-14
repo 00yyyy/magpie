@@ -3198,8 +3198,10 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		noteMember(w, r, p, model)
 	}
 	// a backend that only streams gets a non-streaming request translated
-	// (the provider is always streamed on that path) rather than relayed
-	relay := slices.Contains(s.usable(p, model), from) && (p.Account == nil || !p.Account.Stream || streamOf(body))
+	// (the provider is always streamed on that path) rather than relayed,
+	// except a plugin's on Responses, which is relayed streamed and given
+	// back whole (gathers)
+	relay := slices.Contains(s.usable(p, model), from) && (p.Account == nil || !p.Account.Stream || streamOf(body) || gathers(p, from, body))
 	// a Claude model is asked on Messages whatever API the client spoke,
 	// for the cache breakpoints the translation adds: OpenCode speaks Chat
 	// for every model, and a relay drops cache_control on Chat, so every
@@ -3622,6 +3624,13 @@ func codexClientHeader(k string) bool {
 func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.Provider, proto provider.Protocol, model string, body []byte, u *Usage) (status int, msg string, done bool) {
 	upstream := provider.UpstreamNameIn(wiresOf(r.Context()), p.ID, model)
 	body = rewriteModel(body, upstream)
+	// a client that asked for one body, of an account that only streams:
+	// asked streamed, the stream read here (gathered)
+	var gather *gathered
+	if gathers(p, proto, body) {
+		gather = &gathered{h: http.Header{}, status: http.StatusOK}
+		body = withFields(body, map[string]any{"stream": true})
+	}
 	searchFn := false    // Codex's tool search sent as a function
 	geminiWhole := false // a Gemini client's generateContent
 	// a model that wants its reasoning text back (#388, #1104)
@@ -4072,6 +4081,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		return writeError(w, proto, res.StatusCode, msg), msg, true
 	}
 	rd, sse := eventStream(res)
+	client := w
+	if gather != nil {
+		w = gather
+	}
 	h := w.Header()
 	for _, k := range []string{"Content-Type", "Request-Id", "X-Request-Id"} {
 		if v := res.Header.Get(k); v != "" {
@@ -4208,6 +4221,14 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	if sse {
 		sniff.drain()
+	}
+	if gather != nil {
+		cut := ""
+		if rerr != nil && rerr != io.EOF {
+			cut = cutMidReply(p.Name, rerr)
+		}
+		status, msg := gather.finish(client, p, sse, cut, sniff.failed)
+		return status, msg, true
 	}
 	if sse && r.Context().Err() == nil && !sniff.whole() {
 		// the upstream died mid-reply, or ended it short of its last
