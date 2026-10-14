@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,7 +30,20 @@ type pluginSubJSON struct {
 	Methods  []plugin.Method `json:"methods"`
 	SignedIn bool            `json:"signedIn"`
 	Models   int             `json:"models"`
+	// Options are the switches the plugin declares (auth.options, #2038),
+	// each with where it stands now
+	Options []pluginOptionJSON `json:"options,omitempty"`
 }
+
+// pluginOptionJSON is a plugin's option with the user's value, else its
+// default.
+type pluginOptionJSON struct {
+	plugin.Option
+	On bool `json:"on"`
+}
+
+// pluginOptionKey is the key an option may have, as the host checks it.
+var pluginOptionKey = regexp.MustCompile(`^[a-z0-9_-]{1,40}$`)
 
 // pluginIcon is the vendor's icon: the one the plugin gives its provider,
 // else the one the plugin market gives the plugin or its provider, else
@@ -57,10 +71,15 @@ func pluginIcon(pp plugin.Provider) string {
 
 func pluginSubs() []pluginSubJSON {
 	out := []pluginSubJSON{}
+	chosen := settings.Load().PluginOptions
 	for _, pp := range plugin.Cached() {
+		var opts []pluginOptionJSON
+		for _, o := range pp.Options {
+			opts = append(opts, pluginOptionJSON{o, plugin.OptionOn(chosen, pp.ID, o)})
+		}
 		out = append(out, pluginSubJSON{
 			ID: provider.PluginID(pp.ID), PID: pp.ID, Name: pp.Name, Icon: pluginIcon(pp), Spec: pp.Spec,
-			Methods: pp.Methods, SignedIn: pp.SignedIn, Models: len(pp.Models),
+			Methods: pp.Methods, SignedIn: pp.SignedIn, Models: len(pp.Models), Options: opts,
 		})
 	}
 	return out

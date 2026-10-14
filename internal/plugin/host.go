@@ -887,6 +887,7 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		"directory":     settings.Dir(),
 		"config":        l.Config,
 		"prefer":        l.Prefer,
+		"options":       settings.Load().PluginOptions,
 		"plugins":       items,
 	}, &res)
 	if err != nil {

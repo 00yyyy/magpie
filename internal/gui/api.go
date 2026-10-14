@@ -41,6 +41,7 @@ import (
 	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/mcpauth"
 	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/redact"
@@ -1169,6 +1170,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.FastPicks = cur.FastPicks             // switched in the agents' pickers (#954)
 		in.AgentEfforts = cur.AgentEfforts       // picked in an agent's row (#1003)
 		in.PluginCheckins = cur.PluginCheckins   // set on its own (plugin-checkin below)
+		in.PluginOptions = cur.PluginOptions     // set on its own (plugin-option below)
 		in.CheckinOff = cur.CheckinOff           // set on its own (checkin-account below)
 		settings.CarryPerModel(&in, &cur)
 		in.LAN, in.LANKey = cur.LAN, cur.LANKey
@@ -1719,6 +1721,43 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			fail(rw, err)
 			return
 		}
+		writeJSON(rw, settingsState())
+	})
+	// and a switch a plugin declares for its provider (auth.options, #2038),
+	// by the plugin's own provider id, handed to the running host at once
+	mux.HandleFunc("POST /api/settings/plugin-option", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Provider string
+			Key      string
+			On       bool
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if in.Provider == "" || !pluginOptionKey.MatchString(in.Key) {
+			fail(rw, errors.New("no provider or no such option"))
+			return
+		}
+		s := settings.Load()
+		s.PluginOptions = maps.Clone(s.PluginOptions)
+		if s.PluginOptions == nil {
+			s.PluginOptions = map[string]map[string]bool{}
+		}
+		own := maps.Clone(s.PluginOptions[in.Provider])
+		if own == nil {
+			own = map[string]bool{}
+		}
+		own[in.Key] = in.On
+		s.PluginOptions[in.Provider] = own
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		// best effort: a host that misses it reads them when it next starts
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		_ = plugin.SetProviderOptions(ctx)
+		cancel()
 		writeJSON(rw, settingsState())
 	})
 	// and one account's daily check-in, whichever vendor's (#1902): off

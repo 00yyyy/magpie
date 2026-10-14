@@ -265,6 +265,19 @@ switch on through a focus refresh and lets the next click turn it off.
 [`plugin-checkin.test.cjs`](../../internal/gui/tests/plugin-checkin.test.cjs)
 covers both response shapes, refreshes and the subsequent toggle.
 
+### Plugin options
+
+A plugin provider's editor shows the options its plugin declares
+(`pluginOptionsField` in [`app.js`](../../internal/gui/assets/app.js); see
+[provider-plugins.md](provider-plugins.md#a-plugins-own-options)). The
+plugin's label, description and `confirm` text go in as text, never as HTML.
+A change is kept in `draft.pluginOptions` until Save, which posts each one
+to `POST /api/settings/plugin-option` before the provider's own save. An
+option switched back to where it was is dropped from the draft, so it isn't
+posted and doesn't make the editor dirty.
+[`plugin-options.test.cjs`](../../internal/gui/tests/plugin-options.test.cjs)
+covers it.
+
 ### Shared UI rules
 
 - Settings → General is laid out as macOS System Settings is (1ooogle on X): a row says its name alone when that says enough (Appearance, Language, Text size, the fonts, the tray click, the Codex model rows, Open at login, Show in Dock), and keeps one short line where the setting isn't clear from its name or has a consequence (Long conversations, Lightweight mode, Prevent sleep, Session terminal, Codex subagents). A font row's line shows only while its fonts load or fail; the text size keys are the choices' tooltip. Language is one menu button showing the language picked, opened in the app's menu (`renderLangPick`). See `settings-general.test.cjs`.

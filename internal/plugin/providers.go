@@ -103,6 +103,9 @@ type Provider struct {
 	// Checkin says the plugin presses its vendor's daily check-in for each
 	// account (auth.checkin)
 	Checkin bool `json:"checkin,omitempty"`
+	// Options are the switches the plugin declares for the provider
+	// (auth.options, #2038), as the host checked them
+	Options []Option `json:"options,omitempty"`
 	// Decide says the plugin serves a decision API (TypeSafe's System
 	// One) for this provider: its config hook set decide on it. magpie
 	// posts the questions to the provider's own base, at /systemone,
@@ -132,6 +135,38 @@ type Provider struct {
 	// magpie.maxConcurrency); 0 for none said. The user's setting on the
 	// provider goes over it.
 	MaxConcurrency int `json:"maxConcurrency,omitempty"`
+}
+
+// Option is a switch a plugin declares for its provider (auth.options,
+// #2038): magpie shows it, keeps the user's value in settings'
+// PluginOptions and hands it to the plugin (input.magpie.option). Nothing
+// runs when it changes.
+type Option struct {
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+	Default     bool   `json:"default,omitempty"`
+	// Confirm is asked before the switch is turned on, when the plugin
+	// says turning it on does something the user should agree to
+	Confirm string `json:"confirm,omitempty"`
+}
+
+// OptionOn is option o of a provider as it stands with the user's values
+// in chosen (settings' PluginOptions): theirs, else the plugin's default.
+func OptionOn(chosen map[string]map[string]bool, provider string, o Option) bool {
+	if v, ok := chosen[provider][o.Key]; ok {
+		return v
+	}
+	return o.Default
+}
+
+// SetProviderOptions hands the user's option values (settings' PluginOptions) to
+// the host running now; a host started later reads them at its start.
+func SetProviderOptions(ctx context.Context) error {
+	if !Running() {
+		return nil
+	}
+	return Call(ctx, "setProviderOptions", map[string]any{"options": settings.Load().PluginOptions}, nil)
 }
 
 // Account is one account a provider is signed in to: Key is where

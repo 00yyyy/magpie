@@ -464,6 +464,13 @@ with the result on each account's Usage card. A check-in the vendor wants a
 captcha for is shown as such (check in in the vendor's app); magpie never
 solves captchas. See [provider-plugins.md](subsystems/provider-plugins.md#a-plugins-daily-check-in).
 
+A plugin can also declare its own switches for its provider (`auth.options`).
+They are listed under **Plugin options** in the provider's editor, an Off/On
+each with the plugin's own words, and saved with the provider. The values are
+kept in `pluginOptions` in `settings.json`, and the plugin reads them as it
+works. Changing one starts nothing by itself. See
+[provider-plugins.md](subsystems/provider-plugins.md#a-plugins-own-options).
+
 The gateway issues **gateway keys** for clients, separate from a provider's
 upstream API keys. Turn on **Settings → Share on local network**, then open
 **Gateway → Gateway keys → Add gateway key**. This block appears only while

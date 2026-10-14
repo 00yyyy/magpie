@@ -280,6 +280,13 @@ method's questions (a pick, then a text the plugin checks), then takes the
 code the browser page shows; an API-key way opens the account. English and
 Chinese, Chromium and WebKit, with the API faked.
 
+`plugin-options.test.cjs` checks the switches a plugin declares for its
+provider (#2038), in its editor: the plugin's words shown as text, wrapped
+inside the editor; a confirm asked before one is turned on, and Cancel
+leaving it off; Save posting each changed one by the plugin's provider id
+before the provider, and none switched back. Chromium and WebKit, 1100 and
+420 wide, every language.
+
 `plugin-move-overflow.test.cjs` checks a Plugins card that offers a
 built-in's accounts: the button is one word beside the name, as Install is
 ("Move", its title saying whose accounts and how many), on one line, and it

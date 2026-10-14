@@ -7471,6 +7471,52 @@ function priceRateField() {
   box.oninput = () => { draft.priceRate = box.value; };
   return field(t("Price rate"), box, t("Costs are counted at the official price times this, as a relay bills, like 0.8 or 1.5; a price you set for a model stays as set"));
 }
+// pluginOptionsField: the switches a plugin declares for its provider
+// (auth.options, #2038, Vocllum), each an Off/On beside the plugin's own
+// words for it, put in as text. One the plugin asks to confirm is asked
+// before it is turned on. A change is kept in the draft as
+// pluginOptions[key] and saved with the provider; nothing runs when it is,
+// the plugin reads the value when it next wants it.
+function pluginOptionsField(sub) {
+  const opts = sub?.plugin?.options || [];
+  if (!opts.length) return [];
+  const now = (o) => (draft.pluginOptions && o.key in draft.pluginOptions ? draft.pluginOptions[o.key] : !!o.on);
+  const set = (o, on) => {
+    const own = { ...draft.pluginOptions };
+    if (on === !!o.on) delete own[o.key]; else own[o.key] = on;
+    if (Object.keys(own).length) draft.pluginOptions = own; else delete draft.pluginOptions;
+  };
+  const box = el("div", "stack plugin-options");
+  for (const o of opts) {
+    const row = el("div", "plugin-option");
+    row.dataset.key = o.key;
+    const text = el("div", "plugin-option-text");
+    text.append(el("div", "n", o.label));
+    if (o.description) text.append(el("div", "hint", o.description));
+    const draw = () => {
+      const seg = segs([["off", t("Off")], ["on", t("On")]], now(o) ? "on" : "off", async (v) => {
+        if (v === "on" && !now(o) && o.confirm && !(await confirmAction(t("Turn on {name}?", { name: o.label }), o.confirm, t("Turn on")))) {
+          seg.replaceWith(draw());
+          return;
+        }
+        set(o, v === "on");
+      });
+      return seg;
+    };
+    row.append(text, draw());
+    box.append(row);
+  }
+  return field(t("Plugin options"), box, t("{plugin} declares these and reads them as it works; nothing runs on its own when one changes.", { plugin: sub.plugin.name || sub.plugin.pid }));
+}
+// savePluginOptions saves the plugin options changed in the draft, by the
+// plugin's own provider id.
+async function savePluginOptions(sub) {
+  const pid = sub?.plugin?.pid;
+  if (!pid) return;
+  for (const [key, on] of Object.entries(draft.pluginOptions || {})) {
+    prefs = await writingPrefs(api("settings/plugin-option", { provider: pid, key, on }));
+  }
+}
 // priceRateOfDraft is the draft's rate as it is saved — null for none,
 // else the number — or undefined when what is typed isn't one.
 function priceRateOfDraft() {
@@ -8546,6 +8592,7 @@ function drawEditor(p, presetID) {
     ed.append(...concurrencyField(p));
     ed.append(...priceRateField());
     if (p.cline) ed.append(...upstreamField());
+    ed.append(...pluginOptionsField(subOf(a.agent)));
     // a plugin's provider is reached inside magpie: its plugin:// URLs go
     // nowhere to show or test
     const urls = [p.chat, p.responses, p.anthropic].filter(Boolean);
@@ -8581,7 +8628,9 @@ function drawEditor(p, presetID) {
       const priceRate = priceRateOfDraft();
       if (priceRate === undefined) return priceRateError(ed);
       if (priceTypedError(ed)) return;
-      saving(saveBtn, t("Saving…")); providerAction("save", { id: p.id, models: chosenIds(), noModels: noneChosen(), unlisted: draft.unlisted, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...routingOfDraft(p) }, t("{name} saved", { name: p.name })); };
+      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), unlisted: draft.unlisted, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...routingOfDraft(p) };
+      saving(saveBtn, t("Saving…"));
+      savePluginOptions(subOf(a.agent)).then(() => providerAction("save", body, t("{name} saved", { name: p.name })), (e) => { doneSaving(saveBtn); editorError(e.message || String(e)); }); };
     bar.append(cancel, saveBtn);
     ed.append(bar);
     return ed;

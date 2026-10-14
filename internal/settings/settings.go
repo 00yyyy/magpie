@@ -184,6 +184,10 @@ type Settings struct {
 	// on or off, by the plugin's provider id; one not set follows its
 	// vendor's switch above, which the plugin took over, else is off.
 	PluginCheckins map[string]bool `json:"pluginCheckins,omitempty"`
+	// PluginOptions are the user's values of the switches plugins declare
+	// for their providers (auth.options, #2038): provider id → the
+	// option's key → on. A key not here takes the plugin's default.
+	PluginOptions map[string]map[string]bool `json:"pluginOptions,omitempty"`
 	// CheckinOff are the accounts left out of their vendor's daily
 	// check-in while it is on (#1902), each by its entry in the vendor's
 	// check-in file: "<site or provider>|<account id>" ("workbuddy|<uid>",
