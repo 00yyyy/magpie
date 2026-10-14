@@ -290,6 +290,43 @@ func TestClaudeDesktopChangedSince(t *testing.T) {
 	}
 }
 
+// #2035 (capiton0): settings the user made in Desktop's third-party window
+// live in magpie's profile. Switching Desktop off magpie and on again
+// brings them back, the gateway's address and key set anew.
+func TestClaudeDesktopOffOnKeepsTheUsersSettings(t *testing.T) {
+	home, p := desktopSandbox(t)
+	os.MkdirAll(p.dir, 0o755)
+	a := claudeDesktop(home)
+	f := a.Field("provider")
+	if err := f.Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	desktopWrite(t, p.prof, `{"inferenceProvider":"gateway","inferenceGatewayBaseUrl":"http://old:1","inferenceGatewayApiKey":"old","inferenceGatewayAuthScheme":"bearer",`+
+		`"disableDeploymentModeChooser":false,"coworkEgressAllowedHosts":["corp.example"],"inferenceModels":["claude-opus-4-7"],"isClaudeCodeForDesktopEnabled":true}`)
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(p.prof); !os.IsNotExist(err) {
+		t.Fatal("magpie's profile is still there after off")
+	}
+	if err := f.Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	prof := desktopJSON(t, p.prof)
+	want := map[string]any{
+		"inferenceProvider": "gateway", "inferenceGatewayBaseUrl": gateway.URL(),
+		"inferenceGatewayApiKey": "magpie-claude-desktop", "inferenceGatewayAuthScheme": "bearer",
+		"disableDeploymentModeChooser": false, "coworkEgressAllowedHosts": []any{"corp.example"},
+		"inferenceModels": []any{"claude-opus-4-7"}, "isClaudeCodeForDesktopEnabled": true,
+	}
+	if !reflect.DeepEqual(prof, want) {
+		t.Errorf("profile after off and on:\n%v\nwant\n%v", prof, want)
+	}
+	if f.Get() != "magpie" || a.Check() != "" {
+		t.Errorf("get %q, check %q", f.Get(), a.Check())
+	}
+}
+
 // A file magpie can't read as Desktop writes it is left alone, and so is
 // everything else.
 func TestClaudeDesktopRefusesOddFiles(t *testing.T) {

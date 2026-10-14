@@ -295,6 +295,9 @@ func desktopObject(path string) error {
 // The stash keeps what Desktop had before magpie: each file's
 // deploymentMode ("" when it had none), the profile applied, and the
 // files and folders magpie made, so switching off puts all of it back.
+// It also keeps magpie's profile as it was when switched off, the
+// settings the user made in it from Desktop's window among them, so
+// switching on again brings them back (#2035).
 // A package's folders keep theirs under the same keys ending in ".package".
 const (
 	desktopStashed = "claude-desktop.on"
@@ -302,9 +305,10 @@ const (
 	desktopMode3p  = "claude-desktop.mode3p"
 	desktopApplied = "claude-desktop.applied"
 	desktopMade    = "claude-desktop.made"
+	desktopProfile = "claude-desktop.profile"
 )
 
-var desktopStashKeys = []string{desktopStashed, desktopMode, desktopMode3p, desktopApplied, desktopMade}
+var desktopStashKeys = []string{desktopStashed, desktopMode, desktopMode3p, desktopApplied, desktopMade, desktopProfile}
 
 // desktopAdoptStash moves the stash a packaged Desktop's folders got
 // before they had keys of their own (when magpie wrote only one set) onto
@@ -365,12 +369,17 @@ func desktopOn(p desktopPaths) error {
 	}
 
 	// the profile: the gateway's address and key set, Desktop's own
-	// settings in it (the user's, from its window) kept
+	// settings in it (the user's, from its window) kept, and those it had
+	// when switched off put back (#2035)
 	if b, _ := edit.Read(p.prof); len(bytes.TrimSpace(b)) == 0 {
 		if err := os.MkdirAll(p.library, 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(p.prof, []byte("{}\n"), 0o600); err != nil {
+		was := []byte("{}\n")
+		if kept := unstash(desktopProfile + p.key); kept != "" && desktopObjectBytes([]byte(kept)) {
+			was = []byte(kept)
+		}
+		if err := os.WriteFile(p.prof, was, 0o600); err != nil {
 			return err
 		}
 	}
@@ -478,6 +487,11 @@ func desktopOff(p desktopPaths) error {
 			return err
 		}
 	}
+	// the profile goes, and what is in it is kept for the next on: the
+	// settings the user made in it are theirs (#2035)
+	if b, err := os.ReadFile(p.prof); err == nil && desktopObjectBytes(b) && !desktopEmpty(b) {
+		stash(map[string]string{desktopProfile + k: string(b)})
+	}
 	if err := os.Remove(p.prof); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -498,6 +512,12 @@ func desktopOff(p desktopPaths) error {
 		}
 	}
 	return nil
+}
+
+// desktopObjectBytes: b is a JSON object.
+func desktopObjectBytes(b []byte) bool {
+	var m map[string]json.RawMessage
+	return json.Unmarshal(b, &m) == nil && m != nil
 }
 
 func desktopEmpty(b []byte) bool {
