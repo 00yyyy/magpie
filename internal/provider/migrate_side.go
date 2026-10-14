@@ -18,7 +18,7 @@ import (
 func init() {
 	movers["devin"] = &mover{
 		pkg:    "@magpie-community/opencode-devin-auth",
-		min:    "0.1.14", // a tool whose parameters have a root anyOf, oneOf or allOf goes as a plain object (#1196), a branch that is a union itself folded too (#1271); a turn's parallel calls split over two assistant messages keep their results (#1275); a temperature or top_p of 0 goes as 1e-6, which Devin takes (plugins #50); a call id with ":" or "#" goes to the agent as one Claude Code takes, and back to Devin as it was (#1304); a week used up, its share left out of GetUserStatus, is 100% and holds the account until its reset (面条)
+		min:    "0.1.16", // a tool whose parameters have a root anyOf, oneOf or allOf goes as a plain object (#1196), a branch that is a union itself folded too (#1271); a turn's parallel calls split over two assistant messages keep their results (#1275); a temperature or top_p of 0 goes as 1e-6, which Devin takes (plugins #50); a call id with ":" or "#" goes to the agent as one Claude Code takes, and back to Devin as it was (#1304); a week used up, its share left out of GetUserStatus, is 100% and holds the account until its reset (面条); SWE-2, which Devin's quota doesn't count (its Free cost tier), is left out of the day and week and listed free, so a used-up quota no longer holds it (太陽と向日葵)
 		agents: []string{"devin"},
 		// a variant picked before the families were one model (swe-2-high)
 		// goes to Devin as it is, through the plugin too, which keeps the
