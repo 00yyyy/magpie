@@ -3954,6 +3954,32 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	})
 }
 
+// bridgeFailed is the status and words a client is answered with when an
+// agent's run ended in an error before any answer: the status the agent
+// got, else a guess from the words, else 502.
+//
+// Claude Code says "Prompt is too long" with no status when its own check
+// turned the conversation away before asking Anthropic (#2162). That is a
+// conversation that no longer fits, not an upstream fault: as a 502 a
+// client such as pi neither compacts nor shows why. It is a 400, as
+// Anthropic's own too-long answer is, and says whose check it was and
+// what lowers it. Claude Code holds a subscription to 200K once Anthropic
+// has said the account needs extra usage for long context, whatever the
+// model's window.
+func bridgeFailed(name, msg string, status int) (int, string) {
+	switch {
+	case status >= 400:
+		return status, msg
+	case quotaSaid(msg):
+		return 429, msg
+	case name == "Claude Code" && tooLong(400, msg):
+		return 400, msg + " (Claude Code's own check, before Anthropic was asked: it holds a conversation to its own limit for the account, " +
+			"200K once Anthropic has said the account needs extra usage for long context. " +
+			"Compact the conversation, or turn on extra usage for the Claude account.)"
+	}
+	return 502, msg
+}
+
 // relay answers the client with a reply's events: abort is called when
 // there is no answer to give, ended when one was given, before its last
 // event goes out.
@@ -3979,12 +4005,7 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 			code := 502
 			if n > 0 {
 				usage.add(Usage{ErrType: head[n-1].Code, RequestID: head[n-1].RequestID})
-				// the status Claude Code got, else a guess from the words
-				if head[n-1].Status >= 400 {
-					code = head[n-1].Status
-				} else if quotaSaid(msg) {
-					code = 429
-				}
+				code, msg = bridgeFailed(name, msg, head[n-1].Status)
 			}
 			return writeError(w, from, code, name+": "+msg), msg
 		}
@@ -4039,14 +4060,9 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 	if col.err != "" && !saidAnything(col.res.Parts) {
 		abort()
 		// a status, as in a stream, so another account can take over
-		code := 502
 		usage.add(Usage{ErrType: col.errCode})
-		if col.errStatus >= 400 {
-			code = col.errStatus
-		} else if quotaSaid(col.err) {
-			code = 429
-		}
-		return writeError(w, from, code, name+": "+col.err), col.err
+		code, msg := bridgeFailed(name, col.err, col.errStatus)
+		return writeError(w, from, code, name+": "+msg), msg
 	}
 	ended(said, stop, col.err == "" && r.Context().Err() == nil)
 	if begin != nil {
