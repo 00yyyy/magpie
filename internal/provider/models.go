@@ -1651,6 +1651,9 @@ func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 	if pr, ok := p.cursorFastPrice(model); ok {
 		return pr, true
 	}
+	if pr, ok := p.factoryFastPrice(model); ok {
+		return pr, true
+	}
 	names := pricedNames(model)
 	if p.kimiCodeMember() {
 		if id, ok := kimiCodeAPI[strings.ToLower(strings.TrimSpace(model))]; ok {
@@ -1754,6 +1757,49 @@ func (p Provider) cursorFastPrice(model string) (catalog.Price, bool) {
 		pr.Tiers = slices.Clone(pr.Tiers)
 	}
 	return pr, ok
+}
+
+// factoryFastTimes is how many times its base model's list price each
+// Fast Mode model Factory offers is billed at by the model's maker
+// (droid's ids, the factory plugin's MODELS): Anthropic's fast mode is 2x
+// on Opus 5.5 ($8 / $40), Opus 5 and Opus 4.8 ($10 / $50), cache prices
+// with it; OpenAI's priority tier is 2.5x on GPT-5.5 and 2x on GPT-5.4 and
+// GPT-5.3-Codex, cache with it (models.dev's vercel gpt-5.5-fast $12.5 /
+// $75 / $1.25 cached, gpt-5.4-fast $5 / $30, gpt-5.3-codex-fast $3.5 /
+// $28). No catalog lists Factory's -fast ids, so a call on one was priced
+// at its served model's standard price, Factory naming the base model in
+// its reply (plugins#119, psylch).
+var factoryFastTimes = map[string]float64{
+	"claude-opus-5-5": 2, "claude-opus-5": 2, "claude-opus-4-8": 2,
+	"gpt-5.5": 2.5, "gpt-5.4": 2, "gpt-5.3-codex": 2,
+}
+
+// servedByFactory is whether p is a Factory account: the built-in's or the
+// Factory plugin's.
+func (p Provider) servedByFactory() bool {
+	if p.Account == nil {
+		return false
+	}
+	return p.Account.Agent == "factory" || p.PluginProvider() == "factory"
+}
+
+// factoryFastPrice is a Factory Fast Mode model's list price: its base
+// model's at factoryFastTimes, tiers and cache included, on a Factory
+// account only. Elsewhere a "-fast" id is a model of its own.
+func (p Provider) factoryFastPrice(model string) (catalog.Price, bool) {
+	if !p.servedByFactory() {
+		return catalog.Price{}, false
+	}
+	base, ok := strings.CutSuffix(strings.ToLower(strings.TrimSpace(model)), "-fast")
+	times := factoryFastTimes[base]
+	if !ok || times == 0 {
+		return catalog.Price{}, false
+	}
+	pr, ok := p.ListPrice(base)
+	if !ok {
+		return catalog.Price{}, false
+	}
+	return pr.Times(times), true
 }
 
 // membershipCatalogs are models.dev catalogs of a membership's own

@@ -142,3 +142,63 @@ func TestGrokWindowWithoutKListPrice(t *testing.T) {
 		}
 	}
 }
+
+// A Factory account's Fast Mode ids are priced at their base model's list
+// price times its maker's fast multiple (factoryFastTimes), cache and
+// tiers included, whether the built-in or the plugin serves them. Factory
+// answers claude-opus-5-5-fast naming claude-opus-5-5, so with no price
+// of its own the call was counted at standard Opus (plugins#119, psylch).
+func TestFactoryFastPrice(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	os.WriteFile(catalog.CachePath(), []byte(`{
+	  "anthropic":{"id":"anthropic","models":{
+	    "claude-opus-5-5":{"id":"claude-opus-5-5","cost":{"input":4,"output":20,"cache_read":0.2,"cache_write":5}},
+	    "claude-opus-5":{"id":"claude-opus-5","cost":{"input":5,"output":25,"cache_read":0.5,"cache_write":6.25}}}},
+	  "openai":{"id":"openai","models":{
+	    "gpt-5.5":{"id":"gpt-5.5","cost":{"input":5,"output":30,"cache_read":0.5,
+	      "tiers":[{"tier":{"type":"context","size":272000},"input":10,"output":45,"cache_read":1}]}},
+	    "gpt-5.4":{"id":"gpt-5.4","cost":{"input":2.5,"output":15,"cache_read":0.25}},
+	    "grok-4.7":{"id":"grok-4.7","cost":{"input":2,"output":6}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+
+	builtin := Provider{ID: "factory", Name: "Factory", Account: &Account{Agent: "factory"}}
+	moved := Provider{ID: "factory", Name: "Factory", Account: &Account{plugin: &plugin.Provider{ID: "factory"}}}
+	for _, p := range []Provider{builtin, moved} {
+		who := p.PluginProvider() + p.Account.Agent
+		pr, ok := p.ListPrice("claude-opus-5-5-fast")
+		if !ok || pr.Input != 8 || pr.Output != 40 || pr.CacheRead != 0.4 || pr.CacheWrite != 10 || pr.CacheWrite1h != 16 {
+			t.Errorf("%s ListPrice(claude-opus-5-5-fast) = %+v, %v; want 2x Opus 5.5: $8/$40, $0.4 read, $10 and $16 writes", who, pr, ok)
+		}
+		if pr, ok := p.ListPrice("claude-opus-5-fast"); !ok || pr.Input != 10 || pr.Output != 50 {
+			t.Errorf("%s ListPrice(claude-opus-5-fast) = %+v, %v; want $10/$50", who, pr, ok)
+		}
+		pr, ok = p.ListPrice("gpt-5.5-fast")
+		if !ok || pr.Input != 12.5 || pr.Output != 75 || pr.CacheRead != 1.25 {
+			t.Errorf("%s ListPrice(gpt-5.5-fast) = %+v, %v; want 2.5x: $12.5/$75/$1.25", who, pr, ok)
+		} else if long := pr.At(300000); long.Input != 25 || long.Output != 112.5 {
+			t.Errorf("%s gpt-5.5-fast past 272k = %+v; want 2.5x its tier: $25/$112.5", who, long)
+		}
+		if pr, ok := p.ListPrice("gpt-5.4-fast"); !ok || pr.Input != 5 || pr.Output != 30 || pr.CacheRead != 0.5 {
+			t.Errorf("%s ListPrice(gpt-5.4-fast) = %+v, %v; want $5/$30/$0.5", who, pr, ok)
+		}
+		// the base model stays at its own price
+		if pr, ok := p.ListPrice("claude-opus-5-5"); !ok || pr.Input != 4 {
+			t.Errorf("%s ListPrice(claude-opus-5-5) = %+v, %v; want $4", who, pr, ok)
+		}
+		// a -fast id Factory has no Fast Mode of
+		if pr, ok := p.ListPrice("grok-4.7-fast"); ok {
+			t.Errorf("%s ListPrice(grok-4.7-fast) = %+v; want unpriced", who, pr)
+		}
+	}
+	// elsewhere a -fast id is no Factory Fast Mode model
+	other := Provider{ID: "claude", Name: "Claude", Account: &Account{Agent: "claude"}}
+	if pr, ok := other.ListPrice("claude-opus-5-5-fast"); ok {
+		t.Errorf("claude ListPrice(claude-opus-5-5-fast) = %+v; want unpriced", pr)
+	}
+}
