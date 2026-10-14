@@ -276,7 +276,7 @@ func TestForeignPagesRefused(t *testing.T) {
 		{"http://localhost:5173", "127.0.0.1:3425", loop, ""},                        // a page on this computer
 		{"http://127.0.0.2:8080", "127.0.0.1:3425", loop, ""},                        // 127.0.0.0/8
 		{"http://[::1]:3000", "[::1]:3425", "[::1]:50123", ""},                       // IPv6 loopback
-		{"http://tauri.localhost", "127.0.0.1:3425", loop, ""},                       // Tauri's webview on Windows
+		{"http://tauri.localhost", "127.0.0.1:3425", loop, secret},                   // a localhost subdomain, with a key (keyless on Windows: TestLocalhostSubdomainNeedsAKey)
 		{"https://app.example.com", "127.0.0.1:3425", loop, secret},                  // listed, with its key
 		{"http://192.168.1.5:3425", "192.168.1.5:3425", "192.168.1.9:50123", secret}, // the gateway's own origin, shared on the LAN
 		{"https://magpie.example.com", "magpie.example.com", loop, secret},           // its own origin behind a port-443 name, with a key (without one, a rebound page: TestReboundPageRefused)
@@ -380,6 +380,135 @@ func TestOpaqueOriginNeedsAKey(t *testing.T) {
 		if w := do("POST", "/v1/chat/completions", o, ""); w.Code != http.StatusOK {
 			t.Errorf("%s as before: %d %s", o, w.Code, w.Body)
 		}
+	}
+}
+
+// A page at a subdomain of localhost (#2256, ggbdpq) is not this
+// computer's in every browser: Chrome and Firefox resolve *.localhost to
+// loopback by a rule of their own, but Safari and other WebKit views ask
+// the system resolver, which before macOS 26 asks the network's DNS (WebKit
+// bug 160504, closed when macOS 26 resolved it below WebKit). A resolver
+// that answers such a name — a captive portal's, a hostile network's —
+// serves the page from anywhere, and it then reaches the gateway two ways:
+// cross-origin from http://evil.localhost with a "simple" text/plain POST,
+// and rebound, at http://evil.localhost:3425 itself once the name turns to
+// 127.0.0.1, where its GET carries no Origin. Both are held to an enabled
+// gateway key, as Origin "null" is (#2242). localhost itself, which the
+// system answers from its hosts file, is unchanged, and so are
+// tauri.localhost and wails.localhost on Windows, where Tauri's and
+// Wails' webviews serve themselves and no browser asks the DNS for them.
+func TestLocalhostSubdomainNeedsAKey(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	var hits atomic.Int64
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)
+	}))
+	defer up.Close()
+	if err := provider.Save(provider.Provider{ID: "plan", Name: "Plan", Key: "upstream-secret", Chat: up.URL + "/v1", Models: []string{"m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := access.Update("add-key", access.Change{Name: "Local page"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// what Safari sends: a "simple" POST, so no preflight comes first
+	do := func(method, path, host, origin, key string) *httptest.ResponseRecorder {
+		t.Helper()
+		var body io.Reader
+		if method == "POST" {
+			body = strings.NewReader(chatReq)
+		}
+		r := httptest.NewRequest(method, path, body)
+		r.RemoteAddr = "127.0.0.1:50123"
+		r.Host = host
+		site := "same-origin"
+		if origin != "" {
+			r.Header.Set("Origin", origin)
+			site = "cross-site"
+		}
+		r.Header.Set("Sec-Fetch-Site", site)
+		r.Header.Set("Sec-Fetch-Mode", "no-cors")
+		r.Header.Set("Content-Type", "text/plain;charset=UTF-8")
+		r.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15")
+		if key != "" {
+			r.Header.Set("Authorization", "Bearer "+key)
+		}
+		w := httptest.NewRecorder()
+		lanGuard(New().Handler()).ServeHTTP(w, r)
+		return w
+	}
+	routes := []struct{ method, path string }{
+		{"POST", "/v1/chat/completions"},
+		{"POST", "/v1/messages"},
+		{"POST", "/v1/responses"},
+		{"POST", "/v1/embeddings"},
+		{"GET", "/v1/models"},
+		{"GET", "/v1/magpie/quotas"},
+	}
+	const gw = "127.0.0.1:3425"
+	for _, os := range []string{"darwin", "linux", "windows"} {
+		t.Run(os, func(t *testing.T) {
+			was := webviewOS
+			webviewOS = os
+			t.Cleanup(func() { webviewOS = was })
+			hits.Store(0)
+			// cross-origin, from a page at any subdomain; on macOS and
+			// Linux the two webview names too, which a hostile resolver
+			// answers as readily
+			pages := []string{"http://evil.localhost", "http://evil.localhost:8080", "HTTP://Free-Gift.LOCALHOST", "http://a.b.localhost"}
+			if os != "windows" {
+				pages = append(pages, "http://tauri.localhost", "http://wails.localhost")
+			}
+			for _, o := range pages {
+				for _, p := range routes {
+					if w := do(p.method, p.path, gw, o, ""); w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "gateway key") || w.Header().Get("Access-Control-Allow-Origin") != "" {
+						t.Errorf("%s %s from %s with no key: %d %s", p.method, p.path, o, w.Code, w.Body)
+					}
+				}
+			}
+			// rebound: the page's own name turned to 127.0.0.1, its GET
+			// with no Origin and its POST with its own
+			for _, p := range routes {
+				o := ""
+				if p.method == "POST" {
+					o = "http://evil.localhost:3425"
+				}
+				if w := do(p.method, p.path, "evil.localhost:3425", o, ""); w.Code != http.StatusForbidden {
+					t.Errorf("%s %s rebound at evil.localhost with no key: %d %s", p.method, p.path, w.Code, w.Body)
+				}
+			}
+			if n := hits.Load(); n != 0 {
+				t.Fatalf("a localhost subdomain with no key reached the vendor %d times", n)
+			}
+			// with an enabled key it is answered, both ways, and reads
+			// nothing more (no CORS headers)
+			if w := do("POST", "/v1/chat/completions", gw, "http://evil.localhost", secret); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "ok") || w.Header().Get("Access-Control-Allow-Origin") != "" {
+				t.Errorf("cross-origin with its key: %d %s", w.Code, w.Body)
+			}
+			if w := do("GET", "/v1/models", "evil.localhost:3425", "", secret); w.Code != http.StatusOK {
+				t.Errorf("rebound with its key: %d %s", w.Code, w.Body)
+			}
+			// answered as before: a page at localhost itself, and the two
+			// webviews on Windows
+			keyless := []string{"http://localhost:5173", "http://127.0.0.1:8080"}
+			if os == "windows" {
+				keyless = append(keyless, "http://tauri.localhost", "http://wails.localhost")
+			}
+			for _, o := range keyless {
+				if w := do("POST", "/v1/chat/completions", gw, o, ""); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "ok") {
+					t.Errorf("%s as before: %d %s", o, w.Code, w.Body)
+				}
+			}
+			for _, host := range []string{"localhost:3425", "LOCALHOST.:3425", "docker.for.mac.localhost:3425"} {
+				if w := do("GET", "/v1/models", host, "", ""); w.Code != http.StatusOK {
+					t.Errorf("a browser at %s: %d %s", host, w.Code, w.Body)
+				}
+			}
+		})
 	}
 }
 

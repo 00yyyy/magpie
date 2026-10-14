@@ -364,13 +364,15 @@ func fromBrowser(r *http.Request) bool {
 var containerHostNames = []string{"host.docker.internal", "gateway.docker.internal", "host.containers.internal", "host.orb.internal", "docker.for.mac.localhost"}
 
 // ownHost: host (a Host header) names this computer — an IP, localhost,
-// *.localhost, or one of the names above.
+// or one of the names above. A subdomain of localhost doesn't (#2256):
+// Safari and other WebKit views ask the DNS for it, so a page served at
+// one from anywhere can have it turned to 127.0.0.1 after it loads.
 func ownHost(host string) bool {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
 	host = strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
-	if host == "" || net.ParseIP(host) != nil || host == "localhost" || strings.HasSuffix(host, ".localhost") || slices.Contains(containerHostNames, host) {
+	if host == "" || net.ParseIP(host) != nil || host == "localhost" || slices.Contains(containerHostNames, host) {
 		return true
 	}
 	if strings.EqualFold(host, PublicHost()) {

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -36,6 +37,10 @@ import (
 // app's webview send it as well). A key, as for a listed origin, still
 // lets such a client through; neither gets CORS headers, so a frame or a
 // local page still sends blind, as before.
+//
+// So is a page at a subdomain of localhost (localhostSubdomain, #2256):
+// Safari and other WebKit views ask the DNS for such a name, and a
+// resolver that answers it serves the page from anywhere.
 func corsGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
@@ -48,6 +53,11 @@ func corsGuard(next http.Handler) http.Handler {
 			if origin == "null" && !keyedCaller(r) {
 				log.Printf("refused %s %s from Origin: null: a sandboxed frame or a local page, with no gateway key", r.Method, r.URL.Path)
 				writeError(w, provider.Chat, http.StatusForbidden, "magpie doesn't answer a sandboxed frame or a local page (Origin: null) without a gateway key: create one in magpie's Gateway page and send it as Authorization: Bearer <key> (or x-api-key)")
+				return
+			}
+			if localhostSubdomain(origin) && !keyedCaller(r) {
+				log.Printf("refused %s %s from the web page %s: a localhost subdomain, with no gateway key", r.Method, r.URL.Path, origin)
+				writeError(w, provider.Chat, http.StatusForbidden, "magpie doesn't answer the web page "+origin+" without a gateway key: Safari and other WebKit browsers ask the network's DNS for a localhost subdomain, so the page may not be on this computer. Open it at localhost or 127.0.0.1, or create a key in magpie's Gateway page and send it as Authorization: Bearer <key> (or x-api-key)")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -102,10 +112,9 @@ func keyedCaller(r *http.Request) bool {
 // off, an extension holding host permissions), and no ordinary web page
 // can put one on a request, so those pass as before. "null" is not one of
 // them: any web page sends it from a sandboxed frame and a local file
-// sends it too, which corsGuard judges (a gateway key, or 403). *.localhost
-// counts as this computer: browsers resolve it to loopback, and Tauri's
-// and Wails' webviews on Windows are http://tauri.localhost and
-// http://wails.localhost, whose HTTP plugins send that Origin outside CORS.
+// sends it too, which corsGuard judges (a gateway key, or 403). A
+// subdomain of localhost isn't foreign here either, but corsGuard asks a
+// gateway key of it (localhostSubdomain).
 func foreignPage(r *http.Request, origin string) bool {
 	if origin == "" {
 		return false
@@ -133,6 +142,40 @@ func foreignPage(r *http.Request, origin string) bool {
 		return false
 	}
 	return true
+}
+
+// webviewOS is the system magpie runs on, which localhostSubdomain asks;
+// a variable so a test can be each.
+var webviewOS = runtime.GOOS
+
+// localhostSubdomain: origin is an http(s) page at a subdomain of
+// localhost (#2256, ggbdpq), which may not be on this computer. Chrome and
+// Firefox resolve *.localhost to loopback by a rule of their own, but
+// Safari and other WebKit views hand the name to the system resolver, and
+// before macOS 26 that asks the network's DNS (WebKit bug 160504, closed
+// when macOS 26 resolved it below WebKit; WebKitGTK asks whatever the
+// system's resolver is). A resolver that answers — a captive portal's, a
+// hostile network's — serves the page from anywhere, and it would send the
+// "simple" POST Origin "null" was refused for (#2242). The request doesn't
+// say which browser resolved the name, so every such page is held to a
+// key. tauri.localhost and wails.localhost on Windows are left out: Tauri's
+// and Wails' webviews there serve themselves at those names and their HTTP
+// plugins send that Origin outside CORS, and no browser on Windows asks the
+// DNS for them. On macOS and Linux those apps use tauri:// and wails://, so
+// the two names are any page's there.
+func localhostSubdomain(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	if s := strings.ToLower(u.Scheme); s != "http" && s != "https" {
+		return false
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if !strings.HasSuffix(host, ".localhost") {
+		return false
+	}
+	return webviewOS != "windows" || host != "tauri.localhost" && host != "wails.localhost"
 }
 
 // hostPort is host[:port] lower-cased with the scheme's port filled in, so
