@@ -900,6 +900,36 @@ func (d *chatDecoder) text(s string, emit func(Event)) {
 	}
 }
 
+// markedThought sends a piece of text Gemini marked as a thought
+// (extra_content.google.thought) as thinking. AI Studio's OpenAI-compatible
+// API may still wrap it in <thought> tags, and mark only the chunk with the
+// opening one: "<thought>…" marked, then "</thought>接下来我将调用 probe"
+// not (#2098). The tags are read as text's are, so that the close is
+// found in the unmarked chunk and left out of the answer; a marked chunk
+// that could be no tag's start is thinking as it is.
+func (d *chatDecoder) markedThought(s string, emit func(Event)) {
+	if s == "" {
+		return
+	}
+	tagged := d.thought || d.lead != ""
+	if lead := strings.TrimLeft(s, " \n"); !tagged && !d.past {
+		tagged = lead == ""
+		for open := range thoughtTags {
+			tagged = tagged || strings.HasPrefix(lead, open) || strings.HasPrefix(open, lead)
+		}
+	}
+	if !tagged {
+		emit(Event{Kind: KThink, Text: s})
+		return
+	}
+	d.text(s, func(ev Event) {
+		if ev.Kind == KText {
+			ev.Kind = KThink
+		}
+		emit(ev)
+	})
+}
+
 // end gives back what text was held to see whether a tag began.
 func (d *chatDecoder) end(emit func(Event)) {
 	if d.lead == "" {
@@ -992,13 +1022,12 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		} else {
 			decodeJSON(c.Delta.Content, &content)
 		}
-		if c.Delta.ExtraContent.Google.Thought {
-			t, content = t+content, ""
-		}
 		if t != "" {
 			emit(Event{Kind: KThink, Text: t})
 		}
-		if content != "" {
+		if c.Delta.ExtraContent.Google.Thought {
+			d.markedThought(content, emit)
+		} else if content != "" {
 			d.text(content, emit)
 		}
 		if len(c.Delta.ToolCalls) > 0 {
