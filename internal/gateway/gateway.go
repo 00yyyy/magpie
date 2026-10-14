@@ -3770,6 +3770,13 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if !s.fits(p.ID, toolStrictRefused, proto) {
 		body, _ = withoutToolStrict(proto, body)
 	}
+	// structured output an upstream turned away before (#2126): a schema
+	// as any JSON object, or the format told in the system prompt alone
+	if !s.fits(p.ID, formatRefused(model), proto) {
+		body, _ = formatInBody(proto, body, false)
+	} else if !s.fits(p.ID, schemaRefused(model), proto) {
+		body, _ = formatInBody(proto, body, true)
+	}
 	// a Grok subscription is given Codex's namespaced functions flat
 	// (grokBody), and Zed's plugin likewise (ZedBody); a call to one goes
 	// back under its namespace (#404)
@@ -3780,6 +3787,38 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	res, err := s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header)
 	if err != nil {
 		return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+	}
+	// structured output turned away (Xiaomi MiMo's Token Plan takes no
+	// json_schema, only text and json_object, #2126): a schema is asked
+	// for as any JSON object with the schema in the system prompt, and if
+	// that is turned away too the format is told there alone; each, once
+	// it is taken, from then on. What the client asked for still reaches
+	// the model, in words
+	for _, object := range []bool{true, false} {
+		if !badRequest(res.StatusCode) || bodyFormat(proto, body) == nil {
+			break
+		}
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		res.Body.Close()
+		res.Body = io.NopCloser(bytes.NewReader(b))
+		if !refusesFormat(res.StatusCode, b) {
+			break
+		}
+		nb, ok := formatInBody(proto, body, object)
+		if !ok {
+			continue
+		}
+		mark := formatRefused(model)
+		if object {
+			mark = schemaRefused(model)
+		}
+		body = nb
+		if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
+			return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+		}
+		if res.StatusCode < 400 {
+			s.markUnfit(p.ID, mark, proto)
+		}
 	}
 	// a vendor that turns away the fields it doesn't know (Mistral's
 	// extra_forbidden for OpenCode's store, #393) is asked again without
@@ -4329,6 +4368,8 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		}
 		if req.Format != nil && !s.fits(p.ID, formatRefused(model), to) {
 			req = req.inSystem()
+		} else if req.Format != nil && to != provider.Anthropic && !s.fits(p.ID, schemaRefused(model), to) {
+			req = req.asObject()
 		}
 		if req.LastIsTurn && !req.Resume && req.endsWithAssistant() && !s.fits(p.ID, prefillRefused(model), to) {
 			// a model that takes no prefill is asked to answer after the
@@ -4501,10 +4542,19 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			}
 		}
 		if req.Format != nil && refusesFormat(res.StatusCode, b) {
+			if to != provider.Anthropic && req.Format.Type == "json_schema" {
+				// a schema turned away by an upstream that takes any
+				// JSON object (DeepSeek; Xiaomi MiMo's Token Plan,
+				// #2126): asked again for an object, the schema in the
+				// system prompt, and so from then on
+				s.markUnfit(p.ID, schemaRefused(model), to)
+				req = req.asObject()
+				continue
+			}
 			// structured output turned away by the model or the relay in
-			// front of it (DeepSeek takes json_object only; a schema
-			// Anthropic can't hold): asked again with the format in the
-			// system prompt, and so from then on
+			// front of it (a schema Anthropic can't hold, an object
+			// refused too): asked again with the format in the system
+			// prompt, and so from then on
 			s.markUnfit(p.ID, formatRefused(model), to)
 			req = req.inSystem()
 			continue
