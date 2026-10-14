@@ -157,6 +157,7 @@ function fixture(lang, theme, events, options = {}) {
       }
       if (action === "models-key") k.models = body.models?.length ? body.models : undefined;
       if (action === "accounts-key") k.accounts = body.accounts?.length ? body.accounts : undefined;
+      if (action === "quotas-key") k.quotas = body.quotas || undefined;
       if (action === "copy-key") secret = k.id === lanKeyID ? lanSecret : secrets.get(k.id);
       return json({ keys, secret });
     }

@@ -242,6 +242,18 @@ own. `Route.callerKey` is set by `trace.beginFor` from the request's
 caller, so a route begun without it is told to no held key.
 `TestHeldKeyToldNoAccounts` covers every one of these from loopback and
 the LAN, for a key held each of the three ways and one held to nothing.
+A held key whose owner set `access.Key.Quotas` (#2216) is told the four
+quota routes through `scopeQuotas` (`quotas_scope.go`) instead: cards of
+providers whose every catalog model `modelAllowed` lets it use, and of
+those only accounts `AllowsAccount` lets it use, matched by the card's
+`User` against `AccountIDs` (a name two accounts share must be allowed
+both; a card no account is known by, only where the list names none of
+the provider's). Remote cards (`From`) are never told. A refresh of a
+card outside the scope is refused, one naming none reads the scope's
+cards only, and a scope with no card answers the cards routes as held.
+`TestHeldKeyToldItsOwnQuotas` covers each route for a provider-wide key,
+a key with some of a provider's models, an account-held key, a provider's
+only key, and a key told nothing, each red when its check is removed.
 
 ### Calls read from the agents' own files
 

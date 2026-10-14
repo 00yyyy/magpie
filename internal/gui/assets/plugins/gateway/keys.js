@@ -181,7 +181,7 @@ function renderGatewayKeys() {
     rm.onclick = () => askGatewayKey(k, false);
     const rotate = el("button", "text quiet", t("Rotate key"));
     rotate.onclick = () => askGatewayKey(k, true);
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), el("span", "grow"), gatewayModelsBadge(k), gatewayLimitBadge(k), copyCallerKeyBtn(k), rotate, rm);
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), el("span", "grow"), gatewayModelsBadge(k), gatewayQuotasBadge(k), gatewayLimitBadge(k), copyCallerKeyBtn(k), rotate, rm);
     const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
     if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
@@ -337,6 +337,30 @@ function gatewayModelsBadge(k) {
     loading.open(models, accounts);
   };
   if (keyModelsLoading?.id === k.id) keyModelsLoading.open = open;
+  return b;
+}
+
+// ---- the quotas a gateway key is told (#2216) ----
+
+// gatewayQuotasBadge turns on or off a key's being told the quotas of what
+// it may use: a key held to a budget, models or accounts is told none of
+// this magpie's quotas (#1981) unless it is on, and then only the cards of
+// the providers whose every model it may use, of the accounts it may use.
+// "Quotas" on hover when off, "Quotas shown" always when on.
+function gatewayQuotasBadge(k) {
+  const b = el("button", "amodels key-quotas" + (k.quotas ? " set" : ""));
+  b.type = "button";
+  b.textContent = t(k.quotas ? "Quotas shown" : "Quotas");
+  b.title = t(k.quotas
+    ? "This key is told the quotas of the providers whose every model it may use, and of the accounts it may use, account names included. Click to stop."
+    : "A key held to a budget, models or accounts is told no quotas. Click to tell it the quotas of the providers whose every model it may use, and of the accounts it may use, account names included.");
+  b.setAttribute("aria-label", t("Show this key its quotas"));
+  b.setAttribute("aria-pressed", k.quotas ? "true" : "false");
+  b.onclick = async (e) => {
+    e.preventDefault();
+    const out = await gatewayKeyAction("quotas-key", { key: k.id, quotas: !k.quotas });
+    if (out) status(t(k.quotas ? "{name} is told no quotas" : "{name} is told the quotas of what it may use", { name: k.name }), "ok");
+  };
   return b;
 }
 

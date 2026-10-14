@@ -392,3 +392,48 @@ func TestGatewayKeySeveralLimitsCLI(t *testing.T) {
 		t.Fatal(got, err)
 	}
 }
+
+// #2216: whether a key held to a budget, models or accounts is told the
+// quotas of what it may use; off, as every key was (#1981), it is told none.
+func TestGatewayKeyQuotasCLI(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := settings.Save(settings.Settings{LAN: true}); err != nil {
+		t.Fatal(err)
+	}
+	call := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		err := gatewayKeysTo(&out, append([]string{"gateway-key"}, args...))
+		return out.String(), err
+	}
+	if _, err := call("add", "Phone"); err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := access.List()
+	id := keys[0].ID
+	off, on := "Phone: told no quotas when held to a budget, models or accounts\n", "Phone: told the quotas of the providers and accounts it may use\n"
+	if got, err := call("quotas", id); err != nil || got != off {
+		t.Fatal(got, err)
+	}
+	if got, err := call("quotas", id, "on"); err != nil || got != on {
+		t.Fatal(got, err)
+	}
+	if keys, _ = access.List(); !keys[0].Quotas {
+		t.Fatal("not kept on")
+	}
+	for _, args := range [][]string{{"quotas"}, {"quotas", id, "yes"}, {"quotas", id, "on", "off"}, {"quotas", "missing", "on"}, {"quotas", "missing"}} {
+		if _, err := call(args...); err == nil {
+			t.Error("accepted", args)
+		}
+	}
+	if keys, _ = access.List(); !keys[0].Quotas {
+		t.Fatal("a refused call turned it off")
+	}
+	if got, err := call("quotas", id, "off"); err != nil || got != off {
+		t.Fatal(got, err)
+	}
+	if keys, _ = access.List(); keys[0].Quotas {
+		t.Fatal("not kept off")
+	}
+}

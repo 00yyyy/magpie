@@ -651,24 +651,26 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 // asks of it while the gateway is shared or MAGPIE_ADDR puts it on the
 // network. A key held to a budget, models or accounts is someone else's
 // to use and is told none of it (refuseHeld), as are quotasHistory,
-// quotaCards, quotaCardsRefresh and concurrency.
+// quotaCards, quotaCardsRefresh and concurrency; one its owner lets be
+// told its quotas is told those of what it may use (scopeQuotas, #2216).
 func (s *Server) quotas(w http.ResponseWriter, r *http.Request) {
 	if !local(r) && !sharedWith(r) {
 		writeError(w, provider.Chat, http.StatusForbidden, "magpie's quotas are told to another machine only when magpie is shared on the local network (Settings → Share on local network) and the request carries its API key (Authorization: Bearer <key> or x-api-key: <key>)")
 		return
 	}
-	if refuseHeld(w, r, heldRefused) {
+	scope, ok := scopeQuotas(w, r)
+	if !ok {
 		return
 	}
 	// ?kept=1: what was last read, no vendor asked (magpie statusline,
 	// run on every message, #1997)
 	if r.URL.Query().Get("kept") == "1" {
-		writeJSON(w, 200, map[string]any{"object": "list", "data": provider.KeptQuotaReport(time.Now())})
+		writeJSON(w, 200, map[string]any{"object": "list", "data": scope.quotas(provider.KeptQuotaReport(time.Now()))})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
-	writeJSON(w, 200, map[string]any{"object": "list", "data": provider.QuotaReport(ctx, time.Now())})
+	writeJSON(w, 200, map[string]any{"object": "list", "data": scope.quotas(provider.QuotaReport(ctx, time.Now()))})
 }
 
 // quotasHistory is what was left of each account's windows over time, as
@@ -680,11 +682,12 @@ func (s *Server) quotasHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, http.StatusForbidden, "magpie's quotas are told to another machine only when magpie is shared on the local network (Settings → Share on local network) and the request carries its API key (Authorization: Bearer <key> or x-api-key: <key>)")
 		return
 	}
-	if refuseHeld(w, r, heldRefused) {
+	scope, ok := scopeQuotas(w, r)
+	if !ok {
 		return
 	}
 	q := r.URL.Query()
-	writeJSON(w, 200, map[string]any{"object": "list", "data": provider.QuotaHistories(provider.QuotaHistorySince(q.Get("days"), time.Now()), q.Get("provider"), q.Get("user"))})
+	writeJSON(w, 200, map[string]any{"object": "list", "data": scope.histories(provider.QuotaHistories(provider.QuotaHistorySince(q.Get("days"), time.Now()), q.Get("provider"), q.Get("user")))})
 }
 
 // quotaCards is the Usage page's cards as this magpie last read them, for
@@ -695,10 +698,11 @@ func (s *Server) quotaCards(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, http.StatusForbidden, "magpie's quotas are told to another machine only when magpie is shared on the local network (Settings → Share on local network) and the request carries its API key (Authorization: Bearer <key> or x-api-key: <key>)")
 		return
 	}
-	if refuseHeld(w, r, heldRefused) {
+	scope, ok := scopeQuotas(w, r)
+	if !ok {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"object": "list", "data": provider.CachedCards(time.Now())})
+	writeCards(w, r, scope)
 }
 
 // remoteRefreshes is when another magpie last had each card read again
@@ -720,12 +724,20 @@ func (s *Server) quotaCardsRefresh(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, http.StatusForbidden, "magpie's quotas are told to another machine only when magpie is shared on the local network (Settings → Share on local network) and the request carries its API key (Authorization: Bearer <key> or x-api-key: <key>)")
 		return
 	}
-	if refuseHeld(w, r, heldRefused) {
+	scope, ok := scopeQuotas(w, r)
+	if !ok {
 		return
 	}
 	id, user := r.URL.Query().Get("provider"), r.URL.Query().Get("user")
 	if strings.Contains(id, "/") || provider.IsRemoteCard(id) { // a card this magpie has from another: not passed on
 		writeError(w, provider.Chat, http.StatusBadRequest, "this magpie reads only its own cards again")
+		return
+	}
+	// a key told only some cards (#2216) has only those read again: a
+	// card it isn't told is refused, as if held, and with none named
+	// each card it is told is read, not every account here
+	if scope != nil && id != "" && !scope.card(id, user) {
+		refuseHeld(w, r, heldRefused)
 		return
 	}
 	key := id + "|" + strings.ToLower(user)
@@ -737,14 +749,19 @@ func (s *Server) quotaCardsRefresh(w http.ResponseWriter, r *http.Request) {
 	remoteRefreshes.Unlock()
 	if due {
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		if id == "" {
-			provider.ReadAllCards(ctx)
-		} else {
+		switch {
+		case id != "":
 			provider.RefreshUsage(ctx, id, user)
+		case scope != nil:
+			for _, q := range scope.cards(provider.CachedCards(time.Now())) {
+				provider.RefreshUsage(ctx, q.Provider, q.User)
+			}
+		default:
+			provider.ReadAllCards(ctx)
 		}
 		cancel()
 	}
-	writeJSON(w, 200, map[string]any{"object": "list", "data": provider.CachedCards(time.Now())})
+	writeCards(w, r, scope)
 }
 
 func modelObject(e provider.Entry) map[string]any {

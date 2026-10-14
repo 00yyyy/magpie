@@ -128,6 +128,11 @@ type Key struct {
 	// "<provider>/<account>": a signed-in account by its stable id, a
 	// key by its fingerprint; none for every account, as keys always did.
 	Accounts []string `json:"accounts,omitempty"`
+	// Quotas lets a key held to a budget, models or accounts be told the
+	// quotas of what it may use (#2216): the cards of the providers whose
+	// every model it may use, of the accounts and keys it may use, names
+	// and balances included. Off, it is told none (#1981).
+	Quotas bool `json:"quotas,omitempty"`
 }
 
 // Identity is the gateway key a request came with, its budget, the
@@ -138,6 +143,7 @@ type Identity struct {
 	More           []Limit
 	Models         []string
 	Accounts       []string
+	Quotas         bool
 }
 type contextKey struct{}
 
@@ -260,6 +266,8 @@ type Change struct {
 	// Accounts is what "accounts-key" sets (#905); none lets the key use
 	// every account and key.
 	Accounts []string `json:"accounts,omitempty"`
+	// Quotas is what "quotas-key" sets (#2216).
+	Quotas bool `json:"quotas,omitempty"`
 	// Secret is the value "add-key" gives the new key, one its clients
 	// already send (love1sbug on X: keys handed out from another gateway);
 	// "" for one magpie makes.
@@ -399,6 +407,8 @@ func Update(action string, in Change) (string, error) {
 				return "", err
 			}
 			keys[i].Accounts = as
+		case "quotas-key":
+			keys[i].Quotas = in.Quotas
 		case "on-key", "off-key":
 			keys[i].Off = action == "off-key"
 		case "remove-key":
@@ -413,7 +423,7 @@ func Update(action string, in Change) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
-		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "accounts-key" {
+		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "accounts-key" && action != "quotas-key" {
 			mirror = &keys[i]
 		}
 	}
@@ -460,7 +470,7 @@ func Authenticate(secret string) (Identity, bool) {
 			if k.Off {
 				return Identity{}, false
 			}
-			return Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: k.Models, Accounts: k.Accounts}, true
+			return Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: k.Models, Accounts: k.Accounts, Quotas: k.Quotas}, true
 		}
 	}
 	s := settings.Load()

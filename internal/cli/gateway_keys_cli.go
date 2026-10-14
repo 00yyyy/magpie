@@ -36,6 +36,10 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyAccounts(out, args[1:])
 	}
+	if action == "quotas" {
+		access.MigrateLegacyLANKeyBestEffort()
+		return gatewayKeyQuotas(out, args[1:])
+	}
 	// add <name> --key <value>: the key keeps a value its clients already
 	// send (love1sbug on X); "--key -" reads it from stdin, out of the
 	// shell's history
@@ -55,7 +59,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] | rotate <id> | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] | rotate <id> | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -449,5 +453,43 @@ func gatewayKeyAccounts(out io.Writer, args []string) error {
 		shown[i] = cmp.Or(names[a], a)
 	}
 	_, err = fmt.Fprintf(out, "%s: only %s\n", k.Name, strings.Join(shown, ", "))
+	return err
+}
+
+// gatewayKeyQuotas shows or sets whether a key held to a budget, models
+// or accounts is told the quotas of what it may use (#2216): the cards of
+// the providers whose every model it may use, of its accounts and keys.
+//
+//	magpie gateway-key quotas <id>         whether it is
+//	magpie gateway-key quotas <id> on|off  tell it them, or none (#1981)
+func gatewayKeyQuotas(out io.Writer, args []string) error {
+	usage := fmt.Errorf("usage: magpie gateway-key quotas <id> [on | off]")
+	if len(args) == 0 || len(args) > 2 {
+		return usage
+	}
+	id := args[0]
+	if len(args) == 2 {
+		if args[1] != "on" && args[1] != "off" {
+			return usage
+		}
+		if _, err := access.Update("quotas-key", access.Change{Key: id, Quotas: args[1] == "on"}); err != nil {
+			return err
+		}
+	}
+	keys, err := access.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k access.Key) bool { return k.ID == id })
+	if i < 0 {
+		return fmt.Errorf("Key not found")
+	}
+	k := keys[i]
+	switch {
+	case !k.Quotas:
+		_, err = fmt.Fprintf(out, "%s: told no quotas when held to a budget, models or accounts\n", k.Name)
+	default:
+		_, err = fmt.Fprintf(out, "%s: told the quotas of the providers and accounts it may use\n", k.Name)
+	}
 	return err
 }

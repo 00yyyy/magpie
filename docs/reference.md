@@ -514,6 +514,7 @@ magpie gateway-key models <id> openai/gpt-5 anthropic/*   # only these models
 magpie gateway-key models <id> all     # every model
 magpie gateway-key accounts <id> codex/me@example.com   # only these accounts
 magpie gateway-key accounts <id> all    # every account
+magpie gateway-key quotas <id> on      # told the quotas of what it may use
 ```
 
 Each gateway key can have its own **limit**: a token total, an estimated
@@ -1737,6 +1738,21 @@ none of this magpie's accounts (#1981): `/v1/magpie/quotas`,
 403 with `"code": "gateway_key_held"`, from this machine or another. It
 reads its own limit from `GET /v1/magpie/limit`. Another magpie that uses
 such a key shows only that key's own card.
+
+Its owner can let such a key be told the quotas of what it may use
+(#2216): the **Quotas** badge on the key's row (on hover; it reads
+*Quotas shown* while on), or `magpie gateway-key quotas <id> on` (`off`
+again, or no argument to see which). The four quota routes then tell it
+the cards of the providers whose every model it may use — a key held to
+some of a provider's models is told nothing of that provider, since the
+models it may not use spend the same quota — and of those only the
+accounts and keys it may use, account names and balances included. A
+card it isn't told is refused a refresh (403 `gateway_key_held`), and a
+refresh that names none reads again only the cards it is told. A key
+told none of the cards is answered `/v1/magpie/quotas/cards` 403
+`gateway_key_held` as before, so another magpie shows its own card, not
+that nothing was read. `/v1/magpie/concurrency` and `/v1/magpie/usage`
+still refuse it.
 
 An app of your own can read the Usage page's numbers too.
 `GET /v1/magpie/usage?period=<today|week|month|all>` is the page's summary,
