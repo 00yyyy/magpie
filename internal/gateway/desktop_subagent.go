@@ -51,3 +51,20 @@ func desktopSubagentPick(r *http.Request, agent, named, resolved string, body []
 	}
 	return pick
 }
+
+// desktopSubagentEffort is independent of a model replacement: effort-only
+// picks, an unchanged model and a kept model all take it. A non-nil Desktop
+// model pick already checked the agent id and tools, so the body isn't decoded
+// twice. With no effort set, even that check is left out.
+func desktopSubagentEffort(r *http.Request, agent string, body []byte, pick *SubagentPick) string {
+	level := provider.DesktopSubagentEffort()
+	if level == "" || agent != "claude-desktop" {
+		return ""
+	}
+	if pick == nil {
+		if sub, _ := subagentOf(r.Header); sub == "" || !hasTools(body) {
+			return ""
+		}
+	}
+	return level
+}

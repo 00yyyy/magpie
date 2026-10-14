@@ -1815,6 +1815,7 @@ function routingPage(part) {
       : t("{agent} asked for {model}", { agent: agentName(r.agent), model: r.model }) + " → " + (main?.name || r.provider), ""]);
     if (r.kind) items.push([kindWhy(r), "aside kind"]);
     else if (r.subagent) items.push([subagentWhy(r), "aside"]);
+    if (r.subagentEffort) items.push([t("The subagent effort set in magpie is {effort}; the model's supported levels and a routing group's fixed member effort still apply.", { effort: t(r.subagentEffort) }), "aside"]);
     if (r.sealedTask) items.push([t(r.group
       ? "This subagent task is encrypted. Only ChatGPT accounts can read it; other providers (such as Claude) are excluded regardless of quota."
       : "This subagent task is encrypted. Only ChatGPT accounts can read it."), "aside"]);

@@ -10,8 +10,8 @@ import (
 // Claude Desktop's subagent model field: offered magpie's models once
 // Desktop is on magpie, a pick connecting it as any model pick does, an
 // alias kept by its catalog id, one not served now kept, a bare name
-// refused. It alone is Live: Desktop's tiers and Codex's subagent model
-// aren't, and a stopped WSL copy keeps the flag.
+// refused. Desktop's tiers and Codex's subagent model aren't Live, and a
+// stopped WSL copy keeps the flag.
 func TestDesktopSubagentModelField(t *testing.T) {
 	home, _ := desktopSandbox(t)
 	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Chat: "http://127.0.0.1:1/v1", Key: "k", Models: []string{"m1"}}); err != nil {
@@ -57,5 +57,68 @@ func TestDesktopSubagentModelField(t *testing.T) {
 	stopped := asleep(a, wslKind{}, distro{Name: "Stopped"})
 	if !stopped.Field("subagent_model").Live {
 		t.Fatal("stopped WSL agent lost the Live flag")
+	}
+}
+
+func TestDesktopSubagentEffortField(t *testing.T) {
+	home, _ := desktopSandbox(t)
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Chat: "http://127.0.0.1:1/v1", Key: "k", Models: []string{"m1", "m2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetModelEfforts("fake/m1", []string{"low", "high"}); err != nil {
+		t.Fatal(err)
+	}
+	a := claudeDesktop(home)
+	f := a.Field("subagent_effort")
+	if f == nil || !f.Live || !f.Quiet || f.Label != "subagent effort" {
+		t.Fatalf("effort field: %+v", f)
+	}
+	if len(f.Options(nil)) != 0 || f.Set("high") != nil || a.Wired() {
+		t.Fatal("saving an unwired effort offered choices or connected Desktop")
+	}
+	if err := a.Pick("provider", "magpie"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Options(nil)) != len(provider.MemberEfforts) {
+		t.Fatal("inherited model lost effort choices")
+	}
+	if err := a.Pick("subagent_model", "fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	opts := f.Options(nil)
+	if len(opts) != 2 || opts[0].Value != "low" || opts[1].Value != "high" {
+		t.Fatalf("model's effort choices: %+v", opts)
+	}
+	if err := a.Pick(f.Key, " HIGH "); err != nil || f.Get() != "high" {
+		t.Fatalf("effort pick %q: %v", f.Get(), err)
+	}
+	if d := a.Drift(); d != nil {
+		t.Fatalf("gateway effort caused config drift: %+v", d)
+	}
+	if !asleep(a, wslKind{}, distro{Name: "Stopped"}).Field(f.Key).Live {
+		t.Fatal("stopped WSL field lost Live")
+	}
+	if err := provider.SetModelReasonless("fake/m1", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Options(nil)) != 0 || f.Get() != "high" {
+		t.Fatal("reasonless model offered levels or discarded the saved pick")
+	}
+	if err := f.Set("hard"); err == nil || f.Get() != "high" {
+		t.Fatal("invalid effort overwrote the pick")
+	}
+	if err := f.Set(""); err != nil || f.Get() != "" {
+		t.Fatalf("clear effort: %v", err)
+	}
+	// The effort that was there before connecting (a restored setting)
+	// can be restored while disconnected, and the last live pick returns.
+	if err := a.Pick(f.Key, "low"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Disconnect(); err != nil || a.Wired() || f.Get() != "high" {
+		t.Fatalf("disconnect did not restore the saved preference: %q, %v", f.Get(), err)
+	}
+	if err := a.Connect(); err != nil || !a.Wired() || f.Get() != "low" {
+		t.Fatalf("reconnect did not restore the live pick: %q, %v", f.Get(), err)
 	}
 }

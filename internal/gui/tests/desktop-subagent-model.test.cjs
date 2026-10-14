@@ -1,6 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Desktop's gateway-applied subagent model shares Codex's square and picker.
-// Desktop's routing trace has a subagent pick without a kind. All APIs and
+// Desktop's gateway-applied subagent model and effort share Codex's controls.
+// Desktop's routing trace has subagent picks without a kind. All APIs and
 // assets are intercepted; no backend or external network is used.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -13,6 +13,7 @@ const models = [
   { value: "fake/m1", label: "M1", ref: "fake/m1", group: "Fake" },
   { value: "fake/m2", label: "M2", ref: "fake/m2", group: "Fake" },
 ];
+const allLevels = ["none", "minimal", "low", "medium", "high", "xhigh", "max"].map((value) => ({ value }));
 const fresh = (wired = true) => ({
   agents: [{
     id: "claude-desktop", name: "Claude Desktop", path: "/test/claude_desktop_config.json", icon: "claude-color", wired,
@@ -20,6 +21,7 @@ const fresh = (wired = true) => ({
       { key: "provider", label: "provider", value: wired ? "magpie" : "", options: [{ value: "magpie", label: "magpie" }] },
       ...["opus", "sonnet", "haiku", "fable"].map((tier) => ({ key: tier, label: tier, value: "", options: wired ? models : [] })),
       { key: "subagent_model", label: "subagent model", value: "", options: wired ? models : [] },
+      { key: "subagent_effort", label: "subagent effort", value: "", options: wired ? allLevels : [] },
     ],
   }],
   profiles: [],
@@ -31,10 +33,12 @@ const at = (i) => new Date(now.getTime() - (i + 1) * 60e3).toISOString();
 const seat = { id: "fake", provider: "fake", name: "Fake", who: "Test key", kind: "key", agent: "claude-desktop", model: "m2" };
 // Deliberately no kind: Desktop must explain the pick without a Codex tag.
 const routes = [
-  { id: 2, seq: 2, time: at(0), agent: "claude-desktop", model: "fake/m1", provider: "fake", subagent: { asked: "fake/m1", to: "fake/m2" },
+  { id: 3, seq: 3, time: at(0), agent: "claude-desktop", model: "fake/m1", provider: "fake", subagentEffort: "high", subagent: { asked: "fake/m1", to: "fake/m2" },
     order: [seat], tries: [{ id: "fake", model: "m2", start: at(0), done: true, status: 200, ms: 900 }], done: true, status: 200, ms: 900, tokens: 1200 },
-  { id: 1, seq: 1, time: at(1), agent: "claude-desktop", model: "fake/m1", provider: "fake", subagent: { asked: "fake/m1", to: "fake/m2", kept: "it is disabled in magpie" },
+  { id: 2, seq: 2, time: at(1), agent: "claude-desktop", model: "fake/m1", provider: "fake", subagentEffort: "high", subagent: { asked: "fake/m1", to: "fake/m2", kept: "it is disabled in magpie" },
     order: [{ ...seat, model: "m1" }], tries: [{ id: "fake", model: "m1", start: at(1), done: true, status: 200, ms: 900 }], done: true, status: 200, ms: 900, tokens: 1200 },
+  { id: 1, seq: 1, time: at(2), agent: "claude-desktop", model: "fake/m1", provider: "fake", subagentEffort: "high",
+    order: [{ ...seat, model: "m1" }], tries: [{ id: "fake", model: "m1", start: at(2), effort: "high", done: true, status: 200, ms: 900 }], done: true, status: 200, ms: 900, tokens: 1200 },
 ];
 
 function server(lang, fixture) {
@@ -49,6 +53,10 @@ function server(lang, fixture) {
       fixture.sets.push(body);
       fixture.state = JSON.parse(JSON.stringify(fixture.state));
       fixture.state.agents.find((a) => a.id === body.agent).fields.find((f) => f.key === body.field).value = body.value;
+      if (body.field === "subagent_model") {
+        fixture.state.agents[0].fields.find((f) => f.key === "subagent_effort").options =
+          body.value ? [{ value: "low" }, { value: "high" }] : allLevels;
+      }
       return json({ ...fixture.state, settings: { lang, theme: "light" } });
     }
     if (url.pathname === "/api/gateway/trace") {
@@ -73,23 +81,33 @@ function server(lang, fixture) {
 
 // Expected reader-facing words, independent of the translation lookup.
 const W = {
-  en: { unset: "subagent model: the model the lead asks for", def: "Default", set: "subagent model: M2",
+  en: { effortDefault: "subagent effort: default\nthe effort Claude Code asks for", effortHigh: "subagent effort: high",
+    effortStory: "The subagent effort set in magpie is high; the model's supported levels and a routing group's fixed member effort still apply.",
+    unset: "subagent model: the model the lead asks for", def: "Default", set: "subagent model: M2",
     note: "each subagent on the model Claude Desktop's lead asks for",
     moved: "Claude Desktop requested a subagent on fake/m1; magpie put it on fake/m2, the model set for its subagents.",
     kept: "Claude Desktop requested a subagent on fake/m1 and it stayed there: its subagents are set to fake/m2, but it is disabled in magpie." },
-  zh: { unset: "子代理模型：主代理请求的模型", def: "默认", set: "子代理模型：M2",
+  zh: { effortDefault: "子代理推理强度：默认\n跟随 Claude Code 请求的推理强度", effortHigh: "子代理推理强度：高",
+    effortStory: "magpie 为子代理设定的推理强度是 高；仍按模型支持的等级适配，并保留路由组成员的固定强度。",
+    unset: "子代理模型：主代理请求的模型", def: "默认", set: "子代理模型：M2",
     note: "每个子代理都用 Claude Desktop 主代理请求的模型",
     moved: "Claude Desktop 请求了使用 fake/m1 的子代理；magpie 将其改用 fake/m2，即为它的子代理设定的模型。",
     kept: "Claude Desktop 请求了使用 fake/m1 的子代理，并保留在该模型上：它的子代理设为 fake/m2，但该模型在 magpie 中已停用。" },
-  "zh-TW": { unset: "子代理模型：主代理請求的模型", def: "預設", set: "子代理模型：M2",
+  "zh-TW": { effortDefault: "子代理推理強度：預設\n跟隨 Claude Code 請求的推理強度", effortHigh: "子代理推理強度：高",
+    effortStory: "magpie 為子代理設定的推理強度是 高；仍按模型支援的等級適配，並保留路由群組成員的固定強度。",
+    unset: "子代理模型：主代理請求的模型", def: "預設", set: "子代理模型：M2",
     note: "每個子代理都用 Claude Desktop 主代理請求的模型",
     moved: "Claude Desktop 請求了使用 fake/m1 的子代理；magpie 將其改用 fake/m2，即為它的子代理設定的模型。",
     kept: "Claude Desktop 請求了使用 fake/m1 的子代理，並保留在該模型上：它的子代理設為 fake/m2，但該模型在 magpie 中已停用。" },
-  ja: { unset: "サブエージェントのモデル：リードがリクエストしたモデル", def: "デフォルト", set: "サブエージェントのモデル：M2",
+  ja: { effortDefault: "サブエージェントの推論レベル：デフォルト\nClaude Code が要求する推論レベル", effortHigh: "サブエージェントの推論レベル：高",
+    effortStory: "magpie で設定したサブエージェントの推論レベルは 高 です。モデルが対応するレベルへの調整と、ルーティンググループのメンバーに固定されたレベルは引き続き適用されます。",
+    unset: "サブエージェントのモデル：リードがリクエストしたモデル", def: "デフォルト", set: "サブエージェントのモデル：M2",
     note: "各サブエージェントは Claude Desktop のリードがリクエストしたモデルを使います",
     moved: "Claude Desktop が fake/m1 のサブエージェントをリクエストしました。magpie はサブエージェント用に設定された fake/m2 に切り替えました。",
     kept: "Claude Desktop が fake/m1 のサブエージェントをリクエストし、そのモデルのままになりました。サブエージェントは fake/m2 に設定されていますが、このモデルは magpie で無効になっています。" },
-  de: { unset: "Modell der Subagenten: das Modell, das der Haupt-Agent anfordert", def: "Standard", set: "Modell der Subagenten: M2",
+  de: { effortDefault: "Reasoning-Effort der Subagenten: Standard\nder von Claude Code angeforderte Reasoning-Effort", effortHigh: "Reasoning-Effort der Subagenten: hoch",
+    effortStory: "Der in magpie gesetzte Reasoning-Effort der Subagenten ist hoch; die unterstützten Stufen des Modells und die feste Stufe eines Mitglieds der Routing-Gruppe gelten weiterhin.",
+    unset: "Modell der Subagenten: das Modell, das der Haupt-Agent anfordert", def: "Standard", set: "Modell der Subagenten: M2",
     note: "jeder Subagent auf dem Modell, das der Haupt-Agent von Claude Desktop anfordert",
     moved: "Claude Desktop hat einen Subagent mit fake/m1 angefordert; magpie hat ihn auf fake/m2 gesetzt, das für seine Subagenten festgelegte Modell.",
     kept: "Claude Desktop hat einen Subagent mit fake/m1 angefordert, und er blieb dort: Seine Subagenten sind auf fake/m2 gesetzt, aber es ist in magpie deaktiviert." },
@@ -157,6 +175,33 @@ for (const engine of engines) {
         assert.equal(await square.getAttribute("aria-label"), w.set);
         assert.equal(await page.evaluate(() => scrollY), y, "picking does not scroll");
 
+        const effort = page.locator(`${cd} .ag-exp .field.extra[data-key="subagent_effort"]`);
+        assert.equal(await effort.count(), 1, "one effort square beside the model");
+        assert.equal(await effort.getAttribute("title"), w.effortDefault);
+        await effort.click();
+        await page.locator("#pop.effort-picker:not([hidden])").waitFor();
+        assert.equal(await page.locator("#effortTicks i").count(), 3, "Default and the selected model's two levels");
+        assert.equal(await page.evaluate(() => scrollY), y, "opening effort does not scroll");
+        await page.locator("#effortRange").evaluate((r) => {
+          r.value = "2";
+          r.dispatchEvent(new Event("input", { bubbles: true }));
+          r.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        await page.waitForFunction(() => document.querySelector('.row.agent[data-id="claude-desktop"] .field.extra.set[data-key="subagent_effort"]'));
+        assert.deepEqual(fixture.sets.at(-1), { agent: "claude-desktop", field: "subagent_effort", value: "high" });
+        assert.equal(await effort.getAttribute("aria-label"), w.effortHigh);
+        await page.locator("#effortRange").evaluate((r) => {
+          r.value = "0";
+          r.dispatchEvent(new Event("input", { bubbles: true }));
+          r.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        await page.waitForFunction(() => !document.querySelector('.row.agent[data-id="claude-desktop"] .field.extra.set[data-key="subagent_effort"]'));
+        assert.deepEqual(fixture.sets.at(-1), { agent: "claude-desktop", field: "subagent_effort", value: "" });
+        assert.equal(await effort.getAttribute("aria-label"), w.effortDefault);
+        await page.keyboard.press("Escape");
+        assert.equal(await page.evaluate(() => scrollY), y, "effort picks do not scroll");
+        assert.equal(await square.getAttribute("title"), w.set, "effort picks preserve the selected model");
+
         await square.click();
         await page.locator("#pop:not([hidden]) #list li").first().waitFor();
         assert.equal(await page.evaluate(() => scrollY), y, "reopening does not scroll");
@@ -164,6 +209,8 @@ for (const engine of engines) {
         await page.waitForFunction(() => !document.querySelector('.row.agent[data-id="claude-desktop"] .field.extra.set[data-key="subagent_model"]'));
         assert.deepEqual(fixture.sets, [
           { agent: "claude-desktop", field: "subagent_model", value: "fake/m2" },
+          { agent: "claude-desktop", field: "subagent_effort", value: "high" },
+          { agent: "claude-desktop", field: "subagent_effort", value: "" },
           { agent: "claude-desktop", field: "subagent_model", value: "" },
         ], "Default posts an empty value");
         assert.equal(await square.getAttribute("title"), w.unset);
@@ -173,9 +220,10 @@ for (const engine of engines) {
         await page.goto("http://magpie.test/");
         await page.locator(cd).waitFor();
         assert.equal(await page.locator(`${cd} .field[data-key="subagent_model"]`).count(), 0, "unwired Desktop with no options or value has no square");
+        assert.equal(await page.locator(`${cd} .field[data-key="subagent_effort"]`).count(), 0, "unwired Desktop has no effort square");
 
         // A narrow window covers the list with the story, so reopen it afresh.
-        for (const [i, said] of [[0, w.moved], [1, w.kept]]) {
+        for (const [i, said] of [[0, w.moved], [1, w.kept], [2, w.effortStory]]) {
           await page.goto("http://magpie.test/?view=routing");
           await page.locator(".rt-days .rt-day").nth(1).click();
           await page.locator(".rt-req").nth(1).waitFor();
@@ -185,6 +233,7 @@ for (const engine of engines) {
           assert(story.includes(said), `Desktop ${i === 0 ? "moved" : "kept"} story: ${said}\nnot in\n${story}`);
           assert.equal(await page.locator(".rt-steps .aside", { hasText: said }).count(), 1, "one subagent aside without a kind");
           assert.equal(await page.locator(".rt-steps .kind").count(), 0, "Desktop has no Codex purpose tag");
+          assert(story.includes(w.effortStory), "the effort pick is explained even without a model replacement");
           if (i === 1 && lang !== "en") assert(!story.includes("it is disabled in magpie"), "kept reason must be translated");
         }
         assert.deepEqual(errors, []);

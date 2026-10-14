@@ -1135,7 +1135,8 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	if sid, ok := provider.AutoStandIn(id); ok {
 		id = sid
 	}
-	if pick := desktopSubagentPick(r, agentOf(r), named, id, body); pick.Moved() {
+	pick := desktopSubagentPick(r, agentOf(r), named, id, body)
+	if pick.Moved() {
 		id = pick.To
 	}
 	p, model, ok := provider.Resolve(id)
@@ -1151,6 +1152,9 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	// and counts the unmasked one where generation sends that
 	if _, ms, isGroup := provider.FindGroup(id); ok && unredactedRoute(p, isGroup, ms) {
 		body = plain
+	}
+	if level := desktopSubagentEffort(r, agentOf(r), body, pick); level != "" && ok && !provider.Reasonless(p.ID, model) {
+		body = withFixedEffort(provider.Anthropic, body, fitLevel(level, p.Efforts(model)))
 	}
 	s.countOn(w, r, p, model, ok, body)
 }
@@ -1572,11 +1576,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if subagent == nil {
 		subagent = codexSubagentPick(r, agent, call.Kind, call.Model, body)
 	}
+	var desktopPick *SubagentPick
 	if subagent == nil {
-		subagent = desktopSubagentPick(r, agent, call.Model, asked, body)
+		desktopPick = desktopSubagentPick(r, agent, call.Model, asked, body)
+		subagent = desktopPick
 	}
 	if subagent.Moved() {
 		call.Model, asked = subagent.Asked, subagent.To
+	}
+	subagentEffort := desktopSubagentEffort(r, agent, body, desktopPick)
+	if subagentEffort != "" {
+		askedEffort = subagentEffort
 	}
 	p, model, ok := provider.Resolve(asked)
 	// a model the user disabled (#1867) — asked by its id, the model a
@@ -2046,7 +2056,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		capture.tools = tools
 	}
 	tierAsked := bodyTier(from, body) // the service tier the client asked for (#1784)
-	tr := s.trace.beginFor(r, Route{turn: turn, dirOf: dirOf(from, plain), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, call.Agent), TitleLink: link, Pinned: pin, Time: start, Agent: call.Agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, call.Kind), Kind: call.Kind, For: call.For, Model: call.Model, Effort: requestEffort(from, body), Tier: tierAsked, Provider: p.ID, Group: group, Rule: hit, Nested: nested, SealedTask: sealedTask, LeadAccount: leadAccount, Subagent: subagent, Sub: subOf(r.Header), Affinity: shown, Order: pl.order, Left: pl.left})
+	tr := s.trace.beginFor(r, Route{turn: turn, dirOf: dirOf(from, plain), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, call.Agent), TitleLink: link, Pinned: pin, Time: start, Agent: call.Agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, call.Kind), Kind: call.Kind, For: call.For, Model: call.Model, Effort: requestEffort(from, body), Tier: tierAsked, Provider: p.ID, Group: group, Rule: hit, Nested: nested, SealedTask: sealedTask, LeadAccount: leadAccount, Subagent: subagent, SubagentEffort: subagentEffort, Sub: subOf(r.Header), Affinity: shown, Order: pl.order, Left: pl.left})
 	if telemetry != nil {
 		telemetry.routeID = tr.ID
 	}

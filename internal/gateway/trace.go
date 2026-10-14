@@ -64,6 +64,9 @@ type Route struct {
 	// Sub: the Claude Code subagent the request is of (subagentOf), whose
 	// session header is its conversation's; "" for the conversation's own
 	Sub string `json:"sub,omitempty"`
+	// SubagentEffort is Desktop's configured effort. Tries keep the actual
+	// level after member overrides and fitting to the model.
+	SubagentEffort string `json:"subagentEffort,omitempty"`
 	// Nested: the rules of the groups in the group, down the way to the
 	// one that went first, each as it decided
 	Nested   []NestedRule `json:"nested,omitempty"`

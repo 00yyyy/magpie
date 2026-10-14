@@ -431,6 +431,9 @@ type Settings struct {
 	// subagent tool turns on. "" leaves them on the model their lead asks
 	// for; tool-less helpers and the lead's own turns are never moved.
 	DesktopSubagentModel string `json:"desktopSubagentModel,omitempty"`
+	// DesktopSubagentEffort fixes Desktop's subagent tool turns at this
+	// reasoning level. Empty keeps the effort each request asks for.
+	DesktopSubagentEffort string `json:"desktopSubagentEffort,omitempty"`
 	// FullContext has Codex and Claude Code told a model's whole context
 	// window. Off, a window above WorkingWindow is told as WorkingWindow,
 	// so they compact a long conversation there instead of sending ever
@@ -1212,6 +1215,10 @@ func save(s Settings, recording bool) error {
 	s.DesktopSubagentModel = strings.TrimSpace(s.DesktopSubagentModel)
 	if s.DesktopSubagentModel != "" && !strings.Contains(s.DesktopSubagentModel, "/") {
 		return fmt.Errorf("the model for Claude Desktop's subagents must be a model's id such as deepseek/deepseek-v4, not %q", s.DesktopSubagentModel)
+	}
+	s.DesktopSubagentEffort = strings.ToLower(strings.TrimSpace(s.DesktopSubagentEffort))
+	if e := s.DesktopSubagentEffort; e != "" && (!slices.Contains(catalog.EffortRank, e) || e == "ultra") {
+		return fmt.Errorf("%q is not a reasoning effort for Claude Desktop's subagents", e)
 	}
 	s.Searcher = strings.TrimSpace(s.Searcher)
 	for _, e := range []*string{&s.VisionEffort, &s.SearcherEffort} {

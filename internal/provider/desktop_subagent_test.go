@@ -72,3 +72,30 @@ func TestDesktopSubagentUnserved(t *testing.T) {
 		}
 	}
 }
+
+func TestDesktopSubagentEffortRoundTrip(t *testing.T) {
+	desktopSubagentHome(t)
+	release := Hold()
+	defer release()
+	for _, level := range append(append([]string{}, MemberEfforts...), " HIGH ", "") {
+		if err := SetDesktopSubagentEffort(level); err != nil {
+			t.Fatal(err)
+		}
+		if got := DesktopSubagentEffort(); got != strings.ToLower(strings.TrimSpace(level)) {
+			t.Fatalf("effort %q, input %q", got, level)
+		}
+	}
+	if err := SetDesktopSubagentEffort("high"); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"hard", "ultra", "high:low"} {
+		if err := SetDesktopSubagentEffort(bad); err == nil || DesktopSubagentEffort() != "high" {
+			t.Fatalf("invalid pick %q changed the effort: %v", bad, err)
+		}
+	}
+	for _, model := range []string{"fake/m1", "missing/m", ""} {
+		if err := SetDesktopSubagentModel(model); err != nil || DesktopSubagentEffort() != "high" {
+			t.Fatalf("model change lost effort: %v", err)
+		}
+	}
+}

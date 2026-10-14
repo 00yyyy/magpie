@@ -176,6 +176,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		QuotaReads:           "asked",
 		NoAccountDiscovery:   true,
 	}
+	was.DesktopSubagentEffort = "high"
 	if err := settings.Save(was); err != nil {
 		t.Fatal(err)
 	}

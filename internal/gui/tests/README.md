@@ -412,9 +412,11 @@ subagent model in its row opened from the agent link: one square, hidden
 when unwired with no options or value, opening the app's model picker (no
 native select), translated title and Default note, a model posted as
 `subagent_model` and Default as "". No click scrolls, no square or picker
-row has a coloured left border, and the picker fits at 1100px and 560px.
-Desktop routing stories with no kind explain the moved model or the kept
-model with a translated disabled reason. Chromium and WebKit, English,
+row has a coloured left border, and the picker fits at 1100px and 420px.
+The effort square opens the shared effort slider, takes the selected model's levels, posts a level or Default without changing the model, and explains
+that Default keeps Claude Code's requested effort. Desktop routing stories
+with no kind explain the moved or kept model and the configured effort,
+including an effort-only pick with no model replacement. Chromium and WebKit, English,
 Chinese, Traditional Chinese, Japanese and German; all APIs are faked.
 Run with `node --test internal/gui/tests/desktop-subagent-model.test.cjs`.
 

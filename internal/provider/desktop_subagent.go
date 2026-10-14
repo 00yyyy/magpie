@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/settings"
@@ -70,4 +71,29 @@ func DesktopSubagentUnserved(id string) string {
 		}
 	}
 	return "magpie doesn't serve it now"
+}
+
+// DesktopSubagentEffort is the effort set for Desktop's subagent turns,
+// independent of their model. Empty leaves each request's effort alone.
+func DesktopSubagentEffort() string {
+	return heldSettings().DesktopSubagentEffort
+}
+
+// SetDesktopSubagentEffort sets a level the gateway fits to the model
+// each subagent reaches. It survives model changes; "" clears the pick.
+func SetDesktopSubagentEffort(level string) error {
+	level = strings.ToLower(strings.TrimSpace(level))
+	if level != "" && !slices.Contains(MemberEfforts, level) {
+		return fmt.Errorf("%q is not a reasoning effort: one of %s", level, strings.Join(MemberEfforts, ", "))
+	}
+	s := settings.Load()
+	if s.DesktopSubagentEffort == level {
+		return nil
+	}
+	s.DesktopSubagentEffort = level
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	Changed()
+	return nil
 }

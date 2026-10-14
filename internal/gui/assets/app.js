@@ -3681,10 +3681,11 @@ function menuTitle(f) {
 
 // subEffortTitle: the effort subagents start at, and unset, what that means:
 // Codex runs one at the session's effort, or, given a model of its own, at
-// that model's default; Claude Code's (#536) at the effort it asks for
+// that model's default; Claude Code's (#536), including Desktop's Code
+// tab, at the effort its request asks for
 function subEffortTitle(a, f, opt) {
   return t("{label}: {value}", { label: t(f.label), value: effortName(opt || { value: f.value }) }) +
-    (f.value ? "" : "\n" + t(a.id === "claude" ? "the effort Claude Code asks for" : "the session's effort, or the subagent model's own default"));
+    (f.value ? "" : "\n" + t(a.id === "claude" || a.id.split("@wsl:")[0] === "claude-desktop" ? "the effort Claude Code asks for" : "the session's effort, or the subagent model's own default"));
 }
 
 // launchButton copies the command that starts an agent on magpie, for one

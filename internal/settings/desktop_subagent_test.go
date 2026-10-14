@@ -21,3 +21,21 @@ func TestDesktopSubagentModelSetting(t *testing.T) {
 		t.Fatalf("bare model validation: %v", err)
 	}
 }
+
+func TestDesktopSubagentEffortSetting(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := Save(Settings{DesktopSubagentEffort: " HIGH "}); err != nil {
+		t.Fatal(err)
+	}
+	if got := Load().DesktopSubagentEffort; got != "high" {
+		t.Fatalf("saved effort %q, want high", got)
+	}
+	for _, bad := range []string{"hard", "ultra"} {
+		if err := Save(Settings{DesktopSubagentEffort: bad}); err == nil {
+			t.Fatalf("accepted invalid effort %q", bad)
+		}
+	}
+	if err := Save(Settings{}); err != nil || Load().DesktopSubagentEffort != "" {
+		t.Fatalf("clearing effort: %v", err)
+	}
+}

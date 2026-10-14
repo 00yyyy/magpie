@@ -33,6 +33,9 @@ func TestDesktopSubagentModelNotice(t *testing.T) {
 		}
 		return out.Notice
 	}
+	if notice := call("subagent_effort", "high"); notice != "" || a.Wired() {
+		t.Fatalf("saving an unwired preference showed notice %q or connected Desktop", notice)
+	}
 	if notice := call("subagent_model", "fake/m1"); notice != a.Notice() || notice == "" {
 		t.Fatalf("connecting Live pick notice %q, want %q", notice, a.Notice())
 	}
@@ -41,6 +44,12 @@ func TestDesktopSubagentModelNotice(t *testing.T) {
 	}
 	if notice := call("subagent_model", ""); notice != "" {
 		t.Fatalf("wired Live pick notice %q, want none", notice)
+	}
+	if notice := call("subagent_effort", "high"); notice != "" || provider.DesktopSubagentEffort() != "high" {
+		t.Fatalf("live effort notice %q, saved %q", notice, provider.DesktopSubagentEffort())
+	}
+	if notice := call("subagent_effort", ""); notice != "" || provider.DesktopSubagentEffort() != "" {
+		t.Fatalf("clear effort notice %q, saved %q", notice, provider.DesktopSubagentEffort())
 	}
 	if notice := call("sonnet", "fake/m1"); notice != a.Notice() || notice == "" {
 		t.Fatalf("tier notice %q, want %q", notice, a.Notice())

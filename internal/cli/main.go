@@ -498,7 +498,7 @@ func set(a *agent.Agent, key, value string) error {
 	if wired && now != "" && !a.Wired() {
 		fmt.Println(muted.Render(fmt.Sprintf("  disconnected from magpie: %s is %s's own, sent to the endpoint it had before magpie; magpie %s <model> with one of magpie's models connects it again", now, a.Name, a.ID)))
 	}
-	if a.Notice != nil && (!f.Live || !wired) {
+	if a.Notice != nil && (!f.Live || !wired && a.Wired()) {
 		if n := a.Notice(); n != "" {
 			fmt.Println(muted.Render("  ↻ " + n))
 		}

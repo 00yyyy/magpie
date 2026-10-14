@@ -170,7 +170,7 @@ func claudeDesktop(home string) *Agent {
 				return []Option{{Value: magpieID, Label: "magpie", Icon: "magpie",
 					Note: "Desktop's third-party gateway: Code and Cowork on magpie's models, no Anthropic sign-in (restart Desktop)"}}
 			},
-		}}, append(desktopTierFields(ps), desktopSubagentField(ps))...),
+		}}, append(desktopTierFields(ps), desktopSubagentField(ps), desktopSubagentEffortField(ps))...),
 	}
 }
 
@@ -262,6 +262,44 @@ func desktopSubagentField(ps []desktopPaths) Field {
 				return nil
 			}
 			return viaMagpie("claude-desktop", "")
+		},
+	}
+}
+
+// Desktop's subagent effort is a live gateway setting, like its subagent
+// model. With no model picked, a subagent may use any of Desktop's models,
+// so all levels are offered and the gateway fits each to the actual model.
+func desktopSubagentEffortField(ps []desktopPaths) Field {
+	return Field{
+		Key: "subagent_effort", Label: "subagent effort", Quiet: true, Live: true,
+		Get: provider.DesktopSubagentEffort,
+		Set: provider.SetDesktopSubagentEffort,
+		Options: func(map[string]string) []Option {
+			if !desktopWiredAny(ps) {
+				return nil
+			}
+			target := provider.DesktopSubagentModel()
+			if target == "" {
+				return static(provider.MemberEfforts...)
+			}
+			for _, e := range provider.Served() {
+				if e.ID != target {
+					continue
+				}
+				if provider.Reasonless(e.Provider.ID, e.Model) {
+					return nil
+				}
+				var levels []string
+				for _, level := range e.Efforts {
+					if slices.Contains(provider.MemberEfforts, level) {
+						levels = append(levels, level)
+					}
+				}
+				if len(levels) > 0 {
+					return static(levels...)
+				}
+			}
+			return static(provider.MemberEfforts...)
 		},
 	}
 }
