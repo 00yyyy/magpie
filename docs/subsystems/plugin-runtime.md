@@ -92,7 +92,9 @@ the head, each with its `?v=`.
 Each page moves in a commit of its own, whole: its code into
 `assets/plugins/<id>/client.js`, its styles beside it, and the words only it
 says from i18n.js into its `i18n.js` (a key app.js, another page, index.html
-or Go also says stays in i18n.js).
+or Go also says stays in i18n.js). It stays so after: `i18n-keys`' "a
+plugin's words are its own" fails when anything outside a plugin's folder
+says one of its words, which goes back to i18n.js.
 
 - **Sessions** (`plugins/sessions`, `Client: i18n.js, sessions.css,
   client.js`): the page that was `sessions.js`, its markup all drawn by its
@@ -102,6 +104,15 @@ or Go also says stays in i18n.js).
   so with no Sessions plugin it does nothing. Still in app.js: the Usage
   page's Sessions tab (`/api/sessions`) and Settings' session terminal row
   (`data-feature="sessions"`).
+- **Library** (`plugins/library`, `Client: i18n.js, library.css,
+  client.js`): the page that was `library.js`. Its code runs at `mount`
+  only, where it wires its listeners (the dialog's backdrop and Escape,
+  focus and visibility reading it again, its lists' scroll), since the
+  script is in before app.js. Its hooks: `open` and `relang` read
+  `/api/library`, `redraw` draws it again once the state says which agents
+  are hidden, and `close`, `dirty` and `discard` are what `show()` asks
+  before the reader leaves it. `window.loadLibrary`, `redrawLibrary`,
+  `closeLibraryModal`, `libraryDirty` and `discardLibrary` are gone.
 
 ## Source of truth and composing
 
@@ -167,7 +178,8 @@ remembering its layer (`Source`):
 - `go test ./internal/gui/ -run 'TestBuiltin|TestBootSaysBuiltinsOff'`
   (`TestBuiltinConfig`, `TestBuiltinClientsLoaded`).
 - `i18n-keys`, `gui-de`, `gui-ja`, `gui-zh-tw`, and a moved page's own
-  tests (`sessions-*`, `session-*`, `sess-*`) in Chromium and WebKit.
+  tests (`sessions-*`, `session-*`, `sess-*`; `library-*`, `skill-*`,
+  `mcp-*`, `found-skill-*`) in Chromium and WebKit.
 - `internal/gui/tests/builtins.test.cjs` (the settings form) and
   `plugin-kernel.test.cjs` (the boundary, Try again, `callsPage` from
   boot.js and from a change) in Chromium and WebKit, every language, 1100,

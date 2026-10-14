@@ -3845,12 +3845,11 @@ async function load(again) {
     // the library may have drawn itself before the saved language was known
     if (applyPrefs(state.settings, state.fx) || relang) {
       again = false; // the Usage page too is drawn again, in the new language
-      if (view === "library") window.loadLibrary?.();
       if (view === "plugins") window.loadPlugins?.();
       magpie.call(view, "relang"); // a plugin's page
     }
     // a Library drawn before the state came counted the hidden agents too
-    else if (view === "library" && hiddenIds().join() !== hid) window.redrawLibrary?.();
+    else if (view === "library" && hiddenIds().join() !== hid) magpie.call("library", "redraw");
     tintPanel();
     tintTitleBar();
     renderAgents();
@@ -23920,21 +23919,21 @@ async function show(v) {
       if (!await cancelEdit(true)) return false;
     } else if (!$("#modal").hidden && !$("#modal").classList.contains("out")) {
       if (view === "library" && modalFormDirty() && !(await confirmDiscard())) return false;
-      if (view === "library") window.closeLibraryModal?.(); else closeModal();
+      if (view === "library") magpie.call("library", "close"); else closeModal();
     }
     if (view === "routing" && window.routingDirty?.()) {
       if (!(await confirmDiscard())) return false;
       window.discardRouting?.();
     }
-    if (view === "library" && window.libraryDirty?.()) {
+    if (view === "library" && magpie.call("library", "dirty")) {
       if (!(await confirmDiscard())) return false;
-      window.discardLibrary?.();
+      magpie.call("library", "discard");
     }
   }
   view = v;
   // the page the reader leaves is the one the window opens on next (keptView)
   if (mode === "window") { try { localStorage.setItem("magpie.lastView", v); } catch { /* not kept */ } }
-  const title = magpie.page(v)?.title ?? ({ agents: "Agents", providers: "Providers", routing: "Routing", usage: "Usage", library: "Library", plugins: "Plugins", settings: "Settings" })[v];
+  const title = magpie.page(v)?.title ?? ({ agents: "Agents", providers: "Providers", routing: "Routing", usage: "Usage", plugins: "Plugins", settings: "Settings" })[v];
   $("#pageTitle").dataset.en = title;
   $("#pageTitle").textContent = t(title);
   if (mode === "window") {
@@ -23948,7 +23947,7 @@ async function show(v) {
   $("#prefs").classList.toggle("on", v === "settings");
   if (v === "settings") $("#prefs").setAttribute("aria-current", "page"); else $("#prefs").removeAttribute("aria-current");
   navSubs();
-  for (const id of ["agents", "providers", "routing", "usage", "library", "plugins", "settings", ...magpie.pages()]) $("#view-" + id).hidden = v !== id;
+  for (const id of ["agents", "providers", "routing", "usage", "plugins", "settings", ...magpie.pages()]) $("#view-" + id).hidden = v !== id;
   // back to where the reader was in it, and again once it has what it loads
   const back = () => backToReader($("#view-" + v));
   requestAnimationFrame(back);
@@ -23963,7 +23962,6 @@ async function show(v) {
   if (v === "routing" && (!quotas || Date.now() - quotasAt > 60e3)) loadQuotas();
   if (v === "usage") loadUsage(true).then(back, (e) => status(e.message, "err"));
   if (v === "settings") loadSettings().then(back, (e) => status(e.message, "err"));
-  if (v === "library") window.loadLibrary?.()?.then(back);
   if (v === "plugins") window.loadPlugins?.()?.then(back);
   syncTitle();
   syncURL();
@@ -25106,7 +25104,7 @@ navHides(); // the pages built-in plugins switched off have, from boot.js
 // from the tray or a reload) first, then the one kept; a page gateway mode
 // leaves out, or one there is no longer, gives way to the first page.
 // the pages the window can open on besides the first (Agents)
-const OPEN_VIEWS = ["providers", "routing", "usage", "library", "plugins", "settings", ...magpie.pages()];
+const OPEN_VIEWS = ["providers", "routing", "usage", "plugins", "settings", ...magpie.pages()];
 function keptView() {
   const asked = params.get("view");
   if (asked === "agents" || OPEN_VIEWS.includes(asked)) return asked;

@@ -32,3 +32,32 @@ test("a plugin's words are said in every language", () => {
     for (const lang of ["zh-TW", "ja", "de"]) assert.deepEqual(Object.keys(dict[lang]).sort(), [...zh].sort(), `${file} ${lang}`);
   }
 });
+
+test("a plugin's words are its own", () => {
+  // A word the core or another plugin says too belongs in i18n.js: in a
+  // plugin's file, it is English wherever that plugin is off, and a
+  // word a later change starts saying elsewhere ("Check again", Library's
+  // and then Settings' search keys) went untranslated there
+  const fs = require("node:fs"), path = require("node:path");
+  const repo = path.resolve(__dirname, "../../.."), assets = path.join(repo, "internal/gui/assets");
+  const texts = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) {
+        if (!["node_modules", ".git", "site", "tests", "testdata", "docs"].includes(e.name)) walk(p);
+      } else if (/\.(go|js|html|css)$/.test(e.name) && e.name !== "i18n.js") texts.push([p, fs.readFileSync(p, "utf8")]);
+    }
+  };
+  walk(repo);
+  const shared = [];
+  for (const { file, dict } of strings().files.slice(1)) {
+    const own = path.join(assets, path.dirname(file)) + path.sep;
+    const rest = texts.filter(([p]) => !p.startsWith(own));
+    for (const k of Object.keys(dict.zh)) {
+      const at = rest.find(([, s]) => s.includes(k) || s.includes(JSON.stringify(k).slice(1, -1)));
+      if (at) shared.push(`${file} ${JSON.stringify(k)}: ${path.relative(repo, at[0])} says it too`);
+    }
+  }
+  assert.deepEqual(shared, []);
+});

@@ -3,9 +3,13 @@
 // own folder and writes each agent's files from it; what the user has in
 // those files besides stays theirs, and every file is kept aside before
 // magpie writes it. Everything shown here comes from /api/library.
-(() => {
-  const page = $("#view-library");
-  if (!page) return;
+//
+// A page the Library plugin adds to the window (kernel.js): mount wires it
+// up, open and relang read the library again, redraw draws it again as it
+// is, and close, dirty and discard are what app.js asks of it before the
+// reader leaves it.
+magpie.plugin("library", (ctx) => {
+  let page = null;
 
   let lib = null;        // the page, as /api/library gives it
   let taken = 0;         // how many times lib was set, for a read to tell a newer answer came first
@@ -466,11 +470,6 @@
       status(e.message, "err");
     }
   }
-  window.loadLibrary = load;
-  // drawn again as it is: the agents hidden are known only from the state,
-  // which can come after the page was drawn (it counted them, and Turn all
-  // on gave them the servers)
-  window.redrawLibrary = () => { if (lib) render(); };
   // the library as the page shows it: what a change did is said once, not shown
   const seen = (v) => JSON.stringify({ ...v, result: undefined });
 
@@ -3307,13 +3306,15 @@
   // and while the page scrolls, its lists say so (library.css, .scrolling)
   let still = 0;
   const settled = () => { still = 0; for (const w of lists) w.el.classList.remove("scrolling"); };
-  page.addEventListener("scroll", () => {
-    queueLists();
-    if (!still) for (const w of lists) w.el.classList.add("scrolling");
-    clearTimeout(still);
-    still = setTimeout(settled, 150);
-  }, { passive: true });
-  window.addEventListener("resize", queueLists);
+  function wireLists() {
+    page.addEventListener("scroll", () => {
+      queueLists();
+      if (!still) for (const w of lists) w.el.classList.add("scrolling");
+      clearTimeout(still);
+      still = setTimeout(settled, 150);
+    }, { passive: true });
+    window.addEventListener("resize", queueLists);
+  }
 
   // The filling: one list's next few rows per idle moment, the lists in turn.
   const FILL = 20;
@@ -4923,31 +4924,45 @@
     closeModal().then(() => { if (!modal) $("#modal").classList.remove("lib"); });
     return true;
   }
-  window.closeLibraryModal = () => { if (modal) closeLibModal(true); else closeModal(); };
-  window.libraryDirty = () => !!lib && dirty();
-  window.discardLibrary = () => discard(true);
-  // The dialog is the providers page's; while the library has it, its
-  // backdrop and Escape close it here.
-  $("#modal").addEventListener("click", (e) => {
-    if (modal && modalBackdrop(e)) { e.stopImmediatePropagation(); closeLibModal(); }
-  }, true);
-  document.addEventListener("keydown", (e) => {
-    if (!confirmationPending && modal && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeLibModal(); }
-  }, true);
-  // leaving the page with the shared text not saved asks first
-  window.addEventListener("beforeunload", (e) => { if (lib && dirty()) e.preventDefault(); });
   // Back to the window, the library is read again — it may have changed
   // in another window or through the CLI meanwhile. Not over an open dialog,
   // unsaved text, or a lookup under way.
-  page.addEventListener("scroll", () => page.querySelector(".lib-head")?.classList.toggle("stuck", page.scrollTop > 0), { passive: true });
   // What changed there changes what the market calls added, too: take asks it again.
   async function quietLoad() {
     if (page.hidden || modal || dirty() || probing) return;
     await load(true);
   }
   const shelf = () => JSON.stringify([lib?.servers?.map((x) => x.name), lib?.skills?.map((x) => x.name)]);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) quietLoad(); });
-  window.addEventListener("focus", quietLoad);
-  // opened on ?view=library: app.js showed the page before this was here
-  if (!page.hidden) load();
-})();
+
+  ctx.slots.add("page", {
+    key: "library",
+    title: "Library",
+    mount(main) {
+      page = main;
+      wireLists();
+      // The dialog is the providers page's; while the library has it, its
+      // backdrop and Escape close it here.
+      $("#modal").addEventListener("click", (e) => {
+        if (modal && modalBackdrop(e)) { e.stopImmediatePropagation(); closeLibModal(); }
+      }, true);
+      document.addEventListener("keydown", (e) => {
+        if (!confirmationPending && modal && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeLibModal(); }
+      }, true);
+      // leaving the page with the shared text not saved asks first
+      window.addEventListener("beforeunload", (e) => { if (lib && dirty()) e.preventDefault(); });
+      page.addEventListener("scroll", () => page.querySelector(".lib-head")?.classList.toggle("stuck", page.scrollTop > 0), { passive: true });
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) quietLoad(); });
+      window.addEventListener("focus", quietLoad);
+    },
+    open: () => load(),
+    relang: () => load(),
+    // drawn again as it is: the agents hidden are known only from the state,
+    // which can come after the page was drawn (it counted them, and Turn all
+    // on gave them the servers)
+    redraw: () => { if (lib) render(); },
+    // the reader leaving the page: its dialog closed, and what isn't saved
+    close: () => { if (modal) closeLibModal(true); else closeModal(); },
+    dirty: () => !!lib && dirty(),
+    discard: () => discard(true),
+  });
+});
