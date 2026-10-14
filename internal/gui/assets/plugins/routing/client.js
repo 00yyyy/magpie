@@ -4266,7 +4266,10 @@ function routingPage(part) {
         const chips = m || (s ? info : undefined);
         const row = el("div", "fbrow");
         const n = el("span", "n");
-        n.append(el("span", "", memberName(id)));
+        // its whole name on hover, which a tight row ellipsizes
+        const nm = el("span", "", memberName(id));
+        nm.title = memberName(id);
+        n.append(nm);
         if (m || s) n.append(el("small", "", subOf(id) ? memberNote(id) : m.providerName));
         else if (info?.providerOff) n.append(el("small", "", `${info.name} · ${t("switched off")}`));
         const matched = d.matched.includes(id);
