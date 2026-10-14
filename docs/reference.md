@@ -1849,9 +1849,11 @@ still have it, and a menu bar cell for it still opens its card. Both are
 kept in magpie's settings (`usageOrder`, `panelUsageHidden`). Which
 allowances the menu bar itself shows beside its icon is picked in Settings.
 The same list has *Tokens and cost today* and *Tokens and cost, last 7
-days*: every agent's requests as the Usage page's Overview sums them, the
-tokens over the cost in your currency (`usage:today`, `usage:7d` in
-`trayUsages`). Clicked, one opens the Usage page at that period.
+days*: every agent's requests as the Usage page's Requests tab sums them,
+the agents' own session-file calls among them, all their tokens (input,
+output and cache, marked Σ) over the cost in your currency (`usage:today`,
+`usage:7d` in `trayUsages`); the tooltip splits the tokens into in, out and
+cached. Clicked, one opens the Requests tab at that period.
 
 The *Gateway* tab in the app has this as copy buttons and ready-made
 snippets (shell, curl, Python, Node) for each API, the list of model ids,

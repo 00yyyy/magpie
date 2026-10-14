@@ -4,7 +4,7 @@
 // both after the subscriptions, ticked and saved as a card is ("usage:today",
 // "usage:7d"); the pill names a total alone, and counts a mix of them without
 // calling it subscriptions. A total clicked in the menu bar opens the Usage
-// page's Overview, or the panel's Usage tab, at its period. Every language,
+// page's Requests tab, or the panel's Usage tab, at its period. Every language,
 // both engines, wide and narrow; no click moves the page; no backend, the API
 // is faked here.
 const assert = require("node:assert/strict");
@@ -165,8 +165,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         });
       }
 
-      // clicked in the menu bar with the window as the tray's: the Overview
-      // at the total's period (quotaView), the address left clean
+      // clicked in the menu bar with the window as the tray's: the Requests
+      // tab, which sums what the total does, at its period (quotaView), the
+      // address left clean
       await t.test("window", async () => {
         const errors = [], asked = [];
         const context = await browser.newContext({ viewport: { width: 1100, height: 560 }, reducedMotion: "reduce" });
@@ -174,9 +175,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.setDefaultTimeout(5000);
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, [], asked));
-        await page.goto("http://magpie.test/?view=usage&tab=usage&period=7d");
+        await page.goto("http://magpie.test/?view=usage&tab=requests&period=7d");
         await page.waitForFunction((s) => document.querySelector("#period .opt.on")?.textContent.trim() === s, w.days);
-        assert(asked.some((a) => a.startsWith("/api/usage?") && a.includes("period=7d")), "asked: " + asked.join(" "));
+        await page.waitForFunction(() => document.querySelector("#ledDash") || document.querySelector("#ledKpi"));
+        assert(asked.some((a) => a.startsWith("/api/usage/requests?") && a.includes("period=7d")), "asked: " + asked.join(" "));
         assert.equal(new URL(page.url()).searchParams.get("period"), null);
         await shot(page, "window");
         assert.deepEqual(errors, []);

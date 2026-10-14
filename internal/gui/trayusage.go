@@ -220,22 +220,31 @@ func trayTotalPeriod(id string) (usage.Period, bool) {
 	return usage.Period(p), true
 }
 
-// trayTotalSum is a period's sum as the Usage page's Overview has it (its
-// cached summary, without the sessions); a var for tests.
-var trayTotalSum = func(p usage.Period) usage.Totals { return usage.SummarizeTop(p, 0).Totals }
+// trayTotalSum is a period's sum as the Usage page's Requests tab and the
+// panel's Usage tab have it, the pages a click on it opens: the gateway's
+// requests and the calls the agents' session files record beside them,
+// from the ledger's cached index; a var for tests. The Overview's summary,
+// summed before, left those calls out (NextCommit on Discord).
+var trayTotalSum = func(p usage.Period) usage.Totals { return usage.QueryPage(p, usage.Filter{}, 0, 1).Sum }
 
-// trayTotalCard is a total as a card: its rows are the tokens in and out
-// (cache aside, as the Usage page counts them) over the cost, in the
-// currency Settings says, "+" when some calls had no known price; nothing
-// beneath the tokens when none had one. Its name is the tooltip, which
-// spells them out.
+// trayTotalCard is a total as a card: its rows are every token, the
+// cache's too, as the Requests tab's and the panel's Tokens count them,
+// marked Σ so it doesn't read as the input alone (NextCommit on Discord),
+// over the cost, in the currency Settings says, "+" when some calls had no
+// known price; nothing beneath the tokens when none had one. Its name is
+// the tooltip, which spells out the input, output and cache.
 func trayTotalCard(id string, t usage.Totals, currency string, rate float64) provider.SubscriptionQuota {
 	when := "Today"
 	if p, _ := trayTotalPeriod(id); p == usage.Week {
 		when = "Last 7 days"
 	}
-	rows := []string{trayCount(t.Tokens())}
-	tip := when + " in magpie\n" + trayCount(t.Tokens()) + " tokens (" + trayCount(t.Input) + " in · " + trayCount(t.Output) + " out)"
+	all := t.Tokens() + t.CacheRead + t.CacheWrite
+	rows := []string{"Σ" + trayCount(all)}
+	tip := when + " in magpie\n" + trayCount(all) + " tokens (" + trayCount(t.Input) + " in · " + trayCount(t.Output) + " out"
+	if cached := t.CacheRead + t.CacheWrite; cached > 0 {
+		tip += " · " + trayCount(cached) + " cached"
+	}
+	tip += ")"
 	if t.Cost > 0 {
 		c := usage.FormatCost(t.Cost, currency, rate)
 		if t.Unpriced > 0 {
