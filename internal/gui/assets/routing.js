@@ -5277,7 +5277,16 @@
     if (r.tries.length > 1) meta.push(t("{n} tries", { n: r.tries.length }));
     if (r.tokens) meta.push(t("{n} tokens", { n: tokens(r.tokens) }));
     if (r.done && r.ms) meta.push(took(r.ms));
-    b.append(asked, when, to, el("span", "meta", meta.join(" · ")));
+    // and how fast it wrote, as the Routing page's row tells it (#2050):
+    // none for one that failed or whose speed can't be told
+    const speed = r.done && how !== "bad" ? speedOf(r) : 0;
+    if (speed) meta.push(t("{n} tok/s", { n: Math.round(speed) }));
+    // where it went and its totals share a line, and the totals, longer
+    // with the speed, go under it, at the right, when both don't fit: the
+    // panel is narrow, and neither the "served …" mark nor the speed is cut
+    const line = el("span", "pr-line");
+    line.append(to, el("span", "meta", meta.join(" · ")));
+    b.append(asked, when, line);
     b.title = reqTitle(r, how, tr);
     b.onclick = (e) => { api("window/main?view=routing&req=" + r.id, {}); e.currentTarget.blur(); };
     return b;
