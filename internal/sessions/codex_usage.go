@@ -622,11 +622,17 @@ func (s *codexUsageState) count(at time.Time, model string, total, last *cxUsage
 		return nil
 	}
 	s.advance(at, total)
-	// Preserve the legacy delta when there is no paired RECORD. A missing
-	// last value or an unexplained gap must not silently discard token usage.
-	if prev != nil {
+	// Without a paired RECORD, last is still the request's own usage, exact
+	// even when zero. Only a missing last falls back to the counter's delta,
+	// so no token usage is silently lost. The counter isn't always this
+	// request's: a Codex Desktop fork (thread_spawn) replays its parent's
+	// checkpoints, each with last=0, between its own, and its delta would
+	// book the parent's whole lead again on each switch back (#2234).
+	if last != nil && last.valid() {
+		v.Usage = *last
+	} else if prev != nil {
 		v.Usage = total.less(*prev)
-	} else if last == nil || !last.valid() {
+	} else {
 		v.Usage = *total
 	}
 	if v.Usage.zero() || !v.Usage.valid() {
