@@ -2152,9 +2152,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// (#1359)
 			hw.loop = &loopGuard{}
 		}
-		if isGroup && g.FirstToken > 0 && !last && streams {
+		// a member of a group in the group is timed by the innermost
+		// group that sets a FirstToken (#2246), else by the group asked for
+		firstToken := cmp.Or(c.firstToken, g.FirstToken)
+		if isGroup && firstToken > 0 && !last && streams {
 			// slow to start, the next member is asked (Group.FirstToken)
-			hw.firstWait = time.Duration(g.FirstToken) * time.Second
+			hw.firstWait = time.Duration(firstToken) * time.Second
 		}
 		call.Provider, call.To, call.Usage = c.p.ID, "", Usage{}
 		model = c.model
@@ -2545,7 +2548,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// no first content in the group's FirstToken, and nothing of
 			// it sent: the next member is asked, and this one doesn't
 			// rest, a long prompt being slow to start anywhere
-			call.Status, call.Error = http.StatusGatewayTimeout, fmt.Sprintf("%s: no first token in %ds", c.p.Name, g.FirstToken)
+			call.Status, call.Error = http.StatusGatewayTimeout, fmt.Sprintf("%s: no first token in %ds", c.p.Name, firstToken)
 			try.Status, try.Error, try.Fail = call.Status, call.Error, failSlow
 			call.TTFT, call.FirstText, call.Flow, call.FirstReasoning = 0, 0, 0, 0
 			telemetry.attempt(call, try, c.p.ID, sent, hw, capture)
