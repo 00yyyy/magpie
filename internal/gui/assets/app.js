@@ -8310,7 +8310,9 @@ function pickedOf(p) {
   const on = p.models.filter((m) => m.on);
   if (!Array.isArray(p.chosen)) return on.map((m) => m.id); // no picks said: those served, as before
   const picks = new Set(p.chosen);
-  return on.filter((m) => picks.has(m.id)).map((m) => m.id);
+  // a pick agents aren't offered for want of its API's URL stays picked
+  // (#2094): it is offered again once the URL is added
+  return p.models.filter((m) => (m.on || m.noAPI) && picks.has(m.id)).map((m) => m.id);
 }
 
 // baseAPIOf is the API a saved provider's Base URL is shown as: the one the
@@ -10139,6 +10141,17 @@ function renderModels(p) {
   // staged as Names & levels stages it, and made with the Save
   const apis = modelAPIs(p);
   const apiNow = (id) => draft.modelPrefs?.[id]?.api ?? p.models.find((m) => m.id === id)?.api ?? "";
+  // a model listed on none of the APIs the provider has a URL for (#2094: a
+  // relay's Claude on /messages alone, at a provider given its chat URL):
+  // agents aren't offered it, so Select all and Free only leave it, and it
+  // is drawn dimmed, saying why. As saved (m.noAPI), or as the API set for
+  // it in this editor makes it
+  const noAPI = (m) => {
+    const set = draft.modelPrefs?.[m.id]?.api;
+    if (set === undefined || !p.speaks?.length) return !!m.noAPI;
+    const on = set ? [set] : (m.auto || []);
+    return on.length > 0 && !on.some((a) => p.speaks.includes(a));
+  };
   const pickAPI = (c, id) => {
     const m = p.models.find((x) => x.id === id) || { id };
     const auto = (m.auto || []).map(apiLabel).join(" · ");
@@ -10266,7 +10279,7 @@ function renderModels(p) {
     // groups alone, those are what the groups use (#1818: drawn as none
     // while the card and the auto groups had all 17); after Select none,
     // none is served
-    const served = draft.chosen.length || decideOnly(p) || draft.none ? new Set() : new Set(p.models.slice(0, 24).map((m) => m.id));
+    const served = draft.chosen.length || decideOnly(p) || draft.none ? new Set() : new Set(p.models.filter((m) => !noAPI(m)).slice(0, 24).map((m) => m.id));
     // a filter is a search: what it doesn't match is left out, picked or not
     for (const m of p.models) {
       const on = draft.chosen.includes(m.id);
@@ -10275,7 +10288,7 @@ function renderModels(p) {
       // asked for: a picked model is never out of sight (#685: 10 picked,
       // 7 shown, and "4 more, filter to find them" with no names to filter by)
       if (shown >= 80 && !f && !showAll && !on) { hidden++; continue; }
-      const c = el("button", "mchip" + (on ? " on" : served.has(m.id) ? " auto" : ""));
+      const c = el("button", "mchip" + (on ? " on" : served.has(m.id) ? " auto" : "") + (noAPI(m) ? " noapi" : ""));
       c.append(el("span", "", m.name && m.name !== m.id ? m.name : m.id));
       // one the plan serves at no cost to it (WorkBuddy's x0.00 credits)
       // or one its vendor names free (#185)
@@ -10288,6 +10301,7 @@ function renderModels(p) {
       if (m.default) c.title = `${m.id} · ${m.default}`;
       else if (m.name && m.name !== m.id) c.title = m.id;
       if (free) c.title = (c.title || m.id) + " · " + t(m.free ? "free: it doesn't use the plan's credits" : "free: so its name says");
+      if (noAPI(m)) c.title = (c.title || m.id) + "\n" + t("{p} has no URL for the API its list serves it on ({apis}), so agents aren't offered it. Add that URL, or set the API it is asked on in Names & levels.", { p: p.name, apis: (apiNow(m.id) ? [apiNow(m.id)] : m.auto || []).map(apiLabel).join(" · ") });
       if (served.has(m.id)) c.title = (c.title || m.id) + "\n" + t(draft.unlisted ? "Routing groups use it: none are picked, so the vendor's list is used" : "Agents see it: none are picked, so the vendor's list is used") + "\n" + t("Click to pick just this model");
       tested(c, m.id);
       menu(c, m.id);
@@ -10712,10 +10726,10 @@ function renderModels(p) {
   // every model at once (those the filter shows, when there is one), or none
   const bulk = el("div", "mbulk");
   const allOn = el("button", "text action", t("Select all"));
-  allOn.title = t("Pick every model listed (those the filter shows)");
+  allOn.title = t("Pick every model listed that this provider can serve (those the filter shows)");
   allOn.onclick = () => {
     const f = (q?.value || "").trim().toLowerCase();
-    const ids = p.models.filter((m) => !f || m.id.toLowerCase().includes(f) || (m.name || "").toLowerCase().includes(f) || (m.default || "").toLowerCase().includes(f)).map((m) => m.id);
+    const ids = p.models.filter((m) => !noAPI(m)).filter((m) => !f || m.id.toLowerCase().includes(f) || (m.name || "").toLowerCase().includes(f) || (m.default || "").toLowerCase().includes(f)).map((m) => m.id);
     draft.chosen = [...draft.chosen, ...ids.filter((id) => !draft.chosen.includes(id))];
     draft.none = true;
     draw();
@@ -10733,7 +10747,7 @@ function renderModels(p) {
     freeOn.title = t("Pick only the free models (those the filter shows), unpicking the others");
     freeOn.onclick = () => {
       const f = (q?.value || "").trim().toLowerCase();
-      draft.chosen = p.models.filter((m) => isFree(m) && (!f || m.id.toLowerCase().includes(f) || (m.name || "").toLowerCase().includes(f) || (m.default || "").toLowerCase().includes(f))).map((m) => m.id);
+      draft.chosen = p.models.filter((m) => isFree(m) && !noAPI(m) && (!f || m.id.toLowerCase().includes(f) || (m.name || "").toLowerCase().includes(f) || (m.default || "").toLowerCase().includes(f))).map((m) => m.id);
       draft.none = true;
       draw();
     };

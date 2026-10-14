@@ -1353,8 +1353,11 @@ func (p Provider) Exposed() []catalog.Model {
 		picks = slices.DeleteFunc(slices.Clone(picks), p.Account.unusable)
 	}
 	if len(picks) > 0 {
-		return pick(p.withNewlyListed(picks, avail))
+		return slices.DeleteFunc(pick(p.withNewlyListed(picks, avail)), func(m catalog.Model) bool { return p.NoAPIFor(m.ID) })
 	}
+	// a model listed on none of the APIs the provider has a URL for is
+	// left out before the first 24 are taken (#2094)
+	avail = slices.DeleteFunc(slices.Clone(avail), func(m catalog.Model) bool { return p.NoAPIFor(m.ID) })
 	// another magpie's list is already the models its user exposed
 	if len(avail) <= manyModels || p.IsRemoteMagpie() {
 		return avail
@@ -1363,6 +1366,25 @@ func (p Provider) Exposed() []catalog.Model {
 	// vendor's own list — theirs run newest first — and let the user pick
 	// from the rest; nothing here is compiled in.
 	return avail[:manyModels]
+}
+
+// NoAPIFor says the provider has a URL for none of the APIs the vendor's
+// list serves model on (or the one the user set for it): a relay's Claude
+// listed on /messages alone, at a provider given only a chat URL. Agents
+// aren't offered it, as no request for it could be answered (#2094). Only
+// a provider of keys, whose URLs the user typed: a sign-in's APIs are
+// magpie's own. A model whose list says no API, and a provider with no URL
+// at all, are never left out here.
+func (p Provider) NoAPIFor(model string) bool {
+	if p.Account != nil {
+		return false
+	}
+	apis := p.APIs(model)
+	if len(apis) == 0 {
+		return false
+	}
+	speaks := p.Speaks()
+	return len(speaks) > 0 && !slices.ContainsFunc(speaks, func(s Protocol) bool { return slices.Contains(apis, s) })
 }
 
 // Picks are the models the user picked, with those the vendor has listed

@@ -50,6 +50,7 @@ type modelJSON struct {
 	RateWas    float64  `json:"rateWas,omitempty"`   // the rate before a discount running now
 	API        string   `json:"api,omitempty"`       // the one API the user said it is asked on
 	Auto       []string `json:"auto,omitempty"`      // the APIs its vendor's list says it is served on, what Auto asks it on
+	NoAPI      bool     `json:"noAPI,omitempty"`     // the provider has a URL for none of them: agents aren't offered it (provider.NoAPIFor, #2094)
 	Same       string   `json:"same,omitempty"`      // the model the user said it is the same as, for the groups magpie finds (#583)
 	Merge      string   `json:"merge,omitempty"`     // what those groups merge it by when the user says nothing
 	Kind       string   `json:"kind,omitempty"`      // what the user said it makes: image or video (#1399)
@@ -176,9 +177,13 @@ type providerJSON struct {
 	// AnonKey is the key Add another key adds when nothing is pasted
 	// (provider.AnonymousKey: OpenCode Zen's public, #1795), while the
 	// provider doesn't have it yet
-	AnonKey  string   `json:"anonKey,omitempty"`
-	Ready    bool     `json:"ready"`
-	Chosen   []string `json:"chosen"`   // the user's explicit picks, if any
+	AnonKey string   `json:"anonKey,omitempty"`
+	Ready   bool     `json:"ready"`
+	Chosen  []string `json:"chosen"` // the user's explicit picks, if any
+	// Speaks: the APIs a provider of keys has a URL for, which a model's
+	// own API set in the editor is checked against (NoAPI); none for a
+	// sign-in, whose models are never left out for it
+	Speaks   []string `json:"speaks,omitempty"`
 	Fallback []string `json:"fallback"` // where requests go when this one can't take them
 	Routing  string   `json:"routing"`  // how requests spread over its keys or accounts
 	Affinity string   `json:"affinity"` // how long a conversation stays with who answered it
@@ -554,6 +559,11 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 	if out.Fallback == nil {
 		out.Fallback = []string{}
 	}
+	if p.Account == nil {
+		for _, s := range p.Speaks() {
+			out.Speaks = append(out.Speaks, string(s))
+		}
+	}
 	if out.Chosen == nil {
 		out.Chosen = []string{}
 	}
@@ -685,6 +695,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 				j.Auto = append(j.Auto, string(a))
 			}
 		}
+		j.NoAPI = p.NoAPIFor(m.ID)
 		j.Same = sames[p.ID+"/"+m.ID]
 		j.Kind = p.ModelKind(m.ID)
 		j.Merge = provider.MergeName(m.ID)
