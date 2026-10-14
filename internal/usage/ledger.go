@@ -184,6 +184,10 @@ func (p Period) Since(now time.Time) time.Time {
 	if first, _, ok := p.days(now.Location()); ok {
 		return first
 	}
+	// a rolling window ends now, so it began that long ago (#2075)
+	if d := p.Last(); d > 0 {
+		return now.Add(-d)
+	}
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	switch p {
 	case Today:
@@ -564,6 +568,25 @@ func timeline(p Period, now, first time.Time) (since time.Time, bucket string, p
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	bucket, pts = "day", []Point{}
 	var n int
+	// a rolling window ends now: an hour each of two days or less, else a
+	// day each from when it began (#2075)
+	if d := p.Last(); d > 0 {
+		since = now.Add(-d)
+		if d <= 48*time.Hour {
+			bucket = "hour"
+			for h := 0; h <= int(d.Hours()); h++ {
+				t := since.Add(time.Duration(h) * time.Hour)
+				pts = append(pts, Point{Label: t.Format("15"), Time: t})
+			}
+		} else {
+			n = int(d.Hours())/24 + 1
+			for i := 0; i < n; i++ {
+				t := since.AddDate(0, 0, i)
+				pts = append(pts, Point{Label: t.Format("Jan 2"), Time: t})
+			}
+		}
+		return since, bucket, pts
+	}
 	if first, last, ok := p.days(now.Location()); ok {
 		// a picked range: an hour each of a single day, else a day each,
 		// a week each (from a Monday) past 60 days as All has

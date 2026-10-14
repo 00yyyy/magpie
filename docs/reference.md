@@ -280,6 +280,10 @@ account, a plugin's and a vendor whose own client magpie goes as
 (OpenCode, Cline, Kilo, another magpie) keep the User-Agent their sign-in
 sends, and don't take it.
 
+`magpie usage` (and `--csv`) takes `today`, `7d`, `30d` or `all`, each from a
+local midnight, or a window ending now: `--last 24h` (any Go duration, `90m`)
+or `--days 1.5`; the CSV then holds that window's calls only (#2075).
+
 `magpie usage` also lists **upstream provider keys** to help check upstream bills.
 Each request records the fingerprint and saved name of the key that actually
 served it, including image calls and account/key failover. The CSV adds

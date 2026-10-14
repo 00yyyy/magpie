@@ -56,7 +56,9 @@ func csvStamp(p usage.Period, day string, now time.Time) string {
 	if p.IsRange() { // the days picked, which already say when
 		return "magpie-requests-" + strings.Replace(string(p), "..", "-to-", 1)
 	}
-	return "magpie-requests-" + string(p) + "-" + now.Format(time.DateOnly)
+	// a rolling window ("last:24h0m0s") without the colon, which Windows
+	// doesn't take in a file name (#2075)
+	return "magpie-requests-" + strings.ReplaceAll(string(p), ":", "-") + "-" + now.Format(time.DateOnly)
 }
 
 // contentJSON is what was said in a request, or why it can't be told.
