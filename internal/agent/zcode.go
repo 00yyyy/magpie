@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
@@ -462,6 +463,20 @@ func zcodeRules(path string, on, keep bool) error {
 		// turned off in ZCode, it stays off
 		if e, ok := old["enabled"].(bool); ok {
 			rule["enabled"] = e
+		}
+		// What the user set on it in ZCode stays (#2030): its name, logo,
+		// visibility, a header or the key's management link
+		// (packages/provider/src/config/provider-data-schema.ts). ZCode
+		// checks the file strictly, so only keys it already took are kept;
+		// the address, key, format and model lists are magpie's.
+		if old != nil {
+			if name, _ := old["providerName"].(string); strings.TrimSpace(name) != "" {
+				rule["providerName"] = name
+			}
+			if oc, _ := old["config"].(map[string]any); oc != nil {
+				rule["config"] = mergeKept(oc, rule["config"].(map[string]any), []string{"group", "personalModelIds", "modelOrder"})
+			}
+			rule = mergeKept(old, rule, nil)
 		}
 		if at >= 0 {
 			providers = slices.Insert(providers, at, any(rule))

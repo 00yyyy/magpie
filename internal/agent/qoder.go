@@ -32,6 +32,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
@@ -68,7 +69,6 @@ func qoderSite(home string, b qoderBuild) *Agent { return qoderAt(here(home), b)
 // qoderAt is a build of Qoder at a place, its provider naming the gateway
 // as it reaches it from there.
 func qoderAt(at place, b qoderBuild) *Agent {
-	qoderProvider := func(agent, model string) map[string]any { return qoderProviderAt(agent, model, at.v1()) }
 	dir := at.getenv(b.env)
 	if dir == "" {
 		dir = filepath.Join(at.home, b.dir)
@@ -76,6 +76,10 @@ func qoderAt(at place, b qoderBuild) *Agent {
 	path := filepath.Join(dir, "settings.json")
 	key := b.id + ":" + path + ":"
 	slot := "providers." + magpieID
+	// magpie's provider, with what the user set on it in Qoder kept
+	qoderProvider := func(agent, model string) any {
+		return qoderKept(path, slot, qoderProviderAt(agent, model, at.v1()))
+	}
 	get := func(k string) string { v, _ := edit.GetJSON(path, k); return v }
 	// effort is what the model in use asks for: its preference, else
 	// reasoningEffort
@@ -258,6 +262,20 @@ func qoderPreferences(prefs, model, effort string) (out map[string]any, drop boo
 		out[model] = p
 	}
 	return out, len(out) == 0
+}
+
+// qoderKept is want, magpie's provider in Qoder's settings.json at path,
+// with what the user set on the one at slot kept: Qoder (1.1.70) reads a
+// provider's routing (the model for compact, summary, subagent …), its
+// firstPayloadTimeoutMs and streamIdleTimeoutMs, type, authType and
+// anthropic block, none of which magpie writes, and a sync wrote them away
+// on every start, as T3 Code's did (#2030). A name the user gave it is
+// theirs too. Its address, key, model and model list are magpie's.
+func qoderKept(path, slot string, want map[string]any) any {
+	if name, ok := edit.GetJSON(path, slot+".displayName"); ok && strings.TrimSpace(name) != "" {
+		want["displayName"] = name
+	}
+	return theirsKept(path, slot, func() any { return want }, "models")()
 }
 
 // qoderLevels are the efforts Qoder can ask for.
