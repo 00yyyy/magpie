@@ -46,6 +46,13 @@ const providerUsage = `usage:
                                           ids… replace the list, +id adds one, -id takes one out, all: the default,
                                           none: serve none of them, its balance and usage still shown
   magpie provider refresh <id>            fetch the vendor's model list again (as the app's Fetch models)
+  magpie provider refresh-every <id> [6h|1d|off]
+                                          have the gateway (magpie serve, the app) fetch the list again by itself
+                                          once it is that old (at least 10m; off: only when asked)
+  magpie provider auto-include <id> [rule…|none]
+                                          rules over a model's id (a glob with *, e.g. 'gpt-*' '*claude*', or
+                                          're:…' a regular expression): the listed models one matches are exposed
+                                          now, and each one a later fetch newly lists; picks are only added to
   magpie provider account-models <id> [account|key [ids…|all]]
                                           the models one account or key alone serves; all: every model the provider has
   magpie provider account-cap <id> [account [percent|off]]
@@ -562,6 +569,10 @@ func providerCmd(args []string) error {
 		return queueCmd(rest)
 	case "rpm":
 		return rpmCmd(rest)
+	case "refresh-every":
+		return refreshEveryCmd(rest)
+	case "auto-include":
+		return autoIncludeCmd(rest)
 	case "quota-rest":
 		return quotaRestCmd(rest)
 	case "rest-cap":
@@ -639,11 +650,14 @@ func providerCmd(args []string) error {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		ms, dropped, err := p.Refetch(ctx)
+		ms, dropped, taken, err := p.RefetchTaking(ctx)
 		if err != nil {
 			return err
 		}
 		fmt.Println(green.Render("✓"), len(ms), "models from", fetchedFrom(*p))
+		if len(taken) > 0 {
+			fmt.Println(green.Render("+"), "newly listed, taken by its auto-include rules:", strings.Join(taken, ", "))
+		}
 		if len(dropped) > 0 {
 			fmt.Println(amber.Render("!"), "gone from its list, so no longer picked:", strings.Join(dropped, ", "))
 		}
@@ -837,6 +851,12 @@ func showProvider(p provider.Provider) error {
 	cancel()
 	for _, k := range slices.Sorted(maps.Keys(p.Headers)) {
 		kv("header", k+": "+muted.Render(p.Headers[k]))
+	}
+	if d := p.RefreshInterval(); d > 0 {
+		kv("refresh", "every "+p.RefreshEvery+muted.Render("  the gateway fetches its list by itself"))
+	}
+	if len(p.AutoInclude) > 0 {
+		kv("include", strings.Join(p.AutoInclude, " ")+muted.Render("  newly listed models these match are exposed"))
 	}
 	ms := p.Exposed()
 	src := "models.dev"
@@ -1809,4 +1829,64 @@ func printPicksChange(before, after provider.Provider, args []string) {
 			fmt.Println(" ", amber.Render("!"), after.ID+"/"+id, muted.Render("isn't in "+after.Name+"'s list; exposed as given"))
 		}
 	}
+}
+
+// refreshEveryCmd shows, or sets, how often the gateway fetches a
+// provider's list by itself (#2135).
+func refreshEveryCmd(rest []string) error {
+	if len(rest) < 1 || len(rest) > 2 {
+		return fmt.Errorf("magpie provider refresh-every <id> [30m|6h|1d|off]")
+	}
+	p, err := provider.Find(rest[0])
+	if err != nil {
+		return err
+	}
+	if len(rest) > 1 {
+		if err := provider.SetRefreshEvery(p.ID, rest[1]); err != nil {
+			return err
+		}
+		if p, err = provider.Find(p.ID); err != nil {
+			return err
+		}
+	}
+	if d := p.RefreshInterval(); d > 0 {
+		fmt.Printf("%s · its model list is fetched by the gateway every %s (magpie serve, or the app, running)\n", p.Name, p.RefreshEvery)
+	} else {
+		fmt.Printf("%s · its model list is fetched only when asked (magpie provider refresh %s, or Fetch models)\n", p.Name, p.ID)
+	}
+	return nil
+}
+
+// autoIncludeCmd shows, or sets, the rules a provider's newly listed models
+// are exposed by (#2135); none clears them.
+func autoIncludeCmd(rest []string) error {
+	if len(rest) < 1 {
+		return fmt.Errorf("magpie provider auto-include <id> [rule…|none]")
+	}
+	p, err := provider.Find(rest[0])
+	if err != nil {
+		return err
+	}
+	if len(rest) > 1 {
+		rules := rest[1:]
+		if len(rules) == 1 && (rules[0] == "none" || rules[0] == "off") {
+			rules = nil
+		}
+		taken, err := provider.SetAutoInclude(p.ID, rules)
+		if err != nil {
+			return err
+		}
+		if len(taken) > 0 {
+			fmt.Println(green.Render("+"), "exposed now, as its rules match them:", strings.Join(taken, ", "))
+		}
+		if p, err = provider.Find(p.ID); err != nil {
+			return err
+		}
+	}
+	if len(p.AutoInclude) == 0 {
+		fmt.Printf("%s · no auto-include rules: a newly listed model is exposed as its picks say\n", p.Name)
+		return nil
+	}
+	fmt.Printf("%s · a newly listed model is exposed when one of these matches its id: %s\n", p.Name, strings.Join(p.AutoInclude, " "))
+	return nil
 }

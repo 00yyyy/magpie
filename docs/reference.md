@@ -236,6 +236,8 @@ magpie provider models deepseek         # re-fetch the vendor's list (add ids to
 magpie provider models deepseek +deepseek-v4 -deepseek-chat   # expose one more, take one out; the rest stay
 magpie provider models deepseek a b c   # the whole list of models to expose, replacing it (all: the default)
 magpie provider refresh deepseek        # re-fetch it, and drop picks it no longer has (the TUI: m)
+magpie provider refresh-every relay 6h  # the gateway fetches its list every 6h (1d, 30m; off; at least 10m)
+magpie provider auto-include relay 'gpt-*' 're:claude-.*'  # a newly listed model these match is exposed (none clears)
 magpie provider test deepseek           # one tiny request per API, with latency
 magpie provider key deepseek sk-…       # replace the key
 magpie provider rm deepseek
