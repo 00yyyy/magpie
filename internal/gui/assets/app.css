@@ -3322,6 +3322,12 @@ body.panel .modal { padding: 16px 12px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  /* what declares no transition of its own keeps none: its default is
+     `all 0s`, which the rule above made `all .01ms`, so a header tab's
+     label took a frame to come to its new size, the header was fitted to
+     the old one, and the page stayed a few pixels wider than the window
+     (#2142, #1864, #2023). No specificity: any transition declared wins. */
+  :where(*), :where(*)::before, :where(*)::after { transition-property: none; }
   .skeleton { animation: none !important; }
 }
 
