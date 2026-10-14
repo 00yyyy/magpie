@@ -839,8 +839,10 @@ func showProvider(p provider.Provider) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	if amount, ok, err := provider.Balance(ctx, p); ok {
 		from := ""
-		if p.BalanceURL != "" {
-			from = muted.Render("  from " + p.BalanceURL + " " + p.BalancePath)
+		// where it was asked: a panel's key query when its account query
+		// has no token left to ask with
+		if u, field := provider.BalanceQuery(p); u != "" {
+			from = muted.Render("  from " + u + " " + field)
 		}
 		if err != nil {
 			kv("balance", amber.Render("unavailable")+muted.Render("  "+err.Error())+from)
