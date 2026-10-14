@@ -389,7 +389,10 @@ func (m *model) openProviderModels(id string) {
 		input:  newInput("filter models"),
 		items:  modelOptions(id),
 		relist: func() []agent.Option { return modelOptions(id) },
-		empty:  "no models known yet · m on the providers list asks the vendor for them",
+		empty:  "no models known yet · ctrl+r asks the vendor for them",
+		// the list asked again from here, where its models are looked at
+		// (#2113), as m does on the providers list
+		refetch: func() tea.Cmd { return refetchCmd(id) },
 		toggle: func(model string) ([]agent.Option, string, bool) {
 			p, err := provider.Find(id)
 			if err != nil {

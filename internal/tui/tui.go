@@ -83,7 +83,10 @@ type picker struct {
 	// toggle, when set, is what enter does instead of onPick: it changes
 	// the item and the list stays open, with its items anew.
 	toggle func(string) (items []agent.Option, done string, ok bool)
-	empty  string
+	// refetch, on a provider's models, asks its vendor for the list again
+	// (ctrl+r): a free model list changes often (#2113)
+	refetch func() tea.Cmd
+	empty   string
 }
 
 type model struct {
@@ -287,7 +290,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case flashMsg:
 		m.flash, m.flashOK = msg.text, msg.ok
-		m.reload()
+		// and a picker of models open shows what was done to them (a list
+		// fetched again from it)
+		m.modelsChanged()
 		return m, nil
 	case balanceMsg:
 		m.bal = msg
@@ -553,6 +558,12 @@ func (m model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.pk.cursor = (m.pk.cursor + len(m.pk.match) - 1) % len(m.pk.match)
 		}
 		return m, nil
+	case "ctrl+r":
+		if m.pk.refetch != nil {
+			m.flash, m.flashOK = "asking for the models again…", true
+			return m, m.pk.refetch()
+		}
+		return m, nil
 	case "ctrl+d":
 		if m.mode == modeProfiles && m.pk.onDel != nil && len(m.pk.match) > 0 {
 			n := m.pk.items[m.pk.match[m.pk.cursor]].Value
@@ -770,6 +781,8 @@ func (m model) View() string {
 		switch {
 		case m.mode == modeProfiles:
 			footer = hints("↑↓", "move", "↵", "apply", "ctrl+d", "delete", "esc", "back")
+		case m.pk.refetch != nil:
+			footer = hints("↑↓", "move", "↵", "on / off", "ctrl+r", "fetch models again", "esc", "back")
 		case m.pk.toggle != nil:
 			footer = hints("↑↓", "move", "↵", "on / off", "esc", "back")
 		default:
