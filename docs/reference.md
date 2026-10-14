@@ -1765,6 +1765,14 @@ conversation did.
 Records written before these fields came have neither. Codex's sub-agents are told
 apart by `kind` only.
 
+`magpie quota refresh <provider> [<account>]` reads that card again, as its
+refresh button on the Usage page does, and prints it alone; the other
+vendors aren't asked. Name the account by its login or its alias, or write
+`<provider>/<account>`. A second refresh of the same card within 30 seconds
+asks nobody and prints what was read, saying so on stderr, so a status line
+can run it in a loop. `--json` prints the card as `magpie quota --json` does,
+with `readAt` (when it was read) and `error` (why it couldn't be).
+
 `magpie quota wait <provider|account>` blocks until that subscription (any
 of its accounts magpie has on) or that one account has allowance again — no
 window that stops it used up — then exits 0, so a long task stopped by its
@@ -2210,6 +2218,7 @@ magpie rm work
 magpie sync                     # refresh the models.dev catalog and every live model list
 
 magpie quota                    # what is left of every subscription, plan and key balance
+magpie quota refresh codex      # read Codex's cards again now (once per 30s)
 magpie quota wait codex         # block until a Codex account has allowance again
 magpie quota credits me@example.com off   # hold a ChatGPT account at its limit instead of spending credits
 ```

@@ -21,6 +21,7 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
        magpie quota alert [<percent>|off] [--balance <amount>|off]
        magpie quota wait <provider|account> [--timeout <duration>] [--quiet]
        magpie quota history [<provider|account>…] [--days <n>] [--json]
+       magpie quota refresh <provider> [<account>] [--json]
   what is left of every subscription, plan and key magpie has: each window's use and
   when it starts again, and each key's balance, asked of the vendors now (or less than
   a minute ago). --json is for scripts and agents, each entry with lastServedAt, when it
@@ -63,7 +64,13 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
   every one since --days days ago, as GET /v1/magpie/quotas/history?days=&provider=&user=
   answers. A provider, an account's email or login, or <provider>/<account> narrows it.
   A reading is kept at the time it was read: a Claude account's, which Claude Code
-  tells only as it answers or runs /usage, isn't written again each time it is shown.`
+  tells only as it answers or runs /usage, isn't written again each time it is shown.
+  quota refresh reads one card again, as its refresh button on the Usage page does:
+  the provider's, or of the one account named (<provider>/<account> works too), and
+  shows only it, --json with each card's readAt and error. A saved Claude account is
+  read by running Claude Code's /usage in its own folder, which plain magpie quota
+  never does. A card read less than 30 seconds ago isn't asked again: what was read
+  then is shown.`
 
 // quotaCmd: magpie quota [<provider>…] [--json]
 func quotaCmd(args []string) error {
@@ -84,6 +91,9 @@ func quotaCmd(args []string) error {
 	}
 	if len(args) > 1 && args[1] == "history" {
 		return quotaHistoryCmd(args[2:])
+	}
+	if len(args) > 1 && args[1] == "refresh" {
+		return quotaRefreshCmd(args[2:])
 	}
 	asJSON := false
 	var only []string
@@ -125,6 +135,12 @@ func quotaCmd(args []string) error {
 		fmt.Println(muted.Render("nothing to tell ·"), "a signed-in subscription, a coding plan or a key whose vendor tells its balance shows up here")
 		return nil
 	}
+	printQuotas(qs)
+	return nil
+}
+
+// printQuotas is magpie quota's table: a line for each card.
+func printQuotas(qs []provider.Quota) {
 	width := 0
 	for _, q := range qs {
 		width = max(width, len([]rune(quotaTitle(q))))
@@ -148,7 +164,6 @@ func quotaCmd(args []string) error {
 		fmt.Println(line)
 	}
 	fmt.Println(faint.Render("  % is how much of a window is used · ↻ when it starts again · --json for scripts, or GET /v1/magpie/quotas on the gateway"))
-	return nil
 }
 
 // balanceCell is what an account holds in a line: "1.2K credits left",
