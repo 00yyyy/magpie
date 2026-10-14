@@ -799,6 +799,28 @@ func start(ctx context.Context) (*host, error) {
 	return h, nil
 }
 
+var (
+	catalogSyncing  sync.WaitGroup
+	catalogCancelMu sync.Mutex
+	catalogCancels  = map[int]context.CancelFunc{}
+	catalogCancelID int
+	syncCatalog     = catalog.SyncIfMissing // a var for tests
+)
+
+func cancelCatalogSyncs() {
+	catalogCancelMu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(catalogCancels))
+	for _, c := range catalogCancels {
+		cancels = append(cancels, c)
+	}
+	catalogCancels = map[int]context.CancelFunc{}
+	catalogCancelMu.Unlock()
+	for _, c := range cancels {
+		c()
+	}
+	catalogSyncing.Wait()
+}
+
 // startOn starts the host on the bun given; crashed is whether it died
 // before it started.
 func startOn(ctx context.Context, bun string) (*host, bool, error) {
@@ -815,10 +837,28 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 	}
 	if catalog.Source() == "" {
 		// a plugin's provider has the models models.dev lists for it, as in
-		// OpenCode; a magpie that has never fetched them does first
-		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		_ = catalog.Sync(cctx)
-		cancel()
+		// OpenCode; sync in the background so starting the host never stalls
+		// on models.dev (#1922, #1928).
+		cctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		catalogCancelMu.Lock()
+		catalogCancelID++
+		id := catalogCancelID
+		catalogCancels[id] = cancel
+		catalogCancelMu.Unlock()
+
+		catalogSyncing.Add(1)
+		go func() {
+			defer catalogSyncing.Done()
+			defer func() {
+				catalogCancelMu.Lock()
+				delete(catalogCancels, id)
+				catalogCancelMu.Unlock()
+				cancel()
+			}()
+			if err := syncCatalog(cctx); err == nil {
+				forgetProviders()
+			}
+		}()
 	}
 	// the host outlives the request that started it
 	proxy := hostProxy(env()) // what bunCommand gives it
@@ -880,9 +920,13 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 	}
 	ictx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	catalogPath := catalog.Source()
+	if catalogPath == "" {
+		catalogPath = catalog.CachePath()
+	}
 	err = h.call(ictx, "init", map[string]any{
 		"authPath":      AuthPath(),
-		"modelsDevPath": catalog.Source(),
+		"modelsDevPath": catalogPath,
 		"piPath":        pi,
 		"directory":     settings.Dir(),
 		"config":        l.Config,

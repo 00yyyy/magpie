@@ -529,6 +529,7 @@ func Settle() {
 	// its own, are not taken for the plugins changed (checkList), nor
 	// answered with these
 	UseCached(nil)
+	cancelCatalogSyncs()
 }
 
 // Cached is the plugins' providers as last asked, without starting the

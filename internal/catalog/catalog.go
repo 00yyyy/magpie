@@ -454,7 +454,7 @@ var (
 	// is, so it is never taken for another either (renamed)
 	canonical map[string]bool
 
-	syncMu sync.Mutex
+	syncCh = make(chan struct{}, 1)
 )
 
 // CachePath is where `magpie sync` stores the models.dev catalog.
@@ -620,8 +620,25 @@ func Reset() {
 // Sync downloads the models.dev catalog into CachePath. It serializes with
 // itself so a background refresh and a manual one cannot interleave writes.
 func Sync(ctx context.Context) error {
-	syncMu.Lock()
-	defer syncMu.Unlock()
+	return syncLock(ctx, false)
+}
+
+// SyncIfMissing is Sync, but returns nil if a catalog already exists once the
+// lock is acquired.
+func SyncIfMissing(ctx context.Context) error {
+	return syncLock(ctx, true)
+}
+
+func syncLock(ctx context.Context, onlyIfMissing bool) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case syncCh <- struct{}{}:
+	}
+	defer func() { <-syncCh }()
+	if onlyIfMissing && Source() != "" {
+		return nil
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsDevURL, nil)
 	if err != nil {
 		return err

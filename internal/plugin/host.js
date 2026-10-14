@@ -1225,8 +1225,22 @@ function authOf(provider) {
 // ---- providers and models ----------------------------------------------------
 
 let modelsDev
+let modelsDevMtime = 0
 function mdev() {
-  if (modelsDev === undefined) modelsDev = (modelsDevPath && readJSON(modelsDevPath)) || {}
+  if (modelsDevPath) {
+    try {
+      const st = fs.statSync(modelsDevPath, { throwIfNoEntry: false })
+      const mtime = st ? st.mtimeMs : 0
+      if (modelsDev === undefined || (mtime > 0 && mtime !== modelsDevMtime) || (Object.keys(modelsDev).length === 0 && mtime > 0)) {
+        modelsDev = readJSON(modelsDevPath) || {}
+        modelsDevMtime = mtime
+      }
+    } catch {
+      if (modelsDev === undefined) modelsDev = {}
+    }
+  } else if (modelsDev === undefined) {
+    modelsDev = {}
+  }
   return modelsDev
 }
 
