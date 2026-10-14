@@ -4441,9 +4441,13 @@ function openPicker(agent, field, anchor, ev, only) {
   if (again) return;
   const cur = field.value;
   let options = field.options.filter((o) => !only || only(o));
-  // routing groups come first, before the agent's own models and each
-  // provider's; only the picker's own choices (Automatic, Off) above them
-  options = [...options.filter((o) => o.reset), ...options.filter((o) => !o.reset && o.group === ROUTING_GROUPS), ...options.filter((o) => !o.reset && o.group !== ROUTING_GROUPS)];
+  // routing groups come first, then each provider's, then the models the
+  // agent asks for itself, not through magpie: Claude Code's own list of
+  // Claude models above them hid every magpie model below the fold (abledo
+  // on Discord: "claudecode的magpie模型选不了"). Only the picker's own
+  // choices (Automatic, Off) above them all
+  const rest = options.filter((o) => !o.reset && o.group !== ROUTING_GROUPS);
+  options = [...options.filter((o) => o.reset), ...options.filter((o) => !o.reset && o.group === ROUTING_GROUPS), ...rest.filter((o) => !o.direct), ...rest.filter((o) => o.direct)];
   const effortPicker = !only && (field.key === "effort" || field.label === "effort" || field.label === "thinking" || field.label === SUB_EFFORT || roleLevel(field.label));
   options = oneRowPerModel(options, cur);
   // Current model first, then the rest in catalog order. Effort levels keep
