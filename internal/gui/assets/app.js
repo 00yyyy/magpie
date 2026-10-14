@@ -250,8 +250,11 @@ function keepIcons(...roots) {
 const maskLoads = new Map();
 let maskShelf = null;
 function maskSpan(src, failed) {
+  // a url() in a variable is read against the stylesheet that uses it,
+  // and a plugin's sits in its own folder: the picture named in full
+  const pic = `url("${new URL(src, document.baseURI).href}")`;
   const m = el("span", "mask");
-  m.style.setProperty("--i", `url(${src})`);
+  m.style.setProperty("--i", pic);
   let load = maskLoads.get(src);
   if (!load) {
     load = new Promise((done) => {
@@ -268,7 +271,7 @@ function maskSpan(src, failed) {
         document.body.append(maskShelf);
       }
       const k = el("span", "mask");
-      k.style.setProperty("--i", `url(${src})`);
+      k.style.setProperty("--i", pic);
       maskShelf.append(k);
     });
     maskLoads.set(src, load);
