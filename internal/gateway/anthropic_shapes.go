@@ -39,6 +39,16 @@ import (
 // on its Claude models: 400 "safeguards: Extra inputs are not permitted"
 // (#1756, claude-opus-5.5). A provider that refuses it is sent none, and
 // Claude Code, finding no safeguard_results, reviews its actions locally.
+//
+// Claude Code's deferred tools (ToolSearch, MCP tools that come and go)
+// put blocks of their own in a message: {"type":"tool_addition","tool":
+// {"type":"tool_reference","name":…}} (or a tool_definition) when a tool
+// is loaded, a tool_removal when one goes, and a tool_reference. DeepSeek's
+// Anthropic endpoint takes a tool_addition naming a tool, but not one
+// defining it, nor a tool_removal or a message's tool_reference: 422
+// "messages[1].content: unknown variant `tool_removal`". A provider that
+// refuses one is sent none of them (withoutDeferredTools); Kimi, whose 400
+// names nothing, is never sent them (forwardOnce, #2042).
 
 // The refusals, remembered in unfit under the provider's id as betas are.
 const (
@@ -47,6 +57,7 @@ const (
 	shapeTurnEffort = "shape:messages[].output_config"
 	shapeTurnSystem = "shape:messages[].role=system"
 	shapeSafeguards = "shape:safeguards"
+	shapeDeferred   = "shape:messages[].content[].tool_addition"
 )
 
 var (
@@ -55,6 +66,7 @@ var (
 	turnEffortRefused   = regexp.MustCompile(`messages\.\d+\.output_config:? Extra inputs are not permitted`)
 	turnRoleRefused     = regexp.MustCompile(`messages\.(\d+)\.role\b`)
 	safeguardsRefused   = regexp.MustCompile(`\bsafeguards:? Extra inputs are not permitted`)
+	deferredRefused     = regexp.MustCompile("messages\\[\\d+\\]\\.content: unknown variant `(?:tool_addition|tool_removal|tool_definition|tool_reference)`")
 )
 
 // knownDisplay is a thinking.display every Anthropic endpoint has taken.
@@ -84,6 +96,9 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 	if safeguardsRefused.Match(errBody) && gjson.GetBytes(body, "safeguards").Exists() {
 		mark(shapeSafeguards)
 	}
+	if deferredRefused.Match(errBody) && hasDeferredTools(body) {
+		mark(shapeDeferred)
+	}
 	// a role refused at a message that is a system one, counted in the
 	// messages as they were sent; a refusal naming a user or assistant
 	// message is over something else
@@ -99,6 +114,9 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 // withoutRefusedShapes is body as the provider takes it, leaving out what
 // it has refused before.
 func (s *Server) withoutRefusedShapes(p provider.Provider, body []byte) []byte {
+	if !s.fits(p.ID, shapeDeferred, provider.Anthropic) {
+		body = withoutDeferredTools(body)
+	}
 	if !s.fits(p.ID, shapeTurnSystem, provider.Anthropic) {
 		body = withSystemOnTop(body)
 	}
@@ -270,4 +288,81 @@ func emptyContent(c gjson.Result) bool {
 		return empty
 	}
 	return false
+}
+
+// deferredBlock is a message block of Claude Code's deferred tools.
+func deferredBlock(typ string) bool {
+	return typ == "tool_addition" || typ == "tool_removal" || typ == "tool_reference"
+}
+
+// hasDeferredTools is a request with a deferred-tool block in a message's
+// content. A tool_reference inside a tool_result (ToolSearch's answer) is
+// not one.
+func hasDeferredTools(body []byte) bool {
+	if !bytes.Contains(body, []byte(`"tool_addition"`)) && !bytes.Contains(body, []byte(`"tool_removal"`)) && !bytes.Contains(body, []byte(`"tool_reference"`)) {
+		return false
+	}
+	found := false
+	gjson.GetBytes(body, "messages").ForEach(func(_, m gjson.Result) bool {
+		m.Get("content").ForEach(func(_, b gjson.Result) bool {
+			found = deferredBlock(b.Get("type").String())
+			return !found
+		})
+		return !found
+	})
+	return found
+}
+
+// withoutDeferredTools is body without the deferred-tool blocks in its
+// messages, and without a message they leave empty. The tools stay in the
+// request's own tools list, so a vendor that doesn't defer tools still
+// offers the model every one. A tool_result's tool_reference stays: it is
+// the tool's answer, and Kimi and DeepSeek take it. A body with none is
+// sent as it was.
+func withoutDeferredTools(body []byte) []byte {
+	if !hasDeferredTools(body) {
+		return body
+	}
+	var v struct {
+		Messages []json.RawMessage `json:"messages"`
+	}
+	if json.Unmarshal(body, &v) != nil {
+		return body
+	}
+	out := make([]json.RawMessage, 0, len(v.Messages))
+	for _, raw := range v.Messages {
+		c := gjson.GetBytes(raw, "content")
+		if !c.IsArray() {
+			out = append(out, raw)
+			continue
+		}
+		var kept []json.RawMessage
+		for _, b := range c.Array() {
+			if !deferredBlock(b.Get("type").String()) {
+				kept = append(kept, json.RawMessage(b.Raw))
+			}
+		}
+		if len(kept) == len(c.Array()) {
+			out = append(out, raw)
+			continue
+		}
+		if len(kept) == 0 {
+			continue // it said only that tools came or went
+		}
+		var m map[string]json.RawMessage
+		if json.Unmarshal(raw, &m) != nil {
+			return body
+		}
+		content, err := marshalPlain(kept)
+		if err != nil {
+			return body
+		}
+		m["content"] = content
+		b, err := marshalPlain(m)
+		if err != nil {
+			return body
+		}
+		out = append(out, b)
+	}
+	return withFields(body, map[string]any{"messages": out})
 }

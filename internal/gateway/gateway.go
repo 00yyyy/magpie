@@ -3283,7 +3283,7 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 	// "updates", a turn's output_config in messages: anthropic_shapes.go),
 	// each learned once
 	for range 3 {
-		if err != nil || to != provider.Anthropic || res.StatusCode != http.StatusBadRequest {
+		if err != nil || to != provider.Anthropic || res.StatusCode != http.StatusBadRequest && res.StatusCode != http.StatusUnprocessableEntity {
 			return res, err
 		}
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -3321,6 +3321,12 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// shapes a provider refused are taken out, as it asks a display
 		body = adaptiveThinking(body)
 		body = s.withoutRefusedShapes(p, body)
+		if isKimi(p, to) {
+			// Claude Code's deferred-tool blocks, for which Kimi's
+			// Anthropic endpoint turns the whole request away with a 400
+			// that names nothing to learn from (#2042)
+			body = withoutDeferredTools(body)
+		}
 		body = thinkingOffAsTaken(body, path)
 		body = samplingAsTaken(body, path)
 		asked := askedBetas(in)
