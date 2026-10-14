@@ -27,29 +27,32 @@ import (
 // with one key, the gateway that fronts them, and who is routed where.
 
 type modelJSON struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`              // the user's name for it, if they gave one
-	Default  string   `json:"default,omitempty"` // its own name, when the user gave it another
-	Plain    string   `json:"plain,omitempty"`   // a remote magpie's model's name there alone, when Name has its provider there after it (catalog.Model's)
-	Kept     []string `json:"kept,omitempty"`    // the reasoning levels the user keeps of Efforts, when not all
-	Efforts  []string `json:"efforts,omitempty"`
-	Given    bool     `json:"given,omitempty"`     // its levels aren't known: Efforts are those it can be given, Kept those it was
-	Images   bool     `json:"images"`              // agents are told it can see images
-	ImageSet bool     `json:"imageSet,omitempty"`  // the user said so, rather than its vendor
-	Own      bool     `json:"ownImages,omitempty"` // its vendor's answer, which a staged Restore default shows
-	On       bool     `json:"on"`                  // exposed to agents
-	Context  int      `json:"context,omitempty"`   // the window agents are told: the user's, else Listed
-	Output   int      `json:"output,omitempty"`    // the reply limit agents are told: provider.ReplyLimit within Context (provider.OutputWithin)
-	Listed   int      `json:"listed,omitempty"`    // its window before the user's: its vendor's list's, else models.dev's
-	Max      int      `json:"max,omitempty"`       // the most its context may be set to, above Listed
-	Free     bool     `json:"free,omitempty"`      // costs the subscription nothing
-	Rate     float64  `json:"rate,omitempty"`      // the credits a request costs the subscription, as a multiple
-	RateWas  float64  `json:"rateWas,omitempty"`   // the rate before a discount running now
-	API      string   `json:"api,omitempty"`       // the one API the user said it is asked on
-	Auto     []string `json:"auto,omitempty"`      // the APIs its vendor's list says it is served on, what Auto asks it on
-	Same     string   `json:"same,omitempty"`      // the model the user said it is the same as, for the groups magpie finds (#583)
-	Merge    string   `json:"merge,omitempty"`     // what those groups merge it by when the user says nothing
-	Kind     string   `json:"kind,omitempty"`      // what the user said it makes: image or video (#1399)
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`              // the user's name for it, if they gave one
+	Default string   `json:"default,omitempty"` // its own name, when the user gave it another
+	Plain   string   `json:"plain,omitempty"`   // a remote magpie's model's name there alone, when Name has its provider there after it (catalog.Model's)
+	Kept    []string `json:"kept,omitempty"`    // the reasoning levels the user keeps of Efforts, when not all
+	Efforts []string `json:"efforts,omitempty"`
+	Given   bool     `json:"given,omitempty"` // its levels aren't known: Efforts are those it can be given, Kept those it was
+	// Reasonless: the user said it takes no reasoning ask
+	// (provider.SetModelReasonless): none of Efforts is kept, and none is sent
+	Reasonless bool     `json:"reasonless,omitempty"`
+	Images     bool     `json:"images"`              // agents are told it can see images
+	ImageSet   bool     `json:"imageSet,omitempty"`  // the user said so, rather than its vendor
+	Own        bool     `json:"ownImages,omitempty"` // its vendor's answer, which a staged Restore default shows
+	On         bool     `json:"on"`                  // exposed to agents
+	Context    int      `json:"context,omitempty"`   // the window agents are told: the user's, else Listed
+	Output     int      `json:"output,omitempty"`    // the reply limit agents are told: provider.ReplyLimit within Context (provider.OutputWithin)
+	Listed     int      `json:"listed,omitempty"`    // its window before the user's: its vendor's list's, else models.dev's
+	Max        int      `json:"max,omitempty"`       // the most its context may be set to, above Listed
+	Free       bool     `json:"free,omitempty"`      // costs the subscription nothing
+	Rate       float64  `json:"rate,omitempty"`      // the credits a request costs the subscription, as a multiple
+	RateWas    float64  `json:"rateWas,omitempty"`   // the rate before a discount running now
+	API        string   `json:"api,omitempty"`       // the one API the user said it is asked on
+	Auto       []string `json:"auto,omitempty"`      // the APIs its vendor's list says it is served on, what Auto asks it on
+	Same       string   `json:"same,omitempty"`      // the model the user said it is the same as, for the groups magpie finds (#583)
+	Merge      string   `json:"merge,omitempty"`     // what those groups merge it by when the user says nothing
+	Kind       string   `json:"kind,omitempty"`      // what the user said it makes: image or video (#1399)
 	// what it costs, USD per million tokens (#819): the price the user set
 	// for it, and its list price, its vendor's else its maker's, before the
 	// provider's price rate
@@ -700,6 +703,10 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		}
 		if k, ok := kept[m.ID]; ok {
 			j.Kept = slices.DeleteFunc(slices.Clone(j.Efforts), func(e string) bool { return !slices.Contains(k, e) })
+		}
+		if provider.Reasonless(p.ID, m.ID) {
+			// none of its levels is kept: each is there to tick again
+			j.Reasonless, j.Kept = true, nil
 		}
 		return j
 	}

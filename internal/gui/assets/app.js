@@ -10408,7 +10408,11 @@ function renderModels(p) {
       const levels = m.efforts || [];
       const savedKept = m.kept?.length || m.given ? m.kept || [] : levels;
       const nameNow = () => prefs[id]?.name ?? savedName;
-      const keptNow = () => prefs[id]?.efforts ? (prefs[id].efforts.length || m.given ? prefs[id].efforts : levels) : savedKept;
+      // none of its levels kept: it is sent no reasoning field at all
+      // (yuexian7 on Discord: a model models.dev says reasons answered
+      // reasoning_effort with 422, and worked without it)
+      const noneNow = () => prefs[id]?.reasonless ?? !!m.reasonless;
+      const keptNow = () => noneNow() ? [] : prefs[id]?.efforts ? (prefs[id].efforts.length || m.given ? prefs[id].efforts : levels) : savedKept;
       const imagesNow = () => prefs[id]?.ownImages ? !!m.ownImages : prefs[id]?.images ?? !!m.images;
       const row = el("div", "mname");
       const name = input(nameNow(), own);
@@ -10601,25 +10605,41 @@ function renderModels(p) {
         row.append(apiSeg);
       }
       // a model whose levels aren't known (m.given) can be given any
-      // of them, and none again
+      // of them, and none again;
+      // one whose levels are known can keep none of them: it is then
+      // sent no reasoning field, in a routing group too
       const boxes = [];
-      if (levels.length > 1) {
+      const noneSaid = el("span", "hint mnone", t("No reasoning field sent"));
+      noneSaid.title = t("None ticked: magpie sends {id} no reasoning field, whatever effort the agent asks, as for a model that doesn't reason", { id: m.id });
+      const drawNone = () => { noneSaid.hidden = !noneNow(); };
+      if (levels.length > 1 || levels.length && !m.given) {
         const lv = el("div", "mlevels");
-        lv.title = t(m.given ? "Its reasoning levels aren't known: tick the ones it takes" : "Reasoning levels agents are offered");
+        lv.title = t(m.given ? "Its reasoning levels aren't known: tick the ones it takes" : "Reasoning levels agents are offered; none ticked: it is sent no reasoning field");
         for (const l of levels) {
           const [tk, cb] = tick(t(l), keptNow().includes(l));
           cb.onchange = () => {
             const kept = keptNow();
             const next = levels.filter((x) => x === l ? cb.checked : kept.includes(x));
-            if (!next.length && !m.given) { cb.checked = true; status(t("Keep at least one level"), "err"); return; }
+            if (!next.length && !m.given) {
+              // none kept: no reasoning field
+              delete pref().efforts;
+              if (m.reasonless) delete pref().reasonless; else pref().reasonless = true;
+              drawNone();
+              drawReset();
+              return;
+            }
+            if (m.reasonless) pref().reasonless = false; else delete pref().reasonless;
             const all = next.length === levels.length && !m.given;
             if (all ? !m.kept?.length : next.join() === savedKept.join()) delete pref().efforts;
             else pref().efforts = all ? [] : next;
+            drawNone();
             drawReset();
           };
           boxes.push([l, cb]);
           lv.append(tk);
         }
+        lv.append(noneSaid);
+        drawNone();
         row.append(lv);
       }
       // what the Save will make of it differs from what it is: said beside
@@ -10633,10 +10653,12 @@ function renderModels(p) {
         if (draft.priceTyped) delete draft.priceTyped[id];
         if (m.default) prefs[id].name = "";
         if (m.kept?.length) prefs[id].efforts = [];
+        if (m.reasonless) prefs[id].reasonless = false;
         if (m.imageSet) prefs[id].ownImages = true;
         name.value = nameNow();
         imgCb.checked = imagesNow();
         for (const [l, cb] of boxes) cb.checked = keptNow().includes(l);
+        drawNone();
         if (m.api) prefs[id].api = "";
         if (m.same) prefs[id].same = "";
         same.value = sameNow();
@@ -10651,7 +10673,7 @@ function renderModels(p) {
         unsaved.hidden = !prefs[id] && !draft.priceTyped?.[id];
         // staged back to its own already, there is nothing to restore
         const images = prefs[id]?.ownImages ? false : prefs[id]?.images !== undefined ? prefs[id].images !== !!m.ownImages : !!m.imageSet;
-        const custom = nameNow() !== "" || (prefs[id]?.efforts ? prefs[id].efforts.length > 0 : !!m.kept?.length) || images || apiNow() !== "" || sameNow() !== "" || priceNow() !== null || !!draft.priceTyped?.[id];
+        const custom = nameNow() !== "" || noneNow() || (prefs[id]?.efforts ? prefs[id].efforts.length > 0 : !!m.kept?.length) || images || apiNow() !== "" || sameNow() !== "" || priceNow() !== null || !!draft.priceTyped?.[id];
         reset.hidden = !custom;
       };
       row.append(unsaved, reset);

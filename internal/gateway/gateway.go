@@ -2189,7 +2189,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// user saying this model does think, over a catalog that may be
 		// wrong about it (the Trae plugin's own model, #950)
 		quiet := isGroup && c.effort == "" && quietTo(c.p.ID, c.model)
-		if quiet {
+		if provider.Reasonless(c.p.ID, c.model) {
+			// a model the user said takes no reasoning ask is sent none,
+			// in a group or not, at a fixed effort or not: not even
+			// reasoning turned off (yuexian7 on Discord: its vendor
+			// answers reasoning_effort with 422)
+			quiet = true
+			attemptBody, picked = withoutAnyReasoning(from, attemptBody), false
+		} else if quiet {
 			attemptBody, picked = withoutReasoningAsk(from, attemptBody), false
 		}
 		// the reasoning the model is asked for, whoever chose it
@@ -3675,7 +3682,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// turns the whole request away for (#1611)
 			body = withThinkingOnToolTurns(body)
 		}
-		if !anthropicModel.MatchString(model) {
+		if !anthropicModel.MatchString(model) && !provider.Reasonless(p.ID, model) {
 			body = thinkingOffUnlessAsked(body)
 			// Claude Code's auto mode classifier, on a vendor's model that
 			// may think whatever it is told (#250); a Claude model's request
@@ -4241,6 +4248,12 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		// the model can stop thinking: asked for none (#899)
 		r := *req
 		r.Effort, req = "none", &r
+	}
+	if provider.Reasonless(p.ID, model) {
+		// the user said it takes no reasoning ask: built with none, not
+		// even reasoning turned off (yuexian7 on Discord)
+		r := *req
+		r.Effort, r.ThinkOff, r.Thinking, req = "", false, false, &r
 	}
 	if req.Effort != "" {
 		if e := fitFor(p, model, req.Effort); e != req.Effort {

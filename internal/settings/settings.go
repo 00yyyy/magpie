@@ -532,6 +532,13 @@ type Settings struct {
 	// by "<provider id>/<model id>": the lists magpie hands out offer only
 	// those (see provider.SetModelEfforts).
 	ModelEfforts map[string][]string `json:"modelEfforts,omitempty"`
+	// ModelReasonless are the models the user said take no reasoning ask,
+	// by "<provider id>/<model id>": magpie offers them no levels and
+	// sends them no reasoning field, on any API, though their list says
+	// they think (see provider.SetModelReasonless; yuexian7 on Discord: a
+	// model models.dev lists with reasoning answered reasoning_effort
+	// with 422).
+	ModelReasonless map[string]bool `json:"modelReasonless,omitempty"`
 	// ModelImages is whether the user said a model takes images, by
 	// "<provider id>/<model id>". Absent leaves it to the vendor's list.
 	ModelImages map[string]bool `json:"modelImages,omitempty"`

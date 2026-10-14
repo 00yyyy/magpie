@@ -22,6 +22,7 @@ const modelUsage = `usage:
   magpie model efforts <provider/model>          the reasoning levels it offers, and those it has
   magpie model efforts <provider/model> <l>,<l>  offer only these of them, e.g. low,medium,high
   magpie model efforts <provider/model> --reset  offer every level it has again
+  magpie model efforts <provider/model> off      send it no reasoning field at all
   magpie model price <provider/model>            what the model costs you, and what you said it costs
   magpie model price <provider/model> <in>,<out>,<cache read>,<cache write>
                                                  say what it costs, in USD per million tokens, all four parts as
@@ -211,7 +212,20 @@ func modelEfforts(args []string) error {
 	all := p.Efforts(model)
 	rest := args[1:]
 	given := len(p.Known(model)) == 0 // levels aren't known: those it has are the user's
+	if len(rest) == 1 && slices.Contains([]string{"off", "--off"}, rest[0]) {
+		// no reasoning field at all, for a vendor that turns one away
+		// though its list says the model reasons (yuexian7 on Discord)
+		if err := provider.SetModelReasonless(id, true); err != nil {
+			return err
+		}
+		fmt.Println(green.Render("✓"), id, muted.Render("is sent no reasoning field"), faint.Render("· --reset offers its levels again"))
+		return nil
+	}
 	if len(rest) == 0 {
+		if provider.Reasonless(p.ID, model) {
+			fmt.Println(muted.Render(id+" is sent no reasoning field"), faint.Render("· --reset offers its levels again"))
+			return nil
+		}
 		if len(all) == 0 {
 			fmt.Println(muted.Render(id+" has no reasoning levels known"), faint.Render("· give it some of "+strings.Join(provider.Levels, ", ")))
 			return nil
@@ -677,9 +691,11 @@ func modelCompact(args []string) error {
 func modelNames() error {
 	s := settings.Load()
 	keys := slices.Sorted(maps.Keys(s.ModelNames))
-	for k := range s.ModelEfforts {
-		if !slices.Contains(keys, k) {
-			keys = append(keys, k)
+	for _, m := range []map[string][]string{s.ModelEfforts, reasonlessLevels(s.ModelReasonless)} {
+		for k := range m {
+			if !slices.Contains(keys, k) {
+				keys = append(keys, k)
+			}
 		}
 	}
 	slices.Sort(keys)
@@ -699,9 +715,23 @@ func modelNames() error {
 		if es := s.ModelEfforts[k]; len(es) > 0 {
 			line += "  " + muted.Render(strings.Join(es, "/"))
 		}
+		if s.ModelReasonless[k] {
+			line += "  " + muted.Render("no reasoning field")
+		}
 		fmt.Println(line)
 	}
 	return nil
+}
+
+// reasonlessLevels are the models sent no reasoning field, as keys.
+func reasonlessLevels(m map[string]bool) map[string][]string {
+	out := map[string][]string{}
+	for k, on := range m {
+		if on {
+			out[k] = nil
+		}
+	}
+	return out
 }
 
 // modelWires lists the names the user gave the vendors their models are asked

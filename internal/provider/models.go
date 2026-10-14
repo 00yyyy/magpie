@@ -1444,6 +1444,9 @@ func (p Provider) RejectsTemperature(model string) bool {
 // Efforts are the reasoning levels the model takes, when known: its own,
 // or those the user gave it when it has none known.
 func (p Provider) Efforts(model string) []string {
+	if Reasonless(p.ID, model) {
+		return nil
+	}
 	if all := p.Known(model); len(all) > 0 {
 		return all
 	}
@@ -1454,6 +1457,9 @@ func (p Provider) Efforts(model string) []string {
 // it thinks, or models.dev says most of those serving it do (Entry's
 // Reasoning).
 func (p Provider) Thinks(model string) bool {
+	if Reasonless(p.ID, model) {
+		return false
+	}
 	if len(p.Efforts(model)) > 0 {
 		return true
 	}
@@ -1514,6 +1520,9 @@ func (p Provider) knownElsewhere(model string) []string {
 // lists it with a thinking switch alone, or nothing (Xiaomi's
 // mimo-v2.6-flash), and the user gave it none.
 func (p Provider) Levelless(model string) bool {
+	if Reasonless(p.ID, model) {
+		return true
+	}
 	if len(p.Efforts(model)) > 0 {
 		return false
 	}
@@ -1988,6 +1997,10 @@ type Entry struct {
 	// thinking switch alone has it and no Efforts (a group's: a member
 	// thinks).
 	Reasoning bool `json:"reasoning,omitempty"`
+	// Reasonless is set on a model the user said takes no reasoning ask
+	// (SetModelReasonless): it is sent none, and as a group's member it
+	// leaves the group the levels the others have
+	Reasonless bool `json:"-"`
 	// AgentsV2 is set on a model offering Codex's Ultra that no ChatGPT
 	// account answers for (a group's: none of its members): Codex is told
 	// multi-agent V2 for it, so Ultra hands work to its agents, whose
@@ -2129,6 +2142,11 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	if p.Account == nil || p.Account.Agent != "codex" {
 		e.Efforts = withUltra(m.ID, e.Efforts)
 		e.AgentsV2 = slices.Contains(e.Efforts, "ultra")
+	}
+	// one the user said takes no reasoning ask offers none and is sent
+	// none (SetModelReasonless), whatever its list says
+	if s.ModelReasonless[e.ID] {
+		e.Efforts, e.Reasoning, e.AgentsV2, e.Reasonless = nil, false, false, true
 	}
 	return e
 }

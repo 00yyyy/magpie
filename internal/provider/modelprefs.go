@@ -270,7 +270,11 @@ func setModelEfforts(ref string, efforts []string) (bool, error) {
 	}
 	s := settings.Load()
 	key := p.ID + "/" + model
-	if slices.Equal(s.ModelEfforts[key], keep) {
+	// levels given, or all of them again, take back a word that it takes
+	// no reasoning ask (SetModelReasonless)
+	reasonless := s.ModelReasonless[key]
+	delete(s.ModelReasonless, key)
+	if slices.Equal(s.ModelEfforts[key], keep) && !reasonless {
 		return false, nil
 	}
 	if len(keep) == 0 {
@@ -285,6 +289,50 @@ func setModelEfforts(ref string, efforts []string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// SetModelReasonless says whether a provider's model, spelt
+// "provider/model", takes no reasoning ask, whatever its list says: on,
+// it offers no levels (Efforts, the agents' lists, a group's) and the
+// gateway sends it no reasoning field on any API — Chat's
+// reasoning_effort, Responses' reasoning, Anthropic's thinking and
+// output_config effort — as it does a model known not to think
+// (yuexian7 on Discord: models.dev lists a model with reasoning, and the
+// vendor answers reasoning_effort with 422 while the request without it
+// works). Off gives it the levels it had again.
+func SetModelReasonless(ref string, on bool) error {
+	return touchedIf(setModelReasonless(ref, on))
+}
+
+func setModelReasonless(ref string, on bool) (bool, error) {
+	p, model, err := splitRef(ref)
+	if err != nil {
+		return false, err
+	}
+	s := settings.Load()
+	key := p.ID + "/" + model
+	if s.ModelReasonless[key] == on {
+		return false, nil
+	}
+	if on {
+		if s.ModelReasonless == nil {
+			s.ModelReasonless = map[string]bool{}
+		}
+		s.ModelReasonless[key] = true
+		delete(s.ModelEfforts, key) // none kept of none offered
+	} else {
+		delete(s.ModelReasonless, key)
+	}
+	if err := settings.Save(s); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Reasonless reports whether the user said pid's model takes no reasoning
+// ask (SetModelReasonless).
+func Reasonless(pid, model string) bool {
+	return heldSettings().ModelReasonless[pid+"/"+model]
 }
 
 // ModelEfforts are the reasoning levels the user kept of the provider's
@@ -437,14 +485,17 @@ func modelAPI(proto Protocol) bool {
 // place of Price, what the user said it costs (SetModelPrice, #819), and
 // Kind "" what its vendor's list says it makes (SetModelKind, #1399).
 type ModelPref struct {
-	Name      *string        `json:"name,omitempty"`
-	Efforts   *[]string      `json:"efforts,omitempty"`
-	Images    *bool          `json:"images,omitempty"`
-	OwnImages bool           `json:"ownImages,omitempty"`
-	API       *string        `json:"api,omitempty"`
-	Same      *string        `json:"same,omitempty"`
-	Price     *catalog.Price `json:"price,omitempty"`
-	OwnPrice  bool           `json:"ownPrice,omitempty"`
+	Name    *string   `json:"name,omitempty"`
+	Efforts *[]string `json:"efforts,omitempty"`
+	// Reasonless, set, is SetModelReasonless's word: true for no
+	// reasoning ask, false to take that back
+	Reasonless *bool          `json:"reasonless,omitempty"`
+	Images     *bool          `json:"images,omitempty"`
+	OwnImages  bool           `json:"ownImages,omitempty"`
+	API        *string        `json:"api,omitempty"`
+	Same       *string        `json:"same,omitempty"`
+	Price      *catalog.Price `json:"price,omitempty"`
+	OwnPrice   bool           `json:"ownPrice,omitempty"`
 	// Kind is what the model makes, as SetModelKind takes it: "image",
 	// "video", or "" for what its vendor's list and name say (#1399)
 	Kind *string `json:"kind,omitempty"`
@@ -471,6 +522,11 @@ func SetModelPrefs(pid string, prefs map[string]ModelPref) error {
 			}
 			if m.Efforts != nil {
 				if err := set(setModelEfforts(ref, *m.Efforts)); err != nil {
+					return err
+				}
+			}
+			if m.Reasonless != nil {
+				if err := set(setModelReasonless(ref, *m.Reasonless)); err != nil {
 					return err
 				}
 			}

@@ -123,6 +123,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		CheckinOff:           []string{"workbuddy|u1"},
 		ModelNames:           map[string]string{"p/m": "Mine"},
 		ModelEfforts:         map[string][]string{"p/m": {"low"}},
+		ModelReasonless:      map[string]bool{"p/n": true},
 		ModelImages:          map[string]bool{"p/m": true},
 		ModelOutputs:         map[string]int{"p/m": 131072},
 		ModelCompacts:        map[string]int{"p/*": 500000},
