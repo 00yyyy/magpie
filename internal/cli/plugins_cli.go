@@ -53,7 +53,7 @@ func pluginCmd(args []string) error {
 		if !plugin.IsPath(rest[0]) && !plugin.HasBun() {
 			fmt.Println(muted.Render("Downloading Bun " + plugin.BunInUse() + ", which plugins run on…"))
 		}
-		e, err := plugin.Add(ctx, rest[0])
+		e, err := provider.AddPlugin(ctx, rest[0])
 		if err != nil {
 			return err
 		}

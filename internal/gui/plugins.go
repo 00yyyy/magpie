@@ -370,7 +370,7 @@ func pluginMarketState(ctx context.Context, w Windows) pluginMarketJSON {
 // addPlugin, removePlugin, updatePlugins and upgradePlugin are what
 // /api/plugins/{op} runs, for tests to stand in for.
 var (
-	addPlugin     = plugin.Add
+	addPlugin     = provider.AddPlugin
 	removePlugin  = provider.RemovePlugin
 	updatePlugins = plugin.Update
 	upgradePlugin = plugin.Upgrade

@@ -393,6 +393,10 @@ type file struct {
 	// Routing page (#779), by id, found ones among them; one not in it
 	// follows those that are (see SetGroupOrder).
 	GroupOrder []string `json:"groupOrder,omitempty"`
+	// PluginLeft are the picks of a removed plugin's providers, set aside
+	// when it was removed and put back when it is added again (#2057; see
+	// plugin_left.go).
+	PluginLeft []LeftRecord `json:"pluginLeft,omitempty"`
 }
 
 // Path is the file the user's providers live in.

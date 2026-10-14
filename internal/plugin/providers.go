@@ -451,6 +451,24 @@ func UseCached(ps []Provider) {
 	listSeen.Unlock()
 }
 
+// Listed is every provider the plugins last listed, an off plugin's among
+// them, as Cached keeps them, with no sign-in read: false when no listing
+// is known (none kept, plugin-providers.json missing or unreadable), which
+// is never "no providers".
+func Listed() ([]Provider, bool) {
+	provMu.Lock()
+	ps := provCache
+	provMu.Unlock()
+	if ps != nil {
+		return slices.Clone(ps), true
+	}
+	b, err := steady.ReadFile(providersPath())
+	if err != nil || json.Unmarshal(b, &ps) != nil {
+		return nil, false
+	}
+	return ps, true
+}
+
 // refreshing is Cached's refreshes in the background.
 var refreshing sync.WaitGroup
 

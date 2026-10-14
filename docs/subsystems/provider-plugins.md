@@ -129,6 +129,16 @@ Installing the plugin independently can also hand over ownership through `provid
 
 `MoveBack` restores built-in ownership and records `back`. Compatible accounts added through the plugin can return too; incompatible accounts can remain with the plugin under its separate id. Removing or disabling a plugin first moves affected built-ins back and stops if that fails. A package installed by the user remains after moving back; a migration-installed package is removed only when no remaining signed-in or moved provider needs it.
 
+Removing a plugin also sets aside the model picks its providers left in `providers.json` (#2057, `plugin_left.go`). Before, nothing listed those records and `magpie provider rm` couldn't find them, so sync and backup asked for a sign-in to them on every run (`NotSignedIn`).
+
+- `RemovePlugin` reads which ids the plugin's providers have (`pluginRecordIDs`: `PluginID` of each provider `plugin.Listed` last gave for its spec, an off plugin's included) while it is still installed. It leaves out:
+  - a built-in's id;
+  - any id another installed plugin also serves.
+- After `plugin.Remove`, only records under those ids that hold picks alone (`OnlyPicks`) move into `providers.json`'s `pluginLeft`, under the package's name. A record with an endpoint or a key is the user's own provider and stays.
+- With no listing known (no cache and no readable `plugin-providers.json`), nothing is set aside.
+- `provider.AddPlugin` is what the GUI, the CLI and `AddPlugins` (backup and sync) add through. It puts the package's records back, each one whose id has no record now. One the user gave to a provider since stays aside.
+- Switching a plugin off sets nothing aside, since off is undone by switching it back on. Records left behind by removals before this change stay as they are; they can't be told from picks a sync brought for a plugin not installed here yet.
+
 New users do not see an unused deprecated built-in in the Add sheet. `unusedSub` leaves it out when it has no account. Until an installed replacement takes ownership, `replacedSub` makes the Add sheet show the plugin tile. The Plugins page is the installation entry point.
 
 `keepMovedCurrent` maintains the required plugin version for moved subscriptions. Raising the owning mover's `min` after publishing a plugin fix triggers this update path. Update failures are logged; disabled packages and local-folder installations are not automatically replaced.

@@ -2552,7 +2552,8 @@ the copy made before a write.
 What you set:
 
 - `settings.json` — Settings
-- `providers.json` — your providers, keys included (0600)
+- `providers.json` — your providers, keys included (0600); `pluginLeft` in it
+  keeps a removed plugin's model picks until it is added again
 - `profiles.json` — saved profiles
 - `library.json`, `library/` — the library: its instructions, skills, MCP
   servers and hooks, and the agents each goes to
