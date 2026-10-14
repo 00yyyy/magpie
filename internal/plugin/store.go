@@ -71,6 +71,21 @@ type List struct {
 
 var listMu sync.Mutex
 
+// bunMu is held through each bun command that changes plugins/ (add,
+// update, remove). Two at once read package.json and bun.lock before
+// either writes them, so one's change is lost (#2002, anganing: after an
+// update, the hourly plugin updates and the moved subscriptions' ran
+// together at start). The dependency a git plugin is found by is then
+// gone from package.json, and the plugin can't be loaded.
+var installMu sync.Mutex
+
+// runBun runs a bun command that changes plugins/, one at a time.
+func runBun(ctx context.Context, bun string, args ...string) ([]byte, error) {
+	installMu.Lock()
+	defer installMu.Unlock()
+	return bunCommand(ctx, bun, Dir(), args...).CombinedOutput()
+}
+
 // Dir is the folder magpie installs npm plugins into.
 func Dir() string { return filepath.Join(settings.Dir(), "plugins") }
 
@@ -385,7 +400,7 @@ func add(ctx context.Context, spec, version string) (Entry, error) {
 		// installed just now for this, and nothing loads it: taken out again
 		if !IsPath(spec) && !slices.Contains(slices.Collect(maps.Values(was)), Name(spec)) {
 			if bun, berr := Bun(ctx); berr == nil {
-				_ = bunCommand(ctx, bun, Dir(), "remove", "--ignore-scripts", Name(spec)).Run()
+				_, _ = runBun(ctx, bun, "remove", "--ignore-scripts", Name(spec))
 			}
 		}
 		return Entry{}, err
@@ -547,7 +562,7 @@ func Remove(ctx context.Context, name string) error {
 	}
 	if !IsPath(e.Spec) {
 		if bun, err := Bun(ctx); err == nil {
-			_ = bunCommand(ctx, bun, Dir(), "remove", "--ignore-scripts", Name(e.Spec)).Run()
+			_, _ = runBun(ctx, bun, "remove", "--ignore-scripts", Name(e.Spec))
 		}
 	}
 	Restart()
@@ -646,13 +661,19 @@ func install(ctx context.Context, spec string) error {
 	if err := os.MkdirAll(Dir(), 0o755); err != nil {
 		return err
 	}
+	// the package.json made for a first plugin is made under the lock
+	// too: written while another bun add writes its own, it would take
+	// every plugin out of it
+	installMu.Lock()
 	pj := filepath.Join(Dir(), "package.json")
 	if _, err := os.Stat(pj); err != nil {
 		if err := os.WriteFile(pj, []byte("{\n  \"name\": \"magpie-plugins\",\n  \"private\": true\n}\n"), 0o644); err != nil {
+			installMu.Unlock()
 			return err
 		}
 	}
 	out, err := bunCommand(ctx, bun, Dir(), "add", "--ignore-scripts", spec).CombinedOutput()
+	installMu.Unlock()
 	if err != nil {
 		if hint := missingLibs(string(out)); hint != "" {
 			return fmt.Errorf("bun add %s: %s: %w", spec, hint, err)
@@ -821,7 +842,7 @@ func reinstall(ctx context.Context, spec string) error {
 	if err != nil {
 		return err
 	}
-	out, err := bunCommand(ctx, bun, Dir(), "update", "--ignore-scripts", name).CombinedOutput()
+	out, err := runBun(ctx, bun, "update", "--ignore-scripts", name)
 	if err != nil {
 		if hint := missingLibs(string(out)); hint != "" {
 			return fmt.Errorf("bun update %s: %s: %w", name, hint, err)
