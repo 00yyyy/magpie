@@ -1465,7 +1465,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// serves it: the Routing view shows the group it went to
 	asked = call.Model
 	if agent == "claude-desktop" {
-		asked = desktopTurn(asked, body, fromClaudeCode(r.Header))
+		sub, _ := subagentOf(r.Header)
+		asked = desktopTurn(asked, body, fromClaudeCode(r.Header), sub != "")
 	}
 	// a stand-in that is a tier at an effort of its own ("<model>:<level>",
 	// #536) is that model at that level, as were it asked for so

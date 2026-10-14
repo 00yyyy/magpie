@@ -395,7 +395,12 @@ func desktopPickedPath() string { return filepath.Join(settings.Dir(), "claude-d
 
 // desktopTurn is the model a Claude Desktop request for asked is served by.
 // byClaudeCode is a request Claude Code sent (its claude-cli/ User-Agent)
-// rather than Desktop's own client.
+// rather than Desktop's own client. bySubagent is a subagent's request
+// (x-claude-code-agent-id): its turns carry tools too, but its model is
+// the one its tier or definition asked for, not the user's pick, so it is
+// never kept as the session's model. Before, a subagent on the opus tier's
+// model took the session's place until the lead's next turn, and the
+// titles asked for meanwhile went to it.
 //
 // Claude Code names the model of each of its own background requests on
 // purpose: its auto mode's safety classifier asks for its sonnet with no
@@ -406,7 +411,7 @@ func desktopPickedPath() string { return filepath.Join(settings.Dir(), "claude-d
 // pick> --system-prompt "You write short session titles…" --tools ""`,
 // sent with max_tokens 64000); one for a model magpie doesn't serve still
 // goes there whoever sent it.
-func desktopTurn(asked string, body []byte, byClaudeCode bool) string {
+func desktopTurn(asked string, body []byte, byClaudeCode, bySubagent bool) string {
 	if asked == "" {
 		return asked
 	}
@@ -437,7 +442,7 @@ func desktopTurn(asked string, body []byte, byClaudeCode bool) string {
 		}
 		return asked
 	}
-	if tools {
+	if tools && !bySubagent {
 		desktopPicked.model = asked
 		if os.MkdirAll(settings.Dir(), 0o755) == nil {
 			os.WriteFile(desktopPickedPath(), []byte(asked+"\n"), 0o600)
