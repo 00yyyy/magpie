@@ -33,6 +33,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -507,7 +508,19 @@ func codexFilesIn(dir string) []file {
 	var out []file
 	for _, folder := range []string{"sessions", "archived_sessions"} {
 		root := filepath.Join(dir, folder)
-		filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		// The folder can be a link: the Codex CLI keeps .codex on another drive
+		// by making ~/.codex/sessions a junction to it, and a symlink elsewhere.
+		// WalkDir lstat()s the root it is handed, where a link is no folder at
+		// all, so it walks nothing: walk where the link leads, and name each
+		// rollout under this folder, whose config.toml and state databases are
+		// read back out of a rollout's path (#2233).
+		walk := root
+		if fi, err := os.Lstat(root); err == nil && !fi.IsDir() {
+			if real, err := proc.RealPath(root); err == nil {
+				walk = real
+			}
+		}
+		filepath.WalkDir(walk, func(p string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
 			}
@@ -518,6 +531,11 @@ func codexFilesIn(dir string) []file {
 			fi, err := d.Info()
 			if err != nil || !fi.Mode().IsRegular() {
 				return nil
+			}
+			if walk != root {
+				if rel, err := filepath.Rel(walk, p); err == nil {
+					p = filepath.Join(root, rel)
+				}
 			}
 			out = append(out, file{agent: "codex", key: "codex:" + m[1], path: p, main: true, size: fi.Size(), mod: fi.ModTime()})
 			return nil
