@@ -13,6 +13,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { openPart } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const at = (h) => new Date(Date.now() + h * 3600e3).toISOString();
@@ -141,7 +142,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     t.after(() => browser.close());
     const prefs = async (page) => {
       await page.locator("#prefs").click();
-      await page.locator(":is(#setTab-usage, .nav-s[data-of=setTab-usage]):visible").click();
+      await openPart(page, "usage");
       await page.locator("#trayUsagePick button").waitFor();
     };
     const scrolled = (page) => page.locator("#view-settings").evaluate((v) => v.scrollTop);

@@ -94,4 +94,14 @@ async function watchSettingsReads(page) {
 // settings, with no wait between, so once it is set the read is counted.
 const settingsDrawn = (page) => page.waitForFunction(() => load.done && __settingsReads.asked === __settingsReads.drawn);
 
-module.exports = { inView, reach, click, watchSettingsReads, settingsDrawn };
+// openPart opens a part of Settings (a tab, or its entry in the sidebar's
+// strip) the way the keyboard does. A click waits for the tab to hold still
+// over two animation frames, and on a loaded machine WebKit draws no frames
+// for seconds while the page itself runs on, so the click can sit out the
+// test's whole timeout over a tab that isn't moving (#2150). Enter on the
+// focused button clicks it with no frame to wait for.
+async function openPart(page, id) {
+  await page.locator(`:is(#setTab-${id}, .nav-s[data-of=setTab-${id}]):visible`).press("Enter");
+}
+
+module.exports = { inView, reach, click, openPart, watchSettingsReads, settingsDrawn };
