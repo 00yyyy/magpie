@@ -616,6 +616,17 @@ type matchGroup struct {
 	counts []int
 }
 
+// agyMatchSession stands for the session of an Antigravity CLI (agy) call
+// on both sides: agy sends the gateway no session header, so its gateway
+// records name none, and its transcript's steps are matched to them by
+// their tokens and time alone (#2097).
+const agyMatchSession = "\x00agy"
+
+// agyStepLongest is how long after an agy step began its gateway call may
+// have ended: a transcript's created_at is when the step began, to the
+// second, where every other session file's time is when its call ended.
+const agyStepLongest = 30 * time.Minute
+
 func matchedLocal(gateway *rowChunk, chunks []*rowChunk, skip map[rowRef]bool, since time.Time) map[rowRef]bool {
 	return matchedBlocks([]*rowChunk{gateway}, chunks, skip, since, true)
 }
@@ -681,6 +692,9 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			if session == "" {
 				session = gateway.Strings[p.Text[13]]
 			}
+			if session == "" && gateway.Strings[p.Text[0]] == "agy" {
+				session = agyMatchSession
+			}
 			if session == "" {
 				continue
 			}
@@ -710,6 +724,10 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 				continue
 			}
 			key := matchKey{session: c.Strings[p.Text[13]], tokens: matchTokens(p.Tokens), failed: failed}
+			from, to := p.Time.Add(-2*time.Second), p.Time.Add(2*time.Second)
+			if c.Strings[p.Text[0]] == "agy" {
+				key.session, to = agyMatchSession, p.Time.Add(agyStepLongest)
+			}
 			count, candidate := 0, (rowRef{})
 			// Without a local ID either gateway partition can match. With an ID,
 			// only an unnamed gateway call can match (different IDs stay distinct).
@@ -722,8 +740,8 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 				if g == nil {
 					continue
 				}
-				lo := sort.Search(len(g.ends), func(i int) bool { return !g.ends[i].at.Before(p.Time.Add(-2 * time.Second)) })
-				hi := sort.Search(len(g.ends), func(i int) bool { return g.ends[i].at.After(p.Time.Add(2 * time.Second)) })
+				lo := sort.Search(len(g.ends), func(i int) bool { return !g.ends[i].at.Before(from) })
+				hi := sort.Search(len(g.ends), func(i int) bool { return g.ends[i].at.After(to) })
 				if hi > lo {
 					count += hi - lo
 					candidate = g.ends[lo].index

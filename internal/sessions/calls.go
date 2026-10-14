@@ -235,6 +235,7 @@ func callSources() []file {
 	out = append(out, wslFiles("kimi")...)
 	out = append(out, piCallFiles()...)
 	out = append(out, codebuddyCallFiles()...)
+	out = append(out, agyCallFiles()...) // #2097
 	return append(out, workbuddyCallFiles()...)
 }
 

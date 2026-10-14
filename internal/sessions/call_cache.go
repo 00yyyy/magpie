@@ -183,6 +183,7 @@ var wholeCallReaders = map[string]func(file) (*callFile, bool){
 	"kimi":         readKimiCalls, // #1607
 	"pi":           readPiCalls,   // #1951
 	"omp":          readPiCalls,
+	"agy":          readAgyCalls, // #2097
 }
 
 func readCalls(f file) *callFile {
