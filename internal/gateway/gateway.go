@@ -2174,11 +2174,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			continue
 		}
 		// a group tells agents the longest reply a member of it gives
-		// (groupEntries); each member is asked for no more than its own
+		// (groupEntries); each member is asked for no more than its own.
+		// Outside a group only the user's own Max output lowers a request
+		// (userOutput): a vendor's figure may be stale, the user's is asked
 		if isGroup {
 			if n := outputLimit(c.p, c.model); n > 0 {
 				attemptBody = withMaxOutput(from, attemptBody, n)
 			}
+		} else if n := userOutput(c.p, c.model); n > 0 {
+			attemptBody = withMaxOutput(from, attemptBody, n)
 		}
 		picked := false // the effort asked for in place of the agent's
 		// a member fixed at an effort (#189), else the model asked for at
