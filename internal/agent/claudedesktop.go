@@ -32,6 +32,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -378,6 +380,8 @@ func desktopOn(p desktopPaths) error {
 		was := []byte("{}\n")
 		if kept := unstash(desktopProfile + p.key); kept != "" && desktopObjectBytes([]byte(kept)) {
 			was = []byte(kept)
+		} else if own := desktopOwnGatewayProfile(p); own != nil {
+			was = own
 		}
 		if err := os.WriteFile(p.prof, was, 0o600); err != nil {
 			return err
@@ -512,6 +516,54 @@ func desktopOff(p desktopPaths) error {
 		}
 	}
 	return nil
+}
+
+// desktopOwnGatewayProfile is the profile the user made themselves in
+// Desktop's window for magpie's gateway, the one applied before magpie
+// applied its own: its settings (chat tab, default effort, allowed hosts
+// and whatever Desktop adds) start magpie's profile, so switching on
+// doesn't trade them for magpie's defaults (#2035). A profile for another
+// gateway, Bedrock or Vertex is not one: its models and settings are for
+// somewhere else. nil when there is none.
+func desktopOwnGatewayProfile(p desktopPaths) []byte {
+	id, _ := edit.GetJSON(p.meta, "appliedId")
+	if id == desktopProfileID {
+		id = unstash(desktopApplied + p.key)
+	}
+	if id == "" || id == desktopProfileID || filepath.Base(id) != id || strings.HasPrefix(id, ".") {
+		return nil
+	}
+	b, err := os.ReadFile(filepath.Join(p.library, id+".json"))
+	if err != nil || !desktopObjectBytes(b) {
+		return nil
+	}
+	var prof struct {
+		Provider string `json:"inferenceProvider"`
+		BaseURL  string `json:"inferenceGatewayBaseUrl"`
+	}
+	if json.Unmarshal(b, &prof) != nil || prof.Provider != "gateway" || !desktopIsOurGateway(prof.BaseURL) {
+		return nil
+	}
+	return b
+}
+
+// desktopIsOurGateway: u is magpie's gateway, by its port on this machine
+// (127.0.0.1, localhost or ::1, with or without /v1).
+func desktopIsOurGateway(u string) bool {
+	a, err := url.Parse(strings.TrimSpace(u))
+	if err != nil || a.Port() == "" {
+		return false
+	}
+	ours, err := url.Parse(gateway.URL())
+	if err != nil || a.Port() != ours.Port() {
+		return false
+	}
+	h := a.Hostname()
+	if h == ours.Hostname() || h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
 }
 
 // desktopObjectBytes: b is a JSON object.
