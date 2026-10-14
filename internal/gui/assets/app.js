@@ -12612,12 +12612,13 @@ function balanceFieldOf(raw) {
 // knows the fix (see balance.go); "" for any other.
 function balanceError(err) {
   if (/takes the API key, not the access token/.test(err)) return t("The Balance URL …/api/usage/token takes the API key, not the access token — set it to …/api/user/self in the provider's settings");
+  if (/takes the API key, not the login token/.test(err)) return t("The Balance URL …/v1/usage takes the API key, not the login token — set it to …/api/v1/user/profile in the provider's settings");
   if (/New-Api-User/i.test(err)) return t("Add the header New-Api-User = your user ID (shown in the site's personal settings) to the provider's Headers");
   return "";
 }
 
 // An account token is unused without a Balance URL and can't authenticate
-// /api/usage/token, which takes API keys only. Other URLs may belong to
+// /api/usage/token or sub2api's /v1/usage, which take API keys only. Other URLs may belong to
 // another relay and are left alone; both new-api and sub2api issue JWTs.
 function balanceFix(p) {
   const box = el("div", "bal-fix");
@@ -12632,20 +12633,21 @@ function balanceFix(p) {
     try { path = new URL(u).pathname.replace(/\/+$/, ""); } catch {}
     let why = "";
     if (path === "/api/usage/token") why = t("…/api/usage/token takes the API key, not this token: for the account's balance, new-api uses /api/user/self; sub2api uses /api/v1/user/profile.");
+    else if (path === "/v1/usage") why = t("…/v1/usage takes the API key, not this token: for the account's balance, a sub2api panel uses /api/v1/user/profile.");
     else if (!u) why = t("The token needs a Balance URL: a new-api relay uses /api/user/self; a sub2api panel uses /api/v1/user/profile to read the account's balance.");
     if (why) {
       box.classList.add("warn");
       box.append(el("span", "", why));
       const site = origin(u) || origin(draft.chat || draft.anthropic || draft.responses || "");
       if (!site) return;
-      for (const path of ["/api/user/self", "/api/v1/user/profile"]) {
-        const to = site + path;
+      // sub2api's /v1/usage has one account query beside it: its panel's
+      for (const to of (path === "/v1/usage" ? ["/api/v1/user/profile"] : ["/api/user/self", "/api/v1/user/profile"]).map((q) => site + q)) {
         const use = el("button", "text action", t("Use {url}", { url: to }));
         use.onclick = () => {
           draft.balanceURL = to;
           // An unrelated expression belongs to the user, so changing the
           // endpoint must not overwrite it.
-          if (!(draft.balancePath || "").trim() || /total_(available|granted|used)|unlimited_quota/.test(draft.balancePath)) draft.balancePath = balanceFieldOf(to);
+          if (!(draft.balancePath || "").trim() || /total_(available|granted|used)|unlimited_quota|^\s*\$?remaining\s*$/.test(draft.balancePath)) draft.balancePath = balanceFieldOf(to);
           const ed = box.closest(".editor");
           const bal = ed?.querySelector(".bal-url");
           const field = ed?.querySelector(".bal-path");
