@@ -884,7 +884,9 @@ func updateEnv(u *updater) []string {
 			}
 		}
 	}
-	return append(env, "NONINTERACTIVE=1", "HOMEBREW_NO_ENV_HINTS=1", "NO_COLOR=1")
+	// the --version run after an update starts Cline, which would otherwise
+	// check for (and schedule) an update of its own
+	return append(env, "NONINTERACTIVE=1", "HOMEBREW_NO_ENV_HINTS=1", "NO_COLOR=1", "CLINE_NO_AUTO_UPDATE=1")
 }
 
 // updateTimeout bounds an update: a download, or Homebrew updating itself first.
