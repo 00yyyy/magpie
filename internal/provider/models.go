@@ -1555,7 +1555,7 @@ func effortsOf(m catalog.Model) []string {
 // else, for one newer than the catalog, its maker's line's
 // (catalog.KinEfforts).
 func borrowedEfforts(id string) []string {
-	if e, ok := catalog.ListedBy(makerCatalogs(), id); ok {
+	if e, ok := catalog.ListedByBorrowed(makerCatalogs(), id); ok {
 		return e
 	}
 	if e := catalog.EffortsOf(id); len(e) > 0 {

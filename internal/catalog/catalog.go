@@ -326,13 +326,30 @@ type mdModel struct {
 	} `json:"limit"`
 }
 
-// efforts are the reasoning levels models.dev says the model takes.
-func (m mdModel) efforts() []string {
+// reasoningOffProviders are models.dev providers whose APIs have verified
+// that their toggled models accept the off effort (#1098).
+var reasoningOffProviders = map[string]struct{}{
+	"deepseek":              {},
+	"kimi-code-plan-cn":     {},
+	"kimi-code-plan-global": {},
+}
+
+// efforts are the reasoning levels models.dev says the model takes. A
+// toggle adds the off level only for providers whose APIs verified it;
+// other providers keep their listed levels because they may reject "none".
+func (m mdModel) efforts(providerID string) []string {
 	var out []string
+	toggle := false
 	for _, r := range m.Reasoning {
-		if r.Type == "effort" {
+		switch r.Type {
+		case "toggle":
+			toggle = true
+		case "effort":
 			out = r.Values
 		}
+	}
+	if _, ok := reasoningOffProviders[providerID]; ok && toggle && len(out) > 0 && !slices.Contains(out, "none") {
+		return append([]string{"none"}, out...)
 	}
 	return out
 }
@@ -343,13 +360,13 @@ func (m mdModel) efforts() []string {
 // thinking models of its family released by then (gpt-6-sol's). A family
 // whose models all take a thinking switch alone (Xiaomi's mimo) gives
 // none, as before (#214).
-func (p mdProvider) levels(m mdModel) []string {
-	if e := m.efforts(); len(e) > 0 || !m.Thinks || m.Family == "" || m.budgeted() {
+func (p mdProvider) levels(m mdModel, providerID string) []string {
+	if e := m.efforts(providerID); len(e) > 0 || !m.Thinks || m.Family == "" || m.budgeted() {
 		return e
 	}
 	var kin *mdModel
 	for _, x := range p.Models {
-		if x.Family != m.Family || !x.Thinks || x.ID == m.ID || len(x.efforts()) == 0 {
+		if x.Family != m.Family || !x.Thinks || x.ID == m.ID || len(x.efforts(providerID)) == 0 {
 			continue
 		}
 		if m.ReleaseDate != "" && x.ReleaseDate > m.ReleaseDate {
@@ -362,7 +379,7 @@ func (p mdProvider) levels(m mdModel) []string {
 	if kin == nil {
 		return nil
 	}
-	return kin.efforts()
+	return kin.efforts(providerID)
 }
 
 // window is the tokens a prompt to m may hold: the input limit where
@@ -492,7 +509,11 @@ func load() map[string]mdProvider {
 							}
 							named[who][x.Name]++
 						}
-						if e := x.efforts(); len(e) > 0 {
+						// This vote answers what the catalog lists for the
+						// model across providers. A verified provider's toggle
+						// support is applied only when that provider itself is
+						// queried; it must not leak into relays or aggregates.
+						if e := x.efforts(""); len(e) > 0 {
 							l := strings.Join(e, ",")
 							if levels[who] == nil {
 								levels[who] = map[string]int{}
@@ -502,7 +523,7 @@ func load() map[string]mdProvider {
 								levels[who][l]++
 							}
 						}
-						if x.Thinks || len(x.efforts()) > 0 {
+						if x.Thinks || len(x.efforts("")) > 0 {
 							reasons[who]++
 						} else {
 							reasons[who]--
@@ -795,7 +816,7 @@ func Provider(id string) []Model {
 		mm := Model{ID: m.ID, Name: m.Name, Provider: id, Released: m.ReleaseDate, Price: m.Cost, Temperature: m.Temperature,
 			Images: slices.Contains(m.Modalities.Input, "image"), ImageInput: imageInput(m.Modalities.Input), Context: m.window(), Output: m.Limit.Output,
 			InputModalities: m.Modalities.Input, OutputModalities: m.Modalities.Output}
-		mm.Efforts = p.levels(m)
+		mm.Efforts = p.levels(m, id)
 		mm.Reasoning = m.Thinks || len(mm.Efforts) > 0
 		out = append(out, mm)
 	}
@@ -1093,6 +1114,18 @@ func unmarked(b string) (string, int) {
 // lists mimo-v2.6-flash with a switch alone, where gateways reselling it
 // give levels up to max, which Xiaomi turns away (#214).
 func ListedBy(providers []string, id string) ([]string, bool) {
+	return listedBy(providers, id, true)
+}
+
+// ListedByBorrowed is ListedBy for levels borrowed from another provider:
+// it uses the levels the catalog lists, without adding a verified provider's
+// toggle-only off level. A provider's API accepting "none" does not verify
+// that a relay, reseller, or another provider does too.
+func ListedByBorrowed(providers []string, id string) ([]string, bool) {
+	return listedBy(providers, id, false)
+}
+
+func listedBy(providers []string, id string, providerOverrides bool) ([]string, bool) {
 	all := load()
 	b := bareID(id)
 	if r, _, ok := renamed(b); ok {
@@ -1107,7 +1140,11 @@ func ListedBy(providers []string, id string) ([]string, bool) {
 				if bareID(key) != want {
 					continue
 				}
-				if e := all[pid].levels(m); len(e) > 0 || !m.budgeted() {
+				providerID := ""
+				if providerOverrides {
+					providerID = pid
+				}
+				if e := all[pid].levels(m, providerID); len(e) > 0 || !m.budgeted() {
 					return slices.Clone(e), true
 				}
 			}
@@ -1134,7 +1171,7 @@ func KinEfforts(providers []string, id string) ([]string, bool) {
 	)
 	for _, pid := range providers {
 		for key, m := range all[pid].Models {
-			if !m.Thinks && len(m.efforts()) == 0 || m.budgeted() {
+			if !m.Thinks && len(m.efforts("")) == 0 || m.budgeted() {
 				continue
 			}
 			if s, ok := versionless(bareID(key)); !ok || s != shape {
@@ -1143,7 +1180,7 @@ func KinEfforts(providers []string, id string) ([]string, bool) {
 			// the newest; of two the same day, the first provider's, then
 			// the greater id, whatever order the map gives
 			if !found || m.ReleaseDate > newest || m.ReleaseDate == newest && pid == from && key > name {
-				levels, newest, from, name, found = all[pid].levels(m), m.ReleaseDate, pid, key, true
+				levels, newest, from, name, found = all[pid].levels(m, ""), m.ReleaseDate, pid, key, true
 			}
 		}
 	}
