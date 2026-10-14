@@ -114,6 +114,9 @@ const W = {
 };
 
 const cd = '.row.agent[data-id="claude-desktop"]';
+// A pick redraws its square at once and writes behind it, queued: what was
+// posted is read once the write's answer is back, not when the square changes.
+const written = (page) => page.waitForResponse((r) => new URL(r.url()).pathname === "/api/set");
 const engines = process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"];
 const langs = process.env.LANGS ? process.env.LANGS.split(",") : Object.keys(W);
 
@@ -168,7 +171,9 @@ for (const engine of engines) {
         }).length);
         assert.equal(left, 0, "no coloured left border on square or picker rows");
 
+        let wrote = written(page);
         await page.locator("#pop #list li", { hasText: "M2" }).first().click();
+        await wrote;
         await page.waitForFunction(() => document.querySelector('.row.agent[data-id="claude-desktop"] .field.extra.set[data-key="subagent_model"]'));
         assert.deepEqual(fixture.sets, [{ agent: "claude-desktop", field: "subagent_model", value: "fake/m2" }], "Desktop pick posts the catalog id");
         assert.equal(await square.getAttribute("title"), w.set);
@@ -182,19 +187,23 @@ for (const engine of engines) {
         await page.locator("#pop.effort-picker:not([hidden])").waitFor();
         assert.equal(await page.locator("#effortTicks i").count(), 3, "Default and the selected model's two levels");
         assert.equal(await page.evaluate(() => scrollY), y, "opening effort does not scroll");
+        wrote = written(page);
         await page.locator("#effortRange").evaluate((r) => {
           r.value = "2";
           r.dispatchEvent(new Event("input", { bubbles: true }));
           r.dispatchEvent(new Event("change", { bubbles: true }));
         });
+        await wrote;
         await page.waitForFunction(() => document.querySelector('.row.agent[data-id="claude-desktop"] .field.extra.set[data-key="subagent_effort"]'));
         assert.deepEqual(fixture.sets.at(-1), { agent: "claude-desktop", field: "subagent_effort", value: "high" });
         assert.equal(await effort.getAttribute("aria-label"), w.effortHigh);
+        wrote = written(page);
         await page.locator("#effortRange").evaluate((r) => {
           r.value = "0";
           r.dispatchEvent(new Event("input", { bubbles: true }));
           r.dispatchEvent(new Event("change", { bubbles: true }));
         });
+        await wrote;
         await page.waitForFunction(() => !document.querySelector('.row.agent[data-id="claude-desktop"] .field.extra.set[data-key="subagent_effort"]'));
         assert.deepEqual(fixture.sets.at(-1), { agent: "claude-desktop", field: "subagent_effort", value: "" });
         assert.equal(await effort.getAttribute("aria-label"), w.effortDefault);
@@ -205,7 +214,9 @@ for (const engine of engines) {
         await square.click();
         await page.locator("#pop:not([hidden]) #list li").first().waitFor();
         assert.equal(await page.evaluate(() => scrollY), y, "reopening does not scroll");
+        wrote = written(page);
         await page.locator("#pop #list li").first().click();
+        await wrote;
         await page.waitForFunction(() => !document.querySelector('.row.agent[data-id="claude-desktop"] .field.extra.set[data-key="subagent_model"]'));
         assert.deepEqual(fixture.sets, [
           { agent: "claude-desktop", field: "subagent_model", value: "fake/m2" },
