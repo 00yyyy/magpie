@@ -442,9 +442,15 @@ body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .side-toggle .st-pane { transition: none; } }
 /* the two layouts trade places as one motion (app.js navMorph): the sidebar
    slides in from the window's edge or back to it, each page's tab flies to
-   its place in the other, and the page moves over, all on the spring the
-   sidebar's lists open on. Each piece is drawn at its own size, never
-   stretched, the old fading as the new comes in */
+   its place in the other, and the page moves over, together. Each piece is
+   drawn at its own size, never stretched, the old fading as the new comes
+   in. It sets off from rest and settles, as a Mac's sidebar does (its
+   ease-in-ease-out) in a third of a second: the frames a webview drops
+   as the pictures start to move fall where hardly anything moves yet. On
+   the spring the lists open on it left at speed, a twelfth of the way gone
+   in the first frame, and a dropped one there (WebView2's, most) read as a
+   jerk, then crept for a quarter second more (wangye1644294 on X) */
+:root { --morph-t: .32s; --morph-ease: cubic-bezier(.42, 0, .58, 1); }
 .nav-morph #side { view-transition-name: side; }
 .nav-morph .brand { view-transition-name: brand; }
 .nav-morph #sideToggle { view-transition-name: side-toggle; }
@@ -458,7 +464,7 @@ body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
 .nav-morph #nav button[data-view="gateway"] { view-transition-name: nav-gateway; }
 .nav-morph #nav button[data-view="usage"] { view-transition-name: nav-usage; }
 .nav-morph #nav button[data-view="plugins"] { view-transition-name: nav-plugins; }
-::view-transition-group(*) { z-index: 1; animation-duration: .5s; animation-timing-function: cubic-bezier(.32, .72, 0, 1); }
+::view-transition-group(*) { z-index: 1; animation-duration: var(--morph-t); animation-timing-function: var(--morph-ease); }
 ::view-transition-old(*), ::view-transition-new(*) { inline-size: auto; block-size: auto; }
 /* the sidebar's own panel under the tabs flying to it or from it, with the
    rest of the window (a fixed panel is drawn last otherwise, over them) */
@@ -469,8 +475,8 @@ body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
 ::view-transition-new(page) { animation: none; }
 /* the icons at the header's right stay against it */
 ::view-transition-old(actions), ::view-transition-new(actions) { inset-inline-start: auto; inset-inline-end: 0; }
-::view-transition-old(side):only-child { animation: side-out .5s cubic-bezier(.32, .72, 0, 1) both; }
-::view-transition-new(side):only-child { animation: side-in .5s cubic-bezier(.32, .72, 0, 1) both; }
+::view-transition-old(side):only-child { animation: side-out var(--morph-t) var(--morph-ease) both; }
+::view-transition-new(side):only-child { animation: side-in var(--morph-t) var(--morph-ease) both; }
 @keyframes side-in { from { transform: translateX(-100%); } }
 @keyframes side-out { to { transform: translateX(-100%); } }
 
