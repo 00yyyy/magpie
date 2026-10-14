@@ -192,10 +192,7 @@ func trayUsageCards(ctx context.Context, ids []string) []provider.SubscriptionQu
 			continue
 		}
 		if currency == "" {
-			currency = settings.Load().Currency
-			if currency == "cny" {
-				rate = fx.Soon().CNYPerUSD // never waited for, as the Settings page's
-			}
+			currency, rate = trayCurrency()
 		}
 		cards = append(cards, trayTotalCard(id, trayTotalSum(p), currency, rate))
 	}
@@ -258,6 +255,39 @@ func trayTotalCard(id string, t usage.Totals, currency string, rate float64) pro
 		tip += fmt.Sprintf(", %d with no known price", t.Unpriced)
 	}
 	return provider.SubscriptionQuota{Provider: id, Name: tip, Balance: strings.Join(rows, " · ")}
+}
+
+// trayCurrency is the currency Settings shows costs in, and the yuan's
+// rate when that is CNY.
+func trayCurrency() (currency string, rate float64) {
+	currency = settings.Load().Currency
+	if currency == "cny" {
+		rate = fx.Soon().CNYPerUSD // never waited for, as the Settings page's
+	}
+	return currency, rate
+}
+
+// trayIdleTip is the tooltip while the menu bar shows no cards: magpie's
+// name over a line of what went through it today, as the panel's Usage tab
+// counts it (ylorn on Discord: a Linux bar's tooltip said only "magpie").
+// The whole of today's total, spelled out, is the usage:today card's.
+func trayIdleTip(t usage.Totals, currency string, rate float64) string {
+	if t.Calls == 0 {
+		return "magpie\nToday: no requests yet"
+	}
+	line := "Today: " + trayCount(t.Tokens()+t.CacheRead+t.CacheWrite) + " tokens"
+	if t.Cost > 0 {
+		c := usage.FormatCost(t.Cost, currency, rate)
+		if t.Unpriced > 0 {
+			c += "+"
+		}
+		line += " · ≈" + c
+	}
+	n := "requests"
+	if t.Calls == 1 {
+		n = "request"
+	}
+	return fmt.Sprintf("magpie\n%s · %d %s", line, t.Calls, n)
 }
 
 // trayCount is a count as the Usage page says it in English: 133M, 1.2M,
