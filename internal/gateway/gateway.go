@@ -3007,7 +3007,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// a compaction a rule sent to a model of its own leaves the
 			// conversation, and the turn's size, where they were
 			if hit == nil || !hit.Compact {
-				answered(stuck, c, aff.Turn, call.Usage.CacheRead)
+				answered(stuck, c, aff.Turn, call.Usage.CacheRead, call.Usage.CacheWrite)
 			}
 			if hit != nil && !hit.Compact {
 				ruleAnswered(ruleAt, call.Usage)

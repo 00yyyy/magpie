@@ -1346,8 +1346,10 @@ result for every request: who went first, and why.
 6. **The conversation's account first.** Once an account has answered a
    conversation, it is moved to the front for the conversation's next
    requests, as *Stays* says. In auto mode that is within a turn, and
-   across turns while at least 1,024 tokens of the last request were read
-   from the vendor's cache and it answered in the last 5 minutes. This
+   across turns while the last request read from the vendor's cache and
+   wrote to it at least 1,024 tokens between them, and it answered in the
+   last 5 minutes. A first turn reads nothing and writes the whole prompt,
+   so the second stays to read it. This
    never brings back an account that is resting, nor one that has used 98%
    of a window (100% In order). *Stays: Strict* does, and asks no other:
    the conversation stays on its account, resting, spent or past its cap,
