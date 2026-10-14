@@ -1456,6 +1456,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					if req.AuthHeader == nil {
 						in.AuthHeader = old.AuthHeader
 					}
+					// its list's schedule and rules are set on their own, from
+					// the CLI (#2135)
+					in.RefreshEvery, in.AutoInclude = old.RefreshEvery, old.AutoInclude
 					in.KeepLogin = old.KeepLogin // set on its own, with keeplogin
 					in.KeepLoginAs = old.KeepLoginAs
 					in.SwitchOnly = old.SwitchOnly

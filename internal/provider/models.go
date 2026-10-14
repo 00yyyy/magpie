@@ -195,19 +195,41 @@ func (p Provider) Fetch(ctx context.Context) ([]catalog.Model, error) {
 // A pick the old list didn't have was typed in by hand, and stays; a
 // fetch that fails, or that answers no model at all, changes nothing.
 func (p Provider) Refetch(ctx context.Context) ([]catalog.Model, []string, error) {
+	ms, dropped, _, err := p.RefetchTaking(ctx)
+	return ms, dropped, err
+}
+
+// RefetchTaking is Refetch, and says which models the provider's
+// AutoInclude rules took into its picks: those the list fetched now has,
+// the one before didn't, and a rule matches (takeMatching, #2135).
+func (p Provider) RefetchTaking(ctx context.Context) (ms []catalog.Model, dropped, taken []string, err error) {
+	ms, dropped, before, err := p.refetch(ctx)
+	if err != nil || !p.ownList() || len(p.AutoInclude) == 0 {
+		return ms, dropped, nil, err
+	}
+	taken, terr := takeMatching(p.ID, func(id string) bool { return !before[id] })
+	if terr != nil {
+		log.Println(p.ID + ": " + terr.Error())
+	}
+	return ms, dropped, taken, nil
+}
+
+// refetch is Refetch, with the ids the provider's list had before it
+// (none for an account's, a plugin's or a decision-only provider's).
+func (p Provider) refetch(ctx context.Context) ([]catalog.Model, []string, map[string]bool, error) {
 	if p.IsPlugin() {
 		// its plugin's list, read again: a pick it had and has no more
 		// goes as a built-in's does (plugin_relist.go)
 		before := plugin.Cached()
 		ms, err := p.fetch(ctx)
 		if err != nil {
-			return ms, nil, err
+			return ms, nil, nil, err
 		}
-		return ms, dropGonePluginPicks(before, plugin.Cached())[p.ID], nil
+		return ms, dropGonePluginPicks(before, plugin.Cached())[p.ID], nil, nil
 	}
 	if p.Account != nil || p.DecideOnly() {
 		ms, err := p.fetch(ctx)
-		return ms, nil, err
+		return ms, nil, nil, err
 	}
 	before := liveIDs(p.ID)
 	ms, err := p.fetch(ctx)
@@ -218,17 +240,17 @@ func (p Provider) Refetch(ctx context.Context) ([]catalog.Model, []string, error
 		}
 	}
 	if err != nil || len(before) == 0 {
-		return ms, nil, err
+		return ms, nil, before, err
 	}
 	now := liveIDs(p.ID)
 	if len(now) == 0 {
-		return ms, nil, nil
+		return ms, nil, before, nil
 	}
 	dropped, derr := dropGonePicks(p.ID, before, now)
 	if derr != nil {
 		log.Println(p.ID + ": " + derr.Error())
 	}
-	return ms, dropped, nil
+	return ms, dropped, before, nil
 }
 
 // liveIDs are the ids of every model in the provider's fetched list.

@@ -334,6 +334,14 @@ type Provider struct {
 	// listed since is served beside picks that held every one listed then
 	// (withNewlyListed), and one listed then and left unpicked stays out.
 	PickedFrom []string `json:"pickedFrom,omitempty"`
+	// RefreshEvery, for a provider of the user's own, is how often the
+	// gateway fetches its model list by itself ("6h", "1d"; none, only when
+	// asked), as Fetch models does (#2135). See autolist.go.
+	RefreshEvery string `json:"refreshEvery,omitempty"`
+	// AutoInclude are patterns over a model's id (a glob with *, or a
+	// regular expression after "re:"): a model a fetch newly lists that one
+	// matches joins Models, beside the picks already there (#2135).
+	AutoInclude []string `json:"autoInclude,omitempty"`
 	// Unlisted keeps the provider's own models out of the list agents see:
 	// it serves only through the routing groups it is in, and by its
 	// "provider/model" ids.
@@ -530,6 +538,7 @@ func (p Provider) clone() Provider {
 	p.Fallback = slices.Clone(p.Fallback)
 	p.Models = slices.Clone(p.Models)
 	p.PickedFrom = slices.Clone(p.PickedFrom)
+	p.AutoInclude = slices.Clone(p.AutoInclude)
 	p.Headers = maps.Clone(p.Headers)
 	p.ExtraBody = maps.Clone(p.ExtraBody)
 	p.AccountProxies = maps.Clone(p.AccountProxies)
