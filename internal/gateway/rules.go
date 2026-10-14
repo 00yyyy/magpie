@@ -236,7 +236,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 		default:
 			hit.Waits = true
 		}
-		if !hit.Waits && hit.Effort != "" {
+		if !hit.Waits && hit.Effort != "" && !req.ThinkOff {
 			hit.Pick, hit.Wanted = tr.effort, tr.wanted
 		}
 		if grown, ok := outgrown(g, ctx, hit, q); ok {
@@ -254,9 +254,11 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 	}
 	// a new turn: the classifier is asked only when a rule that could be
 	// the first to match waits on its intent, or it picks the effort of a
-	// turn the agent asked to reason in
+	// turn the agent asked to reason in. Reasoning turned off ("none",
+	// which Effort reads as low) is not asked to reason: the pick would
+	// never be sent (withEffort leaves "none" as it is), only shown (#2247)
 	intents := provider.Intents(g.Rules, q)
-	effort := g.Effort == provider.EffortAuto && hit.Effort != ""
+	effort := g.Effort == provider.EffortAuto && hit.Effort != "" && !req.ThinkOff
 	if len(intents) > 0 || effort {
 		c := &Classified{By: g.Classifier, Intents: intents}
 		if had && slices.Contains(intents, tr.intent) {
