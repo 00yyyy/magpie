@@ -3895,3 +3895,5 @@ input[type="checkbox"]:disabled { opacity: .45; }
 
 /* a disabled model's pattern, as typed (#1867): an id or a glob */
 .disabled-model .name { font-family: var(--code); font-size: 12px; overflow-wrap: anywhere; }
+/* Settings › Images: the way to the Magpie Image tool, under its words (#2091) */
+.image-gen-how .link { padding-left: 0; padding-right: 0; white-space: normal; text-align: start; }

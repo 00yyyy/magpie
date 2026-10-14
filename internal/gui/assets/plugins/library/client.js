@@ -10,6 +10,7 @@
 // reader leaves it.
 magpie.plugin("library", (ctx) => {
   let page = null;
+  let loading = null;    // the read open started, which server waits for
 
   let lib = null;        // the page, as /api/library gives it
   let taken = 0;         // how many times lib was set, for a read to tell a newer answer came first
@@ -4977,8 +4978,22 @@ magpie.plugin("library", (ctx) => {
       document.addEventListener("visibilitychange", () => { if (!document.hidden) quietLoad(); });
       window.addEventListener("focus", quietLoad);
     },
-    open: () => load(),
+    open: () => (loading = load()),
     relang: () => load(),
+    // one of the market's servers up close, from another page (Settings ›
+    // Images' Magpie Image, #2091): its sheet over the MCP servers tab, to
+    // pick the agents that get it; one already in the library is on that
+    // tab's list, which opens with nothing over it
+    server: async (name) => {
+      if (tab !== "mcp") openTab("mcp");
+      await loading;
+      if (!market.mcp.items || market.mcp.q.trim()) {
+        market.mcp.q = "";
+        await fetchMarket("mcp");
+      }
+      const x = market.mcp.items?.find((m) => m.name === name || m.id === name);
+      if (x && !x.have && !page.hidden) serverSheet(x);
+    },
     // drawn again as it is: the agents hidden are known only from the state,
     // which can come after the page was drawn (it counted them, and Turn all
     // on gave them the servers)
