@@ -382,7 +382,7 @@ func (p Provider) testModel(q Provider, proto Protocol) string {
 			if apis := p.APIs(id); apis != nil {
 				return slices.Contains(apis, proto)
 			}
-			return proto != Anthropic || isClaude(id)
+			return (proto != Anthropic || isClaude(id)) && !p.NamedOnlyOn(proto)
 		},
 		func(string) bool { return true },
 	} {

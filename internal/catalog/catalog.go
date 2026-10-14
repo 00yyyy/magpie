@@ -783,9 +783,11 @@ func canonicallyPriced(all map[string]mdProvider, providers []string, b string) 
 func dashed(id string) string { return strings.ReplaceAll(id, ".", "-") }
 
 // APIOf is the API a models.dev provider's model is served on, when the
-// catalog says it's one of its own: "responses" or "anthropic" for a model
-// OpenCode serves through OpenAI's or Anthropic's SDK, not the
-// OpenAI-compatible one the rest of its models go through.
+// catalog says it's one of its own: "responses", "anthropic" or "gemini"
+// for a model OpenCode serves through OpenAI's, Anthropic's or Google's
+// SDK (Gemini's generateContent: Zen's Gemini models, Go's Gemini 4 Argon
+// Contributor, #2168), not the OpenAI-compatible one the rest of its
+// models go through.
 func APIOf(providerID, modelID string) string {
 	if p, ok := load()[providerID]; ok {
 		if m, ok := p.Models[modelID]; ok && m.Provider != nil {
@@ -794,6 +796,8 @@ func APIOf(providerID, modelID string) string {
 				return "responses"
 			case "@ai-sdk/anthropic":
 				return "anthropic"
+			case "@ai-sdk/google":
+				return "gemini"
 			}
 		}
 	}

@@ -4345,7 +4345,7 @@ func (s *Server) usable(p provider.Provider, model string) []provider.Protocol {
 	apis := p.APIs(model)
 	var out []provider.Protocol
 	for _, proto := range p.Speaks() {
-		if s.fits(p.ID, model, proto) && (apis == nil || slices.Contains(apis, proto)) {
+		if s.fits(p.ID, model, proto) && (apis == nil && !p.NamedOnlyOn(proto) || slices.Contains(apis, proto)) {
 			out = append(out, proto)
 		}
 	}

@@ -663,6 +663,12 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 			if p.Gemini == "" {
 				continue // Factory's, whose list is its sign-in's
 			}
+			if p.IsOpenCode() {
+				// OpenCode's Gemini models are in the list its other
+				// APIs share, asked at its chat URL; it has no Gemini
+				// list of its own
+				continue
+			}
 			// listed as the Gemini API lists them, the key in its header,
 			// and merged like any other protocol's list (#1346)
 			asked[protoBase] = true
