@@ -280,7 +280,18 @@ func codexIn(at place) *Agent {
 	// discovery off (#1535) auth.json stays unread, and Codex is taken to be
 	// as magpie last wired it, beside a ChatGPT sign-in or not, so turning
 	// discovery off never rewires Codex by itself.
+	//
+	// A Codex that reaches the gateway from another machine (a WSL distro
+	// under NAT, or MAGPIE_ADDR pinned beyond loopback) is wired as one
+	// with no ChatGPT sign-in: beside its sign-in it would send the gateway
+	// its ChatGPT token, and from there the gateway takes a named key
+	// alone, so every request was a 401 (#2145, lazydao). With magpie as
+	// its provider it sends the key magpie gives it (gwKey); its own models
+	// still go straight to OpenAI on its sign-in.
 	chatGPT := func() bool {
+		if onAnotherMachine(at.gw()) {
+			return false
+		}
 		if settings.AccountDiscoveryOff() {
 			return joined() || beside()
 		}
