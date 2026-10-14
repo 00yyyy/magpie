@@ -5662,10 +5662,12 @@ func developerAsSystem(body []byte) []byte {
 }
 
 // sessionHeaders are where agents already name their conversation: OpenCode
-// (to its own gateway, and to everyone else), Pi, Codex and Claude Code.
+// (to its own gateway, and to everyone else), Pi, Codex, Claude Code and
+// WorkBuddy / CodeBuddy (X-Conversation-ID).
 var sessionHeaders = []string{
 	"x-opencode-session", "x-session-affinity", "x-session-id",
 	"session_id", "session-id", "x-claude-code-session-id",
+	"x-conversation-id",
 }
 
 // SessionHeader names the session a call is part of, for the usage log to

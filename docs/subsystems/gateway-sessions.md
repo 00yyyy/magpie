@@ -21,6 +21,16 @@ routing summaries reuse versioned log snapshots; appends and rewrites invalidate
 them, and price/provider changes also invalidate priced projections. Single-session
 lookups use the cached identity index. Native exclusions are applied per caller.
 
+WorkBuddy and CodeBuddy Code name their conversation in `X-Conversation-ID`.
+The gateway reads it as a native session header, after the existing native
+headers; `X-Magpie-Session` still overrides the recorded session without
+changing its native identity. The per-turn `X-Conversation-Request-ID`,
+per-message `X-Conversation-Message-ID` and `X-Parent-Conversation-ID` do not
+identify the current session. This lets Routing group requests by the same id
+the native WorkBuddy session reader already knows; old requests without a
+recorded session remain unnamed. See `TestWorkBuddySessionHeader`,
+`TestWorkBuddySessionThroughGateway` and `TestRemoteMagpieKeepsTheSession`.
+
 When the same identity is present in a native session, the native session wins
 and the gateway projection is omitted. Gateway projections have no path,
 resume command or terminal action: the agent's own files of them are not on

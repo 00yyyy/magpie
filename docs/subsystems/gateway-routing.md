@@ -11,6 +11,17 @@ This page covers how a request is routed. Plugins that change requests and
 replies are in [Gateway middleware](gateway-middleware.md). Subscriptions
 served by a plugin are in [Provider and plugin ownership](provider-plugins.md).
 
+WorkBuddy and CodeBuddy Code's `X-Conversation-ID` is a native session header
+in `sessionHeaders` (`sessionOf`, `nativeSessionOf`, `conversationID` in
+[`gateway.go`](../../internal/gateway/gateway.go)). It keeps their requests
+apart even when two chats have the same first message. The same identity is
+used for affinity, usage and the Routing page, and is preserved when passed
+to a remote magpie, not copied to an ordinary vendor. Existing header
+precedence is unchanged. Affinity previously kept under an inferred first
+message digest is not migrated to a newly recognised native id, so the first
+request after upgrading can choose an account anew. Historical usage is not
+backfilled; see [Gateway Session Aggregation](gateway-sessions.md).
+
 ## Responsibilities and sources of truth
 
 | Part | Responsibility | Source |
