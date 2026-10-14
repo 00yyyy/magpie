@@ -141,6 +141,7 @@ docker logs magpie</pre>
       <button class="copy" data-copy="ex-claude-code">コピー</button>
       <pre id="ex-claude-code">docker exec -it magpie magpie claude-code install</pre>
     </div>
+    <p>Grok（SuperGrok）サブスクリプションは xAI の Grok Build CLI でサインインしますが、これもイメージにはありません。ブラウザ UI や <code>magpie plugin login grok</code> でサインインすると、magpie が xAI のインストーラーと同じ方法で先にインストールします。<code>x.ai/cli</code> の stable 版を <code>/config/home/.grok</code> に置きます。自分でボリュームに置いた Grok Build を使うときは、<code>GROK_BIN_DIR</code> にそのフォルダを指定します。</p>
 
     <h2 id="volume"><a class="anchor" href="#volume">保存されるもの</a></h2>
     <p>magpie が書くものはすべて <code>/config</code> の下にあるので、再起動しても、同じボリュームで新しいコンテナを作っても、プロバイダ、キー、サインイン、プラグインは残ります。</p>

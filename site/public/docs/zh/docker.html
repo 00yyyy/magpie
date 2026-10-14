@@ -141,6 +141,7 @@ docker logs magpie</pre>
       <button class="copy" data-copy="ex-claude-code">复制</button>
       <pre id="ex-claude-code">docker exec -it magpie magpie claude-code install</pre>
     </div>
+    <p>Grok（SuperGrok）订阅通过 xAI 的 Grok Build CLI 登录，镜像里同样没有它。在浏览器界面里登录，或者用 <code>magpie plugin login grok</code> 登录时，magpie 会先按 xAI 安装脚本的方式安装它：从 <code>x.ai/cli</code> 下载 stable 版本，放在 <code>/config/home/.grok</code>。要用你自己放进数据卷的 Grok Build，把 <code>GROK_BIN_DIR</code> 设为它所在的文件夹。</p>
 
     <h2 id="volume"><a class="anchor" href="#volume">保存了什么</a></h2>
     <p>magpie 写的所有东西都在 <code>/config</code> 下，所以重启、或者在同一个数据卷上新建容器，供应商、密钥、登录和插件都还在。</p>

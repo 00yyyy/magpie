@@ -369,6 +369,13 @@ func pluginProvider(ctx context.Context, name string) (plugin.Provider, error) {
 	return plugin.Provider{}, fmt.Errorf("no plugin signs in to %q; they sign in to %s", name, strings.Join(ids, ", "))
 }
 
+// pluginSignInCLI finds and installs the vendor CLI a plugin's sign-in
+// runs through; tests stand in for it.
+var pluginSignInCLI = struct {
+	missing func(id string) string
+	install func(ctx context.Context, id string) error
+}{provider.PluginCLIMissing, provider.InstallPluginCLI}
+
 // pluginLogin signs in to a plugin's provider as OpenCode's `auth login`
 // does: the method, its questions, then a browser (and a code pasted
 // back) or a key.
@@ -403,6 +410,17 @@ func pluginLogin(ctx context.Context, name, method string) error {
 			return err
 		}
 		m = n
+	}
+	if pp.Methods[m].Type != "api" {
+		// the vendor's CLI it signs in with, installed first as the
+		// window's sign-in installs it (#2223: Grok Build in Docker)
+		if name := pluginSignInCLI.missing(pp.ID); name != "" {
+			fmt.Println(amber.Render("!"), name, "isn't installed here: "+pp.Name+" signs in through it. Installing it, as its vendor's installer does…")
+			if err := pluginSignInCLI.install(ctx, pp.ID); err != nil {
+				return err
+			}
+			fmt.Println(green.Render("✓"), name, "installed")
+		}
 	}
 	inputs := map[string]string{}
 	for {

@@ -141,6 +141,7 @@ docker logs magpie</pre>
       <button class="copy" data-copy="ex-claude-code">Copy</button>
       <pre id="ex-claude-code">docker exec -it magpie magpie claude-code install</pre>
     </div>
+    <p>A Grok (SuperGrok) subscription signs in through xAI’s Grok Build CLI, which the image doesn’t have either. Its sign-in, in the browser UI or with <code>magpie plugin login grok</code>, installs it first, as xAI’s installer does: the stable version from <code>x.ai/cli</code>, kept in <code>/config/home/.grok</code>. To use a Grok Build binary you put on the volume yourself, set <code>GROK_BIN_DIR</code> to the folder holding it.</p>
 
     <h2 id="volume"><a class="anchor" href="#volume">What is kept</a></h2>
     <p>Everything magpie writes is under <code>/config</code>, so a restart, or a new container on the same volume, keeps your providers, keys, sign-ins and plugins.</p>
