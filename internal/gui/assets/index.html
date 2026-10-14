@@ -9,7 +9,7 @@
 <script src="theme.js"></script>
 <script src="omarchy.js"></script>
 <link rel="stylesheet" href="app.css">
-<link rel="stylesheet" href="routing.css">
+<link rel="stylesheet" href="plugins/routing/routing.css">
 <link rel="stylesheet" href="plugins/library/library.css">
 <link rel="stylesheet" href="plugins.css">
 <link rel="stylesheet" href="plugins/sessions/sessions.css">
@@ -51,7 +51,7 @@
     <button data-view="library" data-feature="library"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5h9v13H5a1.5 1.5 0 0 1 0-3h9"/></g></svg><span data-t>Library</span></button>
     <span class="nav-gl" data-t>Models</span>
     <button data-view="providers"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="10" r="3"/><path d="M10 10h7M14 10v3M16.5 10v2"/></g></svg><span data-t>Providers</span></button>
-    <button data-view="routing"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h5l4-5h5M8 10l4 5h5M14.5 3l2.5 2-2.5 2M14.5 13l2.5 2-2.5 2"/></g></svg><span data-t>Routing</span></button>
+    <button data-view="routing" data-feature="routing"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h5l4-5h5M8 10l4 5h5M14.5 3l2.5 2-2.5 2M14.5 13l2.5 2-2.5 2"/></g></svg><span data-t>Routing</span></button>
     <button data-view="gateway" data-feature="gateway"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="5" rx="1.5"/><rect x="3" y="11" width="14" height="5" rx="1.5"/><path d="M6 6.5h.01M6 13.5h.01"/></g></svg><span data-t>Gateway</span></button>
     <span class="nav-gl" data-t>Insights</span>
     <button data-view="usage"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16V9M8 16V5M12 16v-5M16 16V7"/></g></svg><span data-t>Usage</span></button>
@@ -87,7 +87,7 @@
   <button type="button" data-ptab="agents"><span data-t>Agents</span><em id="ptabN"></em></button>
   <button type="button" data-ptab="usage"><span data-t>Allowances</span></button>
   <button type="button" data-ptab="stats"><span data-t>Usage</span></button>
-  <button type="button" data-ptab="routing"><span data-t>Routing</span></button>
+  <button type="button" data-ptab="routing" data-feature="routing"><span data-t>Routing</span></button>
 </nav>
 
 <main class="view" id="view-agents">
@@ -98,7 +98,7 @@
     <button class="text" id="save" data-t>＋ Save current</button>
   </section>
   <section class="panel-quota" id="panelQuota" hidden></section>
-  <section class="panel-routing" id="panelRouting" hidden></section>
+  <section class="panel-routing" id="panelRouting" data-feature="routing" hidden></section>
   <section class="panel-usage" id="panelUsage" hidden></section>
 </main>
 
@@ -123,14 +123,6 @@
 
 <!-- the pages plugins add (kernel.js) go here, in the order they register -->
 <template data-slot="page"></template>
-
-<main class="view" id="view-routing" hidden>
-  <div class="row-head"><span class="label" data-t>Routing</span><span class="rt-livedot" aria-hidden="true"></span><span class="note" data-t>live, as the gateway decides</span><span class="grow"></span>
-    <button class="text rt-newgroup" id="rtNewGroup" type="button" data-feature="groups" data-tt="Make a routing group of any models you like — agents pick it as one model"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg><span data-t>New group</span></button>
-    <button class="text rt-mask" id="rtMask" aria-pressed="false" data-tt="Mask the accounts on this page — email addresses and account names — for a screenshot to share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg><span data-t>Hide accounts</span></button></div>
-  <section class="rt" id="rt"></section>
-  <div class="rt-more" id="rtMore"></div>
-</main>
 
 <main class="view" id="view-usage" hidden>
   <div class="usage-head">
@@ -567,9 +559,10 @@
 <script src="plugins/sessions/client.js"></script>
 <script src="plugins/library/i18n.js"></script>
 <script src="plugins/library/client.js"></script>
+<script src="plugins/routing/i18n.js"></script>
+<script src="plugins/routing/client.js"></script>
 <script src="purposes.js"></script>
 <script src="app.js"></script>
-<script src="routing.js"></script>
 <script src="plugins.js"></script>
 <script src="context.js"></script>
 </body>

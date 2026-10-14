@@ -8,8 +8,8 @@ turned off. `plugins.yml` says which are on. This page describes P0 (the
 runtime, the file and the window's switch) and P1 (the window's kernel: a
 plugin's page, its error boundary, the kit it draws with and its settings
 form, with the Gateway page as the first plugin to draw its own page), and
-P2 so far (a page moved out of the core whole: its code, styles and words,
-starting with Sessions). OpenCode plugins (npm packages in
+P2 so far (a page moved out of the core whole: its code, styles and words:
+Sessions, Library and Routing). OpenCode plugins (npm packages in
 the plugin host) are a different thing; see
 [provider and plugin ownership](provider-plugins.md) and
 [gateway middleware](gateway-middleware.md).
@@ -24,7 +24,7 @@ the plugin host) are a different thing; see
 | Ctx | What `Apply` gets: `OnDispose(f)`, `Contribute(slot, key)`, `Provide(name, v)` (withdrawn when it goes), `Service(name)`, and its composed `Config`. Disposers run in reverse, each one's panic logged and the rest still run. | [`pluginrt.go`](../../internal/pluginrt/pluginrt.go) |
 | plugins.yml | `appdir.Config()/plugins.yml`: `preset` (`essentials` or `all`) and `plugins`, rows of `{id, enabled, config}` holding only what the user set. | [`config.go`](../../internal/pluginrt/config.go) |
 | Settings schema | `SchemaOf(Settings)` makes a JSON Schema object of the struct, in its fields' order (`x-order`): each exported field with a json name is a setting, of `bool`, an int, `float64` or `string`, with tags `title` (English; the window translates it), `description`, `enum` (comma separated) and `min`/`max`. Its values are the defaults. A field a form can't draw, or a tag that doesn't parse, panics at `Register`. `Schema.Validate` takes a value only as the schema allows it (a JSON float64 or a YAML int for an integer); `SetConfig(id, config)` writes the user's row through it, and `Compose` leaves out a value edited into plugins.yml by hand that it doesn't allow, so the default stands. | [`schema.go`](../../internal/pluginrt/schema.go), [`config.go`](../../internal/pluginrt/config.go) |
-| Built-in plugins | `groups`, `library`, `otel`, `sessions`, `warmups` (P0), and `gateway` (P1), the Gateway page, which is Essential and in use while a gateway key is there (`access.List`). Its one setting, `callsPage` (10, 20, 50 or 100; 20), is how many recent calls the page shows at a time. The other five aren't Essential. Each one's `InUse` counts what the user made with it: routing groups not Auto and not hidden, library items given to agents, a collector sent to, gateway conversations recorded, warm-ups and check-ins on. | [`plugins/`](../../plugins) |
+| Built-in plugins | `groups`, `library`, `otel`, `sessions`, `warmups` (P0), `gateway` (P1), the Gateway page, which is Essential and in use while a gateway key is there (`access.List`), and `routing` (P2), the Routing page, Essential and in use while the user has a routing group, since the page is where groups are made and changed. The Gateway page's one setting, `callsPage` (10, 20, 50 or 100; 20), is how many recent calls the page shows at a time. The other five aren't Essential. Each one's `InUse` counts what the user made with it: routing groups not Auto and not hidden, library items given to agents, a collector sent to, gateway conversations recorded, warm-ups and check-ins on. | [`plugins/`](../../plugins) |
 
 The boundary is checked by `TestPluginsImportOnlyCore`: no package outside
 `plugins/` imports one (but `main.go`, through `plugins/all`), a plugin never
@@ -113,6 +113,23 @@ says one of its words, which goes back to i18n.js.
   are hidden, and `close`, `dirty` and `discard` are what `show()` asks
   before the reader leaves it. `window.loadLibrary`, `redrawLibrary`,
   `closeLibraryModal`, `libraryDirty` and `discardLibrary` are gone.
+- **Routing** (`plugins/routing`, `Client: i18n.js, routing.css,
+  client.js`): the page that was `routing.js`, Essential. Its part's `html`
+  is the page's head and boxes that were index.html's; the rest of the page
+  is drawn by `routingPage`, run at `mount` because it builds on app.js. It
+  keeps itself after that, as it did (its own `hidden`, the language, the
+  window's focus), so its hooks are only `dirty` and `discard`, a routing
+  group being edited, which `show()` and the window's close ask through
+  `magpie.call("routing", …)`: `window.routingDirty` and `discardRouting`
+  are gone. Its tab in the tray panel and the panel's section are marked
+  `data-feature="routing"`. What other pages use of it is still on
+  `window` (`openRoute` for context.js; `kindName`, `swapWhy` and
+  `routedWhy` for Usage's Requests; `newGroupWith` for Providers;
+  `panelRoutingShown` for the panel). With the plugin off, what leads to
+  the page goes with it: the nav and panel tabs, the guide's Open Routing,
+  Providers' "Make a routing group of …" (`data-feature="routing"`), the
+  Usage list's View routing and its time as a link, and the context card's
+  Latest request; a panel left on its Routing tab shows Agents.
 
 ## Source of truth and composing
 

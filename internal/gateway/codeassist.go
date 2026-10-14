@@ -99,7 +99,7 @@ func (s *Server) antigravityForeseen(p provider.Provider, from provider.Protocol
 
 // antigravityTurnedAwayHint is what magpie adds to Antigravity's words, after
 // " — ", for the agent and the Routing page, which says it apart from them in
-// its own language (routing.js AG_TURNED_AWAY).
+// its own language (routing/client.js AG_TURNED_AWAY).
 const antigravityTurnedAwayHint = "Antigravity answers this 429 to the system prompt of Claude Code and the Claude Agent SDK (Claude Desktop's chats) whatever quota is left, so it is not a quota and waiting won't help; use another provider for these chats, or put one after Antigravity in a routing group"
 
 // turnedAwayStatus is what the agent is told when nobody is left to answer

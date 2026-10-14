@@ -44,12 +44,12 @@ func TestBuiltinSwitch(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 			t.Fatal(err)
 		}
-		if len(out) != 6 {
+		if len(out) != 7 {
 			t.Fatalf("the built-ins: %+v", out)
 		}
 		for _, b := range out {
-			// the gateway page is essential: on in every preset
-			if b.On != (b.ID == "library" || b.ID == "gateway") || b.On != (b.State == pluginrt.Active) {
+			// the Gateway and Routing pages are essential: on in every preset
+			if b.On != (b.ID == "library" || b.ID == "gateway" || b.ID == "routing") || b.On != (b.State == pluginrt.Active) {
 				t.Fatalf("after library on: %+v", out)
 			}
 		}

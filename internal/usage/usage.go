@@ -453,7 +453,7 @@ func (t Totals) Floor() float64 {
 // over next to no time would lift everyone's; its TTFT still counts.
 // The bounds are wide of any real stream: the fastest vendors write a few
 // thousand tokens a second, and a tenth of a second is the least a
-// stream's timing tells anything by. routing.js's speedOf has the same.
+// stream's timing tells anything by. routing/client.js's speedOf has the same.
 const (
 	MinDecodeMs    = 100
 	MaxDecodeSpeed = 10000
@@ -533,7 +533,7 @@ func DecodeOf(out, reasoning int, ms, ttft, firstText, flow int64, firstReasonin
 
 // HeldShare and ThinkPace tell a reply held back and let go in a burst
 // (DecodeOf): its content came in under a quarter of its window, or its
-// answer at over 20 times the pace its reasoning came. routing.js's
+// answer at over 20 times the pace its reasoning came. routing/client.js's
 // decodeOf and app.js's ledDecode have the same.
 const (
 	HeldShare = 4

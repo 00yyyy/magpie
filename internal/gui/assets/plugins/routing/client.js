@@ -7,7 +7,39 @@
 // recorded while deciding (see internal/gateway/trace.go) — the order it
 // weighed the accounts in, what it weighed them by, what each answered,
 // how long a failed one rests. Nothing here is worked out again or made up.
-(() => {
+//
+// A page the Routing plugin adds to the window (kernel.js), its words in
+// i18n.js beside this file. Classic script, loaded before app.js: what
+// runs as it loads touches neither the page nor app.js. Its markup is the
+// html below; mount, at magpie.start, draws the stage and starts reading
+// the gateway's trace, and from then on the page keeps itself (it watches
+// its own hidden, the language and the window). dirty and discard are a
+// routing group being edited, asked of it before the reader leaves.
+magpie.plugin("routing", (ctx) => {
+  ctx.slots.add("page", {
+    key: "routing",
+    title: "Routing",
+    html: `
+    <div class="row-head"><span class="label" data-t>Routing</span><span class="rt-livedot" aria-hidden="true"></span><span class="note" data-t>live, as the gateway decides</span><span class="grow"></span>
+      <button class="text rt-newgroup" id="rtNewGroup" type="button" data-feature="groups" data-tt="Make a routing group of any models you like — agents pick it as one model"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg><span data-t>New group</span></button>
+      <button class="text rt-mask" id="rtMask" aria-pressed="false" data-tt="Mask the accounts on this page — email addresses and account names — for a screenshot to share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg><span data-t>Hide accounts</span></button></div>
+    <section class="rt" id="rt"></section>
+    <div class="rt-more" id="rtMore"></div>
+`,
+    // once the window's scripts have all run: the page it opens on is
+    // shown by then, so the first draw is of a page in sight (WebKit
+    // opened the first request a draw late), and context.js's ctxCard,
+    // which draws the context window's card, is there for it
+    mount() {
+      const ready = document.readyState === "loading" ? new Promise((go) => document.addEventListener("DOMContentLoaded", go, { once: true })) : Promise.resolve();
+      return ready.then(() => routingPage(this));
+    },
+  });
+});
+
+// The page, drawn once app.js is set up; part is its part, given the hooks
+// app.js calls
+function routingPage(part) {
   const box = $("#rt");
   if (!box) return;
   const NS = "http://www.w3.org/2000/svg";
@@ -3365,8 +3397,9 @@
     renderGroups();
     return true;
   }
-  window.routingDirty = groupDirty;
-  window.discardRouting = () => { gEdit = null; renderGroups(); };
+  // what app.js asks before the reader leaves the page
+  part.dirty = groupDirty;
+  part.discard = () => { gEdit = null; renderGroups(); };
   async function groupAction(action, body, ok) {
     if (action === "delete" && !await confirmRemoval(groups?.groups.find((g) => g.id === body.id)?.name || body.id,
       "This routing group will no longer be available to agents.")) return;
@@ -5537,4 +5570,4 @@
   words();
   start();
   poll();
-})();
+}

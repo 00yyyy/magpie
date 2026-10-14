@@ -858,6 +858,7 @@
     if (a.latestId) {
       const go = el("button", "text", t("Latest request"));
       go.type = "button";
+      go.dataset.feature = "routing"; // it opens on the Routing page
       go.onclick = () => window.openRoute(a.latestId, a.latestTime, { context: true }).catch((e) => status(e.message, "err"));
       foot.append(go);
     }
@@ -894,7 +895,7 @@
         still: true, cache, place: "session",
         series: s.points,
         crumbs: [agentLabel(s.agent), s.title || s.key.slice(0, 12), t("latest request")],
-        onPoint: (pt) => window.openRoute(pt.id, pt.time, { context: true }).catch((e) => status(e.message, "err")),
+        onPoint: (pt) => { if (!featuresOff.has("routing")) window.openRoute(pt.id, pt.time, { context: true }).catch((e) => status(e.message, "err")); },
       }));
     }
     return box;

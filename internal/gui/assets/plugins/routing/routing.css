@@ -1,5 +1,5 @@
 /* Routing, live: the Gateway view's stage for what routing does with each
-   request (routing.js). The same stage as the site's Model Routing, only
+   request (client.js). The same stage as the site's Model Routing, only
    played by the gateway's own trace. */
 .rt { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; margin: 0 0 18px; }
 .rt-top { display: flex; flex-direction: column; gap: 3px; }
@@ -139,7 +139,7 @@
   .rt-accts li { transition: none; }
 }
 /* The narrow and wide layouts below go by a box's own width, as container
-   queries would: routing.js sets max560 on a box 560px wide or less, min1150
+   queries would: client.js sets max560 on a box 560px wide or less, min1150
    on one 1150px or wider. Not container queries: in WebKit they kept the
    page from scrolling to its end (#1249). :where() keeps each rule as
    strong as it was inside its query. */

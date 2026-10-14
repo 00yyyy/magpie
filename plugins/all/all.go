@@ -7,6 +7,7 @@ import (
 	_ "github.com/yetone/magpie/plugins/groups"
 	_ "github.com/yetone/magpie/plugins/library"
 	_ "github.com/yetone/magpie/plugins/otel"
+	_ "github.com/yetone/magpie/plugins/routing"
 	_ "github.com/yetone/magpie/plugins/sessions"
 	_ "github.com/yetone/magpie/plugins/warmups"
 )

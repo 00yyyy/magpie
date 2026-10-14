@@ -1638,6 +1638,7 @@ function guideCard(g) {
     }
     const open = el("button", "text guide-open", t("Open Routing"));
     open.type = "button";
+    open.dataset.feature = "routing";
     open.onclick = (e) => {
       e.stopPropagation();
       if (mode === "window") show("routing");
@@ -5131,6 +5132,7 @@ function keptNote(m) {
   } else {
     words.append(el("span", "", t("{provider} is used only through routing groups, and {model} is in none, so no agent can use it. Make a group of it, or untick “Only through routing groups” in {provider}'s models.", { provider: m.provider, model })));
     act.textContent = t("Make a routing group of it");
+    act.dataset.feature = "routing"; // made on the Routing page
     act.onclick = (ev) => {
       ev.stopPropagation();
       closePicker();
@@ -7423,7 +7425,7 @@ async function cancelEdit(keep) {
   return true;
 }
 window.addEventListener("beforeunload", (e) => {
-  if (providerDirty() || window.routingDirty?.() || ((view === "library" || importing || importingApps) && modalFormDirty())) {
+  if (providerDirty() || magpie.call("routing", "dirty") || ((view === "library" || importing || importingApps) && modalFormDirty())) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -10420,6 +10422,7 @@ function renderModels(p) {
     if (!p.unlisted) { lost.append(" " + t("Once saved, make a group of them in Routing.")); return; }
     for (const id of none.slice(0, 4)) {
       const b = el("button", "text action", t("Make a routing group of {model}", { model: id }));
+      b.dataset.feature = "routing"; // made on the Routing page
       b.onclick = (ev) => { if (mode !== "window") api("window/main?view=routing&newgroup=" + encodeURIComponent(p.id + "/" + id), {}); else window.newGroupWith?.(p.id + "/" + id, "", ev); };
       lost.append(b);
     }
@@ -10992,7 +10995,7 @@ const ROUTINGS = [
 ];
 // weight is a key's share: offered for a provider with keys only
 const routingsOf = (p) => p.account ? ROUTINGS.filter(([id]) => id !== "weight") : ROUTINGS;
-// as on the Routing page's list of these (routing.js AFF_OPTS)
+// as on the Routing page's list of these (routing/client.js AFF_OPTS)
 const STAYS = [
   ["", "Auto", "A conversation stays with the account or key that answered it while what the vendor cached of it is worth keeping — within a turn always, across turns while it's fresh."],
   ["session", "Session", "A conversation stays with the account or key that answered it for the whole session, while it can answer."],
@@ -11003,7 +11006,7 @@ const STAYS = [
 // what one rate limited while it still has quota does then (provider.Sink,
 // 01huadalang): keeps its place, back first once its rest ends, or goes to
 // the back of the order so the load goes round — as on the Routing page
-// (routing.js SINK_OPTS)
+// (routing/client.js SINK_OPTS)
 const SINKS = [
   [false, "Keeps its place", "One rate limited while it still has quota rests as long as the vendor asks, then takes its place in the order again."],
   [true, "Goes to the back", "One rate limited (429) while it still has quota goes to the back of the order, behind every one not rate limited since, and comes round again once those ahead of it are rate limited in turn — so the load goes round rather than back to the first each time. Out of quota, it rests as usual. Kept until magpie restarts."],
@@ -15844,7 +15847,7 @@ if (mode === "panel") document.addEventListener("visibilitychange", () => {
 // The tray panel is four tabs over the one page: the agents, the allowances
 // of every subscription and key (the "usage" tab, as it was named before),
 // what the requests add up to (the "stats" tab, the window's Requests made
-// small) and the gateway's latest requests (routing.js draws those). The saved
+// small) and the gateway's latest requests (routing/client.js draws those). The saved
 // profiles open from Profiles at the Agents tab's foot, over the list (a tab
 // of their own was one too many). The tab is remembered.
 const profBtn = $("#profBtn"), profBox = $(".profiles");
@@ -15882,9 +15885,10 @@ let panelTab = "agents";
 try { panelTab = localStorage.getItem("magpie.panelTab") || "agents"; } catch {}
 function setPanelTab(tab) {
   const tabs = $("#ptabs");
-  // no usage to show, no tab for it (nor for profiles: they open from the foot)
+  // no usage to show, no tab for it (nor for profiles: they open from the
+  // foot), nor for a page a built-in plugin switched off (Routing)
   const b = tabs.querySelector(`[data-ptab="${tab}"]`);
-  if (!b || b.hidden) tab = "agents";
+  if (!b || b.hidden || featureHides(b)) tab = "agents";
   closeProfiles();
   if (tab !== "usage") panelPeek = "";
   panelTab = tab;
@@ -17842,7 +17846,8 @@ function ledDetail(r, cols) {
   if (Number.isFinite(r.ms) && r.ms > 0) add("Duration", (r.source === "log" ? "≈" : "") + ledTook(r.ms));
   // the way it was routed: the row's time links there too, which reads as
   // a time rather than a link (#799)
-  if (r.route_id) {
+  // (with the Routing page switched off there is nowhere to see it)
+  if (r.route_id && !featuresOff.has("routing")) {
     const go = el("button", "text led-route-link", t("View routing"));
     go.onclick = (e) => { e.stopPropagation(); window.openRoute(r.route_id, r.t).catch((err) => status(err.message, "err")); };
     const dd = el("dd");
@@ -18749,7 +18754,7 @@ const LED_COLS = [
 ];
 
 // the tokens a reply was seen to write and the ms it took, as
-// usage.DecodeOf and routing.js's decodeOf tell them: one that reasoned
+// usage.DecodeOf and routing/client.js's decodeOf tell them: one that reasoned
 // counts its answer from its first text, its reasoning written before
 // the stream showed any (tony on Discord); null when it tells no speed.
 // A reply held back and let go in a burst at its end tells none (John on
@@ -19002,8 +19007,9 @@ function renderLedger() {
       tr.append(c);
       return c;
     };
-    const when = r.route_id ? el("button", "text led-route-link", ledTime(r.t)) : ledTime(r.t);
-    if (r.route_id) {
+    const routed = r.route_id && !featuresOff.has("routing"); // the Routing page there to open it on
+    const when = routed ? el("button", "text led-route-link", ledTime(r.t)) : ledTime(r.t);
+    if (routed) {
       when.title = t("View routing");
       // the link opens the route, not the row's details as well
       when.onclick = (e) => { e.stopPropagation(); window.openRoute(r.route_id, r.t).catch((err) => status(err.message, "err")); };
@@ -24550,9 +24556,9 @@ async function show(v) {
       if (view === "library" && modalFormDirty() && !(await confirmDiscard())) return false;
       if (view === "library") magpie.call("library", "close"); else closeModal();
     }
-    if (view === "routing" && window.routingDirty?.()) {
+    if (view === "routing" && magpie.call("routing", "dirty")) {
       if (!(await confirmDiscard())) return false;
-      window.discardRouting?.();
+      magpie.call("routing", "discard");
     }
     if (view === "library" && magpie.call("library", "dirty")) {
       if (!(await confirmDiscard())) return false;
@@ -24562,7 +24568,7 @@ async function show(v) {
   view = v;
   // the page the reader leaves is the one the window opens on next (keptView)
   if (mode === "window") { try { localStorage.setItem("magpie.lastView", v); } catch { /* not kept */ } }
-  const title = magpie.page(v)?.title ?? ({ agents: "Agents", providers: "Providers", routing: "Routing", usage: "Usage", plugins: "Plugins", settings: "Settings" })[v];
+  const title = magpie.page(v)?.title ?? ({ agents: "Agents", providers: "Providers", usage: "Usage", plugins: "Plugins", settings: "Settings" })[v];
   $("#pageTitle").dataset.en = title;
   $("#pageTitle").textContent = t(title);
   if (mode === "window") {
@@ -24576,7 +24582,7 @@ async function show(v) {
   $("#prefs").classList.toggle("on", v === "settings");
   if (v === "settings") $("#prefs").setAttribute("aria-current", "page"); else $("#prefs").removeAttribute("aria-current");
   navSubs();
-  for (const id of ["agents", "providers", "routing", "usage", "plugins", "settings", ...magpie.pages()]) $("#view-" + id).hidden = v !== id;
+  for (const id of ["agents", "providers", "usage", "plugins", "settings", ...magpie.pages()]) $("#view-" + id).hidden = v !== id;
   // back to where the reader was in it, and again once it has what it loads
   const back = () => backToReader($("#view-" + v));
   requestAnimationFrame(back);
@@ -24638,6 +24644,7 @@ function applyFeatures(list) {
   if (off.size === featuresOff.size && [...off].every((id) => featuresOff.has(id))) return;
   featuresOff = off;
   featureStyle();
+  if (mode === "panel" && panelTab !== "agents") setPanelTab(panelTab); // its tab may be gone
   if (mode !== "window") return;
   navHides();
   if (featureHides($(`#nav button[data-view="${view}"]`))) show(gatewayMode ? "providers" : "agents");
@@ -25733,7 +25740,7 @@ navHides(); // the pages built-in plugins switched off have, from boot.js
 // from the tray or a reload) first, then the one kept; a page gateway mode
 // leaves out, or one there is no longer, gives way to the first page.
 // the pages the window can open on besides the first (Agents)
-const OPEN_VIEWS = ["providers", "routing", "usage", "plugins", "settings", ...magpie.pages()];
+const OPEN_VIEWS = ["providers", "usage", "plugins", "settings", ...magpie.pages()];
 function keptView() {
   const asked = params.get("view");
   if (asked === "agents" || OPEN_VIEWS.includes(asked)) return asked;
