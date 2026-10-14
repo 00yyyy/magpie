@@ -2698,6 +2698,12 @@ func renderClaudeTurn(msgs []Message, tools []Tool) []map[string]any {
 func renderParts(blocks []map[string]any, text *strings.Builder, parts []Part, offered map[string]bool) []map[string]any {
 	open := "" // the tool result told last, not closed yet
 	for _, p := range parts {
+		if open != "" && p.Kind == Text && agentNotice(p.Text) {
+			// the agent's notice (a hook's output, a token count) closes
+			// the result but is not the user's (#2060)
+			fmt.Fprintf(text, "\n[end of tool result id=%s]\n\n", open)
+			open = ""
+		}
 		if open != "" && (p.Kind == Text || p.Kind == File) {
 			fmt.Fprintf(text, "\n[end of tool result id=%s]\n\n[user message]\n", open)
 			open = ""
@@ -2987,6 +2993,17 @@ func (r *subscriptionRun) offers(tools []Tool) bool {
 // or what a request forked from the conversation asks (Claude Code's
 // AgentSummary, #1878). The words of a message with images go with the
 // results (match), as before. "" when there are no results, or no words.
+//
+// What the client's agent put in beside the results is not the user's
+// (#2060): Claude Code's hooks' notices ("PreToolUse:Read hook additional
+// context: …"), its <total_tokens> count, its other notices (agentNotice).
+// Told to the run as the user's, the model was told after nearly every
+// call that the user had sent a message, of a hook's output or of nothing
+// (the run's Claude Code doesn't show a bare <total_tokens>). Claude Code
+// 2.1.296 sends them as one {role: "system"} message after the results,
+// with a message the user sent mid-turn among them (midTurnSaid): only
+// those words are the user's. A system message is never the user's
+// otherwise.
 func saidWithResults(msgs []Message) string {
 	i := len(msgs)
 	for i > 0 && msgs[i-1].Role != "assistant" {
@@ -3000,7 +3017,11 @@ func saidWithResults(msgs []Message) string {
 			switch {
 			case p.Kind == ToolResult:
 				results = true
-			case p.Kind == Text && results && !captions && strings.TrimSpace(p.Text) != "":
+			case p.Kind != Text || !results || captions:
+			case midTurnHead.MatchString(p.Text):
+				said = append(said, midTurnSaid(p.Text)...)
+			case m.Role == "system" || m.Role == "developer":
+			case !agentNotice(p.Text):
 				said = append(said, p.Text)
 			}
 		}
@@ -3009,6 +3030,64 @@ func saidWithResults(msgs []Message) string {
 		return ""
 	}
 	return strings.Join(said, "\n\n")
+}
+
+var (
+	// midTurnHead heads a message the user sent while a tool ran, as
+	// Claude Code tells its model one: "The user sent a new message while
+	// you were working:" (2.1.296), "The user sent the following message:"
+	// (older).
+	midTurnHead = regexp.MustCompile(`The user sent (?:a new message while you were working|the following message):[ \t]*\n`)
+	// midTurnEnd is where the user's words after midTurnHead end: Claude
+	// Code's ask to address them, the reminder's end, or a notice of its
+	// own after them.
+	midTurnEnd = regexp.MustCompile(`\n\n(?:This is how Claude Code surfaces messages the user sends mid-turn|IMPORTANT: After completing your current task, you MUST address the user's message above|Please address this message and continue with your tasks)|</system-reminder>|\n\n<total_tokens>|\n\n` + hookNoticeLead)
+	// hookNotice is a Claude Code hook's output told to the model:
+	// "PreToolUse:Read hook additional context: …", "SessionStart hook
+	// success: …", "Stop hook blocking error from command: …". Only
+	// these kinds: "Stop hook is broken: …" may be the user's.
+	hookNoticeLead = `[A-Z][A-Za-z]+(?::\S+)? hook (?:additional context|success|blocking error(?: from command)?|stopped continuation|feedback):`
+	hookNotice     = regexp.MustCompile(`^` + hookNoticeLead)
+	// tokenCount is Claude Code's count of the tokens left, or used.
+	tokenCount = regexp.MustCompile(`^(?:<total_tokens>[^<]*</total_tokens>|Token usage: \S+; \S+ remaining)$`)
+	// reminderTag is a <system-reminder> tag, open or close.
+	reminderTag = regexp.MustCompile(`</?system-reminder(?:\s[^>]*)?>`)
+)
+
+// midTurnSaid is the user's words in each message they sent mid-turn
+// that text tells, without what Claude Code tells its model around them.
+func midTurnSaid(text string) []string {
+	var said []string
+	at := midTurnHead.FindAllStringIndex(text, -1)
+	for k, h := range at {
+		rest := text[h[1]:]
+		if k+1 < len(at) {
+			rest = text[h[1]:at[k+1][0]]
+		}
+		if e := midTurnEnd.FindStringIndex(rest); e != nil {
+			rest = rest[:e[0]]
+		}
+		if w := strings.TrimSpace(rest); w != "" {
+			said = append(said, w)
+		}
+	}
+	return said
+}
+
+// agentNotice says a text after tool results is the agent's, not words
+// of the user's: empty within its reminder tags, or a hook's notice, a
+// token count, or a notice userWords knows (injected).
+func agentNotice(text string) bool {
+	t := strings.TrimSpace(reminderTag.ReplaceAllString(text, ""))
+	if t == "" || hookNotice.MatchString(t) || tokenCount.MatchString(t) {
+		return true
+	}
+	for _, lead := range injected {
+		if strings.HasPrefix(t, lead) {
+			return true
+		}
+	}
+	return false
 }
 
 // withImages says m has an image of its own, not in a tool result.
