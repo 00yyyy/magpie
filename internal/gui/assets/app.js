@@ -9259,7 +9259,7 @@ function contextsText(cx) {
 // (#120). The pick matching what is typed is lit.
 function contextPicks(p, cx) {
   const size = (n) => contextsText({ "*": n });
-  const picks = [128e3, 200e3, 256e3, 1e6].map((n) => ({ label: size(n).toUpperCase(), value: size(n) }));
+  const picks = [128e3, 200e3, 256e3, 400e3, 512e3, 1e6].map((n) => ({ label: size(n).toUpperCase(), value: size(n) }));
   // above the window its vendor says, not the one set here: a model set to
   // its most still offers it
   const big = (p?.models || []).filter((m) => m.max > ("listed" in m ? m.listed || 0 : m.context || 0));
