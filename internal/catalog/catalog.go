@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -855,7 +856,7 @@ func NameOf(id string) string {
 	if n, ok := found(b, names); ok {
 		return n
 	}
-	r, w, ok := renamed(b)
+	r, w, ok := renamedBy(b, false)
 	if !ok {
 		return ""
 	}
@@ -1031,17 +1032,30 @@ func found[T any](b string, table map[string]T) (T, bool) {
 // claude-deepseek-v4.1-flash (#1383).
 var relayPrefixes = []string{"claude-"}
 
+// channelPrefix is any other word a relay puts before a model's id to name
+// the channel it serves it on: nyro-gpt-5.5, nyro-gemini-3.8-flash (#2157).
+// It is letters alone, as every such word models.dev's own lists put before
+// a model another of them lists is (openai-, databricks-, doubao-, zai-):
+// the model after it is the same model, its window, levels and images
+// included.
+var channelPrefix = regexp.MustCompile(`^[a-z]{2,24}-`)
+
 // renamed is the model a relay renamed to b, when models.dev lists none
 // by b (found), and the window the rename names, if any: a window mark
 // taken off ("deepseek-v4.1-flash[1m]", "[200k]", and Claude Code's
 // claude-opus-5[1m], which is claude-opus-5), then a relay's prefix
-// ("claude-deepseek-v4.1-flash"). An id models.dev lists, or knows as an
-// entry's canonical_model_id, is always its own model, never renamed
-// (cortecs's claude-sonnet-4 is claude-sonnet-4-0, not sonnet-4-0); a
-// prefix comes off only when what is left is known — listed, or an entry's
-// canonical_model_id (#1520) — and names a version ("claude-auto" is not
-// the router "auto").
-func renamed(b string) (string, int, bool) {
+// ("claude-deepseek-v4.1-flash", and a channel's word, "nyro-gpt-5.5").
+// An id models.dev lists, or knows as an entry's canonical_model_id, is
+// always its own model, never renamed (cortecs's claude-sonnet-4 is
+// claude-sonnet-4-0, not sonnet-4-0); a prefix comes off only when what is
+// left is known — listed, or an entry's canonical_model_id (#1520) — and
+// names a version ("claude-auto" is not the router "auto").
+func renamed(b string) (string, int, bool) { return renamedBy(b, true) }
+
+// renamedBy is renamed, a channel's word (channelPrefix) taken off only
+// with channels: the name a model is shown by keeps a channel's word, so
+// a relay's nyro-gpt-5.5 and its gpt-5.5 still read apart.
+func renamedBy(b string, channels bool) (string, int, bool) {
 	if _, ok := found(b, listed); ok || canonical[b] {
 		return "", 0, false
 	}
@@ -1057,6 +1071,11 @@ func renamed(b string) (string, int, bool) {
 			continue
 		}
 		if knownModel(rest) {
+			return rest, w, true
+		}
+	}
+	if pre := channelPrefix.FindString(r); channels && pre != "" {
+		if rest := r[len(pre):]; strings.ContainsAny(rest, "0123456789") && knownModel(rest) {
 			return rest, w, true
 		}
 	}
