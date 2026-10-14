@@ -644,6 +644,8 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// (#1235): the key's other models are still served
 	unserved := why == failOther && (modelRefused(status, body) || codeAssistModelMissing(c.p, status, body))
 	r := Rest{Why: why, Status: status, By: "cooldown"}
+	// a failure counted past the account's, for its model alone (below)
+	modelBackoff := false
 	if why == failProxy {
 		// the account is as good as it was; the proxy is the user's to start
 		return r
@@ -723,6 +725,19 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		routed.Lock()
 		routed.failures[counted]++
 		n := routed.failures[counted]
+		// the model's own count too, which only its own answer clears: on
+		// an account serving several models, a sibling's answer clears
+		// the account's count, and a model that keeps failing between
+		// them rested a minute forever (#2241, weizsw). Counted past the
+		// account's, a sibling answered since it last did, so the failure
+		// is the model's: it climbs its own ladder and rests alone. A
+		// candidate naming no model has no sibling to tell apart
+		if !unserved && c.model != "" {
+			routed.failures[c.restID()]++
+			if own := routed.failures[c.restID()]; own > n {
+				n, modelBackoff = own, true
+			}
+		}
 		routed.Unlock()
 		d, r.By, r.Failures = min(fallbackCooldown<<min(n-1, 10), c.p.RestCapOr(longestRetry)), "backoff", n
 		// a subscription that failed with a window full is out of it,
@@ -732,7 +747,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// is the vendor's reading, and one read a year off (a /usage date
 		// with no year) would bench the account until someone noticed
 		if t := c.full(now); !t.IsZero() && c.p.Account != nil && !unserved {
-			d, r.By = min(t.Sub(now), longestQuota), "window"
+			d, r.By, modelBackoff = min(t.Sub(now), longestQuota), "window", false
 		}
 	}
 	// an account is kept by the agent its usage is asked of: a plugin's
@@ -760,7 +775,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// a refusal that names its reset and points to the account's other
 	// models is the model's limit: the others still answer (WorkBuddy's
 	// "您也可以切换其他模型继续使用", #1669)
-	if pooled || unserved || why == failQuota && resetsWhen.Match(wordsOf(body)) && otherModels.Match(wordsOf(body)) {
+	if pooled || unserved || modelBackoff || why == failQuota && resetsWhen.Match(wordsOf(body)) && otherModels.Match(wordsOf(body)) {
 		id = c.restID()
 	}
 	// out of credit, or of a quota, on a model that costs credits where
