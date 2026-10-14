@@ -531,8 +531,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       st.colorblind = false;
       await page.evaluate(() => window.dispatchEvent(new Event("focus")));
       await page.waitForFunction(() => !document.documentElement.dataset.colorblind);
-      await page.waitForLoadState("networkidle");
-      got = await readCurve(page, codexCurve);
+      // the tooltip follows the mode at once, before any redraw
+      const now0 = await page.evaluate((sel) => ({ cb: document.documentElement.dataset.colorblind || "", title: document.querySelector(sel).closest(".quota-curve").title }), codexCurve);
+      assert.ok(now0.title.startsWith(now0.cb ? w.tip : w.solid), `tooltip of the mode it is in: ${JSON.stringify(now0)}`);
+      // a state poll begun before the change may still answer with it on;
+      // the next one turns it off again, so wait for the plain curve
+      for (let i = 0; i < 100; i++) {
+        got = await readCurve(page, codexCurve);
+        if (!got.cb && got.evens[0]?.dash === plainEven && got.title.startsWith(w.solid)) break;
+        await page.waitForTimeout(50);
+      }
+      assert.equal(got.cb, "");
       assert.ok(got.lines.every((l) => l.dash === "none"), JSON.stringify(got.lines));
       assert.ok(got.keys.every((k) => k.dot && !k.sample), JSON.stringify(got.keys));
       assert.equal(got.evens[0].dash, plainEven);

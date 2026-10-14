@@ -15426,6 +15426,15 @@ function drawQuotaPlot(g, lines, x0, x1, w, h, now, thin) {
   // stray mark under the curve (#1601); the large curve keeps it
   if (!thin && now >= x0 && now <= x1) g.append(sv("line", { x1: X(now), x2: X(now), y1: 0, y2: h, class: "qc-now" }));
 }
+// what the dashes are isn't plain from the plot (John on Discord asked);
+// colorblind mode dashes the windows and dots the even paces. applyPrefs
+// sets it again on every drawn curve when the mode changes.
+function quotaCurveTitle() {
+  return document.documentElement.dataset.colorblind
+    ? t("Each window's line has the dash shown beside its name. Dotted: an even pace, full at the cycle's start to empty at its reset; a line above its dots lasts the cycle, one below runs out before the reset.")
+    : t("Solid: what was left. Dashed: an even pace, full at the cycle's start to empty at its reset; a line above its dashes lasts the cycle, one below runs out before the reset.");
+}
+
 // quotaCurve: an account's windows over time, under its meters, with the
 // range turned for every card at once
 function quotaCurve(sub) {
@@ -15472,11 +15481,7 @@ function quotaCurve(sub) {
     // at its end belongs to the next cycle, not this cycle's last figure.
     const shown = history?.shown || lines;
     drawQuotaPlot(g, shown, x0, Math.max(x0 + 1, x1), W, H, now);
-    // what the dashes are isn't plain from the plot (John on Discord asked);
-    // colorblind mode dashes the windows and dots the even paces
-    box.title = document.documentElement.dataset.colorblind
-      ? t("Each window's line has the dash shown beside its name. Dotted: an even pace, full at the cycle's start to empty at its reset; a line above its dots lasts the cycle, one below runs out before the reset.")
-      : t("Solid: what was left. Dashed: an even pace, full at the cycle's start to empty at its reset; a line above its dashes lasts the cycle, one below runs out before the reset.");
+    box.title = quotaCurveTitle();
     const r = picked ? t("Past cycle") : t(quotaRange === "2d" ? "2 days" : "Cycle");
     range.textContent = r;
     range.disabled = quotaRange !== "cycle" || !past.cycles.length;
@@ -20536,8 +20541,13 @@ function applyPrefs(s, rate) {
       if (applyPrefs.ready) { tintPanel(450); tintTitleBar(460); }
     }
   }
-  if (s.colorblind) root.dataset.colorblind = "1";
-  else delete root.dataset.colorblind;
+  if (!!s.colorblind !== !!root.dataset.colorblind) {
+    if (s.colorblind) root.dataset.colorblind = "1";
+    else delete root.dataset.colorblind;
+    // a curve drawn already keeps its lines (CSS dashes them), but its
+    // tooltip says which mode it was drawn in
+    for (const b of document.querySelectorAll(".quota-curve:not(.balance-curve)")) b.title = quotaCurveTitle();
+  }
   applyPrefs.ready = true;
   // accounts hidden while personal data is masked, until chosen otherwise
   window.hideAccounts?.follow(!!s.redactPersonal);
