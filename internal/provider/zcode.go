@@ -180,6 +180,11 @@ func zcodeOwn() (who string, k zcodeKey, ok bool) {
 			k = zcodeKey{Key: key, Base: base}
 		}
 	}
+	// ZCode 3.15 keeps no plan key in its credentials; the one it uses
+	// sits in config.json, the provider's options.apiKey (#2130)
+	if k.Key == "" {
+		k = zcodeConfigKey(secret)
+	}
 	if v, ok := store["zcodejwttoken"]; ok {
 		if s, ok := zcodeDecrypt(secret, v); ok {
 			k.JWT = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(s), "Bearer "))
@@ -210,6 +215,41 @@ func zcodeOwn() (who string, k zcodeKey, ok bool) {
 	}
 	k.UID = strings.TrimSpace(info.ID)
 	return zcodeWho(info.Email, info.Name, info.ID), k, true
+}
+
+// zcodeConfigKey is the coding plan key ZCode's config.json gives its
+// built-in coding plan provider, Z.ai's first, as ZCode lists them; ZCode
+// reads it as it is, and one written encrypted is read too.
+func zcodeConfigKey(secret []byte) zcodeKey {
+	var cfg struct {
+		Provider map[string]struct {
+			Options struct {
+				APIKey string `json:"apiKey"`
+			} `json:"options"`
+		} `json:"provider"`
+	}
+	if !readJSON(filepath.Join(filepath.Dir(zcodeCredentialsPath()), "config.json"), &cfg) {
+		return zcodeKey{}
+	}
+	for _, p := range []struct {
+		ids  []string
+		base string
+	}{
+		{[]string{"builtin:zai-coding-plan", "account:zai-individual-coding-plan"}, ZCodeZaiBase},
+		{[]string{"builtin:bigmodel-coding-plan", "account:bigmodel-individual-coding-plan"}, ZCodeBigModelBase},
+	} {
+		for _, id := range p.ids {
+			key := strings.TrimSpace(cfg.Provider[id].Options.APIKey)
+			if strings.HasPrefix(key, "enc:") {
+				key, _ = zcodeDecrypt(secret, key)
+				key = strings.TrimSpace(key)
+			}
+			if strings.Contains(key, ".") && !strings.ContainsAny(key, " {$") {
+				return zcodeKey{Key: key, Base: p.base}
+			}
+		}
+	}
+	return zcodeKey{}
 }
 
 // zcodeWho names a Z.ai account: its email, or the phone number of one
