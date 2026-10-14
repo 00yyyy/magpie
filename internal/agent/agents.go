@@ -90,6 +90,7 @@ func builtins(home, cfg string) []*Agent {
 	return append([]*Agent{
 		claude(home),
 		claudeDesktop(home),
+		claudeScience(),
 		codex(home),
 		gemini(home),
 		agy(home),

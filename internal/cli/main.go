@@ -268,6 +268,9 @@ func run(args []string) error {
 	// and Cursor Private Inference's variables, which the Mac's launchd
 	// forgets at a restart, for the gateway's address now
 	gateway.WhileServing = append(gateway.WhileServing, agent.KeepCursorLocalEnv)
+	// and Claude Science's daemon, which a restart of the computer ends,
+	// started on the gateway again while it is connected
+	gateway.WhileServing = append(gateway.WhileServing, agent.KeepClaudeScience)
 	// and the request archive, when it is on, goes to the bucket sync is to
 	gateway.ArchiveBucket = func() (gateway.Putter, bool) {
 		if b, ok := davsync.S3Bucket(); ok {

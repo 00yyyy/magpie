@@ -60,6 +60,10 @@ func agentOf(r *http.Request) string {
 	if isClaudeDesktop(r) {
 		return "claude-desktop"
 	}
+	if isClaudeScience(r) {
+		// Claude Science's client, an Anthropic SDK's User-Agent
+		return ScienceID
+	}
 	ua := r.Header.Get("User-Agent")
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(ua)), "cursor") {
 		// cursor-agent talks to Cursor's backend alone, never to a
@@ -80,7 +84,7 @@ func startedByAgent(r *http.Request, agent string) bool {
 	if _, ok := strings.CutPrefix(callerKey(r), Token+"-"); ok {
 		return false
 	}
-	return agent != "claude-desktop" && agent != "cursor-local" && !usage.IsAgent(agent)
+	return agent != "claude-desktop" && agent != "cursor-local" && agent != ScienceID && !usage.IsAgent(agent)
 }
 
 // StandIn is the model an agent is set to use in place of one it named that
@@ -903,8 +907,10 @@ func catalogFor(r *http.Request) []provider.Entry {
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 	data := []map[string]any{}
 	shown := catalogFor(r)
-	if agentOf(r) == "claude-desktop" {
+	if agent := agentOf(r); agent == "claude-desktop" {
 		data = desktopModels(shown)
+	} else if agent == ScienceID {
+		data = scienceModels(shown)
 	} else {
 		labels := provider.Labels(shown)
 		// for another magpie: how it searches the web for each model
@@ -1012,6 +1018,12 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 	shown := keyAllowed(r, provider.Catalog())
 	for _, e := range shown {
 		if e.ID == id {
+			if agentOf(r) == ScienceID {
+				// by the alias it asked by, which it keeps what it reads
+				// under
+				writeJSON(w, 200, scienceObject(e, provider.Labels([]provider.Entry{e})[0]))
+				return
+			}
 			writeJSON(w, 200, modelObject(e))
 			return
 		}
@@ -1491,6 +1503,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if agent == "claude-desktop" {
 		sub, _ := subagentOf(r.Header)
 		asked = desktopTurn(asked, body, fromClaudeCode(r.Header), sub != "")
+	} else if agent == ScienceID {
+		asked = scienceTurn(asked, body)
 	}
 	// a stand-in that is a tier at an effort of its own ("<model>:<level>",
 	// #536) is that model at that level, as were it asked for so

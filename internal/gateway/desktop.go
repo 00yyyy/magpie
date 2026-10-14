@@ -336,13 +336,17 @@ func desktopNames(entries []provider.Entry) []string {
 // aliased is the catalog id an alias Claude Desktop was given stands for:
 // anthropic/magpie-<number> (as it was listed before too),
 // mythos-magpie-<number> or magpie-<number>.anthropic.<claude model>, with
-// or without Claude Code's "[1m]".
+// or without Claude Code's "[1m]"; or Claude Science's,
+// claude-magpie-<number>.
 func aliased(id string) (string, bool) {
 	id = strings.TrimSuffix(id, "[1m]")
 	var number string
 	if n, ok := strings.CutPrefix(id, desktopAlias); ok {
 		number = n
 	} else if n, ok := strings.CutPrefix(id, desktopEffortAlias); ok {
+		number = n
+	} else if n, ok := strings.CutPrefix(id, scienceAlias); ok {
+		// Claude Science's (science.go)
 		number = n
 	} else if rest, ok := strings.CutPrefix(id, "magpie-"); ok {
 		if i := strings.Index(rest, desktopClaudeInfix); i > 0 {
