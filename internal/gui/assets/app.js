@@ -15573,8 +15573,14 @@ function setQuotaRange(id) {
   // A range also restores today's meters when leaving a historical cycle.
   renderQuotas();
 }
-// quotaSpark: the tray card's thin line of a window's current cycle, the
-// even burn faint under it; none while the curves are off
+// quotaSpark: the tray card's line of a window's current cycle, the even
+// burn faint under it; none while the curves are off. In a card's width a
+// month drawn in a few pixels' height read as one straight line, its dashes
+// all but on it (#2079): it is taller, and the gap between what was left and
+// the even burn is shaded, green where it is above (it lasts) and amber
+// where it is below (it runs out first), so which side it is on shows
+// without reading an angle.
+let sparkClips = 0;
 function quotaSpark(q, w) {
   if (quotaRange === "off") return null;
   const lines = quotaLines({ ...q, windows: [w.window ? { ...w, name: w.window } : w] });
@@ -15582,14 +15588,50 @@ function quotaSpark(q, w) {
   const now = Date.now(), c = quotaCycle(lines[0], now);
   const x1 = c.reset || now;
   if (!(c.start < x1)) return null;
-  const W = 200, H = 16;
+  const W = 200, H = 30;
   const g = sv("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", class: "pq-spark", role: "img" });
   g.setAttribute("aria-label", t("{name}: this cycle", { name: t(w.name) }));
   drawQuotaPlot(g, lines, c.start, x1, W, H, now, true);
+  const gap = c.reset && sparkGap(lines[0].points, c.start, c.reset, now, W, H);
+  if (gap) g.prepend(gap);
   const s = el("span", "pq-spark-box");
   s.title = t("{name}: what was left this cycle, against an even burn", { name: t(w.name) });
+  const pace = quotaPace(w, now);
+  if (pace) s.title += "\n" + t("Pace {n}", { n: paceNumber(pace.n) });
   s.append(g);
   return s;
+}
+// sparkGap: the shading between a cycle's readings and its even burn (the
+// diagonal from full at start to empty at reset) on a w×h box, one band
+// clipped to above the diagonal and one to below it; null with fewer than
+// two readings of this cycle
+function sparkGap(points, start, reset, now, w, h) {
+  let pts = [];
+  for (const p of points) {
+    if (p.at < start || p.at > now) continue;
+    if (pts.length && quotaCycleBreak(pts[pts.length - 1], p)) pts = [];
+    pts.push(p);
+  }
+  if (pts.length < 2) return null;
+  const X = (at) => ((at - start) / (reset - start)) * w;
+  const Y = (v) => h - (Math.max(0, Math.min(100, v)) / 100) * h;
+  const E = (at) => ((at - start) / (reset - start)) * h; // the even burn's y
+  const a = pts[0].at, b = pts[pts.length - 1].at;
+  const poly = pts.map((p) => X(p.at).toFixed(1) + "," + Y(p.left).toFixed(1))
+    .concat([X(b).toFixed(1) + "," + E(b).toFixed(1), X(a).toFixed(1) + "," + E(a).toFixed(1)]).join(" ");
+  const id = "spark-gap-" + ++sparkClips;
+  const box = sv("g", { class: "pq-gap" });
+  const defs = sv("defs");
+  // above the diagonal, on screen, is more left than an even burn
+  const above = sv("clipPath", { id: id + "-a" });
+  above.append(sv("polygon", { points: `0,0 ${w},0 ${w},${h}` }));
+  const below = sv("clipPath", { id: id + "-b" });
+  below.append(sv("polygon", { points: `0,0 0,${h} ${w},${h}` }));
+  defs.append(above, below);
+  box.append(defs,
+    sv("polygon", { points: poly, class: "pq-gap-ahead", "clip-path": `url(#${id}-a)` }),
+    sv("polygon", { points: poly, class: "pq-gap-behind", "clip-path": `url(#${id}-b)` }));
+  return box;
 }
 
 // planTerm says when a plan's paid time ends: renewed then, over, or

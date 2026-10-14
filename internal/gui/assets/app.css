@@ -1700,9 +1700,12 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-rn2 { display: flex; flex-direction: column; align-items: center; }
 .pq-rn2 > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* the first window's current cycle, a thin line across the card (#651) */
-.pq-spark-box { grid-column: 1 / -1; display: block; height: 16px; }
-.pq-spark { display: block; width: 100%; height: 16px; overflow: hidden; }
-.pq-spark .qc-line { stroke-width: 1.2; }
+.pq-spark-box { grid-column: 1 / -1; display: block; height: 30px; }
+.pq-spark { display: block; width: 100%; height: 30px; overflow: hidden; }
+.pq-spark .qc-line { stroke-width: 1.4; }
+/* the gap to the even burn: ahead of it lasts, behind it runs out (#2079) */
+.pq-gap-ahead { fill: var(--green); opacity: .16; }
+.pq-gap-behind { fill: var(--amber); opacity: .22; }
 /* a Codex account's rate-limit resets, under a hairline across the card */
 .pq-resets { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-top: 5px; padding-top: 7px; border-top: 1px solid var(--line-2); font-size: 11px; font-variant-numeric: tabular-nums; }
 .resets-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

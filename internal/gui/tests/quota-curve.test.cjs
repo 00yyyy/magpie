@@ -9,7 +9,7 @@
 // an earlier recorded cycle in Cycle mode. The global pick is remembered
 // across a reload, and no click moves the page. Several accounts on a card
 // are set apart by a rule, a curve's legend before the next one too. An
-// account with no readings has no curve. The tray's card has a thin line of
+// account with no readings has no curve. The tray's card has a low line of
 // its first window's cycle, with no now line (#1601), and a click into the
 // tray's list rings nothing.
 // English and Chinese, light and dark; no backend, the API is faked here.
@@ -337,7 +337,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const box = (e) => { const r = e.getBoundingClientRect(); return { width: r.width, height: r.height }; };
         return { sb: box(s), cb: box(c) };
       }).then((h) => h.jsonValue());
-      assert.ok(sb.height <= 17 && sb.width > cb.width * 0.7, `thin and across the card: ${JSON.stringify(sb)}`);
+      // 30px since #2079: in 16px a month read as one line on its dashes
+      assert.ok(sb.height <= 31 && sb.width > cb.width * 0.7, `low and across the card: ${JSON.stringify(sb)}`);
       assert.equal(await panel.locator(".pq-card", { hasText: "Kimi" }).locator(".pq-spark").count(), 0);
       // a click into the list, then a key to scroll it, rings nothing: the
       // view takes focus only so the keys scroll it (#1601, WebKitGTK)
