@@ -15073,13 +15073,19 @@ function packUsage() {
 }
 // a card's height or the page's width moved: packed again on the next frame
 // (in the observer's own call the change is owed to it in the same frame,
-// which WebKit reports as a ResizeObserver loop)
+// which WebKit reports as a ResizeObserver loop). A packed card is held to
+// the rows it was given, so one whose content only shrinks (a curve made
+// small again) keeps its own size: what is in it is watched too (#2059,
+// mengyianx: 剩余额度走势 closed left the box as tall as when open).
 const usagePack = new ResizeObserver(() => { if (!usagePackFrame) usagePackFrame = requestAnimationFrame(packUsage); });
 function packUsageNow(list) {
   packUsage();
   usagePack.disconnect();
   usagePack.observe(list);
-  for (const card of list.children) usagePack.observe(card);
+  for (const card of list.children) {
+    usagePack.observe(card);
+    for (const part of card.children) usagePack.observe(part);
+  }
 }
 
 // usageHandle is a card's logo, which is also its handle: drag it to move
