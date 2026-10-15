@@ -16,10 +16,11 @@ import (
 // plugin): its row is magpie as its provider, on or off, with no model to
 // pick, connect is called without a model and writes the gateway and the
 // model list, the list follows the catalog, and switching it off puts back
-// what the user had.
+// what the user had. Its id is one no built-in has: Raycast is built in
+// (ef6f47ed2), and a built-in comes before a plugin of the same id.
 func TestPluggedConnectOnly(t *testing.T) {
 	home := pluggedHome(t, `
-export const agent = { id: "raycast", name: "Raycast", config: "~/.raycast/providers.json" };
+export const agent = { id: "launcher", name: "Launcher", config: "~/.launcher/providers.json" };
 export function connect({ gateway, model, models }) {
   return {
     "providers.magpie.base": gateway.v1,
@@ -28,7 +29,7 @@ export function connect({ gateway, model, models }) {
     "providers.magpie.given": typeof model,
   };
 }`)
-	path := filepath.Join(home, ".raycast", "providers.json")
+	path := filepath.Join(home, ".launcher", "providers.json")
 	os.MkdirAll(filepath.Dir(path), 0o755)
 	os.WriteFile(path, []byte(`{"theme":"dark","providers":{"magpie":{"key":"mine"}}}`), 0o644)
 	read := func() (map[string]any, map[string]any) {
@@ -43,7 +44,7 @@ export function connect({ gateway, model, models }) {
 		return c, m
 	}
 
-	a, err := Find("raycast")
+	a, err := Find("launcher")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +64,7 @@ export function connect({ gateway, model, models }) {
 		t.Fatal(err)
 	}
 	c, m := read()
-	if how.How != "magpie" || m["base"] != gateway.URL()+"/v1" || m["key"] != gateway.TokenFor("raycast") || m["given"] != "undefined" || c["theme"] != "dark" {
+	if how.How != "magpie" || m["base"] != gateway.URL()+"/v1" || m["key"] != gateway.TokenFor("launcher") || m["given"] != "undefined" || c["theme"] != "dark" {
 		t.Fatalf("connected %+v: %v", how, c)
 	}
 	if _, ok := c["model"]; ok {
