@@ -352,9 +352,21 @@ func InstallAsAdmin(staged, bundle string) error {
 // window when window is set, else only its menu bar icon (`tray`, as a
 // login launch), which a restart by itself uses while no window was up.
 func Relaunch(bundle string, window bool) error {
-	script := fmt.Sprintf(`while kill -0 %d 2>/dev/null; do sleep 0.2; done; %s`, os.Getpid(), relaunchOpen(bundle, window))
+	return runAfterExit(os.Getpid(), relaunchOpen(bundle, window))
+}
+
+// runAfterExit starts a shell that runs command once pid has exited. The
+// shell is in a session of its own: launchd ends the process group of a
+// job whose process exits, so one left in magpie's group was killed as
+// magpie quit and the new version never opened. That is the launch agent
+// of Open at login without AbandonProcessGroup (ee16c657), and, on macOS
+// 13 at least, the job LaunchServices runs an app in when it is opened from
+// the Dock or Finder, which magpie can't set that key on (#2362).
+func runAfterExit(pid int, command string) error {
+	script := fmt.Sprintf(`while kill -0 %d 2>/dev/null; do sleep 0.2; done; %s`, pid, command)
 	cmd := proc.Command("/bin/sh", "-c", script)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
+	detach(cmd)
 	return cmd.Start()
 }
 
