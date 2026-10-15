@@ -1197,6 +1197,14 @@ func codexIn(at place) *Agent {
 			if isMagpie(get("model")) {
 				return settle()
 			}
+			// on a model of Codex's own (the app's last pick), the app's
+			// picker still lists magpie's: the efforts they take now are
+			// offered there too. A group that came to take max kept only
+			// high in the app, with no control, while the config was on
+			// Codex's own model (#2127)
+			if routed() {
+				return codexEnableEfforts(path, magpieModels("codex"))
+			}
 			return nil
 		},
 		Check: func() string {
