@@ -816,6 +816,13 @@ func Save(p Provider) error {
 		if p.Was == nil {
 			p.Was = was.Was
 		}
+		if sameStored(*was, p) {
+			// Save pressed on an editor left as it was: providers.json
+			// would be written byte for byte as it is, and its write
+			// handed the catalog to every agent again (agent.SyncCatalog),
+			// seconds of CPU with many agents set up (#1962, witt-bit)
+			return nil
+		}
 		f.Providers[i] = p
 	} else {
 		f.Providers = append(f.Providers, p)
@@ -829,6 +836,16 @@ func Save(p Provider) error {
 		syncClaudeProxyEnvNow()
 	}
 	return nil
+}
+
+// sameStored is whether a and b are written to providers.json alike.
+func sameStored(a, b Provider) bool {
+	x, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	y, err := json.Marshal(b)
+	return err == nil && bytes.Equal(x, y)
 }
 
 // listedWith is what p.PickedFrom is saved as: none without picks; what was
