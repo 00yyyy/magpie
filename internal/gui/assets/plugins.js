@@ -520,8 +520,8 @@
     if (e?.error && !e.off) meta.append(el("span", "pm-chip bad", t("Didn't load")));
     else if (e?.off) meta.append(el("span", "pm-chip", t("Off")));
     if (l.replaces) {
-      const b = el("span", "pm-chip soft", t("Also built in"));
-      b.title = t("magpie also signs in to this itself, for now; the plugin keeps it working if the built-in one is retired");
+      const b = el("span", "pm-chip soft", t("Replaces built-in"));
+      b.title = t("magpie's own sign-in to this subscription is deprecated: this plugin takes its place, and accounts signed in there move to it");
       meta.append(b);
     }
     c.append(top, sum, meta);
@@ -1384,7 +1384,7 @@
       w.append(glyph(SHIELD, 12, 1.5), el("span", "", t(from, { owner: l.github.owner, topic })));
       main.append(w);
     }
-    if (l.replaces) main.append(el("p", "pm-note", t("magpie also signs in to this itself, for now; the plugin keeps it working if the built-in one is retired.")));
+    if (l.replaces) main.append(el("p", "pm-note", t("magpie's own sign-in to this subscription is deprecated: this plugin takes its place, and accounts signed in there move to it.")));
     const readme = el("div", "pm-readme");
     readme.append(el("div", "pm-rskel"), el("div", "pm-rskel short"), el("div", "pm-rskel"));
     main.append(readme);
