@@ -72,6 +72,14 @@ func TestPluginUsage(t *testing.T) {
 		if extra.Used != 250 || extra.Display != "$2.50" || !extra.Aside {
 			t.Fatalf("%s: extra = %+v", agent, extra)
 		}
+		// when its soonest credits are lost, and how many, through the
+		// host (#2265); one it can't read is not known
+		if week.RunsOutAt == nil || time.Until(*week.RunsOutAt) < 47*time.Hour || time.Until(*week.RunsOutAt) > 49*time.Hour || week.RunsOut != 80 {
+			t.Fatalf("%s: week runs out %v, %v", agent, week.RunsOutAt, week.RunsOut)
+		}
+		if extra.RunsOutAt != nil || extra.RunsOut != 0 || w.RunsOutAt != nil {
+			t.Fatalf("%s: extra runs out %v, %v; five hours %v", agent, extra.RunsOutAt, extra.RunsOut, w.RunsOutAt)
+		}
 		if e := u["API key"].Error; e != "an API key has no plan" {
 			t.Fatalf("%s: the key's usage error = %q (%v)", agent, e, u)
 		}

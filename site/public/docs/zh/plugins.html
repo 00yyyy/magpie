@@ -522,9 +522,11 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     resetsAt: <span class="s">"2026-10-03T18:00:00Z"</span>, <span class="c">// 或 resetSecs: 3600</span>
     span: 18000,                <span class="c">// 窗口长度，单位秒</span>
     display: <span class="s">"370 / 1000 credits"</span>,
+    amount: 370, limit: 1000, unit: <span class="s">"credits"</span>, <span class="c">// 按数量计时，窗口自己的用量</span>
     model: <span class="s">"opus"</span>,              <span class="c">// 只统计 id 含这个词的模型</span>
     models: [], notModels: [],  <span class="c">// 或恰好这些 id，或除这些外的全部</span>
     aside: false,               <span class="c">// true：用完也不影响账号使用</span>
+    runsOutAt: <span class="s">"2026-10-05T00:00:00Z"</span>, runsOut: 120, <span class="c">// 剩余额度中最早作废的一笔何时作废、作废多少</span>
   }],
   resets: { count: 2, until: <span class="s">"…"</span>, byWindow: false, fiveHour: 1, weekly: 1 }, <span class="c">// 账号可用的重置次数</span>
   signIn: <span class="s">"kept"</span>,               <span class="c">// 同 X-Magpie-Sign-In</span>

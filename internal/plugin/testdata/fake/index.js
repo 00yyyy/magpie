@@ -199,8 +199,11 @@ export const FakePlugin = async ({ client }) => ({
         resets: full ? { count: 3, byWindow: true, fiveHour: 2, weekly: 1 } : undefined,
         windows: [
           { name: "5 hours", used: full ? 100 : 25, resetsAt: born + 3600e3, span: 5 * 3600, models: ["fake-claude"] },
-          { name: "Week", used: 10, resetsAt: Math.floor(born / 1000) + 86400, span: 7 * 86400, amount: 120, limit: 1200, unit: "credits" },
-          { name: "Extra", used: 250, display: "$2.50", aside: true },
+          // 80 of its credits are lost in two days, after it resets (#2265)
+          { name: "Week", used: 10, resetsAt: Math.floor(born / 1000) + 86400, span: 7 * 86400, amount: 120, limit: 1200, unit: "credits",
+            runsOutAt: Math.floor(born / 1000) + 2 * 86400, runsOut: 80 },
+          // a run-out the host can't read is not told
+          { name: "Extra", used: 250, display: "$2.50", aside: true, runsOutAt: "not a date", runsOut: "12" },
         ],
       }
     },
