@@ -3989,14 +3989,24 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 	if stream {
 		// an error before any of the answer — out of quota, rate limited —
 		// is a status, not a stream, so another account can take over
+		// — unless the provider is heard from first with nothing of the
+		// answer yet, queued or thinking (KAlive): the client is then
+		// sent the reply's start and kept alive while it waits, as a
+		// translated stream's is, or Codex hangs up at its idle timeout
+		// with only comments heard (#2316)
 		var head []Event
+		alive := false
 		for ev := range events {
+			if ev.Kind == KAlive {
+				alive = true
+				break
+			}
 			head = append(head, ev)
 			if ev.Kind != KStart && ev.Kind != KUsage {
 				break
 			}
 		}
-		if n := len(head); n == 0 || head[n-1].Kind == KError {
+		if n := len(head); !alive && (n == 0 || head[n-1].Kind == KError) {
 			msg := name + " ended without an answer"
 			if n > 0 {
 				msg = head[n-1].Text
@@ -4017,6 +4027,11 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		var failed, said, stop string
 		see := func(ev Event) {
 			switch ev.Kind {
+			case KAlive:
+				if sw.quiet() >= keepaliveGap {
+					enc.keepalive()
+				}
+				return
 			case KError:
 				failed = ev.Text
 			case KStart, KUsage:
@@ -4031,6 +4046,9 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		}
 		for _, ev := range head {
 			see(ev)
+		}
+		if alive {
+			see(Event{Kind: KAlive})
 		}
 		// a client waiting on a reply that goes on is kept from its idle
 		// timeout while none of it comes (#436)

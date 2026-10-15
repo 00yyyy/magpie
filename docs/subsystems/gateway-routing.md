@@ -305,6 +305,19 @@ the `TestResponsesSearch` tests in
 and the Responses cases of `TestWebSearchForAModelThatCannot` in
 [`search_test.go`](../../internal/gateway/search_test.go).
 
+While a provider asked by `searchReply` is queued or thinking, sending only
+keepalives or `response.in_progress`, `askTranslated` reads it with
+`readSSEAlive` and hands on a `KAlive` event after `keepaliveGap` with
+nothing else sent. It is nothing of the reply: `searchRounds` passes it on
+uncollected, and `relay` takes it as the provider heard from, begins the
+client's stream and sends the client's own keepalive (`enc.keepalive`).
+Before, `relay` waited for the first content to make the client's encoder,
+so Codex heard only the held stream's comments, which its idle timeout
+doesn't count, and hung up after ~315s (#2316). An error before any
+`KAlive` is still a status another account may answer. Covered by
+`TestSearchQueueKeepsCodexAlive` in
+[`search_queue_test.go`](../../internal/gateway/search_queue_test.go).
+
 ## A searcher that fails or finds nothing
 
 `modelSearch` asks the searcher picked in Settings (or the one magpie picks)

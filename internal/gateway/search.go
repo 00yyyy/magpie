@@ -934,6 +934,13 @@ func (s *Server) searchRounds(ctx context.Context, q *Request, tool string, in <
 		mine, theirs, gap := false, false, said
 		var stop string
 		for ev := range in {
+			if ev.Kind == KAlive {
+				// nothing of the reply: no part of what it collects
+				if !send(ev) {
+					return
+				}
+				continue
+			}
 			col.add(ev)
 			switch ev.Kind {
 			case KStart:
@@ -1084,15 +1091,25 @@ func (s *Server) askTranslated(p provider.Provider, to provider.Protocol, model 
 				}
 			}
 			var failed error
-			err := readSSE(rd, func(_, data string) error {
+			told := time.Now() // when the reader was last sent anything
+			err := readSSEAlive(rd, func(_, data string) error {
 				if err := dec(data, func(ev Event) {
 					if failed == nil {
 						failed = send(ev)
+						told = time.Now()
 					}
 				}); err != nil {
 					return err
 				}
 				return failed
+			}, func() {
+				// a provider still queued or thinking — keepalives,
+				// response.in_progress — is heard from with nothing to
+				// translate: the reader hears that it goes on (#2316)
+				if failed == nil && time.Since(told) >= keepaliveGap {
+					failed = send(Event{Kind: KAlive})
+					told = time.Now()
+				}
 			})
 			if err != nil && failed == nil && ctx.Err() == nil {
 				send(Event{Kind: KError, Text: p.Name + ": " + err.Error()})

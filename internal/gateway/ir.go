@@ -278,6 +278,11 @@ const (
 	KSealed
 	// KTextSig: Text is Gemini's thoughtSignature on the text before it
 	KTextSig
+	// KAlive: nothing of the reply, only that its provider is still heard
+	// from (a keepalive, an event with nothing for the client) after
+	// keepaliveGap of nothing else: a reply read in rounds (searchReply)
+	// keeps its client alive with it as a translated stream does (#2316)
+	KAlive
 )
 
 // Event is one thing a streaming reply said.
@@ -545,7 +550,7 @@ func (c *collector) add(ev Event) {
 		c.res.Parts = append(c.res.Parts, Part{Kind: Image, MediaType: ev.Name, Data: ev.Text})
 	}
 	switch ev.Kind {
-	case KStart, KUsage, KError:
+	case KStart, KUsage, KError, KAlive:
 	default:
 		// what began has had its first content, or something else came
 		c.fresh = false
