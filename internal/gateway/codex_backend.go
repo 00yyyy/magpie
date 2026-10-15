@@ -1482,12 +1482,73 @@ func codexInputAs(body []byte, magpieModel, native bool) (_ []byte, compact bool
 		q["tools"] = json.RawMessage("[]")
 		q["tool_choice"] = json.RawMessage(`"auto"`)
 		q["parallel_tool_calls"] = json.RawMessage("false")
+		if cm, ok := localCompactionMeta(q["client_metadata"]); ok {
+			q["client_metadata"] = cm
+		}
 	}
 	nb, err := json.Marshal(q)
 	if err != nil {
 		return body, false
 	}
 	return nb, compact
+}
+
+// turnMetadataHeader is where Codex says what a request is for, as it does
+// in client_metadata's x-codex-turn-metadata too.
+const turnMetadataHeader = "X-Codex-Turn-Metadata"
+
+// localCompactionTurn is Codex's turn metadata for a compaction magpie
+// summarises itself, as Codex says it of the summary it asks a provider
+// for: compaction.implementation "responses", not the remote
+// "responses_compaction_v2" Codex named when it sent a compaction_trigger
+// (Codex 0.162.1 under a provider named "OpenAI" and under another, both
+// captured). The trigger is gone from what magpie sends, so the request
+// said remote compaction and carried none, a shape Codex itself never
+// sends. A relay that only takes Codex's own requests refused magpie's
+// compaction with "invalid codex request" (#2352, #1171). Everything
+// else stays byte for byte; false when there's nothing to change.
+func localCompactionTurn(meta string) (string, bool) {
+	if !strings.Contains(meta, `"compaction"`) {
+		return meta, false
+	}
+	var m struct {
+		Compaction *struct {
+			Implementation *string `json:"implementation"`
+		} `json:"compaction"`
+	}
+	if json.Unmarshal([]byte(meta), &m) != nil || m.Compaction == nil || m.Compaction.Implementation == nil {
+		return meta, false
+	}
+	impl := *m.Compaction.Implementation
+	if impl == "responses" {
+		return meta, false
+	}
+	was, _ := json.Marshal(impl)
+	old := `"implementation":` + string(was)
+	if strings.Count(meta, old) != 1 {
+		return meta, false
+	}
+	return strings.Replace(meta, old, `"implementation":"responses"`, 1), true
+}
+
+// localCompactionMeta is a request's client_metadata with its
+// x-codex-turn-metadata made localCompactionTurn's.
+func localCompactionMeta(raw json.RawMessage) (json.RawMessage, bool) {
+	var cm map[string]json.RawMessage
+	var meta string
+	if json.Unmarshal(raw, &cm) != nil || json.Unmarshal(cm["x-codex-turn-metadata"], &meta) != nil {
+		return raw, false
+	}
+	turn, ok := localCompactionTurn(meta)
+	if !ok {
+		return raw, false
+	}
+	cm["x-codex-turn-metadata"], _ = marshalPlain(turn)
+	out, err := marshalPlain(cm)
+	if err != nil {
+		return raw, false
+	}
+	return out, true
 }
 
 // bareReasoningRefused is how unfit remembers a provider turning away, for
@@ -1920,6 +1981,10 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		log.Printf("codex compaction: %s", msg)
 		writeError(w, provider.Responses, http.StatusBadRequest, msg)
 		return
+	}
+	if turn, ok := localCompactionTurn(r.Header.Get(turnMetadataHeader)); ok {
+		r = r.Clone(r.Context())
+		r.Header.Set(turnMetadataHeader, turn)
 	}
 	r = askWhole(r)
 	ask := func(b []byte) (*recorder, compactResult, error) {
