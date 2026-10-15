@@ -516,6 +516,22 @@ func ruleMembers(hit *RuleHit, ms []provider.Member) []provider.Member {
 	return membersNamed(hit.Use, ms)
 }
 
+// homeAt are the places (At) of the rule's models met first in the
+// member it names, not shared with a group ahead of it: only those were
+// planned in that member's own routing (#2407, #2361).
+func homeAt(hit *RuleHit, ms []provider.Member) map[int]bool {
+	out := map[int]bool{}
+	if hit == nil || hit.Use == "" {
+		return out
+	}
+	for _, m := range ms {
+		if m.ID == hit.Use {
+			out[m.At] = true
+		}
+	}
+	return out
+}
+
 // homed is ms with each model that has a place under path (the group's
 // member ids from the top) as that place has it, in the walk's order:
 // the groups in a group a rule chose decide among its models with their
@@ -560,7 +576,7 @@ func ruleOrder(hit *RuleHit, ms []provider.Member) []provider.Member {
 // they had; everyone else follows as they were, to fail over to. own is
 // how many of ms are the rule's own members, ahead of the rules after
 // it's. lead is the one in ms whose goes first, -1 when none is ready.
-func ruleFirst(ms []provider.Member, cs []candidate, pl planned, own int) (out []candidate, _ planned, lead int) {
+func ruleFirst(ms []provider.Member, cs []candidate, pl planned, own int, home map[int]bool) (out []candidate, _ planned, lead int) {
 	rank := func(i int) int {
 		if pl.order[i].Rest != nil {
 			return -1
@@ -569,14 +585,15 @@ func ruleFirst(ms []provider.Member, cs []candidate, pl planned, own int) (out [
 		if at < 0 || at >= own {
 			return at
 		}
-		// one of the rule's own members that is a group in the group is
-		// one member here: its models rank as the group's block, in the
-		// order the group's own routing planned them, not the group's
-		// listed order — ranked apart, a rotate group in the group was
-		// pinned to its first member on every request the rule put it
-		// first (#2407)
-		if len(ms[at].Path) > 1 {
-			if first := slices.IndexFunc(ms[:own], func(m provider.Member) bool { return m.ID == ms[at].ID }); first >= 0 {
+		// the group in the group the rule names is one member here: its
+		// models rank as the group's block, in the order the group's own
+		// routing planned them, not the group's listed order — ranked
+		// apart, a rotate group in the group was pinned to its first
+		// member on every request the rule put it first (#2407). A model
+		// it shares with a group ahead of it was planned in that group's
+		// order, so it keeps its rank in the named group's (#2361).
+		if len(ms[at].Path) > 1 && home[ms[at].At] {
+			if first := slices.IndexFunc(ms[:own], func(m provider.Member) bool { return m.ID == ms[at].ID && home[m.At] }); first >= 0 {
 				return first
 			}
 		}
@@ -651,7 +668,7 @@ func ruleOver(hit *RuleHit, ms []provider.Member, cs []candidate, pl planned, af
 			// it stays: the rule's members after it, then the group's
 			sub := pl
 			sub.order = pl.order[1:]
-			rest, sub, _ := ruleFirst(ordered, cs[1:], sub, len(ruleMembers(hit, ms)))
+			rest, sub, _ := ruleFirst(ordered, cs[1:], sub, len(ruleMembers(hit, ms)), homeAt(hit, ms))
 			cs = append([]candidate{cs[0]}, rest...)
 			pl.order = append([]Weighed{pl.order[0]}, sub.order...)
 			if p >= 0 {
@@ -688,7 +705,7 @@ func applyRule(hit *RuleHit, ms []provider.Member, cs []candidate, pl planned) (
 	ordered := ruleOrder(hit, ms)
 	lead := -1
 	if len(ordered) > 0 && len(cs) > 0 {
-		cs, pl, lead = ruleFirst(ordered, cs, pl, len(ruleMembers(hit, ms)))
+		cs, pl, lead = ruleFirst(ordered, cs, pl, len(ruleMembers(hit, ms)), homeAt(hit, ms))
 	}
 	// ordered has the rule's own first, then those of the rules after it
 	hit.Unready = lead < 0 || lead >= len(ruleMembers(hit, ms))
