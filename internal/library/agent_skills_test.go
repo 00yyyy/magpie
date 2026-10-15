@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Every agent on the Agents page that reads skills has a place for them in
@@ -16,8 +17,14 @@ import (
 // the shared ~/.agents/skills.
 func TestAgentsSkillsFolders(t *testing.T) {
 	h := sandbox(t)
+	// Hermes's own folder: ~/.hermes, but %LOCALAPPDATA%\hermes on Windows
+	// (#2275: the test wrote ~/.hermes there, where no Hermes is)
+	hermes, err := filepath.Rel(h, appdir.HermesHome())
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, f := range []string{".kimi/config.toml", ".commandcode/settings.json", ".factory/settings.json", ".cline/data/globalState.json",
-		".hermes/config.yaml", ".grok/config.toml", ".qoder/settings.json", ".workbuddy/models.json", ".fx/settings.json", ".config/devin/config.json"} {
+		filepath.Join(hermes, "config.yaml"), ".grok/config.toml", ".qoder/settings.json", ".workbuddy/models.json", ".fx/settings.json", ".config/devin/config.json"} {
 		write(t, filepath.Join(h, f), "")
 	}
 	// hermes and Cline installed: the CLI beside the folder (the folder
@@ -32,7 +39,7 @@ func TestAgentsSkillsFolders(t *testing.T) {
 		"commandcode": ".commandcode/skills",
 		"droid":       ".factory/skills",
 		"cline":       ".cline/skills",
-		"hermes":      ".hermes/skills",
+		"hermes":      filepath.Join(hermes, "skills"),
 		"grok":        ".grok/skills",
 		"qoder":       ".qoder/skills",
 		"workbuddy":   ".workbuddy/skills",

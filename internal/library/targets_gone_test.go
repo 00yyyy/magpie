@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/testenv"
 )
@@ -24,8 +25,11 @@ func TestTargetsLeaveGoneAgentsOut(t *testing.T) {
 	// no hermes-agent checkout beside the config. Where Hermes reads it:
 	// ~/.hermes, but %LOCALAPPDATA%\hermes on Windows, where a fixture
 	// in ~/.hermes left hermes undetected and Takes refused nothing
-	// (#2254, ggbdpq)
+	// (#2254, ggbdpq; #2275)
 	write(t, filepath.Join(appdir.HermesHome(), "config.yaml"), "custom_providers: []\nmcp_servers: {}\n")
+	if a, err := agent.Find("hermes"); err != nil || !a.Detected() {
+		t.Fatalf("hermes isn't there by its config.yaml: %v", err)
+	}
 	if got := ids(Targets()); slices.Contains(got, "hermes") {
 		t.Fatalf("hermes is a target with its CLI gone: %v", got)
 	}
