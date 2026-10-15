@@ -123,6 +123,10 @@ type SubscriptionQuota struct {
 	Until *time.Time `json:"until,omitempty"`
 	Renew string     `json:"renew,omitempty"`
 	Error string     `json:"error,omitempty"`
+	// PluginError is an Error a plugin's own usage read gave, in its own
+	// words: magpie has no reading of it to say better, so the GUI shows
+	// it on the card rather than only in a tooltip (aqiu817/magpie-sensenova#1).
+	PluginError bool `json:"pluginError,omitempty"`
 	// NeedsAccessKey is a plan read with the account's access key, which
 	// its provider hasn't (accessKeyCard, #1821): the Usage page offers
 	// the provider's settings to give it in.

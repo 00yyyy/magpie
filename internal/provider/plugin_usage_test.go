@@ -83,6 +83,11 @@ func TestPluginUsage(t *testing.T) {
 		if e := u["API key"].Error; e != "an API key has no plan" {
 			t.Fatalf("%s: the key's usage error = %q (%v)", agent, e, u)
 		}
+		// the plugin's own words are said on the card, not only hovered
+		// (aqiu817/magpie-sensenova#1); a clean reading is no error of it
+		if !u["API key"].PluginError || q.PluginError {
+			t.Fatalf("%s: plugin error = %v, a@fake's = %v", agent, u["API key"].PluginError, q.PluginError)
+		}
 		if first == nil {
 			first = q.Windows
 		}

@@ -12639,7 +12639,7 @@ function loginUsageOf(agent) {
 // as the gateway reads a plugin's (signInGone, plugin_usage.go)
 const SIGN_IN_GONE = /sign-in has (expired|lapsed)|sign in again/i;
 
-function quotaError(err) {
+function quotaError(err, q) {
   if (/sign-in has expired/.test(err)) return t("Signed out — add this account again to use it");
   // a Copilot account GitHub refused the token of (copilot_lapsed.go), as
   // its row says it, in English or already in the user's language
@@ -12693,7 +12693,17 @@ function quotaError(err) {
   // built-in key card (clineLimitsUnread, cline_usage.go) and the Cline
   // plugin both begin their error with these words
   if (/^ClinePass limits couldn't be read/.test(err)) return t("ClinePass limits couldn't be read — hover for why");
-  return balanceError(err) || t("Allowance unavailable");
+  const bal = balanceError(err);
+  if (bal) return bal;
+  // a plugin's own usage read failed (pluginError, plugin_usage.go): magpie
+  // has no better words for it than the plugin's, and hiding them in a
+  // tooltip left the card saying only that nothing could be read
+  // (aqiu817/magpie-sensenova#1), so its first line is said on the card
+  if (q?.pluginError) {
+    const why = String(err).split("\n")[0].trim();
+    if (why) return t("Allowance unavailable: {why}", { why: why.length > 160 ? why.slice(0, 159) + "…" : why });
+  }
+  return t("Allowance unavailable");
 }
 
 // the Balance field magpie reads, left empty, from a query whose reply it
@@ -12798,7 +12808,7 @@ function accountQuota(data, user, capFor = () => 0, settable = null) {
     return line;
   }
   if (!q || q.error || !q.windows?.length) {
-    line.append(el("span", "aq-none", [...noPlan, q?.error ? quotaError(q.error) : t("No allowance reported")].join(" · ")));
+    line.append(el("span", "aq-none", [...noPlan, q?.error ? quotaError(q.error, q) : t("No allowance reported")].join(" · ")));
     if (q?.error) line.title = q.error;
     return line;
   }
@@ -16347,7 +16357,7 @@ function panelQuotaCard(q) {
   card.title = [q.name, q.alias, q.user, q.seat && q.seat !== q.alias && "≡ " + q.seat, q.plan, q.until ? planTerm(q) : "", q.balance && t("Balance") + " " + q.balance].filter(Boolean).join(" · ");
   if (q.error) {
     card.classList.add("err");
-    const why = el("span", "pq-sub err", quotaError(q.error));
+    const why = el("span", "pq-sub err", quotaError(q.error, q));
     why.prepend(quotaRefresh(q));
     card.append(why);
     card.title += "\n" + q.error;
@@ -17232,7 +17242,7 @@ function keyLimitLine(sub) {
 // quotaWindows: one account's allowance as meters, or why there are none.
 function quotaWindows(sub) {
   const failed = () => {
-    const e = el("div", "subscription-error", quotaError(sub.error));
+    const e = el("div", "subscription-error", quotaError(sub.error, sub));
     e.title = sub.error;
     // read again from here too: a failed reading is the one most wanted
     e.prepend(quotaRefresh(sub));
