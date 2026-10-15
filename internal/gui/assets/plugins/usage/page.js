@@ -2634,9 +2634,12 @@ function renderSessTop() {
     const r = el("div", "row sess sess-top");
     r.append(icon(icons.get(s.agent) || "generic"));
     const who = el("div", "who");
-    who.append(el("div", "name", s.title || t("(no prompt)")));
-    const sub = el("div", "sub", [s.cwd ? baseName(s.cwd) : "", names[s.agent] || s.agent, s.models?.[0], ago(s.last)].filter(Boolean).join(" · "));
-    sub.title = s.cwd || "";
+    // a session magpie saw only through the gateway (#2285: a Pi
+    // subagent's, its file in a temp folder) has no folder and no prompt
+    // unless gateway conversations are recorded: say so, not "(no prompt)"
+    who.append(el("div", "name", s.title || t(s.gateway ? "(prompt not recorded)" : "(no prompt)")));
+    const sub = el("div", "sub", [s.cwd ? baseName(s.cwd) : s.gateway ? t("Gateway session") : "", names[s.agent] || s.agent, s.models?.[0], ago(s.last)].filter(Boolean).join(" · "));
+    sub.title = s.cwd || (s.gateway ? t("Seen only through the gateway: the agent kept no session file magpie can read. Turn on Record gateway conversations in Sessions to keep its prompts.") : "");
     who.append(sub);
     r.append(who);
     const fc = fmtCost({ cost: s.cost, unpriced: !s.priced });

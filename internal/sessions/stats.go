@@ -40,6 +40,11 @@ type Summary struct {
 	ParentSession string        `json:"parent_session,omitempty"`
 	RootSession   string        `json:"root_session,omitempty"`
 	ModelEffort   []ModelEffort `json:"model_effort,omitempty"`
+	// Gateway: magpie knows the session only from the gateway's records
+	// (MergeExternalStats). The agent left no file magpie reads, so it has
+	// no folder, and no prompt unless gateway conversations were recorded
+	// (#2285: a Pi subagent's DeepSeek turns read as "(no prompt)").
+	Gateway bool `json:"gateway,omitempty"`
 	Tokens
 	Cost   float64  `json:"cost"`
 	Priced bool     `json:"priced"` // every model it used has a price

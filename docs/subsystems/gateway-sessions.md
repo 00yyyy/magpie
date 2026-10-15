@@ -37,7 +37,12 @@ resume command or terminal action: the agent's own files of them are not on
 this computer. Their rows carry `gateway: true`; the Sessions page groups them
 under "Seen through the gateway" rather than "No folder", and their size is the
 text magpie recorded of them (`sessions.GatewaySizes`), shown only when there
-is some. Their
+is some. The overview's top summaries (`MergeExternalStats`) carry
+`gateway: true` too, and Usage › Sessions names such a row "Gateway session"
+where a folder would be, with "(prompt not recorded)" when no text was kept,
+so it doesn't read as a native session with an empty prompt (#2285: a Pi
+subagent whose session file is in a temp folder). Verification:
+`TestTopSessionsMarkWhatOnlyTheGatewaySaw`, `sessions-overview.test.cjs`. Their
 models, token totals, start/last timestamps and effective prices come from the
 same usage records used by Usage and stats endpoints.
 
