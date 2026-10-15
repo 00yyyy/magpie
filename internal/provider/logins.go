@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	toml "github.com/pelletier/go-toml/v2"
+
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filelock"
@@ -621,10 +623,38 @@ func savedButSignedOut() []Exclusion {
 		if saved[a] > 1 {
 			n = fmt.Sprintf("%d accounts are", saved[a])
 		}
+		if store := codexCredentialsStore(); store == "keyring" || store == "auto" {
+			// Codex keeps its sign-in in the system keyring, which magpie
+			// doesn't read: it is signed in, only not where magpie looks
+			// (#2312, Dony2050)
+			out = append(out, Exclusion{Agent: a, SignedOut: true, Users: users[a],
+				Why: fmt.Sprintf("%s saved in magpie, and they are only offered beside the account Codex is signed in to. Codex keeps its sign-in in the system keychain (cli_auth_credentials_store = %q in %s), which magpie doesn't read: it reads only %s. Set cli_auth_credentials_store = \"file\" there and sign in again (codex login).", n, store, codexConfigPath(), codexAuthPath())})
+			continue
+		}
 		out = append(out, Exclusion{Agent: a, SignedOut: true, Users: users[a],
 			Why: fmt.Sprintf("%s saved in magpie, but it isn't signed in here (%s), and they are only offered beside the account it is signed in to. Sign in (%s) with this HOME.", n, why, signIn)})
 	}
 	return out
+}
+
+// codexCredentialsStore is where Codex keeps its ChatGPT sign-in, as its
+// config.toml's top-level cli_auth_credentials_store says: "file" (Codex's
+// default, auth.json), "keyring", "auto" (the keyring when there is one) or
+// "ephemeral"; "" when it isn't set or the file can't be read. Codex
+// 0.162's keyring and auto save to the keyring and remove auth.json
+// (codex-rs/login/src/auth/storage.rs).
+func codexCredentialsStore() string {
+	b, err := os.ReadFile(codexConfigPath())
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		Store string `toml:"cli_auth_credentials_store"`
+	}
+	if toml.Unmarshal(b, &c) != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(c.Store))
 }
 
 // liveLogin reads the account an agent is signed in to now.

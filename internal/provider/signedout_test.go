@@ -38,8 +38,33 @@ func TestSavedButSignedOut(t *testing.T) {
 	if codex == nil || !strings.Contains(codex.Why, "2 accounts are") || !strings.Contains(codex.Why, filepath.Join(home, ".codex", "auth.json")) {
 		t.Fatalf("codex: %+v", codex)
 	}
-	// signed in: nothing to say
+	if strings.Contains(codex.Why, "keychain") {
+		t.Fatalf("no keyring set, yet: %s", codex.Why)
+	}
+	// Codex set to keep its sign-in in the keychain (#2312): it is signed
+	// in, only not where magpie looks, and the reason says so, with how to
+	// put it where magpie looks
 	os.MkdirAll(filepath.Join(home, ".codex"), 0o700)
+	for _, store := range []string{"keyring", "auto"} {
+		os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte("model = \"gpt-5.6\"\ncli_auth_credentials_store = \""+store+"\"\n\n[profiles.x]\nmodel = \"o3\"\n"), 0o600)
+		codex = nil
+		for _, x := range Excluded() {
+			if x.Agent == "codex" && x.SignedOut {
+				codex = &x
+			}
+		}
+		if codex == nil || len(codex.Users) != 2 || strings.Contains(codex.Why, "isn't signed in here") ||
+			!strings.Contains(codex.Why, `cli_auth_credentials_store = "`+store+`"`) || !strings.Contains(codex.Why, `cli_auth_credentials_store = "file"`) {
+			t.Fatalf("%s: %+v", store, codex)
+		}
+	}
+	os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte("cli_auth_credentials_store = \"file\"\n"), 0o600)
+	for _, x := range Excluded() {
+		if x.Agent == "codex" && x.SignedOut && strings.Contains(x.Why, "keychain") {
+			t.Fatalf("file store, yet: %s", x.Why)
+		}
+	}
+	// signed in: nothing to say
 	os.WriteFile(filepath.Join(home, ".codex", "auth.json"), []byte(`{"auth_mode":"chatgpt","tokens":{"access_token":"x","account_id":"acc-1"}}`), 0o600)
 	for _, x := range Excluded() {
 		if x.SignedOut {
