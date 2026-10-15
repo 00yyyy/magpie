@@ -687,7 +687,13 @@ func targets(gone bool) []*Target {
 	for _, a := range apps() {
 		own[a.ID] = true
 	}
-	for _, a := range agent.Detected() {
+	for _, a := range agent.All() {
+		// the agents here, and a folder an agent shares with its vendor's
+		// other app when only that app is here: the Cursor editor reads
+		// ~/.cursor's mcp.json and skills with no cursor-agent installed
+		if !a.Detected() && !a.SharedHere() {
+			continue
+		}
 		// an app magpie also sets up as an agent (Claude Desktop) keeps its
 		// MCP servers where apps says, once
 		if own[a.ID] {
@@ -704,7 +710,7 @@ func targets(gone bool) []*Target {
 		}
 	}
 	for _, a := range apps() {
-		if !a.Detected() {
+		if !a.Detected() && !a.SharedHere() {
 			continue
 		}
 		if t := targetOf(a); t != nil && t.open() {

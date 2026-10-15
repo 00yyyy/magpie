@@ -1332,6 +1332,11 @@ func cursor(home string) *Agent {
 		// the editor reads ~/.cursor's mcp.json, skills and hooks, and its
 		// chats are listed with the CLI's
 		shared: "Cursor",
+		// the Cursor editor makes ~/.cursor (argv.json, extensions, mcp.json,
+		// projects) with no cursor-agent anywhere, so the folder says nothing
+		// of the CLI: cli-config.json or the cursor-agent command does
+		// (@G_Z_Y on X saw a Cursor row that wasn't the CLI)
+		dirShared: true,
 		Fields: []Field{{
 			Key: "model", Label: "model",
 			Get: jsonGet(path, "model.modelId"),

@@ -320,6 +320,15 @@ func (a *Agent) SharedName() string {
 	return a.Name
 }
 
+// SharedHere reports whether the folder the agent shares with its vendor's
+// other app is here (Cursor CLI's ~/.cursor, made by the Cursor editor),
+// whether the agent is or not. The agent isn't Detected for it (dirShared),
+// but what the other app reads there too, the Library's MCP servers and
+// skills, is still given.
+func (a *Agent) SharedHere() bool {
+	return a.shared != "" && a.WSL == "" && a.Dir != "" && !Taken(a.Dir) && agentDir(a.Dir)
+}
+
 // Detected reports whether the agent seems to be installed or configured.
 func (a *Agent) Detected() bool {
 	if a.detect != nil {

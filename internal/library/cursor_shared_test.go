@@ -1,6 +1,8 @@
 package library
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/yetone/magpie/internal/agent"
@@ -34,5 +36,35 @@ func TestCursorLibraryRowIsCursor(t *testing.T) {
 		if av.ID == "cursor" && av.Name != "Cursor" {
 			t.Errorf("the Library's view names it %q", av.Name)
 		}
+	}
+}
+
+// Cursor CLI isn't detected for a ~/.cursor the Cursor editor made (no
+// cli-config.json, no cursor-agent), but the editor reads that folder's
+// mcp.json and skills: the Library still gives them, as Cursor's.
+func TestCursorEditorAloneKeepsItsLibraryRow(t *testing.T) {
+	h := sandbox(t)
+	os.Remove(filepath.Join(h, ".cursor", "cli-config.json"))
+	os.Remove(filepath.Join(h, "bin", "cursor-agent"))
+	os.Remove(filepath.Join(h, "bin", "cursor-agent.exe"))
+	write(t, filepath.Join(h, ".cursor", "argv.json"), "{}")
+	a, err := agent.Find("cursor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Detected() {
+		t.Fatal("Cursor CLI detected by the editor's ~/.cursor")
+	}
+	c := targetByID("cursor")
+	if c == nil {
+		t.Fatalf("the editor's ~/.cursor is no Library target: %v", ids(Targets()))
+	}
+	if c.Agent.Name != "Cursor" || c.MCP == nil || c.MCP.Path != filepath.Join(h, ".cursor", "mcp.json") || c.Skills != filepath.Join(h, ".cursor", "skills") {
+		t.Errorf("cursor target: %+v", c)
+	}
+	// with no ~/.cursor at all there is nothing to give
+	os.RemoveAll(filepath.Join(h, ".cursor"))
+	if c := targetByID("cursor"); c != nil {
+		t.Errorf("a cursor target with no ~/.cursor: %+v", c)
 	}
 }
