@@ -93,15 +93,15 @@ func readAudioForm(ctype string, body []byte) (*audioForm, error) {
 
 // mask masks the prompt, the form's only text a vendor is sent; the
 // audio can't be, and the transcript gets the masked values back.
-func (a *audioForm) mask(w http.ResponseWriter) (http.ResponseWriter, func()) {
+func (a *audioForm) mask(w http.ResponseWriter) (http.ResponseWriter, func(), error) {
 	if a.prompt == "" {
-		return w, func() {}
+		return w, func() {}, nil
 	}
-	w, masked, done := redactedPrompt(w, a.prompt)
+	w, masked, done, err := redactedPrompt(w, a.prompt)
 	if masked != a.prompt {
 		a.masked = &masked
 	}
-	return w, done
+	return w, done, err
 }
 
 // forModel is the form as sent when nothing in it changes; otherwise it is

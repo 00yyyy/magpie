@@ -121,6 +121,9 @@ func lockAuth() func() {
 
 func listPath() string { return filepath.Join(settings.Dir(), "plugins.json") }
 
+// ListPath is plugins.json's path.
+func ListPath() string { return listPath() }
+
 // pluginsList is plugins.json as last read, with the bytes it was parsed
 // from. The file is read every time: an edit that keeps the file's size and
 // time (a swap of two accounts of one length, a replaced file whose time is

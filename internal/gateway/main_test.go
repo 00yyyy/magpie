@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/agentenv"
+	"github.com/yetone/magpie/internal/gwmw"
+	"github.com/yetone/magpie/internal/masking"
+	"github.com/yetone/magpie/internal/middleware"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/routes"
 	"github.com/yetone/magpie/internal/testenv"
@@ -20,6 +23,7 @@ const standInsEnv = "MAGPIE_GATEWAY_TEST_STAND_INS"
 func TestMain(m *testing.M) {
 	serveRotation()
 	groupsServed = provider.ServeGroups()
+	serveMiddleware()
 	code, err := isolatedTests(m)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -121,6 +125,29 @@ func TestRunsAsAnIsolatedTestBinary(t *testing.T) {
 // rotation is what serveRotation registered: the routings plugins/rotation
 // serves, which the gateway's tests route by as a user with it on does.
 var rotation []func()
+
+// masked and chained are the gateway's middleware point as
+// plugins/redact and plugins/middleware serve it, on in every test but
+// those of it off (withoutMasker, withoutMiddleware).
+var masked, chained func()
+
+func serveMiddleware() {
+	masked = gwmw.Mask(masking.Masker{})
+	chained = gwmw.Use(middleware.Chain{})
+}
+
+// withoutMasker takes the masker away for t, as plugins/redact off does.
+func withoutMasker(t *testing.T) {
+	masked()
+	t.Cleanup(func() { masked = gwmw.Mask(masking.Masker{}) })
+}
+
+// withoutMiddleware takes the JS middleware chain away for t, as
+// plugins/middleware off does.
+func withoutMiddleware(t *testing.T) {
+	chained()
+	t.Cleanup(func() { chained = gwmw.Use(middleware.Chain{}) })
+}
 
 func serveRotation() {
 	for name, s := range routes.Builtin {

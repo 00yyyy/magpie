@@ -30,6 +30,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/yetone/magpie/internal/awake"
+	"github.com/yetone/magpie/internal/gwmw"
 
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/pluginrt"
@@ -486,9 +487,18 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		}
 	})
 	defer stopGroups()
+	// and a request masking is wanted for, with no masker served, turns
+	// plugins/redact on as it is sent rather than being refused until
+	// KeepFresh's next look (gwmw.Served)
+	stopMasking := gwmw.Refresh(func() {
+		if _, err := pluginrt.Refresh(); err != nil {
+			log.Printf("plugins: %v", err)
+		}
+	})
+	defer stopMasking()
 	freshCtx, stopFresh := context.WithCancel(ctx)
 	defer stopFresh()
-	go pluginrt.KeepFresh(freshCtx, 2*time.Second, settings.Path(), provider.Path())
+	go pluginrt.KeepFresh(freshCtx, 2*time.Second, settings.Path(), provider.Path(), plugin.ListPath())
 	srv := &http.Server{Handler: lanGuard(s.Handler()), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 5 * time.Minute}
 	// the magpie serving the gateway, and only it, keeps the saved accounts
 	// signed in, so two never refresh one sign-in at once
@@ -1140,8 +1150,12 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	}
 	// Count the same masked prompt that generation sends to the vendor.
 	plain := body
-	w, body, unmask := redacted(w, body)
+	w, body, unmask, err := redacted(w, body)
 	defer unmask()
+	if err != nil {
+		writeError(w, provider.Anthropic, http.StatusServiceUnavailable, err.Error())
+		return
+	}
 	named := unprefixed(model)
 	if m := claudeTierStandIn(r, agentOf(r), model); m != "" {
 		model = m // counted on the model the request will go to
@@ -1460,8 +1474,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// unmasked (unredactedRoute)
 	plain := body
 	var masked []byte // the masked body, when plain goes instead
-	w, body, unmask := redacted(w, body)
+	w, body, unmask, err := redacted(w, body)
 	defer unmask()
+	if err != nil { // fails closed: never sent unmasked
+		log.Printf("gateway: %v", err)
+		writeError(w, from, http.StatusServiceUnavailable, err.Error())
+		return
+	}
 	// the reply's model the member that answered, when asked for (#822)
 	w, r, named := withMemberNames(w, r)
 	defer named()

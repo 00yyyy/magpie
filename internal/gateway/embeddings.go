@@ -52,7 +52,7 @@ func (s *Server) retrieve(path, operation string) http.HandlerFunc {
 type retrieval interface {
 	// mask masks what goes to the vendors, and gives the writer that puts
 	// the masked values back in their answer
-	mask(w http.ResponseWriter) (http.ResponseWriter, func())
+	mask(w http.ResponseWriter) (http.ResponseWriter, func(), error)
 	// forModel is the body and its Content-Type for the provider's own id
 	// of the model
 	forModel(model string) ([]byte, string, error)
@@ -64,13 +64,13 @@ type retrieval interface {
 // jsonRetrieval is an embeddings or rerank body: a JSON object.
 type jsonRetrieval struct{ req map[string]json.RawMessage }
 
-func (j *jsonRetrieval) mask(w http.ResponseWriter) (http.ResponseWriter, func()) {
+func (j *jsonRetrieval) mask(w http.ResponseWriter) (http.ResponseWriter, func(), error) {
 	// masked once, as the settings say: a document a reranker gives back
 	// has its secrets again
 	all, _ := json.Marshal(j.req)
-	w, all, done := redacted(w, all)
+	w, all, done, err := redacted(w, all)
 	json.Unmarshal(all, &j.req)
-	return w, done
+	return w, done, err
 }
 
 // answerType is JSON, whatever a vendor labels it.
@@ -176,8 +176,15 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 	// to go unmasked (provider.SkipsRedaction)
 	if slices.ContainsFunc(tries, func(c candidate) bool { return !c.p.SkipsRedaction() }) {
 		var done func()
-		w, done = req.mask(w)
+		var err error
+		w, done, err = req.mask(w)
 		defer done()
+		if err != nil { // fails closed
+			call.Status, call.Error = http.StatusServiceUnavailable, err.Error()
+			writeError(w, provider.Chat, http.StatusServiceUnavailable, err.Error())
+			s.record(call)
+			return
+		}
 	}
 	for i, c := range tries {
 		last := i == len(tries)-1

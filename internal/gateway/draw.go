@@ -424,8 +424,12 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 			}
 		}
 		var unmask func()
-		w, d.Prompt, unmask = redactedPrompt(w, d.Prompt)
+		w, d.Prompt, unmask, err = redactedPrompt(w, d.Prompt)
 		defer unmask()
+		if err != nil {
+			fail(http.StatusServiceUnavailable, err.Error())
+			return
+		}
 		call.Provider, call.To = p.ID, provider.Chat
 		ctx, cancel := context.WithTimeout(withPrivateFetch(r.Context(), r), drawTimeout)
 		defer cancel()

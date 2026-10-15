@@ -23,7 +23,6 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
-	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -726,16 +725,23 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	call.To = provider.Chat
 	var unmask func()
-	w, f.Prompt, unmask = redactedPrompt(w, f.Prompt)
+	prompt := f.Prompt
+	w, f.Prompt, unmask, err = redactedPrompt(w, f.Prompt)
 	defer unmask()
 	// the fields passed on as they came are masked as the prompt is: a
 	// negative_prompt is the user's text all the same
-	if n := maskStrings(f.Extra); n > 0 {
-		if _, ok := w.(*redact.Writer); !ok {
-			rw := redact.NewWriter(w)
-			w = rw
-			defer rw.Finish()
-		}
+	n := 0
+	if err == nil {
+		n, err = maskStrings(f.Extra)
+	}
+	if err != nil { // fails closed
+		fail(http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if n > 0 && f.Prompt == prompt { // the prompt's mask wraps w already
+		var done func()
+		w, done = restoring(w)
+		defer done()
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), drawTimeout)
 	defer cancel()
@@ -938,9 +944,8 @@ func (s *Server) openAIVideo(ctx context.Context, p provider.Provider, vendorID,
 // videosGet answers how a video is going.
 func (s *Server) videosGet(w http.ResponseWriter, r *http.Request) {
 	// A later poll can echo the prompt masked when the video was created.
-	rw := redact.NewWriter(w)
-	defer rw.Finish()
-	w = rw
+	w, done := restoring(w)
+	defer done()
 	id := r.PathValue("id")
 	p, vendorID, started, err := videoMaker(id)
 	if err != nil {
@@ -1103,28 +1108,43 @@ func (s *Server) remoteVideoContent(ctx context.Context, w http.ResponseWriter, 
 }
 
 // maskStrings masks every string in v (a decoded JSON value) in place as a
-// prompt is masked, and says how many values it swapped.
-func maskStrings(v any) int {
+// prompt is masked, and says how many values it swapped; an error when it
+// can't (fail closed).
+func maskStrings(v any) (int, error) {
 	n := 0
+	one := func(str string) (string, error) {
+		m, c, err := maskedText(str)
+		n += c
+		return m, err
+	}
+	var err error
 	switch x := v.(type) {
 	case map[string]any:
 		for k, e := range x {
 			if str, ok := e.(string); ok {
-				m, c := redact.Mask(str, redactionOptions())
-				x[k], n = m, n+c
+				x[k], err = one(str)
 			} else {
-				n += maskStrings(e)
+				var c int
+				c, err = maskStrings(e)
+				n += c
+			}
+			if err != nil {
+				return n, err
 			}
 		}
 	case []any:
 		for i, e := range x {
 			if str, ok := e.(string); ok {
-				m, c := redact.Mask(str, redactionOptions())
-				x[i], n = m, n+c
+				x[i], err = one(str)
 			} else {
-				n += maskStrings(e)
+				var c int
+				c, err = maskStrings(e)
+				n += c
+			}
+			if err != nil {
+				return n, err
 			}
 		}
 	}
-	return n
+	return n, nil
 }

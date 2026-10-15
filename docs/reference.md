@@ -967,6 +967,13 @@ event) leaves what it was given as it was. Settings → Plugins shows each
 middleware's calls, time and failures. The [plugin guide](https://usemagpie.ai/docs/plugins#middleware)
 has the rest.
 
+Middleware runs through the built-in plugin `middleware` (Gateway
+middleware in Plugins › Built-in), which stays on while one is on. Turned
+off, no middleware runs and agents' requests go as they came. Privacy
+masking is the built-in plugin `redact` (Privacy masking), on while
+Settings → Privacy asks for any masking; if masking is asked for and it
+isn't serving, a request gets a 503 and nothing is sent.
+
 `ctx.options` is the middleware's entry's `options` in `plugins.json`: set
 them with its **Options** button in Plugins › Installed, or
 

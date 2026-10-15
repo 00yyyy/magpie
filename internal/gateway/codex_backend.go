@@ -685,8 +685,13 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	usage.Saw(agentOf(r))
 	if r.Method == http.MethodPost {
 		var unmask func()
-		w, body, unmask = redacted(w, body)
+		var err error
+		w, body, unmask, err = redacted(w, body)
 		defer unmask()
+		if err != nil {
+			writeError(w, provider.Responses, http.StatusServiceUnavailable, err.Error())
+			return
+		}
 	}
 	base := provider.CodexBase
 	if apiKey(r.Header) && rest != "/models" {
