@@ -57,7 +57,11 @@ magpie.plugin("library", (ctx) => {
   // extension, which each of its chips says.
   // An agent hidden on the Agents page is left out here too (#71): what it
   // already has stays with it, and a new server or skill isn't given to it.
-  const shownAgents = () => lib.agents.filter((a) => !isHidden(a));
+  // One gone from this computer (gone: uninstalled, or its CLI) is listed
+  // only on the rows of what it still has (withGone), for that to be taken
+  // out: an agent that isn't installed was on every row (@jiahao_jayden).
+  const shownAgents = () => lib.agents.filter((a) => !a.gone && !isHidden(a));
+  const withGone = (all, on) => [...all, ...lib.agents.filter((a) => a.gone && (on || []).includes(a.id) && !all.some((x) => x.id === a.id))];
   const mcpAgents = () => shownAgents().filter((a) => a.mcp)
     .map((a) => a.mcpVia ? { ...a, aside: t("{agent} reads MCP servers through the {ext} extension", { agent: a.name, ext: a.mcpVia }) } : a);
   const skillAgents = () => shownAgents().filter((a) => a.skills);
@@ -256,6 +260,7 @@ magpie.plugin("library", (ctx) => {
       // WebKit shows it no tooltip either — 蓝猫 clicked Claude Desktop's
       // grey chip for a remote server and nothing said why
       if (blocked) { c.classList.add("blocked"); c.setAttribute("aria-disabled", "true"); tip = blocked; }
+      if (a.gone) { c.classList.add("gone"); tip = t("{agent} isn't installed here — click to take it away", { agent: a.name }); }
       c.title = a.aside && !problem && !blocked ? tip + "\n" + a.aside : tip;
       c.setAttribute("aria-pressed", has ? "true" : "false");
       // What's lit is read off the chips clicked, not the list they were
@@ -300,7 +305,7 @@ magpie.plugin("library", (ctx) => {
   // bringing in servers) have it too (#1531): most start with every agent
   // lit, and one agent alone was a click on each of the others.
   function allChip(box, all, on, onChange) {
-    const can = [...box.children].filter((c) => !cannot(c)).map((c) => c.dataset.agent);
+    const can = [...box.children].filter((c) => !cannot(c) && !c.classList.contains("gone")).map((c) => c.dataset.agent);
     if (can.length < 2) return;
     const c = el("button", "lib-ag all", t("All"));
     c.dataset.all = "1";
@@ -318,7 +323,7 @@ magpie.plugin("library", (ctx) => {
   function paintAll(box) {
     const c = box.querySelector(":scope > .lib-ag.all");
     if (!c) return;
-    const can = [...box.children].filter((x) => x.dataset.agent && !cannot(x));
+    const can = [...box.children].filter((x) => x.dataset.agent && !cannot(x) && !x.classList.contains("gone"));
     const n = can.length, full = can.every((x) => x.getAttribute("aria-pressed") === "true");
     c.classList.toggle("on", full);
     c.setAttribute("aria-pressed", full ? "true" : "false");
@@ -1475,7 +1480,7 @@ magpie.plugin("library", (ctx) => {
     sub.title = serverLine(s);
     who.append(sub, toolsEl(s.name));
     row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), who,
-      agentChips(all, s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true }));
+      agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true }));
     if (picking) return pickRow(row, s.name);
     row.onclick = () => editServer(s);
     row.title = t("Edit {name}", { name: s.name });
@@ -2257,7 +2262,7 @@ magpie.plugin("library", (ctx) => {
     cmd.title = h.command;
     who.append(cmd);
     row.append(glyph(GLYPH.hook), who,
-      agentChips(all, h.agents, chipsChange("hooks/agents", h.name, "hooks", (x) => hookRow(x, all)), { problems: h.problems, blocked: hookBlocked(h), all: true }));
+      agentChips(withGone(all, h.agents), h.agents, chipsChange("hooks/agents", h.name, "hooks", (x) => hookRow(x, all)), { problems: h.problems, blocked: hookBlocked(h), all: true }));
     if (picking) return pickRow(row, h.name);
     row.onclick = () => editHook(h);
     row.title = t("Edit {name}", { name: h.name });
@@ -3784,7 +3789,7 @@ magpie.plugin("library", (ctx) => {
       : t("An agent can have its own way; the others get links, as the library gives them.")));
     const list = el("div", "list lib-list lib-byagent-list");
     let busy = false;
-    const draw = () => list.replaceChildren(...lib.agents.filter((a) => a.skills && (!isHidden(a) || a.howOwn)).map((a) => {
+    const draw = () => list.replaceChildren(...lib.agents.filter((a) => a.skills && !a.gone && (!isHidden(a) || a.howOwn)).map((a) => {
       const row = el("div", "row lib-row lib-byagent-row lib-how-row");
       row.dataset.agent = a.id;
       const who = el("div", "who");
@@ -3892,8 +3897,8 @@ magpie.plugin("library", (ctx) => {
     return lib.agents.filter((a) => kind === "skills" ? a.skills : a.mcp).map((a) => {
       const has = items.filter((x) => x.agents?.includes(a.id)).length;
       const missing = items.filter((x) => can(x, a) && !x.agents?.includes(a.id)).length;
-      return { a, has, missing, hidden: isHidden(a) };
-    }).filter((r) => !r.hidden || r.has || kept?.has(r.a.id));
+      return { a, has, missing, hidden: isHidden(a), gone: !!a.gone };
+    }).filter((r) => !r.hidden && !r.gone || r.has || kept?.has(r.a.id));
   }
 
   function openByAgent(kind) {
@@ -3908,12 +3913,16 @@ magpie.plugin("library", (ctx) => {
     const list = el("div", "list lib-list lib-byagent-list");
     let busy = false;
     const listed = new Set(byAgentRows(kind).map((r) => r.a.id));
-    const draw = () => list.replaceChildren(...byAgentRows(kind, listed).map(({ a, has, missing, hidden }) => {
+    const draw = () => list.replaceChildren(...byAgentRows(kind, listed).map(({ a, has, missing, hidden: shy, gone }) => {
       const row = el("div", "row lib-row lib-byagent-row");
       row.dataset.agent = a.id;
       const who = el("div", "who");
       const name = el("div", "name", a.name);
-      if (hidden) name.append(tag(t("Hidden"), "", t("Hidden on the Agents page: it isn't given anything new, and what it has can be taken out here")));
+      // one gone from this computer is listed while it has some, for them
+      // to be taken out, as one hidden is
+      const hidden = shy || gone;
+      if (gone) name.append(tag(t("Not installed here"), "", t("Not installed here: it isn't given anything new, and what it has can be taken out here")));
+      else if (hidden) name.append(tag(t("Hidden"), "", t("Hidden on the Agents page: it isn't given anything new, and what it has can be taken out here")));
       who.append(name, el("div", "sub", skills ? t("{n} of {m} skills", { n: has, m: items().length }) : t("{n} of {m} servers", { n: has, m: items().length })));
       const on = button(t("Turn all on"), "action lib-updall lib-agenton", (e, b) => everyFor(a, true, b));
       on.disabled = busy || hidden || !missing;
@@ -4320,7 +4329,7 @@ magpie.plugin("library", (ctx) => {
     rm.append(svg(GLYPH.trash, 13, 1.4));
     rm.title = t("Remove");
     acts.append(rm);
-    row.append(mark(s.icon, GLYPH.skill), who, acts, agentChips(all, s.agents, chipsChange("skills/agents", s.name, "skills", (x) => skillRow(x, all)), { problems: s.problems, via: viaFor(s), all: true, always: alwaysFor(s) }));
+    row.append(mark(s.icon, GLYPH.skill), who, acts, agentChips(withGone(all, s.agents), s.agents, chipsChange("skills/agents", s.name, "skills", (x) => skillRow(x, all)), { problems: s.problems, via: viaFor(s), all: true, always: alwaysFor(s) }));
     if (picking) return pickRow(row, s.name);
     row.onclick = () => viewSkill(s);
     row.title = t("Read {name}'s SKILL.md", { name: s.name });

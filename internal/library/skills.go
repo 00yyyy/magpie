@@ -516,6 +516,14 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		if !slices.Contains(s.Agents, id) {
 			continue
 		}
+		// an agent gone from here is given nothing: what it has still
+		// stays its, until unticked
+		if t.Gone {
+			if slices.Contains(a.Skills, s.Name) && !slices.Contains(mine, s.Name) {
+				mine = append(mine, s.Name)
+			}
+			continue
+		}
 		p := filepath.Join(t.Skills, s.Name)
 		if l.blockedSkills[realDir(p)] {
 			if !slices.Contains(mine, s.Name) {

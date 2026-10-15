@@ -31,7 +31,9 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 
 	"github.com/yetone/magpie/internal/appdir"
@@ -44,24 +46,51 @@ func workbuddy(home string) *Agent {
 	if dir == "" {
 		dir = filepath.Join(home, ".workbuddy")
 	}
-	return workbuddyBuild("workbuddy", "WorkBuddy", dir, []string{"work-buddy"})
+	return workbuddyBuild("workbuddy", "WorkBuddy", dir, []string{"work-buddy"}, desktopApp{id: "com.tencent.workbuddy.mac", names: []string{"WorkBuddy.app"}})
 }
 
 // workbuddyAI is WorkBuddy AI, the international build, in ~/.workbuddy-ai.
 // WORKBUDDY_CONFIG_DIR is WorkBuddy's (workbuddy above): both builds would
 // read a folder it names, which that agent writes already.
 func workbuddyAI(home string) *Agent {
-	return workbuddyBuild("workbuddy-ai", "WorkBuddy AI", filepath.Join(home, ".workbuddy-ai"), []string{"workbuddy-intl", "workbuddyai"})
+	return workbuddyBuild("workbuddy-ai", "WorkBuddy AI", filepath.Join(home, ".workbuddy-ai"), []string{"workbuddy-intl", "workbuddyai"}, desktopApp{id: "com.workbuddy.workbuddy-ai", names: []string{"WorkBuddy AI.app"}})
 }
 
-// workbuddyBuild is one of WorkBuddy's builds, its models.json in dir.
-func workbuddyBuild(id, name, dir string, aliases []string) *Agent {
+// workbuddyOnMac says whether WorkBuddy is found by its app bundle, as on a
+// Mac; a var so a test forces either OS.
+var workbuddyOnMac = func() bool { return runtime.GOOS == "darwin" }
+
+// workbuddyHere reports whether a WorkBuddy build is installed. On a Mac it
+// is its app bundle (app): its data folder is no sign of it. Dragging
+// WorkBuddy.app to the Trash leaves ~/.workbuddy behind, and magpie writes
+// there itself (models.json when wired, mcp.json and skills/ from the
+// library), so the folder alone kept an uninstalled WorkBuddy on every
+// library row for good (@jiahao_jayden on X: 没安装的 WorkBuddy 也在技能
+// 那一排). Elsewhere, where magpie doesn't know its install folder, the
+// folder still counts, as before.
+func workbuddyHere(dir, path string, app desktopApp) bool {
+	if Taken(dir) {
+		return false
+	}
+	if workbuddyOnMac() {
+		return macBundle(app)
+	}
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	return agentDir(dir)
+}
+
+// workbuddyBuild is one of WorkBuddy's builds, its models.json in dir and
+// app its macOS bundle.
+func workbuddyBuild(id, name, dir string, aliases []string, app desktopApp) *Agent {
 	path := filepath.Join(dir, "models.json")
 	write := func(on bool) error { return buddyWrite(path, id, on) }
 	return &Agent{
 		ID: id, Name: name, Icon: "workbuddy-color", Aliases: aliases,
 		UA:  []string{id},
 		Dir: dir, Path: path,
+		detect: func() bool { return workbuddyHere(dir, path, app) },
 		Sync: func() error {
 			if !workbuddyWired(path) {
 				return nil

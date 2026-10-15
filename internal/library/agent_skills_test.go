@@ -24,6 +24,8 @@ func TestAgentsSkillsFolders(t *testing.T) {
 	// alone is gone, #2177, and no target — TestTargetsLeaveGoneAgentsOut)
 	holdCLI(t, h, "hermes")
 	holdCLI(t, h, "cline")
+	// and WorkBuddy's app, which is how a Mac has it
+	holdApp(t, h, "WorkBuddy.app", "com.tencent.workbuddy.mac")
 	want := map[string]string{
 		"kimi":        ".agents/skills",
 		"goose":       ".agents/skills",

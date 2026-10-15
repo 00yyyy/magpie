@@ -83,6 +83,24 @@ var (
 	plistVersionRe = regexp.MustCompile(`<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>`)
 )
 
+// macBundle reports whether app's bundle is in one of appFolders, under one
+// of its names: with its bundle id, or an Info.plist that isn't XML (a
+// binary one says nothing either way, and the name is the app's own).
+func macBundle(app desktopApp) bool {
+	for _, dir := range appFolders() {
+		for _, name := range app.names {
+			b, err := os.ReadFile(filepath.Join(dir, name, "Contents", "Info.plist"))
+			if err != nil {
+				continue
+			}
+			if id := plistIDRe.FindSubmatch(b); id == nil || strings.TrimSpace(string(id[1])) == app.id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // AppVersion is the version of the agent's desktop app installed here, ""
 // for an agent without one magpie knows, one not installed, or an Info.plist
 // that doesn't say (a binary one isn't read).

@@ -563,6 +563,9 @@ magpie.strings({
     "Official — from the team that makes it": "官方 — 来自其开发团队",
     "{n} installs": "{n} 次安装",
     "No description.": "暂无描述。",
+    "{agent} isn't installed here — click to take it away": "本机没有安装 {agent}——点一下把它移除",
+    "Not installed here": "本机未安装",
+    "Not installed here: it isn't given anything new, and what it has can be taken out here": "本机没有安装：不会再分配新的内容，已有的可以在这里移除",
   },
   "zh-TW": {
     "already in the library: {names}": "資源庫裡已有：{names}",
@@ -1126,6 +1129,9 @@ magpie.strings({
     "Official — from the team that makes it": "官方 — 來自其開發團隊",
     "{n} installs": "{n} 次安裝",
     "No description.": "暫無描述。",
+    "{agent} isn't installed here — click to take it away": "本機沒有安裝 {agent}——點一下把它移除",
+    "Not installed here": "本機未安裝",
+    "Not installed here: it isn't given anything new, and what it has can be taken out here": "本機沒有安裝：不會再分配新的內容，已有的可以在這裡移除",
   },
   ja: {
     "Give skills as": "スキルの渡し方",
@@ -1689,6 +1695,9 @@ magpie.strings({
     "{n} installs": "{n} 回インストール",
     "No description.": "説明はありません。",
     "It will be removed from the library and the agents it was given to.": "ライブラリと使用中のエージェントから削除されます。",
+    "{agent} isn't installed here — click to take it away": "{agent} はこのコンピューターにインストールされていません — クリックして外します",
+    "Not installed here": "このパソコンに未インストール",
+    "Not installed here: it isn't given anything new, and what it has can be taken out here": "このコンピューターにはインストールされていません：新しいものは割り当てられず、すでにあるものはここで外せます",
   },
   de: {
     "Give skills as": "Skills geben als",
@@ -2252,5 +2261,8 @@ magpie.strings({
     "{n} installs": "{n} Installationen",
     "No description.": "Keine Beschreibung.",
     "It will be removed from the library and the agents it was given to.": "Es wird aus der Bibliothek und den Agenten entfernt, denen es zugewiesen wurde.",
+    "{agent} isn't installed here — click to take it away": "{agent} ist hier nicht installiert – klicken, um es zu entfernen",
+    "Not installed here": "Hier nicht installiert",
+    "Not installed here: it isn't given anything new, and what it has can be taken out here": "Hier nicht installiert: Es erhält nichts Neues, und was es hat, kann hier entfernt werden",
   },
 });

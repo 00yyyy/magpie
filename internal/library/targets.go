@@ -47,6 +47,10 @@ type Target struct {
 	// Settings is Claude Code's settings.json, whose permissions.deny
 	// leaves out the tools of a server turned off (mcp_tools_off.go)
 	Settings string
+	// Gone is an agent no longer installed here that still has what magpie
+	// gave it (held): a sync only takes things out of it, as they are
+	// unticked, and gives it nothing.
+	Gone bool
 }
 
 func home() string { h, _ := os.UserHomeDir(); return h }
@@ -688,6 +692,39 @@ func targets(gone bool) []*Target {
 		}
 	}
 	readsWith(out)
+	return out
+}
+
+// held are the agents not among have (Targets) — uninstalled, or gone for
+// their CLI — that the library still gives something, or that hold a skill,
+// server or hook magpie put there: each is listed on the rows of what it
+// has, for that to be unticked and taken out of it, and on no other row
+// (@jiahao_jayden on X: an agent that isn't installed was on every row). A
+// sync gives them nothing new (Gone).
+func (l *Library) held(have []*Target) []*Target {
+	in := map[string]bool{}
+	for _, t := range have {
+		in[t.Agent.ID] = true
+	}
+	has := func(id string) bool {
+		if a := l.Applied[id]; a != nil && (len(a.Skills) > 0 || len(a.MCP) > 0 || len(a.Hooks) > 0) {
+			return true
+		}
+		return slices.ContainsFunc(l.Skills, func(s *Skill) bool { return slices.Contains(s.Agents, id) }) ||
+			slices.ContainsFunc(l.MCP, func(s *Server) bool { return slices.Contains(s.Agents, id) }) ||
+			slices.ContainsFunc(l.Hooks, func(h *Hook) bool { return slices.Contains(h.Agents, id) })
+	}
+	var out []*Target
+	for _, a := range append(apps(), agent.All()...) {
+		if in[a.ID] || a.WSL != "" || !has(a.ID) {
+			continue
+		}
+		in[a.ID] = true
+		if t := targetOf(a); t != nil && t.open() {
+			t.Gone = true
+			out = append(out, t)
+		}
+	}
 	return out
 }
 
