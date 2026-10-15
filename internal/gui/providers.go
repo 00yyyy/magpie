@@ -92,6 +92,11 @@ type providerJSON struct {
 	// on this machine or the local network, set to go unmasked by
 	// Settings' redaction (provider.Unredacted)
 	Unredacted bool `json:"unredacted"`
+	// a provider the user added whose own HTTPS host's certificate is
+	// taken as it is (provider.InsecureTLS, #2383); TakesInsecureTLS: it
+	// may be, being the user's own and not a preset's or a sign-in's
+	InsecureTLS      bool `json:"insecureTLS"`
+	TakesInsecureTLS bool `json:"takesInsecureTLS"`
 	// Codex's compaction asked of it as Codex sent it, its sealed item
 	// back as it came (provider.NativeCompaction, #1099); CarriesCompaction: its
 	// wire can carry it, so the editor offers it
@@ -545,7 +550,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(), MarksKinds: p.MarksKinds(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, ModelsURL: p.ModelsURL,
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, InsecureTLS: p.InsecureTLS, TakesInsecureTLS: p.TakesInsecureTLS(), NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Picks(), Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Unlisted: p.Unlisted, NoModels: p.ServesNone(), Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
@@ -1044,6 +1049,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// Proxy is the proxy its requests go through (#237), "" to
 			// follow the global one; a save that leaves it out keeps it
 			Proxy *string `json:"proxy"`
+			// InsecureTLS is whether the certificate of its own HTTPS
+			// host is taken unchecked (#2383); a save that leaves it out
+			// keeps it
+			InsecureTLS *bool `json:"insecureTLS"`
 			// MaxConcurrency is how many requests each of its keys or
 			// accounts has out at once: a number (0 none), null for what
 			// its plugin says or none; a save that leaves it out keeps it
@@ -1358,6 +1367,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if req.Proxy != nil {
 					in.Proxy = *req.Proxy
 				}
+				if req.InsecureTLS != nil {
+					in.InsecureTLS = *req.InsecureTLS
+				}
 				add := provider.Add
 				if req.CopyOf != "" {
 					add = func(p provider.Provider) (string, error) { return provider.AddCopy(p, req.CopyOf) }
@@ -1384,6 +1396,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.Proxy = *req.Proxy
 				} else if old != nil {
 					in.Proxy = old.Proxy
+				}
+				if req.InsecureTLS != nil {
+					in.InsecureTLS = *req.InsecureTLS
+				} else if old != nil {
+					in.InsecureTLS = old.InsecureTLS
 				}
 				if keepCC && old != nil {
 					in.MaxConcurrency = old.MaxConcurrency
@@ -1717,7 +1734,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 			saved := *p
 			if req.Typed {
-				q := typed(*p, in, req.Proxy)
+				q := typed(*p, in, req.Proxy, req.InsecureTLS)
 				p = &q
 			}
 			if len(req.Test) > 0 {
@@ -1754,7 +1771,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				}
 				p = *saved
 			}
-			p = typed(p, in, req.Proxy)
+			p = typed(p, in, req.Proxy, req.InsecureTLS)
 			if strings.TrimSpace(in.Decide) != "" {
 				// a decision API is asked its smallest question, at
 				// POST …/systemone (#647)
@@ -1831,7 +1848,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			if p.Name == "" {
 				p.Name = cmp.Or(strings.TrimSpace(in.Name), "the vendor")
 			}
-			p = typed(p, in, req.Proxy)
+			p = typed(p, in, req.Proxy, req.InsecureTLS)
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
 			ms, err := p.List(ctx)
@@ -1863,7 +1880,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			defer cancel()
 			ask := *p
 			if req.Typed {
-				ask = typed(*p, in, req.Proxy)
+				ask = typed(*p, in, req.Proxy, req.InsecureTLS)
 			}
 			ms, dropped, err := ask.Refetch(ctx)
 			if err != nil {
@@ -2190,7 +2207,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 // Vertex AI provider's project, location, credentials file and service
 // account are the ones typed, spelled as a Save keeps them, unless no
 // project is.
-func typed(p, in provider.Provider, proxy *string) provider.Provider {
+func typed(p, in provider.Provider, proxy *string, insecureTLS *bool) provider.Provider {
 	if k := strings.TrimSpace(in.Key); k != "" && k != p.Key {
 		p.Key, p.KeyName, p.KeyProtocol, p.KeyWeight = k, "", "", 0
 	}
@@ -2213,6 +2230,11 @@ func typed(p, in provider.Provider, proxy *string) provider.Provider {
 	}
 	if proxy != nil {
 		p.Proxy = *proxy
+	}
+	// asked unsaved as it would be saved: Via takes it only when p is the
+	// user's own (TakesInsecureTLS)
+	if insecureTLS != nil {
+		p.InsecureTLS = *insecureTLS
 	}
 	return p
 }

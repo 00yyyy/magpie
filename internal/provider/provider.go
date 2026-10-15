@@ -272,6 +272,13 @@ type Provider struct {
 	// See SkipsRedaction.
 	Unredacted bool `json:"unredacted,omitempty"`
 
+	// InsecureTLS has magpie take the certificate of the provider's own
+	// HTTPS host as it is, unchecked (#2383, fangzhengjin: a vLLM on the
+	// LAN, Ollama behind a self-signed cert). Only a provider the user
+	// added takes it (TakesInsecureTLS), and only for the hosts of its own
+	// base URLs (UncheckedHosts); see Via.
+	InsecureTLS bool `json:"insecureTLS,omitempty"`
+
 	// Proxy is the proxy magpie's requests to this provider go through
 	// (#237: Codex through one, a vendor at home without): "" follows
 	// the global one (Settings' Proxy, the environment's, the system's),
@@ -798,6 +805,9 @@ func Save(p Provider) error {
 				return errors.New("Azure OpenAI needs your resource's endpoint, e.g. https://<resource>.openai.azure.com")
 			}
 			return errors.New("a provider needs a base URL")
+		}
+		if p.InsecureTLS && !p.TakesInsecureTLS() {
+			return fmt.Errorf("%s is a preset's: only a provider you added with your own base URL can skip the certificate check", p.Name)
 		}
 		if strings.Contains(p.Decide, WorkspaceID) {
 			return errors.New("Bailian's decision model is asked at your workspace's host: give its workspace ID (workspace=… or the editor's Workspace ID), or pick the Token Plan")

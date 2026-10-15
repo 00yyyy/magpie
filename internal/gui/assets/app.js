@@ -7660,6 +7660,9 @@ function asTyped() {
   if (xb.value) body.extraBody = xb.value;
   const proxy = draft.proxyMode === undefined ? null : proxyOfDraft();
   if (proxy !== null) body.proxy = proxy;
+  // asked unchecked as it would be saved; magpie takes it only for a
+  // provider of the user's own
+  body.insecureTLS = !!draft.insecureTLS;
   return body;
 }
 
@@ -8394,7 +8397,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, insecureTLS: !!p.insecureTLS, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -8550,6 +8553,9 @@ function drawEditor(p, presetID) {
   // the Redaction row, shown while every address is on this computer or
   // the local network
   let showLocal = () => {};
+  // the Certificate row, shown while a provider of the user's own has an
+  // https:// address (#2383)
+  let showTLS = () => {};
   // the Key header row, shown while the provider has a third-party
   // Anthropic API, which is sent its key in both headers by default
   let showAuth = () => {};
@@ -8602,6 +8608,7 @@ function drawEditor(p, presetID) {
       fillEndpoints();
       showSearch();
       showLocal();
+      showTLS();
       showAuth();
       showCompaction();
     };
@@ -8611,7 +8618,7 @@ function drawEditor(p, presetID) {
     url.oninput = () => {
       draft[apiField[draft.api]] = url.value;
       if (carried) { draft[carried.from] = carried.value; carried = null; fillEndpoints(); }
-      showSearch(); showLocal(); showAuth(); showCompaction();
+      showSearch(); showLocal(); showTLS(); showAuth(); showCompaction();
     };
     const urlWrap = el("div", "stack");
     urlWrap.append(seg, url);
@@ -8939,6 +8946,22 @@ function drawEditor(p, presetID) {
     ed.append(...row);
   }
 
+  // a provider the user added whose server has a certificate nothing
+  // trusts (a vLLM on the LAN, Ollama behind a self-signed cert, a
+  // company CA, #2383) may be asked without checking it: only its own
+  // https:// hosts, never a preset's or a sign-in's (provider.TakesInsecureTLS)
+  const tlsTakes = () => custom && (!p || !!p.takesInsecureTLS);
+  const onHTTPS = () => ["chat", "responses", "anthropic", "gemini", "decide"].map(addressOf).some((u) => /^\s*https:\/\//i.test(u));
+  if (tlsTakes()) {
+    const [ctk, ccb] = tick(t("Don't check its certificate"), !!draft.insecureTLS);
+    ctk.classList.add("insecure-tls");
+    ccb.onchange = () => { draft.insecureTLS = ccb.checked; };
+    const row = field(t("Certificate"), ctk, t("For your own server with a self-signed certificate or one from your company's CA. magpie then can't tell it from another machine answering at its address: turn it on only on a network you trust."));
+    showTLS = () => { for (const e of row) e.style.display = onHTTPS() ? "" : "none"; };
+    showTLS();
+    ed.append(...row);
+  }
+
   // a vendor that tells the whole account's balance only to a token of its
   // own (AiHubMix's system access token), where a key knows just its own
   // — or a custom provider's, whose Balance URL may not be named yet: a
@@ -9162,7 +9185,7 @@ function drawEditor(p, presetID) {
       const add = (label, key, ph, hint) => {
         if (apiField[draft.api] === key) return;
         const i = input(draft[key], ph, "url");
-        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); showAuth(); showCompaction(); };
+        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); showTLS(); showAuth(); showCompaction(); };
         eps.append(...field(t(label), i, t(hint)));
       };
       add("OpenAI URL", "chat", "https://…/v1", "if the vendor also serves chat completions");
@@ -9273,6 +9296,7 @@ function drawEditor(p, presetID) {
     body.pinUpstream = !!draft.pinUpstream;
     if (twoKeyHeaders()) body.authHeader = draft.authHeader || "";
     body.unredacted = !!draft.unredacted && onLAN();
+    if (tlsTakes()) body.insecureTLS = !!draft.insecureTLS && onHTTPS();
     if (!decideOnly(p || pr)) body.nativeCompaction = !!draft.nativeCompaction && carriesCompaction();
     body.passUserAgent = !!draft.passUserAgent && uaPassable();
     const cx = parseContexts(draft.contexts || "");
