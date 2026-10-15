@@ -366,8 +366,8 @@ files gets `Subagent` from the file's name, `<session>/subagents/agent-<id>.json
 or `<session>/subagents/workflows/<run>/agent-<id>.jsonl`
 (`sessions.SubagentOf`), so no cache version changes, and `ParentAgent` from
 the `parentAgentId` of the `agent-<id>.meta.json` beside it, which Claude Code
-writes for a subagent a subagent started (`sessions.SubagentParent`, read once
-a file; a meta file not read is unknown and read again). A gateway row matched
+writes for a subagent a subagent started (`sessions.SubagentParent`, through
+`ccMeta`: read once a file; a meta file not read is unknown and read again). A gateway row matched
 to a file row keeps the gateway's own. Both were checked against Claude Code
 2.1.296 spawning a subagent from a subagent.
 
@@ -379,6 +379,48 @@ known keeps an empty `root_session`; Codex entries without explicit identity
 metadata, gateway-only entries and conflicting identities set `role` to
 `unknown` and do not acquire a guessed parent or root. These fields are omitted
 for other agents. This is Codex-specific (#1591).
+
+A session whose agent keeps its subagents' conversations beside its own
+lists them in `subagents` on the sessions API (`/api/sessions`, `one`, `manage`; #2261,
+[`subagents.go`](../../internal/sessions/subagents.go)), only for agents with
+a transcript, oldest first. Each has `id`, `title` (the task it was given),
+`kind` (the agent it ran as), `parent` (the subagent that started it, empty
+for the session) and `start`/`last`; its file is never sent.
+
+- Claude Code, Qoder and Qoder CN: each `subagents/agent-<id>.jsonl` (and
+  under `workflows/<run>/`), with `agentType`, `description` and
+  `parentAgentId` from the meta file beside it (`ccMeta`). With no meta file
+  (Qoder), the title is the file's first user line (`ccTask`, at most 16
+  lines read). `agent-acompact-<id>.jsonl` is a compaction's own run and is
+  left out.
+- OpenCode: a child session (`parent_id`, from the JSON store or
+  `opencode.db`) is a subagent of its root, not a session of its own;
+  `ocRoots` records its parent. Its title splits 1.x's
+  `<description> (@<agent> subagent)`; 2.x titles it the description alone
+  (task tool, opencode 2.0.25), and a default `Child session - <time>` is no
+  title. ZCode shares the parser but has no transcript, so lists none.
+- Kimi Code: each `agents/agent-<n>/wire.jsonl`. 1.5's `subagent.spawned`
+  record, written in the starting agent's wire, gives `subagentName`,
+  `description` and `parentAgentId` (`kimiWireOf`, read again only when the
+  file's size or time changes); 1.4 writes none, and the title is the
+  subagent's first `turn.prompt`.
+
+These are read beside the parsed-session cache, not in it, so its version
+is unchanged. `GET /api/sessions/transcript` takes `sub=<id>` for a
+subagent's conversation; the id is looked up among the session's own
+`subagents` (`sessions.SubagentTranscript`), never used as a path, and one
+not listed is an error. See `TestClaudeSubagents`, `TestQoderSubagents`,
+`TestOpenCodeSubagents`, `TestKimiSubagents` and
+`TestSessionSubagentTranscript`.
+
+The Sessions page draws only main sessions on top. A session's subagents are
+folded under its row ("2 subagents"); unfolded, each is a row of its task and
+kind, set in under the subagent that started it, and a click shows its
+conversation (`sub=`). A Codex thread whose `parent_session` chain reaches a
+listed session is drawn, as a session with its own details, Resume and
+Delete, under its parent in the same fold; a loop of parents, a chain deeper
+than eight or a parent not listed leaves it on top. The folder's count and
+checkbox cover the sessions under others. See `sessions-subagents.test.cjs`.
 
 Codex keeps the existing session-title precedence. Only when that leaves the
 title empty may a child thread use its parent's `spawn_agent` `task_name`,

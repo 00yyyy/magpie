@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "{n} subagent": "{n} 个子代理",
+    "{n} subagents": "{n} 个子代理",
     "Relocate project": "迁移项目会话",
     "New absolute project path": "新的项目绝对路径",
     "Preview relocation": "预览迁移",
@@ -69,6 +71,8 @@ magpie.strings({
     "Searched what was said in the latest {n} of {total} sessions.": "已搜索最近 {n} 个会话的对话内容（共 {total} 个）。",
   },
   "zh-TW": {
+    "{n} subagent": "{n} 個子代理",
+    "{n} subagents": "{n} 個子代理",
     "Relocate project": "遷移專案會話",
     "New absolute project path": "新的專案絕對路徑",
     "Preview relocation": "預覽遷移",
@@ -136,6 +140,8 @@ magpie.strings({
     "Searched what was said in the latest {n} of {total} sessions.": "已搜尋最近 {n} 個會話的對話內容（共 {total} 個）。",
   },
   ja: {
+    "{n} subagent": "{n} 個のサブエージェント",
+    "{n} subagents": "{n} 個のサブエージェント",
     "Relocate project": "プロジェクトを移動",
     "New absolute project path": "新しいプロジェクトの絶対パス",
     "Preview relocation": "移動をプレビュー",
@@ -203,6 +209,8 @@ magpie.strings({
     "Searched what was said in the latest {n} of {total} sessions.": "最新 {n} 件の会話の内容を検索しました（全 {total} 件）。",
   },
   de: {
+    "{n} subagent": "{n} Subagent",
+    "{n} subagents": "{n} Subagenten",
     "Relocate project": "Projekt verschieben",
     "New absolute project path": "Neuer absoluter Projektpfad",
     "Preview relocation": "Verschieben prüfen",

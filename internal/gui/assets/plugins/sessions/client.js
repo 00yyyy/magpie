@@ -39,6 +39,18 @@ magpie.plugin("sessions", (ctx) => {
   let detail = "";            // the session opened to its details
   const talkOpen = new Set(); // sessions whose conversation is shown, by agent/id
   const talks = new Map();    // what was said in them, as read, by agent/id
+  // A session's subagents sit under it, folded (#2261): the conversations
+  // its agent started inside it (Claude Code, Qoder, OpenCode, Kimi Code:
+  // s.subagents, each opened to what was said in it), and the Codex
+  // threads that name it as their parent_session, which are sessions of
+  // their own and drawn as such, only one step in. subsOpen is the
+  // sessions unfolded, by agent/id; kidsOf is the sessions shown under
+  // each one, by its id, and rootOf the top one each nested session is
+  // under, as last drawn.
+  const subsOpen = new Set();
+  let kidsOf = new Map();
+  let rootOf = new Map();
+  const MAX_DEPTH = 8;
   let loading = 0;
   let fitObserver = null;
   let focus = null;           // { agent, id, until }: a session to bring into sight once drawn
@@ -546,8 +558,17 @@ magpie.plugin("sessions", (ctx) => {
       drawnIn.clear();
       if (list[0]) opened.add(groupOf(list[0]));
     }
+    nest(list);
+    // a session shown under another stays in sight: its folder and every
+    // session it is under are unfolded
+    for (const id of [detail, focus?.agent === data.agent ? focus.id : ""]) {
+      if (!id || !rootOf.has(id)) continue;
+      const byId = new Map(list.map((s) => [s.id, s]));
+      for (let p = byId.get(byId.get(id)?.parent_session), n = 0; p && n < MAX_DEPTH; p = byId.get(p.parent_session), n++) subsOpen.add(p.agent + "/" + p.id);
+    }
     const groups = new Map();
     for (const s of list) {
+      if (rootOf.has(s.id)) continue;
       const k = groupOf(s);
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k).push(s);
@@ -564,11 +585,36 @@ magpie.plugin("sessions", (ctx) => {
     const all = [...groups];
     // a page of folders, or as many as were drawn before, and down to the
     // folder of the session opened to its details
-    const at = detail ? all.findIndex(([, items]) => items.some((s) => s.id === detail)) : -1;
+    const top = rootOf.get(detail) || detail;
+    const at = detail ? all.findIndex(([, items]) => items.some((s) => s.id === top)) : -1;
     const n = Math.min(all.length, Math.max(drawnIn.get(FOLDERS) || SM_PAGE, at + 1));
     for (const [cwd, items] of all.slice(0, n)) tree.append(folder(cwd, items, q));
     if (n < all.length) tree.append(moreFolders(all, n, q));
     toFocus();
+  }
+
+  // nest finds the sessions shown that are under another one shown: a
+  // Codex thread whose parent_session is, by a chain with no loop in it
+  function nest(list) {
+    const byId = new Map(list.map((s) => [s.id, s]));
+    kidsOf = new Map();
+    rootOf = new Map();
+    for (const s of list) {
+      let p = byId.get(s.parent_session), root = null;
+      const seen = new Set([s.id]);
+      while (p && !seen.has(p.id) && seen.size <= MAX_DEPTH) {
+        seen.add(p.id);
+        root = p;
+        p = byId.get(p.parent_session);
+      }
+      // a loop, or a chain deeper than is drawn, leaves it on top
+      if (!root || p) continue;
+      rootOf.set(s.id, root.id);
+      const kids = kidsOf.get(s.parent_session) || [];
+      kids.push(s);
+      kidsOf.set(s.parent_session, kids);
+    }
+    for (const kids of kidsOf.values()) kids.sort((a, b) => (a.start || a.last || "").localeCompare(b.start || b.last || ""));
   }
 
   // moreFolders adds the next page of folders above itself, as moreRow does
@@ -596,7 +642,11 @@ magpie.plugin("sessions", (ctx) => {
     const open = !!q || opened.has(cwd);
     const g = el("div", "list sm-group");
     const r = el("div", "row sm-folder");
-    const writable = items.filter((s) => s.deletable);
+    // the sessions under those on top are the folder's too
+    const members = [];
+    const under = (s, n) => { members.push(s); if (n < MAX_DEPTH) for (const k of kidsOf.get(s.id) || []) under(k, n + 1); };
+    for (const s of items) under(s, 0);
+    const writable = members.filter((s) => s.deletable);
     // the folder's box picks every session of it shown, folded or not,
     // for the bar's Delete; the bar still counts sessions (#527)
     if (current()?.deletable && writable.length) {
@@ -626,7 +676,7 @@ magpie.plugin("sessions", (ctx) => {
       redrawList();
     };
     const path = cwd === GW ? "" : cwd;
-    r.append(fold, el("span", "sub sm-path", path), el("span", "grow"), el("span", "note", t(items.length === 1 ? "{n} session" : "{n} sessions", { n: items.length })));
+    r.append(fold, el("span", "sub sm-path", path), el("span", "grow"), el("span", "note", t(members.length === 1 ? "{n} session" : "{n} sessions", { n: members.length })));
     const allInFolder = (data.sessions || []).filter((s) => s.cwd === cwd);
     if (data.agent === "claude" && path && allInFolder.every((s) => !s.read_only && !s.gateway)
       && new Set(allInFolder.map((s) => s.wsl || "")).size === 1) {
@@ -641,7 +691,8 @@ magpie.plugin("sessions", (ctx) => {
     if (open) {
       // a page, or as many as were drawn before, and down to the session
       // opened to its details (from the Usage page's list, #752)
-      const at = detail ? items.findIndex((s) => s.id === detail) : -1;
+      const top = rootOf.get(detail) || detail;
+      const at = detail ? items.findIndex((s) => s.id === top) : -1;
       const n = Math.min(items.length, Math.max(drawnIn.get(cwd) || SM_PAGE, at + 1));
       for (const s of items.slice(0, n)) g.append(item(s));
       if (n < items.length) g.append(moreRow(cwd, items, n));
@@ -661,7 +712,7 @@ magpie.plugin("sessions", (ctx) => {
     b.onclick = (e) => {
       e.stopPropagation();
       const next = Math.min(items.length, n + SM_PAGE);
-      b.before(...items.slice(n, next).map(item));
+      b.before(...items.slice(n, next).map((s) => item(s)));
       n = next;
       drawnIn.set(cwd, n);
       if (n >= items.length) b.remove();
@@ -670,9 +721,10 @@ magpie.plugin("sessions", (ctx) => {
     return b;
   }
 
-  function item(s) {
+  function item(s, depth = 0) {
     const a = current();
     const wrap = el("div", "sess-item sm-item" + (detail === s.id ? " open" : ""));
+    wrap.dataset.depth = String(depth);
     const r = el("div", "row sess sm-sess");
     r.dataset.id = s.id;
     if (a?.deletable && s.deletable) {
@@ -746,12 +798,106 @@ magpie.plugin("sessions", (ctx) => {
       if (was && was !== s.id) {
         const old = page.querySelector(`.row.sm-sess[data-id="${CSS.escape(was)}"]`)?.closest(".sm-item");
         const prev = data.sessions.find((x) => x.id === was);
-        if (old && prev) old.replaceWith(item(prev));
+        if (old && prev) old.replaceWith(item(prev, +old.dataset.depth || 0));
       }
-      wrap.replaceWith(item(s));
+      wrap.replaceWith(item(s, depth));
     };
     wrap.append(r);
     if (detail === s.id) wrap.append(details(s));
+    const kids = depth < MAX_DEPTH ? kidsOf.get(s.id) || [] : [];
+    if (kids.length || s.subagents?.length) wrap.append(subagentsBox(s, kids, depth));
+    return wrap;
+  }
+
+  // subagentsBox is the fold under a session with its subagents: those
+  // its agent started inside it, each opened to its conversation, and the
+  // Codex threads it started, drawn as sessions
+  function subagentsBox(s, kids, depth) {
+    const box = el("div", "sm-subs");
+    const k = s.agent + "/" + s.id;
+    const subs = subTree(s.subagents || []);
+    const n = kids.length + subs.length;
+    const draw = () => {
+      const open = subsOpen.has(k) || (!!query.trim() && kids.length > 0);
+      const fold = el("button", "fold sm-subs-fold");
+      fold.type = "button";
+      fold.setAttribute("aria-expanded", String(open));
+      fold.append(svg(CHEV_R, 10, 1.6), el("span", "", t(n === 1 ? "{n} subagent" : "{n} subagents", { n })));
+      fold.onclick = (e) => {
+        e.stopPropagation();
+        if (subsOpen.has(k)) subsOpen.delete(k); else subsOpen.add(k);
+        draw();
+      };
+      const out = [fold];
+      if (open) {
+        const list = el("div", "sm-subs-list");
+        for (const c of kids) list.append(item(c, depth + 1));
+        for (const [sa, d] of subs) list.append(subRow(s, sa, d));
+        out.push(list);
+      }
+      box.replaceChildren(...out);
+    };
+    box.style.setProperty("--sub-depth", String(depth));
+    draw();
+    return box;
+  }
+
+  // subTree orders a session's subagents as they started one another,
+  // each with how deep it is under the session
+  function subTree(subs) {
+    const ids = new Set(subs.map((sa) => sa.id));
+    const under = new Map();
+    for (const sa of subs) {
+      const p = sa.parent && ids.has(sa.parent) && sa.parent !== sa.id ? sa.parent : "";
+      if (!under.has(p)) under.set(p, []);
+      under.get(p).push(sa);
+    }
+    const out = [];
+    const seen = new Set();
+    const walk = (p, d) => {
+      for (const sa of under.get(p) || []) {
+        if (seen.has(sa.id)) continue;
+        seen.add(sa.id);
+        out.push([sa, Math.min(d, MAX_DEPTH)]);
+        walk(sa.id, d + 1);
+      }
+    };
+    walk("", 0);
+    // one in a loop of parents is still shown, at the top
+    for (const sa of subs) if (!seen.has(sa.id)) { seen.add(sa.id); out.push([sa, 0]); walk(sa.id, 1); }
+    return out;
+  }
+
+  // subRow is one subagent of s: what it was asked, the agent it ran as,
+  // and a click shows what was said in it
+  function subRow(s, sa, d) {
+    const k = s.agent + "/" + s.id + "/" + sa.id;
+    const wrap = el("div", "sm-sub");
+    wrap.style.setProperty("--sub-in", String(d));
+    const r = el("button", "row sm-sub-row");
+    r.type = "button";
+    r.dataset.sub = sa.id;
+    const who = el("span", "who");
+    who.append(el("span", "name", sa.title || sa.kind || sa.id),
+      el("span", "sub", [sa.title ? sa.kind : "", sa.last || sa.start ? ago(sa.last || sa.start) : "", sa.id.slice(0, 8)].filter(Boolean).join(" · ")));
+    r.append(who);
+    const box = el("div", "sess-talk");
+    box.dataset.talk = k;
+    const show = () => {
+      const on = talkOpen.has(k);
+      r.setAttribute("aria-expanded", String(on));
+      wrap.classList.toggle("open", on);
+      box.hidden = !on;
+      if (on) drawTalk(box, s, sa.id);
+    };
+    r.onclick = (e) => {
+      e.stopPropagation();
+      if (window.getSelection()?.toString()) return;
+      if (talkOpen.has(k)) talkOpen.delete(k); else talkOpen.add(k);
+      show();
+    };
+    wrap.append(r, box);
+    show();
     return wrap;
   }
 
@@ -866,8 +1012,8 @@ magpie.plugin("sessions", (ctx) => {
 
   // drawTalk fills box with what was said in a session, read from the
   // agent's own file when it is first shown (only read, never written)
-  function drawTalk(box, s) {
-    const k = s.agent + "/" + s.id;
+  function drawTalk(box, s, sub = "") {
+    const k = s.agent + "/" + s.id + (sub ? "/" + sub : "");
     const got = talks.get(k);
     if (!got) {
       box.replaceChildren(el("p", "cx-none", t("Reading…")));
@@ -879,10 +1025,10 @@ magpie.plugin("sessions", (ctx) => {
         talks.set(k, value);
         if (!talkOpen.has(k)) return;
         for (const currentBox of page.querySelectorAll(".sess-talk")) {
-          if (currentBox.dataset.talk === k) drawTalk(currentBox, s);
+          if (currentBox.dataset.talk === k) drawTalk(currentBox, s, sub);
         }
       };
-      api("sessions/transcript?agent=" + encodeURIComponent(s.agent) + "&id=" + encodeURIComponent(s.id))
+      api("sessions/transcript?agent=" + encodeURIComponent(s.agent) + "&id=" + encodeURIComponent(s.id) + (sub ? "&sub=" + encodeURIComponent(sub) : ""))
         .then((tr) => finish({ tr }), (err) => finish({ err: err.message }));
       return;
     }

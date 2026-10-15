@@ -96,3 +96,22 @@
 .sm-record-clear:hover:not(:disabled) { color: var(--red); background: var(--red-soft); }
 /* a folder's next page of sessions, under the ones drawn */
 .sm-group .sm-more { margin: 4px 8px 6px; }
+/* a session's subagents, folded under it (#2261): set in by how deep they
+   are, never marked off by a stripe */
+.sm-subs { --sub-step: 16px; padding: 0 12px 6px calc(30px + var(--sub-depth, 0) * var(--sub-step)); }
+.sm-subs-fold { font-size: 11.5px; }
+.sm-subs-fold span { font-variant-numeric: tabular-nums; }
+.sm-subs-list { display: flex; flex-direction: column; margin-top: 2px; border: 1px solid var(--line-2); border-radius: 9px; overflow: hidden; background: var(--card); }
+.sm-subs-list > .sess-item .sess-detail { padding-left: 12px; }
+/* set in, a thread's details have less room: a line's buttons go under it */
+.sm-subs-list .sess-line { flex-wrap: wrap; }
+.sm-subs-list > .sm-sub + .sm-sub, .sm-subs-list > .sess-item + .sm-sub, .sm-subs-list > .sm-sub + .sess-item { border-top: 1px solid var(--line-2); }
+.sm-subs-list > .sess-item > .sm-subs { padding-left: calc(8px + var(--sub-step)); }
+.sm-sub.open { background: color-mix(in srgb, var(--pill) 45%, transparent); }
+.row.sm-sub-row { width: 100%; min-height: 38px; text-align: left; padding-left: calc(11px + var(--sub-in, 0) * var(--sub-step)); }
+body.window .row.sm-sub-row { min-height: 42px; padding-left: calc(14px + var(--sub-in, 0) * var(--sub-step)); }
+.row.sm-sub-row .who { display: flex; flex-direction: column; }
+.sm-sub .sess-talk { margin: 0 10px 8px; }
+@media (max-width: 560px) {
+  .sm-subs { --sub-step: 10px; padding-left: calc(12px + var(--sub-depth, 0) * var(--sub-step)); padding-right: 8px; }
+}
