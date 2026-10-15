@@ -19550,7 +19550,9 @@ function renderProxy(s, keep) {
 // way magpie's requests leave. POST /api/proxy/check asks Cloudflare's
 // trace page through it, as a vendor request goes, and direct; the line
 // under the row's text says the address each left from. The same address
-// both ways says the proxy isn't taking them. A result is kept until the
+// both ways is a failure only when the request through the proxy didn't
+// connect to it; when it did, a TUN or system VPN can give both one exit
+// (#2369). A result is kept until the
 // proxy changes, so a redraw doesn't drop it.
 let proxyCheck = null; // { key, busy, out, err }
 function renderProxyCheck(s, row) {
@@ -19600,7 +19602,13 @@ function proxyCheckText(c) {
       : [t("No proxy in force, and a direct request failed: {error}", { error: d.error || "" }), true];
   }
   if (!via.ip) return [t("The proxy failed: {error}. Direct requests leave from {direct}", { error: via.error || "", direct }), true];
-  if (d.ip && via.ip === d.ip) return [t("Through the proxy requests leave from {where}, the same address as direct ones: they leave as if there were no proxy", { where: where(via) }), true];
+  // One address both ways: the connection tells whether the proxy took the
+  // request. A TUN or system VPN sends the direct one out its exit too (#2369).
+  if (d.ip && via.ip === d.ip) {
+    return via.proxied
+      ? [t("The proxy took the requests, but they leave from {where} as direct ones do: a TUN or system VPN may send every request out one exit, so the address can't tell the two paths apart", { where: where(via) }), false]
+      : [t("The request through the proxy didn't connect to it and leaves from {where}, the same address as direct ones: the proxy is passed by", { where: where(via) }), true];
+  }
   return [t("Works: through the proxy requests leave from {where}, {ms} ms; direct ones from {direct}", { where: where(via), ms: via.ms || 0, direct }), false];
 }
 
