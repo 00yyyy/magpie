@@ -17511,6 +17511,9 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
     hot.setAttribute("x", M.l + slot * i);
     hot.style.display = "";
     tip.replaceChildren(el("b", "", ledWhen(p, l.bucket)));
+    // speeds are read across: a model's name in full, its speed and its
+    // first token each in a column of their own (#2343)
+    tip.classList.toggle("speed", speed);
     const by = p.by?.[split] || {};
     const rows = top.map((c) => [name(c), c.color, ledPart(metric, by[c.id] || {}), by[c.id]]);
     if (!speed) rows.push([t("Other"), "var(--faint)", Math.max(0, totals[i] - rows.reduce((a, x) => a + x[2], 0))]);
@@ -17518,15 +17521,18 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
       const row = el("div");
       const sw = el("i");
       sw.style.background = color;
-      const said = el("em", "", ledFormatLong(metric, v));
-      if (speed && ledTTFT(part)) said.append(" · " + t("TTFT {ms}", { ms: ledTook(ledTTFT(part)) }));
-      row.append(sw, el("span", "", nm), said);
+      row.append(sw, el("span", "", nm), el("em", "", ledFormatLong(metric, v)));
+      if (speed) row.append(el("em", "ttft", ledTTFT(part) ? t("TTFT {ms}", { ms: ledTook(ledTTFT(part)) }) : ""));
       tip.append(row);
     }
     const sum = el("div", "sum");
-    sum.append(el("span", "", t(speed ? "All" : "Total")), el("em", "", ledFormatLong(metric, totals[i])));
-    if (speed && ledTTFT(p)) sum.lastChild.append(" · " + t("TTFT {ms}", { ms: ledTook(ledTTFT(p)) }));
-    if (metric !== "calls" && p.calls) sum.lastChild.append(" · " + t(p.calls === 1 ? "{n} request" : "{n} requests", { n: ledNum(p.calls) }));
+    const calls = metric !== "calls" && p.calls ? t(p.calls === 1 ? "{n} request" : "{n} requests", { n: ledNum(p.calls) }) : "";
+    if (speed) {
+      sum.append(el("span", "", t("All") + (calls ? " · " + calls : "")), el("em", "", ledFormatLong(metric, totals[i])),
+        el("em", "ttft", ledTTFT(p) ? t("TTFT {ms}", { ms: ledTook(ledTTFT(p)) }) : ""));
+    } else {
+      sum.append(el("span", "", t("Total")), el("em", "", ledFormatLong(metric, totals[i]) + (calls ? " · " + calls : "")));
+    }
     tip.append(sum);
     tip.hidden = false;
     const x = M.l + slot * (i + 0.5), w = tip.offsetWidth;

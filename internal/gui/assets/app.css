@@ -1160,6 +1160,15 @@ body.window .field.solo { grid-column: auto; }
 .led-chart .tip i { width: 7px; height: 7px; border-radius: 2px; flex: none; }
 .led-chart .tip em { margin-left: auto; padding-left: 12px; font-style: normal; font-variant-numeric: tabular-nums; }
 .led-chart .tip .sum { margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--line-2); color: var(--muted); }
+/* speed: name, speed and first token in columns, the name whole (#2343) */
+.led-chart .tip.speed { display: grid; grid-template-columns: 7px minmax(0, 1fr) auto auto; column-gap: 6px; align-items: center; max-width: min(400px, 100%); }
+.led-chart .tip.speed b { grid-column: 1 / -1; }
+.led-chart .tip.speed > div { display: contents; }
+.led-chart .tip.speed div span { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+.led-chart .tip.speed em { margin-left: 0; padding-left: 6px; text-align: right; white-space: nowrap; }
+.led-chart .tip.speed .ttft { color: var(--muted); }
+.led-chart .tip.speed .sum > * { align-self: stretch; margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--line-2); }
+.led-chart .tip.speed .sum > span { grid-column: 1 / 3; }
 .led-chart .none { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; padding: 0 20px; }
 .led-rank { min-width: 0; display: flex; flex-direction: column; gap: 1px; align-content: start; }
 .led-rank .rk { display: block; width: 100%; padding: 6px 8px 7px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
