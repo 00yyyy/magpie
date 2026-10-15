@@ -14376,6 +14376,10 @@ function moveWhy(m, p) {
 // community plugin, and the move between them. The editor stays open
 // through it: the button says what it is doing, a failure is said under
 // it, and on success the field turns over where the reader is.
+// moveSaid keeps both through a redraw mid-move (an allowance landing):
+// drawn from the provider alone, the button took presses again and the
+// failure was said into a field drawn over.
+const moveSaid = {}; // provider id → { busy } or { why }
 function renderMove(p) {
   const m = p.move;
   const box = el("div", "stack move");
@@ -14387,15 +14391,21 @@ function renderMove(p) {
   const why = el("div", "move-why");
   why.setAttribute("role", "alert");
   const say = (text) => { why.textContent = text; why.hidden = !text; };
-  const failed = m.state === "failed" && (m.why || m.error);
-  say(failed ? t("It stays built-in: {error}", { error: moveWhy(m, p) }) : "");
+  // a failure said stands only while the move's state is the one it failed
+  // from: once a move lands another way (the hourly hand-over), it's gone
+  if (moveSaid[p.id]?.why && moveSaid[p.id].state !== m.state) delete moveSaid[p.id];
+  const going = moveSaid[p.id];
+  const failed = going?.why || m.state === "failed" && (m.why || m.error) && t("It stays built-in: {error}", { error: moveWhy(m, p) });
+  say(failed || "");
   const idle = () => onPlugin ? t("Use the built-in again") : failed ? t("Try again") : t("Move to the plugin");
-  const b = el("button", "text action", idle()); // a button, not a line of text: it changes what runs the subscription
+  const b = el("button", "text action", going?.busy || idle()); // a button, not a line of text: it changes what runs the subscription
+  b.disabled = b.classList.toggle("busy", !!going?.busy);
   b.onclick = async () => {
     b.classList.add("busy");
     b.disabled = true;
     say("");
     b.textContent = onPlugin ? t("Moving back…") : t("Installing the plugin and checking each account…");
+    moveSaid[p.id] = { busy: b.textContent };
     try {
       // the models as the editor shows them picked, when changed and not
       // saved: the reason a move fails says to untick one there (noting_ever)
@@ -14403,6 +14413,7 @@ function renderMove(p) {
       const was = pickedOf(p);
       const changed = picks && (picks.length !== was.length || picks.some((id) => !was.includes(id)));
       providers = await api("provider/" + (onPlugin ? "moveback" : "move"), changed ? { id: p.id, models: picks } : { id: p.id });
+      delete moveSaid[p.id];
       draft = null; // the provider changed under it
       renderProviders(); // the editor stays open, turned over, where it was
       const now = providers.providers.find((x) => x.id === p.id);
@@ -14416,7 +14427,9 @@ function renderMove(p) {
       state = await api("state");
       renderAgents();
     } catch (e) {
-      say(onPlugin ? e.message : t("It stays built-in: {error}", { error: moveWhy({ why: e.why, error: e.message }, p) }));
+      moveSaid[p.id] = { state: m.state, why: onPlugin ? e.message : t("It stays built-in: {error}", { error: moveWhy({ why: e.why, error: e.message }, p) }) };
+      if (!box.isConnected) return renderProviders();
+      say(moveSaid[p.id].why);
       b.classList.remove("busy");
       b.disabled = false;
       b.textContent = onPlugin ? t("Use the built-in again") : t("Try again");

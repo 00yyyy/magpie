@@ -146,6 +146,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await press();
       await page.waitForFunction((busy) => [...document.querySelectorAll("#modal .move button")].some((b) => b.textContent === busy), w.busy, { timeout: 300 });
       assert.equal(await btn.isDisabled(), true, "the button can be pressed again mid-move");
+      // an account's allowance landing mid-move redraws the editor
+      // (loginUsageOf): the move is still said to run, and its end is said
+      // in the field drawn now
+      await page.evaluate(() => renderProviders());
+      assert.equal(await btn.innerText(), w.busy, "a redraw mid-move forgot the move");
+      assert.equal(await btn.isDisabled(), true, "a redraw mid-move lets the button be pressed again");
 
       // it fails: said under the button, the editor open where it was
       const why = ed.locator(".move-why");
@@ -154,6 +160,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await btn.innerText(), w.again);
       assert.equal(await btn.isDisabled(), false);
       assert.equal(await body.evaluate((e) => e.scrollTop), top, "the failure moved the editor");
+      await page.evaluate(() => renderProviders());
+      assert.equal(await why.innerText(), w.failed, "a redraw forgot why the move failed");
+      assert.equal(await btn.innerText(), w.again);
       if (process.env.ARTIFACT_DIR) await ed.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `plugin-move-failed-${engine}-${lang}.png`) });
 
       // tried again, it goes through: the same editor, turned over
