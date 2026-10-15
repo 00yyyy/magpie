@@ -589,6 +589,30 @@ func OnSignIn(f func(provider, account, said string)) {
 	onSignInMu.Unlock()
 }
 
+var (
+	onListedMu sync.Mutex
+	onListed   []func()
+)
+
+// OnListed registers f to be told when the plugins have listed their
+// providers and models anew and the list is another than the one kept
+// before: a plugin signed in to lists its account's models only once the
+// host has answered, after OnChange was told of the sign-in.
+func OnListed(f func()) {
+	onListedMu.Lock()
+	onListed = append(onListed, f)
+	onListedMu.Unlock()
+}
+
+func listed() {
+	onListedMu.Lock()
+	fs := append([]func(){}, onListed...)
+	onListedMu.Unlock()
+	for _, f := range fs {
+		tell(f)
+	}
+}
+
 func changed() {
 	forgetProviders()
 	onChangeMu.Lock()
