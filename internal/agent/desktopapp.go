@@ -98,9 +98,64 @@ func storePackages() []string {
 }
 
 // windowsRegisteredApp is the folder and version an installer registered
-// the app with guid under for the current user on Windows, "" elsewhere or
-// when none is; a var so tests never read the machine's own registry.
+// the app with guid under on Windows (registeredIn), "" elsewhere or when
+// none is; a var so tests never read the machine's own registry.
 var windowsRegisteredApp = registeredWindowsApp
+
+// registryRead is a string value of a key under a Windows registry hive
+// ("HKCU" or "HKLM"), "" when there is none.
+type registryRead func(hive, key, name string) string
+
+// registeredIn is the folder and version an electron-builder installer
+// registered the app with guid under, read through read. It writes
+// Software\<guid>'s InstallLocation and an Uninstall\<guid> entry, under
+// HKCU for a per-user install and HKLM for one for all users; that entry's
+// InstallLocation, else the folder of its DisplayIcon (the app's exe,
+// ",0" after it) or UninstallString, is the folder when the first is
+// missing. DeepSeek Harness Desktop installed to D:\tools\dsh was found by
+// neither %LOCALAPPDATA%\Programs nor HKCU's InstallLocation alone (#2325,
+// cjyrainbow).
+func registeredIn(guid string, read registryRead) (dir, version string) {
+	uninstall := `Software\Microsoft\Windows\CurrentVersion\Uninstall\` + guid
+	for _, hive := range []string{"HKCU", "HKLM"} {
+		at := read(hive, `Software\`+guid, "InstallLocation")
+		if at == "" {
+			at = read(hive, uninstall, "InstallLocation")
+		}
+		for _, name := range []string{"DisplayIcon", "UninstallString"} {
+			if at != "" {
+				break
+			}
+			at = registeredExeDir(read(hive, uninstall, name))
+		}
+		if at = strings.Trim(strings.TrimSpace(at), `"`); at != "" {
+			return at, read(hive, uninstall, "DisplayVersion")
+		}
+	}
+	return "", ""
+}
+
+// registeredExeDir is the folder of the program a registry value names
+// ("D:\tools\dsh\DeepSeek Harness.exe,0", "\"…\Uninstall X.exe\" /currentuser"),
+// "" when it names none.
+func registeredExeDir(v string) string {
+	v = strings.TrimSpace(v)
+	if strings.HasPrefix(v, `"`) {
+		if end := strings.Index(v[1:], `"`); end >= 0 {
+			v = v[1 : 1+end]
+		}
+	} else if i := strings.LastIndex(strings.ToLower(v), ".exe"); i >= 0 {
+		v = v[:i+len(".exe")]
+	}
+	if !strings.HasSuffix(strings.ToLower(v), ".exe") {
+		return ""
+	}
+	i := strings.LastIndexAny(v, `\/`)
+	if i <= 0 {
+		return ""
+	}
+	return v[:i]
+}
 
 var (
 	plistIDRe      = regexp.MustCompile(`<key>CFBundleIdentifier</key>\s*<string>([^<]+)</string>`)
