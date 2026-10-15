@@ -501,6 +501,8 @@ type searchAPIJSON struct {
 	Keys  int    `json:"keys,omitempty"`
 	Pick  string `json:"pick,omitempty"`
 	Quota bool   `json:"quota,omitempty"`
+	// Off: switched off, kept but never asked (#2286)
+	Off bool `json:"off,omitempty"`
 }
 
 // searchChoiceJSON is a provider that can search for a model that can't,
@@ -537,7 +539,7 @@ func searchState(s *settingsJSON) {
 	}
 	s.SearchAPIs, s.SearchVendors = []searchAPIJSON{}, []searchVendorJSON{}
 	for _, a := range provider.StoredSearchAPIs() {
-		j := searchAPIJSON{Vendor: a.Vendor, Name: a.Name(), URL: a.URL, Ready: a.Ready(), Keys: len(a.Keys()), Pick: a.Pick, Quota: gateway.CanReadSearchQuota(a)}
+		j := searchAPIJSON{Vendor: a.Vendor, Name: a.Name(), URL: a.URL, Ready: a.Ready(), Keys: len(a.Keys()), Pick: a.Pick, Quota: gateway.CanReadSearchQuota(a), Off: a.Off}
 		if a.Key != "" {
 			j.Key = a.MaskedKey()
 		}
@@ -2094,20 +2096,28 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
-	// a web search API added, given a new key or address, or taken away
+	// a web search API added, given a new key or address, switched on or
+	// off, or taken away; or the APIs put in a new order (#2286)
 	mux.HandleFunc("POST /api/settings/search-api", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Vendor, Key, URL, Pick string
 			Remove                 bool
+			On                     *bool
+			Arrange                []string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
 			return
 		}
 		var err error
-		if in.Remove {
+		switch {
+		case in.Arrange != nil:
+			err = provider.ArrangeSearchAPIs(in.Arrange)
+		case in.Remove:
 			err = provider.RemoveSearchAPI(in.Vendor)
-		} else {
+		case in.On != nil:
+			err = provider.SwitchSearchAPI(in.Vendor, *in.On)
+		default:
 			err = provider.SetSearchAPI(provider.SearchAPI{Vendor: in.Vendor, Key: in.Key, URL: in.URL, Pick: in.Pick})
 		}
 		if err != nil {

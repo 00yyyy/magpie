@@ -20060,6 +20060,9 @@ function renderSearch(s, keep) {
   const box = $("#searchList");
   box.replaceChildren();
   renderSearcher(s, keep, box);
+  // rows go into the box, or into a search API's own unit (its row and its
+  // keys' row), which is dragged as one (#2286)
+  let into = box;
   const row = (name, sub, ...tools) => {
     const r = el("div", "row pref");
     const who = el("div", "who");
@@ -20067,7 +20070,7 @@ function renderSearch(s, keep) {
     const val = el("div", "val");
     val.append(...tools);
     r.append(who, val);
-    box.append(r);
+    into.append(r);
     return r;
   };
   const set = (body, done) => writingPrefs(api("settings/search-api", body))
@@ -20127,7 +20130,9 @@ function renderSearch(s, keep) {
     i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") add.onclick(); };
   }
   draw();
-  const apiFirst = s.searchFirst === "api" && (s.searchAPIs || []).length > 0;
+  // the ones a search asks: one switched off is kept, never asked (#2286)
+  const asked = (s.searchAPIs || []).filter((a) => !a.off);
+  const apiFirst = s.searchFirst === "api" && asked.length > 0;
   const by = s.searcher === "off" ? t("Provider search is off; only these APIs are used")
     : !s.searchProvider ? t("No provider can search, so these are asked")
     : apiFirst ? t("Asked before {who}, which searches when these fail", { who: s.searchProvider })
@@ -20137,7 +20142,13 @@ function renderSearch(s, keep) {
   head.classList.add("rule-row", "search-add");
   head.querySelector(".val").classList.add("rule-add");
   if (d.err) head.querySelector(".sub").classList.add("err");
+  const units = [];
   (s.searchAPIs || []).forEach((a, n) => {
+    const unit = el("div", "search-unit" + (a.off ? " off" : ""));
+    unit.dataset.vendor = a.vendor;
+    box.append(unit);
+    into = unit;
+    units.push(unit);
     const x = el("button", "text", t("Remove"));
     x.onclick = () => set({ vendor: a.vendor, remove: true });
     const what = [a.key || (a.ready ? "" : t("needs its key")), a.url].filter(Boolean).join(" · ");
@@ -20164,13 +20175,29 @@ function renderSearch(s, keep) {
       };
       tools.unshift(eye, cp);
     }
-    const r = row(`${n + 1}. ${a.name}`, what, ...tools);
+    // switched off it stays, key and all, and no search asks it (#2286)
+    const sw = el("button", "lib-switch use-credits search-on" + (a.off ? "" : " on"));
+    sw.type = "button";
+    sw.setAttribute("role", "switch");
+    sw.setAttribute("aria-checked", String(!a.off));
+    sw.setAttribute("aria-label", t("Ask {name}", { name: a.name }));
+    sw.title = a.off ? t("Off: kept with its key, and never asked") : t("On: asked in its turn");
+    sw.append(el("i"));
+    sw.onclick = () => {
+      if (sw.disabled) return;
+      sw.disabled = true;
+      set({ vendor: a.vendor, on: !!a.off });
+    };
+    tools.push(sw);
+    const r = row(`${n + 1}. ${a.name}`, a.off ? [t("Off"), what].filter(Boolean).join(" · ") : what, ...tools);
     r.classList.add("search-api");
     if (a.keys > 1 || a.quota) searchKeysRow(s, a, row, set);
+    into = box;
   });
+  searchArrange(box, units, set);
   // which goes first when both a provider and a search API can search
   // (#928); with only one of them there is nothing to choose
-  if (s.searchProvider && (s.searchAPIs || []).length) {
+  if (s.searchProvider && asked.length) {
     const r = row(t("Search first with"), t("The other is asked when it fails"),
       segs([["model", t("Model search")], ["api", t("Search APIs")]], apiFirst ? "api" : "model",
         (v) => savePrefs({ ...keep, searchFirst: v === "api" ? "api" : "" })));
@@ -20182,6 +20209,61 @@ function renderSearch(s, keep) {
   const mcp = row(t("MCP server"), t("Cursor, Claude Desktop and other agents can add this search as an MCP server (Streamable HTTP) with one web_search tool. From another computer, send a gateway key as Authorization: Bearer <key>."),
     el("code", "", mcpURL), copyBtn(mcpURL, t("Address")));
   mcp.id = "searchMcpRow";
+}
+
+// searchArrange: the search APIs are asked in the order they are listed,
+// and put in another by dragging one anywhere off its buttons, or with
+// Alt+↑/↓ on it (#2286, as routing's groups are, #779). The new order
+// shows at once and is put back when it can't be saved.
+let searchArranging = false;
+function searchArrange(box, units, set) {
+  if (units.length < 2) return;
+  const move = (unit, to) => {
+    const from = units.indexOf(unit);
+    to = Math.max(0, Math.min(units.length - 1, to));
+    for (const u of units) u.style.transform = "";
+    if (to === from) return;
+    // moving a node in the page takes the keyboard off it
+    const focus = document.activeElement === unit;
+    const order = units.map((u) => u.dataset.vendor);
+    order.splice(to, 0, ...order.splice(from, 1));
+    const anchor = units.at(-1).nextSibling;
+    const next = order.map((v) => units.find((u) => u.dataset.vendor === v));
+    for (const u of next) box.insertBefore(u, anchor);
+    // a second move before the page is drawn again goes from this order
+    units.splice(0, units.length, ...next);
+    next.forEach((u, i) => {
+      const name = u.querySelector(".search-api .name");
+      if (name) name.textContent = name.textContent.replace(/^\d+\./, `${i + 1}.`);
+    });
+    if (focus) unit.focus({ preventScroll: true });
+    set({ arrange: order }, () => {
+      if (focus) requestAnimationFrame(() => document.querySelector(`#searchList .search-unit[data-vendor="${CSS.escape(unit.dataset.vendor)}"]`)?.focus({ preventScroll: true }));
+    });
+    // a refused order: set draws the page again from what is saved, the
+    // order as it was
+  };
+  for (const unit of units) {
+    const name = unit.querySelector(".search-api .name")?.textContent || "";
+    unit.tabIndex = 0;
+    unit.setAttribute("role", "group");
+    unit.setAttribute("aria-label", name + " · " + t("Drag to reorder · Alt+↑/↓ to move"));
+    unit.title = t("Drag to reorder · Alt+↑/↓ to move");
+    unit.prepend(el("span", "grip"));
+    unit.addEventListener("click", (e) => {
+      if (unit.dataset.dragged) { e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
+    unit.onkeydown = (e) => {
+      if (e.target !== unit || !e.altKey || !["ArrowUp", "ArrowDown"].includes(e.key) || searchArranging) return;
+      e.preventDefault(); e.stopPropagation();
+      move(unit, units.indexOf(unit) + (e.key === "ArrowUp" ? -1 : 1));
+    };
+    unit.onpointerdown = (e) => {
+      if (searchArranging || e.target.closest("input, textarea, select, a, button, code, .segs, .sub.revealed")) return;
+      searchArranging = dragRows(e, unit, unit, box, units, (to) => move(unit, to), () => {},
+        () => { searchArranging = false; });
+    };
+  }
 }
 
 // searchKeysRow: under a search API with several keys, or one whose keys

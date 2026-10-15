@@ -403,6 +403,36 @@ Covered by `TestSearchAPIAtItsOwnBaseURL`, `TestSearchKeyStaysAtItsBaseURL`,
 `TestSearchAPIBaseURLFromSettings`, `TestSearchCLI` and
 `search-api.test.cjs`.
 
+## The search APIs' order, and one switched off
+
+`provider.SearchAPIs` gives the search APIs in their saved order, the
+order `apiSearch` asks them in, leaving out one not ready and one
+switched off (`SearchAPI.Off`, #2286). Added, one goes last.
+`ArrangeSearchAPIs` puts them in the order of the vendors named; one not
+named keeps its place after them, and a vendor not set up or named twice
+refuses the whole order, so an order sent from a page drawn before one was
+removed changes nothing. `SwitchSearchAPI` sets `off` and keeps the key,
+URL and place; `SetSearchAPI` (a new key or URL) leaves `off` as it was.
+An API switched off is never asked, by a model's search or by the search
+MCP, and with every API off, Settings' Search first with row is gone as
+with none at all. Backup and sync carry `off` and the order with the rest
+of the entry: a restore (`RestoreSearchAPIs`) puts the backup's APIs in
+the backup's order, one only here after them, and a backup made before
+`off` turns every API on.
+
+In Settings › Models › Web search each API's row and its keys' row move as
+one (`.search-unit`, `searchArrange`): dragged by any part of it off its
+buttons and fields (`dragRows`, as routing's groups are, #779) or moved a
+place with Alt+↑/↓, the rows renumbered at once; an order that can't be
+saved is drawn again as saved. A switch on each row sends `{vendor, on}`;
+one off is dimmed and says Off. On the CLI, `magpie search off <api>`,
+`on <api>` and `move <api> <n>` do the same, and `magpie search` lists one
+off as off. `POST /api/settings/search-api` takes `{arrange: [vendors]}`
+and `{vendor, on}` beside the add and remove it took before.
+
+Covered by `TestSearchAPIOrderAndOff`, `TestSearchCLIOffAndMove`,
+`TestBackupSearchAPIsOrderAndOff` and `search-order.test.cjs`.
+
 ## A search API's keys
 
 A search API's `key` may hold several keys, separated by commas (#1477).
