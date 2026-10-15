@@ -196,3 +196,71 @@ func TestNativeCompactionCopilot(t *testing.T) {
 		}
 	}
 }
+
+// #2271 (JasonBuildAI): a native compaction its provider couldn't answer,
+// sealed by the fallback it went to, whose own native compaction is off,
+// is that fallback's to read: it is recorded as the writer, the next turn
+// carrying it goes there as it is, and a provider that can't read it is
+// never sent it, nor asked without it, but answered why.
+func TestNativeCompactionFallbackSealStaysWithItsWriter(t *testing.T) {
+	noRests()
+	t.Cleanup(noRests)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(400) })
+	done := sse(`data: {"type":"response.completed","response":{"id":"resp_n","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
+	fa := &fake{t: t, reply: done}
+	fa.refuse = func(body []byte) (int, string) {
+		if strings.Contains(string(body), "compaction_trigger") {
+			return 500, `{"error":{"message":"upstream down"}}`
+		}
+		return 0, ""
+	}
+	fb := &fake{t: t, reply: nativeSealedReply("gAAAAB-sealed-by-fb")}
+	other := &fake{t: t, reply: done}
+	for _, x := range []struct {
+		p provider.Provider
+		f *fake
+	}{
+		{provider.Provider{ID: "fa", Name: "FA", Key: "k", Models: []string{"m1"}, Fallback: []string{"fb/m1"}}, fa},
+		{provider.Provider{ID: "fb", Name: "FB", Key: "k", Models: []string{"m1"}}, fb},
+		{provider.Provider{ID: "other", Name: "Other", Key: "k", Models: []string{"m1"}}, other},
+	} {
+		up := httptest.NewServer(x.f)
+		t.Cleanup(up.Close)
+		x.p.Responses = up.URL + "/v1"
+		if err := provider.Save(x.p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	nativeOn(t, "fa") // fb and other are not
+
+	code, body := nativeAsk(t, "fa/m1", compactTurn)
+	if code != 200 || !strings.Contains(body, "gAAAAB-sealed-by-fb") || !strings.Contains(string(fb.got), "compaction_trigger") {
+		t.Fatalf("compact: %d %s\nfb got %s", code, body, fb.got)
+	}
+
+	// as Codex sends it, offering web_search, which has a turn to a
+	// provider that doesn't search translated
+	next := `{"model":"%s","stream":true,"tools":[{"type":"web_search"}],"input":[{"type":"compaction","encrypted_content":"gAAAAB-sealed-by-fb"},{"type":"message","role":"user","content":[{"type":"input_text","text":"go on"}]}]}`
+	code, body = nativeAsk(t, "other/m1", next)
+	if code != 400 || !strings.Contains(body, "compacted natively") || !strings.Contains(body, "fb#") {
+		t.Fatalf("another provider: %d %s\nother got %s", code, body, other.got)
+	}
+	if strings.Contains(body, "native compaction is on") {
+		t.Errorf("says native compaction is on for its writer, whose isn't: %s", body)
+	}
+	if other.calls != 0 {
+		t.Errorf("the other provider was asked: %s", other.got)
+	}
+
+	fb.reply = done
+	fa.got, fb.got = nil, nil
+	code, body = nativeAsk(t, "fa/m1", next)
+	if code != 200 || !strings.Contains(string(fb.got), `"encrypted_content":"gAAAAB-sealed-by-fb"`) {
+		t.Errorf("the writer: %d %s\nfb got %s", code, body, fb.got)
+	}
+	if strings.Contains(string(fa.got), "gAAAAB-sealed-by-fb") {
+		t.Errorf("fa, which can't read it, was sent it: %s", fa.got)
+	}
+}

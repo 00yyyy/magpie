@@ -3174,9 +3174,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			if hit == nil || !hit.Compact {
 				answered(stuck, c, aff.Turn, call.Usage)
 			}
-			if s.compactsNatively(c.p, c.model) {
-				sealedBy = &c
-			}
+			// the trigger was kept, so whoever answered sealed it: a
+			// fallback whose own native compaction is off too, whose seal
+			// only it can read (#2271)
+			sealedBy = &c
 			if hit != nil && !hit.Compact {
 				ruleAnswered(ruleAt, call.Usage)
 			}
