@@ -16380,11 +16380,50 @@ function panelQuotaCard(q) {
     card.append(r);
   }
   const policy = autoResetRow(q, "pq-autoreset");
-  if (policy) card.append(policy);
   const credits = creditsRow(q, "pq-credits");
-  if (credits) card.append(credits);
+  if (policy || credits) {
+    // the options fold to one line saying how each is set (#2356,
+    // detail47: Codex占用过多界面空间，导致其他供应商被遮挡); open until
+    // the user folds them
+    const id = trayCardID(q);
+    const folded = panelOptsFolded.has(id);
+    const fold = el("button", "pq-opts-fold");
+    fold.type = "button";
+    fold.append(svg(CHEV, 11, 1.6));
+    fold.setAttribute("aria-expanded", String(!folded));
+    fold.title = t(folded ? "Unfold" : "Fold");
+    fold.onclick = (e) => {
+      e.stopPropagation();
+      if (folded) panelOptsFolded.delete(id); else panelOptsFolded.add(id);
+      try { localStorage.setItem("magpie.panelOptsFolded", JSON.stringify([...panelOptsFolded])); } catch {}
+      renderPanelQuota();
+      $(`#panelQuota .pq-card[data-card="${CSS.escape(id)}"] .pq-opts-fold`)?.focus({ preventScroll: true });
+    };
+    if (folded) {
+      const row = el("div", "pq-autoreset pq-opts-brief");
+      const say = el("span", "ar-say");
+      say.append(fold);
+      if (policy) {
+        const w = autoResetWhen(q);
+        const on = AUTO_RESET_CASES.filter((c) => w[c.id]);
+        say.append(el("b", "", t("Auto-use resets:")), document.createTextNode(" " + (on.length === 1 ? t(on[0].say) : t(on.length ? "On" : "Off"))));
+      }
+      if (credits) {
+        if (policy) say.append(document.createTextNode(" · "));
+        say.append(el("b", "", t("Use credits:")), document.createTextNode(" " + t(creditsOn(q) ? "On" : "Off")));
+      }
+      row.append(say);
+      card.append(row);
+    } else {
+      (policy || credits).querySelector(".ar-say").prepend(fold);
+      card.append(...[policy, credits].filter(Boolean));
+    }
+  }
   return card;
 }
+// panelOptsFolded: the panel cards, by id, whose options are folded.
+let panelOptsFolded = new Set();
+try { panelOptsFolded = new Set(JSON.parse(localStorage.getItem("magpie.panelOptsFolded") || "[]")); } catch {}
 
 // resetsWords: a Codex account's rate-limit resets, "↺ 2 resets · until
 // Sat 22:30", the date only when one of them runs out. A GLM Coding team

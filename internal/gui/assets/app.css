@@ -1798,6 +1798,11 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .ar-say { flex: 1; min-width: 0; line-height: 1.35; }
 .ar-say b { font-weight: 500; color: var(--fg-2); }
 .ar-used { display: block; margin-top: 2px; color: var(--faint); }
+.pq-opts-fold { float: right; display: inline-grid; place-items: center; width: 18px; height: 16px; margin: 0 0 0 4px; padding: 0; border-radius: 4px; color: var(--faint); transition: background .12s, color .12s; }
+.pq-opts-fold:hover { background: var(--pill); color: var(--fg-2); }
+.pq-opts-fold svg { transform: rotate(180deg); transition: transform .15s ease-out; }
+.pq-opts-fold[aria-expanded="false"] svg { transform: none; }
+@media (prefers-reduced-motion: reduce) { .pq-opts-fold svg { transition: none; } }
 /* its two times, each a line of its own with its switch (#2078): the
    say on top, the lines under it, each switch at the line's end */
 .quota-autoreset.ar-split, .pq-autoreset.ar-split { flex-direction: column; align-items: stretch; gap: 3px; }
