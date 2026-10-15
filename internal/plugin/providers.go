@@ -40,6 +40,17 @@ func (m Method) KeyTitle(name string) string {
 	return l
 }
 
+// Cost is a model's price as a plugin gives it: OpenCode's cost, in USD
+// per 1M tokens, 0 where it gives none.
+type Cost struct {
+	Input  float64 `json:"input"`
+	Output float64 `json:"output"`
+	Cache  struct {
+		Read  float64 `json:"read"`
+		Write float64 `json:"write"`
+	} `json:"cache"`
+}
+
 // Model is a model a plugin's provider serves, as OpenCode lists it.
 type Model struct {
 	ID        string   `json:"id"`
@@ -65,10 +76,9 @@ type Model struct {
 	// m.rateWas); 0 is none.
 	Rate    float64 `json:"rate"`
 	RateWas float64 `json:"rateWas"`
-	Cost    *struct {
-		Input  float64 `json:"input"`
-		Output float64 `json:"output"`
-	} `json:"cost"`
+	// Cost is the model's price as the plugin gives it (Devin's own list,
+	// 0.1.18)
+	Cost *Cost `json:"cost"`
 	// ImageSaid is whether the plugin (or models.dev) said if it takes
 	// images: Image false without it is not known
 	ImageSaid bool `json:"imageSaid"`

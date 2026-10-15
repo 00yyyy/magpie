@@ -1639,7 +1639,9 @@ var makerCatalogs = sync.OnceValue(func() []string {
 // account, Copilot) or a relay with no models.dev id of its own is priced
 // at gpt-6-astra's or gemini-3.8-flash's maker's price, as a Claude
 // account is at Anthropic's. A remote magpie's is what that magpie counts
-// the model at, as its list says (remotePrice).
+// the model at, as its list says (remotePrice). A model no catalog prices
+// is at the price its plugin lists it at (pluginListPrice), else, when the
+// plugin says the plan serves it free, costs nothing (pluginFree).
 func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 	if pr, ok := p.remotePrice(model); ok {
 		return pr, true
@@ -1675,7 +1677,46 @@ func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 			return pr, true
 		}
 	}
+	if pr, ok := p.pluginListPrice(model); ok {
+		return pr, true
+	}
+	if p.pluginFree(model) {
+		return catalog.Price{}, true
+	}
 	return catalog.Price{}, false
+}
+
+// pluginListPrice is the price the plugin serving p lists model at
+// (pluginPrice): Devin's own, from GetCliModelConfigs, for its SWE models
+// that no catalog has. Only where no catalog prices the model, as with
+// pluginFree, so no price a catalog gave changes.
+func (p Provider) pluginListPrice(model string) (catalog.Price, bool) {
+	pp, ok := PluginOf(p.ID)
+	if !ok {
+		return catalog.Price{}, false
+	}
+	m, ok := pluginModel(pp, model)
+	if !ok {
+		return catalog.Price{}, false
+	}
+	return pluginPrice(m)
+}
+
+// pluginFree is whether the plugin serving p lists model as one its plan
+// serves at no cost (plugin.Model.Free): Devin's SWE-2, which Devin gives
+// the "Free" cost tier and no allowance counts, Qoder's and WorkBuddy's
+// x0 models. Such a model is the vendor's own, sold per token nowhere, so
+// no catalog prices it, and without this its calls showed no cost at all
+// (太陽と向日葵 on Discord, on SWE-2 after Devin's quota was used up).
+// Only where no list price is known: a free model a catalog prices keeps
+// that price, as it did.
+func (p Provider) pluginFree(model string) bool {
+	pp, ok := PluginOf(p.ID)
+	if !ok {
+		return false
+	}
+	m, ok := pluginModel(pp, model)
+	return ok && m.Free
 }
 
 // EndpointCatalog is the models.dev catalog a provider the user added by
