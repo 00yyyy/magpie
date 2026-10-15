@@ -106,6 +106,13 @@ func targetOf(a *agent.Agent) *Target {
 	}
 	h := home()
 	t := &Target{Agent: a}
+	if n := a.SharedName(); n != a.Name {
+		// the files are another app's too (the Cursor editor's ~/.cursor):
+		// named for both, not for the CLI alone
+		named := *a
+		named.Name = n
+		t.Agent = &named
+	}
 	switch a.ID {
 	case "claude":
 		d := claudeDir()
