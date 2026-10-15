@@ -298,6 +298,23 @@ reporter's real wire files), `TestCodeBuddyCalls`, `TestWorkBuddyCalls*`,
 `TestPiCalls*` (Pi 1.1.0's and omp 18.9.1's own files) and
 `TestWSLSessionsListed`.
 
+A read of every call decodes each file's cached shard, and over a long
+history that is tens of thousands of files (#2278: 68k shards, 415 MB).
+Asks for the same calls while one read is under way wait for it and get
+copies of its answer (`sharedCalls`), and reads run one at a time.
+`AgentCalls` reads one agent's files only. The Sessions overview's Codex
+model and effort (`usage.CodexModelEffort`) is built from Codex's calls
+and the gateway's records alone, since only those name a Codex actor.
+It is built once at a time per period, and an ask while it builds gets
+the last answer for the same home. The answer is kept when usage.jsonl is
+missing or grows during the build, and up to 8 periods are kept. The page
+asks for an overview it is already waiting for only once (`sessOverview`
+in `plugins/usage/page.js`). Before this, each ask during the gateway's
+writes rebuilt the whole ledger, and the app grew to 85 GB. Verification:
+`TestConcurrentCallsShareOneRead`, `TestAgentCallsReadsOneAgent`,
+`TestCodexModelEffort*` in `codex_effort_shared_test.go` (the codex-only
+answer equals the whole ledger's), and `sessions-overview-once.test.cjs`.
+
 ### Calls an app reports itself
 
 `POST /v1/magpie/usage/requests`

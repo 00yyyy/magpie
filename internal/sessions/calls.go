@@ -10,8 +10,10 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/desktopdir"
@@ -144,11 +146,91 @@ func DesktopDataDirs() []string { return callDesktopDirs() }
 // Calls reads per-file request shards, separately from the session summaries.
 // Only changed files are scanned, and only a bounded number of parses stay in
 // memory. Conversation text is read by ContentOf when a detail is opened.
-func Calls(since time.Time) []Call { return callsFor(since, "") }
+//
+// Over a long history a read decodes every shard (#2278: 68k of them, 415
+// MB), so callers asking at once share one read of the same files, and only
+// one read of every file runs at a time: the Sessions page's requests
+// arriving together each held a whole read's calls, and the app grew to
+// 85 GB.
+func Calls(since time.Time) []Call { return sharedCalls(since, "") }
 
-func callsFor(since time.Time, session string) []Call {
-	files := callSources()
-	pruneCalls(files)
+// AgentCalls is Calls of one agent's session files only: Codex's model and
+// effort per thread need Codex's calls, not a read of every agent's.
+func AgentCalls(since time.Time, agent string) []Call { return sharedCalls(since, agent) }
+
+type callsKey struct {
+	since int64
+	zero  bool
+	agent string
+}
+
+type callsFlight struct {
+	done    chan struct{}
+	calls   []Call
+	waiters int
+}
+
+var (
+	callsFlights = struct {
+		sync.Mutex
+		on map[callsKey]*callsFlight
+	}{on: map[callsKey]*callsFlight{}}
+	// callsReading holds one read of every file at a time.
+	callsReading sync.Mutex
+	// readingCalls, in tests, is told each time Calls reads the files.
+	readingCalls func()
+)
+
+func sharedCalls(since time.Time, agent string) []Call {
+	key := callsKey{since.UnixNano(), since.IsZero(), agent}
+	callsFlights.Lock()
+	if fl := callsFlights.on[key]; fl != nil {
+		fl.waiters++
+		callsFlights.Unlock()
+		<-fl.done
+		return slices.Clone(fl.calls)
+	}
+	fl := &callsFlight{done: make(chan struct{})}
+	callsFlights.on[key] = fl
+	callsFlights.Unlock()
+	// Whatever happens to the read, the flight ends and its waiters go on.
+	defer func() {
+		callsFlights.Lock()
+		if callsFlights.on[key] == fl {
+			delete(callsFlights.on, key)
+		}
+		callsFlights.Unlock()
+		close(fl.done)
+	}()
+	func() {
+		callsReading.Lock()
+		defer callsReading.Unlock()
+		if readingCalls != nil {
+			readingCalls()
+		}
+		fl.calls = callsFor(since, "", agent)
+	}()
+	// none joins once the flight is out of the map, so the count read with
+	// that is every waiter
+	callsFlights.Lock()
+	if callsFlights.on[key] == fl {
+		delete(callsFlights.on, key)
+	}
+	shared := fl.waiters > 0
+	callsFlights.Unlock()
+	if shared { // the waiters copy fl.calls, so the caller's own is another
+		return slices.Clone(fl.calls)
+	}
+	return fl.calls
+}
+
+func callsFor(since time.Time, session, agent string) []Call {
+	all := callSources()
+	pruneCalls(all)
+	files := all
+	if agent != "" {
+		files = slices.DeleteFunc(slices.Clone(all), func(f file) bool { return f.agent != agent })
+	}
 	// Earlier files own messages copied into a resumed Claude session.
 	sort.Slice(files, func(i, j int) bool {
 		if !files[i].mod.Equal(files[j].mod) {

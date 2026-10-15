@@ -244,15 +244,20 @@ func LedgerOf(p Period, f Filter) Ledgered {
 // LedgerOfAt is LedgerOf with the period read at now, for an answer that
 // names that moment elsewhere too, as an exported CSV's name does.
 func LedgerOfAt(p Period, f Filter, now time.Time) Ledgered {
+	reader := LogCalls
+	if reader == nil {
+		reader = sessions.Calls
+	}
+	return ledgerOfAt(p, f, now, reader)
+}
+
+// ledgerOfAt is LedgerOfAt over the session files' calls reader reads.
+func ledgerOfAt(p Period, f Filter, now time.Time, reader func(time.Time) []sessions.Call) Ledgered {
 	since := p.Since(now)
 	gatewaySince := since
 	if !since.IsZero() {
 		gatewaySince = since.Add(-24 * time.Hour)
 	} // calls ending across the period boundary
-	reader := LogCalls
-	if reader == nil {
-		reader = sessions.Calls
-	}
 	rows, sum, agents, providers := ledgerWithShared(since, p.Until(now), f, gatewayRecords(gatewaySince), reader(since), sharedRecords(since))
 	return Ledgered{rows, sum, agents, providers}
 }

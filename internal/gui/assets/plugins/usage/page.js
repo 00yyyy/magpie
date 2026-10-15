@@ -1751,7 +1751,7 @@ async function loadSessions() {
   const stop = first ? sessWatchIndex() : () => {};
   let s, st, o;
   try {
-    [s, st, o] = await Promise.all([api("sessions"), api("sessions/stats?days=" + sessDays()), api("sessions/overview?" + q)]);
+    [s, st, o] = await Promise.all([api("sessions"), api("sessions/stats?days=" + sessDays()), sessOverview(q)]);
   } finally { stop(); }
   if (range !== sessRange) return; // another range was picked meanwhile; its load draws
   const fresh = q === sessOverQ(); // no filter changed meanwhile
@@ -1763,6 +1763,19 @@ async function loadSessions() {
   if (view === "usage" && usageTab === "sessions") renderSessions();
 }
 
+// sessOverview reads a query's overview, once while a read of it is under
+// way: the page's reload, a filter's and a range's each asked for their
+// own, and over a long history each read is a long one (#2278)
+const sessOverReads = new Map();
+function sessOverview(q) {
+  let read = sessOverReads.get(q);
+  if (!read) {
+    read = api("sessions/overview?" + q).finally(() => sessOverReads.delete(q));
+    sessOverReads.set(q, read);
+  }
+  return read;
+}
+
 // the overview's query: the range and the filters
 const sessOverQ = () => new URLSearchParams({ days: sessDays(), agent: sessAgent === "all" ? "" : sessAgent, model: sessModel, cwd: sessFolder }).toString();
 // loadSessOverview reads the overview again when a filter changes, and draws
@@ -1772,7 +1785,7 @@ function loadSessOverview() {
   if (sessOverLoading === q) return;
   sessOverLoading = q;
   const done = () => { if (sessOverLoading === q) sessOverLoading = ""; };
-  api("sessions/overview?" + q).then((o) => {
+  sessOverview(q).then((o) => {
     done();
     if (q !== sessOverQ()) return;
     sessOver = o;
