@@ -26,7 +26,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
-	_ "modernc.org/sqlite"
+	_ "github.com/yetone/magpie/internal/sqlitedb"
 )
 
 // AppSource is one app magpie can import from, with what it holds.
