@@ -16,6 +16,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // magpie quota --json and GET /v1/magpie/quotas tell the same whole as the
@@ -293,10 +294,12 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 }
 
 // apiPricer is each call's model at its API list price: its maker's, else
-// the provider's own list, never a price the user set for the
+// the provider's own list, else the maker's of the model the user said it
+// is the same as (provider.SamePriceIn), never a price the user set for the
 // subscription (which may well be nothing) nor a rate it bills at. A price
 // of nothing at all is no API price.
 func apiPricer() func(Record) *catalog.Price {
+	st := settings.Load()
 	prices := map[[2]string]*catalog.Price{}
 	return func(r Record) *catalog.Price {
 		k := [2]string{r.Provider, r.Model}
@@ -310,6 +313,9 @@ func apiPricer() func(Record) *catalog.Price {
 			if p, err := provider.Find(r.Provider); err == nil {
 				v, ok = p.ListPrice(r.Model)
 			}
+		}
+		if !ok || v.Cost(1e6, 1e6, 0, 0) == 0 { // the model the user said it is (#2344)
+			v, ok = provider.SamePriceIn(st, r.Provider, r.Model)
 		}
 		if ok && v.Cost(1e6, 1e6, 0, 0) > 0 {
 			pr = &v

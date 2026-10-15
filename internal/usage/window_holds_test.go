@@ -9,6 +9,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // holdsHome is a home whose models.dev copy prices a Claude and an OpenAI
@@ -361,5 +362,29 @@ func TestQuotaReportsReckonByTheLog(t *testing.T) {
 	}
 	if qs[0].Windows[1].HoldsWhy != provider.HoldsLow {
 		t.Fatalf("7 days: why %q, want %q", qs[0].Windows[1].HoldsWhy, provider.HoldsLow)
+	}
+}
+
+// #2344: a window's whole is priced like the Usage page's cost, so a call
+// to a provider's own id no list prices is priced at the maker's list
+// price of the model the user said it is the same as (ModelSameAs), never
+// at a rate; without one it stays unpriced.
+func TestHoldsPriceTheModelItIsTheSameAs(t *testing.T) {
+	holdsHome(t)
+	if err := provider.Save(provider.Provider{ID: "wb", Name: "WB", Key: "k", Chat: "https://wb.example/v1",
+		Models: []string{"gpt-5-5-wb", "other"}, PriceRate: 0.5}); err != nil {
+		t.Fatal(err)
+	}
+	s := settings.Load()
+	s.ModelSameAs = map[string]string{"wb/gpt-5-5-wb": "gpt-5.5"}
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	priceOf := apiPricer()
+	if pr := priceOf(Record{Provider: "wb", Model: "gpt-5-5-wb"}); pr == nil || pr.Input != 1.25 {
+		t.Errorf("the model it is the same as wasn't its API price: %+v", pr)
+	}
+	if pr := priceOf(Record{Provider: "wb", Model: "other"}); pr != nil {
+		t.Errorf("a model with no Same as was priced: %+v", pr)
 	}
 }

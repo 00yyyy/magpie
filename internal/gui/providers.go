@@ -713,6 +713,8 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 			j.List, j.RemoteList = &pr, p.RemotePriced(m.ID)
 		} else if pr, ok := provider.MakerPrice(m.ID); ok {
 			j.List = &pr
+		} else if pr, ok := provider.SamePriceIn(held, p.ID, m.ID); ok {
+			j.List = &pr // the model it is the same as, beside it (#2344)
 		}
 		if len(j.Efforts) == 0 {
 			j.Efforts, j.Given = provider.Levels, true

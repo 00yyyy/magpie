@@ -623,7 +623,9 @@ type Settings struct {
 	// that a model is, by "<provider id>/<model id>": the routing groups
 	// magpie finds (provider's autoGroups) merge it with that one rather
 	// than by its own id, for an id no rule of magpie's matches up
-	// (kyzhouxu, #583). Absent leaves it to its id.
+	// (kyzhouxu, #583), and a call to it that no list prices is costed at
+	// that model's maker's price (provider.SamePriceIn, #2344). Absent
+	// leaves it to its id.
 	ModelSameAs map[string]string `json:"modelSameAs,omitempty"`
 	// ModelKinds is what the user said a model makes, by "<provider
 	// id>/<model id>": "image" or "video", for a provider set up with a

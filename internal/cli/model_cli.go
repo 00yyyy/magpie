@@ -340,7 +340,12 @@ func modelPrice(args []string) error {
 			fmt.Println(faint.Render("  · a price you gave is not usable and is ignored"))
 		default:
 			from := "what its provider lists, else its maker's on models.dev"
-			if p.RemotePriced(model) {
+			_, listed := p.ListPrice(model)
+			_, made := provider.MakerPrice(model)
+			st := settings.Load()
+			if _, same := provider.SamePriceIn(st, p.ID, model); same && !listed && !made {
+				from = "the maker's price of " + st.ModelSameAs[p.ID+"/"+model] + " on models.dev, which you said it is the same as"
+			} else if p.RemotePriced(model) {
 				from = "what the other magpie counts it at"
 			} else if c := p.EndpointCatalog(); c != "" {
 				from = "what models.dev's " + c + " lists at its endpoint, else its maker's"
