@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,8 +18,14 @@ import (
 )
 
 // serve serves a Points observer as the gateway would, until the test ends.
+var warmPrices sync.Once
+
 func serve(t *testing.T) *observer {
 	t.Helper()
+	// The first row a process prices loads the price catalog, ≈2s idle and
+	// past until's 10s at load 80–100: a test about the queue doesn't wait
+	// for it (TestOnUsageNeverBlocks went red so in a full run).
+	warmPrices.Do(func() { usage.NewCoster()(usage.Record{Provider: "p"}) })
 	o := Points().(*observer)
 	stop := o.Serve()
 	t.Cleanup(stop)
