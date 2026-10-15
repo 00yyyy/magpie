@@ -26,13 +26,20 @@ func deepseekToolPatterns(p provider.Provider, to provider.Protocol, body []byte
 	if !bytes.Contains(body, []byte(`\\0`)) {
 		return body
 	}
+	return toolPatterns(body, unicodeNullEscape)
+}
+
+// toolPatterns is body with fix applied to every "pattern" of its tools'
+// schemas, each spliced in place so the rest of the body stays byte for
+// byte as it came.
+func toolPatterns(body []byte, fix func(string) string) []byte {
 	toolsRes := gjson.GetBytes(body, "tools")
 	if !toolsRes.Exists() || toolsRes.Index <= 0 || !toolsRes.IsArray() {
 		return body
 	}
 
 	var targets []patternTarget
-	collectNullPatterns(toolsRes, false, &targets)
+	collectPatterns(toolsRes, false, fix, &targets)
 	if len(targets) == 0 {
 		return body
 	}
@@ -63,7 +70,7 @@ type patternTarget struct {
 	replacement string
 }
 
-func collectNullPatterns(node gjson.Result, inSchema bool, targets *[]patternTarget) {
+func collectPatterns(node gjson.Result, inSchema bool, fix func(string) string, targets *[]patternTarget) {
 	if !node.Exists() {
 		return
 	}
@@ -74,7 +81,7 @@ func collectNullPatterns(node gjson.Result, inSchema bool, targets *[]patternTar
 				if k == "pattern" && value.Type == gjson.String && value.Index > 0 {
 					var pattern string
 					if err := json.Unmarshal([]byte(value.Raw), &pattern); err == nil {
-						if norm := unicodeNullEscape(pattern); norm != pattern {
+						if norm := fix(pattern); norm != pattern {
 							*targets = append(*targets, patternTarget{
 								index:       value.Index,
 								rawLen:      len(value.Raw),
@@ -87,25 +94,25 @@ func collectNullPatterns(node gjson.Result, inSchema bool, targets *[]patternTar
 				case "properties", "$defs", "definitions", "dependentSchemas", "patternProperties":
 					if value.IsObject() {
 						value.ForEach(func(_, schema gjson.Result) bool {
-							collectNullPatterns(schema, true, targets)
+							collectPatterns(schema, true, fix, targets)
 							return true
 						})
 					}
 				case "items", "additionalProperties", "contains", "propertyNames", "not", "if", "then", "else", "allOf", "anyOf", "oneOf", "prefixItems", "unevaluatedProperties", "unevaluatedItems", "contentSchema":
-					collectNullPatterns(value, true, targets)
+					collectPatterns(value, true, fix, targets)
 				}
 			} else {
 				if k == "input_schema" || k == "parameters" {
-					collectNullPatterns(value, true, targets)
+					collectPatterns(value, true, fix, targets)
 				} else if k == "function" {
-					collectNullPatterns(value, false, targets)
+					collectPatterns(value, false, fix, targets)
 				}
 			}
 			return true
 		})
 	} else if node.IsArray() {
 		node.ForEach(func(_, item gjson.Result) bool {
-			collectNullPatterns(item, inSchema, targets)
+			collectPatterns(item, inSchema, fix, targets)
 			return true
 		})
 	}

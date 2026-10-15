@@ -3569,6 +3569,7 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provider.Protocol, path string, body []byte, in http.Header) (*http.Response, error) {
 	ctx = s.metered(p.Via(ctx), p, "")
 	body = deepseekToolPatterns(p, to, body)
+	body = grokToolPatterns(p, to, body)
 	body = toolOneOfAsAnyOf(p, to, body)
 	body = kimiToolEnumTypes(p, to, body)
 	body = kimiLockedSampling(p, to, body)
