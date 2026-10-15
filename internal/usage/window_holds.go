@@ -18,6 +18,10 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
+// magpie quota --json and GET /v1/magpie/quotas tell the same whole as the
+// Usage page (#2333).
+func init() { provider.ReckonHolds = WithWindowHolds }
+
 // WithWindowHolds is qs with each window's Holds reckoned from the log, as
 // it stood at now. qs itself, which the caller may share, is left as it is.
 func WithWindowHolds(qs []provider.SubscriptionQuota, now time.Time) []provider.SubscriptionQuota {

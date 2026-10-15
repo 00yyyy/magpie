@@ -77,8 +77,9 @@ type QuotaWindow struct {
 	// own (WindowCapID), for the GUI to set and show one.
 	CapID string `json:"capId,omitempty"`
 	// Holds is what the whole window holds, reckoned from magpie's own
-	// calls through the account (usage.WithWindowHolds), for the GUI only;
-	// nil where that can't be told honestly.
+	// calls through the account (usage.WithWindowHolds), for the GUI and,
+	// through ReckonHolds, magpie quota --json and /v1/magpie/quotas
+	// (#2333); nil where that can't be told honestly.
 	Holds *WindowHolds `json:"holds,omitempty"`
 	// HoldsWhy is, where Holds is nil on a window of an account's own card
 	// that runs out and starts again, why its whole isn't told (#2045):

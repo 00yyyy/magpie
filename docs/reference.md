@@ -1747,6 +1747,16 @@ subscription account, plan and key that answered a request through the
 gateway in the last 30 days, and `last: true` on the latest. It is kept
 in `served.json` beside `providers.json`, so a restart keeps it.
 
+Each subscription window there also has the Usage page's whole-window
+estimate (#2333): `holds` (`tokens`, `cost` at API list prices, `priced`)
+reckoned from magpie's own calls through the account since the window
+began, over the share used. Where it can't be told honestly, `holdsWhy`
+says why instead: `low` (under 5% used), `clock` (no reset clock), `log`
+(the window began before magpie's log), `none` (nothing routed in it) or
+`credits` (a call in it may have been paid from credits). A window with
+neither is one no whole is told for: a pool, a family, money, or a card
+with a balance or read on another computer.
+
 `GET /v1/magpie/quotas?kept=1` answers the same list from what magpie last
 read, asking no vendor and never waiting for a read, for something that asks
 often. `magpie statusline` is built on it for Claude Code's status line

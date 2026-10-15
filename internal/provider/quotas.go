@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"math"
+	"slices"
 	"time"
 )
 
@@ -104,7 +105,18 @@ type QuotaSpan struct {
 	Limit  float64 `json:"limit,omitempty"`
 	Unit   string  `json:"unit,omitempty"`
 	Pool   string  `json:"pool,omitempty"` // the shared pool the window draws on ("Gemini")
+	// Holds and HoldsWhy are the window's whole as the Usage page's card
+	// tells it (QuotaWindow.Holds, #2333): reckoned when ReckonHolds is
+	// set, else left out.
+	Holds    *WindowHolds `json:"holds,omitempty"`
+	HoldsWhy string       `json:"holdsWhy,omitempty"`
 }
+
+// ReckonHolds is usage.WithWindowHolds, which package usage sets: it reads
+// the usage log, which this package can't import. QuotaReport,
+// KeptQuotaReport and RefreshReport tell each window's whole by it, as the
+// Usage page does (#2333); nil, where usage isn't linked in, leaves it out.
+var ReckonHolds func(qs []SubscriptionQuota, now time.Time) []SubscriptionQuota
 
 // QuotaReport is Quotas as Quota, the reset times made absolute from now.
 func QuotaReport(ctx context.Context, now time.Time) []Quota {
@@ -132,6 +144,11 @@ func KeptQuotaReport(now time.Time) []Quota {
 
 // quotaReport assembles the cards from readings the tests feed directly.
 func quotaReport(subs, plans, balances []SubscriptionQuota, now time.Time) []Quota {
+	if ReckonHolds != nil { // one pass over the log for every card
+		all := ReckonHolds(slices.Concat(subs, plans, balances), now)
+		ns, np := len(subs), len(plans)
+		subs, plans, balances = all[:ns], all[ns:ns+np], all[ns+np:]
+	}
 	out := []Quota{}
 	for _, g := range []struct {
 		kind string
@@ -144,7 +161,7 @@ func quotaReport(subs, plans, balances []SubscriptionQuota, now time.Time) []Quo
 			// as the usage page shows them
 			for _, w := range PooledWindows(q.Windows) {
 				s := QuotaSpan{Unlimited: w.Unlimited, Name: w.Name, Used: w.Used, Remaining: max(0, 100-w.Used), ResetsAt: w.ResetsAt, Display: w.Display,
-					Amount: w.Amount, Limit: w.Limit, Unit: w.Unit, Pool: w.Pool}
+					Amount: w.Amount, Limit: w.Limit, Unit: w.Unit, Pool: w.Pool, Holds: w.Holds, HoldsWhy: w.HoldsWhy}
 				if s.ResetsAt == nil && w.ResetSecs > 0 {
 					t := now.Add(time.Duration(w.ResetSecs) * time.Second)
 					s.ResetsAt = &t

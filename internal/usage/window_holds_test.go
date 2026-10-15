@@ -338,3 +338,28 @@ func TestWindowHoldsDryAgainAfterReset(t *testing.T) {
 		t.Fatalf("7 days: %+v (%q), want 4000 tokens", w.Holds, w.HoldsWhy)
 	}
 }
+
+// #2333: magpie quota --json and GET /v1/magpie/quotas reckon a window's
+// whole by the same WithWindowHolds the Usage page does, which usage hands
+// provider (ReckonHolds) since provider can't read the log itself.
+func TestQuotaReportsReckonByTheLog(t *testing.T) {
+	holdsHome(t)
+	now := holdClock(t, time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC))
+	reset := now.Add(2 * time.Hour)
+	for _, ago := range []time.Duration{8 * 24 * time.Hour, time.Hour} {
+		Append(Record{Time: now.Add(-ago), Agent: "codex", Provider: "codex", ProviderAccount: "sam@example.com", Model: "gpt-5.5", Input: 4000, Output: 1000, Status: 200})
+	}
+	if provider.ReckonHolds == nil {
+		t.Fatal("provider.ReckonHolds isn't set: the quota reports tell no whole")
+	}
+	qs := provider.ReckonHolds([]provider.SubscriptionQuota{{Provider: "codex", User: "sam@example.com", Windows: []provider.QuotaWindow{
+		{Name: "5 hours", Used: 10, ResetsAt: &reset, Span: 5 * time.Hour},
+		{Name: "7 days", Used: 2, ResetsAt: &reset, Span: 7 * 24 * time.Hour},
+	}}}, now)
+	if h := qs[0].Windows[0].Holds; h == nil || h.Tokens != 50000 || !h.Priced {
+		t.Fatalf("5 hours: %+v, want 50000 tokens, priced", h)
+	}
+	if qs[0].Windows[1].HoldsWhy != provider.HoldsLow {
+		t.Fatalf("7 days: why %q, want %q", qs[0].Windows[1].HoldsWhy, provider.HoldsLow)
+	}
+}
