@@ -35,6 +35,9 @@ body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; --bleed
    Library folder, Backups) on one line has the buttons on a line of their own, at
    its end */
 .lib-head { flex-wrap: wrap; row-gap: 4px; }
+/* eight tabs (Subagents, #2283) outgrow a narrow window in German: the
+   tabs wrap onto a second line rather than scroll the view sideways */
+.lib-tabs { max-width: 100%; flex-wrap: wrap; }
 .lib-headacts { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .lib-head.stuck::before { box-shadow: 0 1px 0 var(--line-2); }
 .lib-tabs .opt { height: 24px; padding: 0 12px; font-size: 12.5px; }
@@ -621,6 +624,18 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-hook > .who { flex-basis: 240px; }
 .lib-hook .lib-hookdesc { font-size: 12px; line-height: 1.45; color: var(--fg); white-space: normal; overflow-wrap: anywhere; margin-top: 1px; }
 .lib-hookedit .lib-hookdescin { width: 100%; box-sizing: border-box; resize: none; font: inherit; font-size: 12.5px; line-height: 1.45; }
+
+/* Subagents (#2283): the row says what it is for, wrapped, as a hook's
+   description does; its skills and servers are menus as wide as the
+   dialog lets them be, and the prompt a box that grows with it */
+.lib-subagent > .who { flex-basis: 240px; }
+.lib-subagent .lib-subagentdesc { font-size: 12px; line-height: 1.45; color: var(--fg); white-space: normal; overflow-wrap: anywhere; margin-top: 1px; }
+.lib-subagent .lib-subagentuses { white-space: normal; overflow-wrap: anywhere; }
+.lib-subagentedit .lib-menu { max-width: 100%; height: 28px; color: var(--fg); }
+.lib-subagentedit .lib-menu > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-subagentedit .lib-subagentdescin, .lib-subagentedit .lib-subagentprompt { width: 100%; box-sizing: border-box; resize: none; font: inherit; font-size: 12.5px; line-height: 1.45; }
+.lib-subagentedit .lib-subagentprompt { max-height: 40vh; overflow-y: auto; }
+.lib-subagentedit .hint:empty { display: none; }
 
 /* a chip whose agent has the item whatever is ticked (it reads
    ~/.agents/skills itself, #595): lit, as it has it, with a lock on its

@@ -46,6 +46,8 @@ magpie.plugin("library", (ctx) => {
     person: "M8 3a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z M3.5 13.5c.6-2.4 2.3-3.6 4.5-3.6s3.9 1.2 4.5 3.6",
     back: "m9.5 4.5-3 3.5 3 3.5",
     hook: "M10.5 2.5v6.5a3 3 0 0 1-6 0V7.5 M3 9l1.5-1.5L6 9",
+    // a person with a second, smaller one it hands work to
+    subagent: "M6 3a2.2 2.2 0 1 0 0 4.4A2.2 2.2 0 0 0 6 3z M2 13c.5-2.2 2-3.4 4-3.4s3.5 1.2 4 3.4 M11.5 7.5a1.5 1.5 0 1 0 0 .01 M10.2 12.5c.3-1.3 1.1-2 2.3-2s1.6.5 1.9 1.4",
     // a clock with an arrow going back round it, as macOS draws backups
     backup: "M3.2 8a4.8 4.8 0 1 0 1.4-3.4 M2.8 2.6v2.4h2.4 M8 5.3V8l1.9 1.2",
   };
@@ -387,7 +389,7 @@ magpie.plugin("library", (ctx) => {
   // What All did, said of the item: on for how many of the agents it went
   // to, and which of them couldn't be given it, and why.
   function reportAll(v, me) {
-    const what = ({ servers: "mcp:", hooks: "hook:" }[me.list] || "skill:") + me.name;
+    const what = ({ servers: "mcp:", hooks: "hook:", subagents: "subagent:" }[me.list] || "skill:") + me.name;
     const shown = [...me.box.children].filter((x) => x.dataset.agent && !cannot(x)).map((x) => x.dataset.agent);
     const n = shown.filter((id) => me.want.includes(id)).length;
     const bad = (v.result?.problems || []).filter((p) => p.what === what && shown.includes(p.agent));
@@ -615,7 +617,7 @@ magpie.plugin("library", (ctx) => {
       ul.append(li);
     }
     if (ul.childElementCount) card.append(ul);
-    const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks") };
+    const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks"), subagents: t("Subagents") };
     const others = Object.keys(away).filter((k) => k in tabNames);
     if (others.length) {
       const more = el("div", "lib-problems-away");
@@ -630,7 +632,7 @@ magpie.plugin("library", (ctx) => {
   }
   // the tab a problem is about; "" is one shown on every tab
   function problemTab(what) {
-    return { instructions: "instructions", mcp: "mcp", skill: "skills", skills: "skills", project: "skills", hook: "hooks", hooks: "hooks" }[what.split(":")[0]] || "";
+    return { instructions: "instructions", mcp: "mcp", skill: "skills", skills: "skills", project: "skills", hook: "hooks", hooks: "hooks", subagent: "subagents" }[what.split(":")[0]] || "";
   }
   function problemWhat(what) {
     const [kind, ...rest] = what.split(":");
@@ -639,6 +641,7 @@ magpie.plugin("library", (ctx) => {
     if (kind === "mcp") return name ? t("MCP server {name}", { name }) : t("MCP servers");
     if (kind === "skill") return t("Skill {name}", { name });
     if (kind === "hook") return t("Hook {name}", { name });
+    if (kind === "subagent") return t("Subagent {name}", { name });
     if (kind === "project") return name ? t("Skill {name}", { name }) : t("The project");
     return what;
   }
@@ -730,6 +733,7 @@ magpie.plugin("library", (ctx) => {
       ["mcp", t("MCP servers") + n("mcp")],
       ["skills", t("Skills") + n("skills")],
       ["hooks", t("Hooks") + n("hooks")],
+      ["subagents", t("Subagents") + n("subagents")],
       ["rtk", "RTK"],
     ], tab, openTab);
     tabs.classList.add("lib-tabs");
@@ -776,7 +780,7 @@ magpie.plugin("library", (ctx) => {
     const caret = focus ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
     page.replaceChildren();
     fits = [];
-    const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length });
+    const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length, subagents: (lib.subagents || []).length });
     page.append(head);
     head.classList.toggle("stuck", top > 0);
     if (!lib.agents.length) {
@@ -793,6 +797,7 @@ magpie.plugin("library", (ctx) => {
     else if (tab === "mcp") renderServers(body);
     else if (tab === "rtk") renderRTK(body);
     else if (tab === "hooks") renderHooks(body);
+    else if (tab === "subagents") renderSubagents(body);
     else renderSkills(body);
     page.append(body);
     for (const n of body.querySelectorAll(".row-head .note")) n.title = n.textContent;
@@ -2442,6 +2447,169 @@ magpie.plugin("library", (ctx) => {
       takenFrom(hooks),
       t("Hooks your agents have that aren't in the library stay as they are, and so does one you changed in an agent's file."),
     ], !!some);
+  }
+
+  // ---------- subagents ----------
+
+  // A subagent (#2283, chuanchinatest) is a helper with a prompt of its
+  // own that an agent hands a task to. It is kept once and written into
+  // each agent picked, as that agent's own file in its own folder and
+  // shape (subagents.go). Its skills and MCP servers go only into the
+  // files that can name them: skills into Claude Code's, servers into
+  // Claude Code's and Droid's. Every other agent gets its prompt alone.
+  const subagentAgentOf = (id) => (lib.subagentAgents || []).find((x) => x.id === id);
+  const subagentAgents = () => shownAgents().filter((a) => subagentAgentOf(a.id));
+  // why a can't be given a subagent, or ""
+  const subagentBlocked = (a) => {
+    const sa = subagentAgentOf(a.id);
+    if (!sa || sa.no) return sa?.wsl ? t("magpie gives subagents only to agents on this computer, not yet to {agent} in WSL", { agent: a.name }) : t("{agent} reads no subagents magpie can write", { agent: a.name });
+    return "";
+  };
+  // the agents of all that take what s binds, by kind: who can't bind them
+  const unbound = (all, ids, kind) => all.filter((a) => ids.includes(a.id) && !subagentBlocked(a) && !subagentAgentOf(a.id)[kind]);
+  function subagentLine(s) {
+    const parts = [];
+    if (s.skills?.length) parts.push(t("Skills: {names}", { names: s.skills.join(", ") }));
+    if (s.mcp?.length) parts.push(t("MCP servers: {names}", { names: s.mcp.join(", ") }));
+    return parts.join(" · ");
+  }
+
+  function renderSubagents(body) {
+    body.append(intro(t("A subagent is a helper with a prompt of its own that an agent hands a task to — a reviewer, a test writer. Add it once and magpie writes it into each agent you pick, as that agent's own subagent file.")));
+    const all = subagentAgents();
+    const subs = lib.subagents || [];
+    pickingFor("subagents", []);
+    if (!subs.length) {
+      body.append(empty(t("No subagents in the library yet"), t("Add one, and pick the agents that can hand it a task."), button(t("＋ Add a subagent"), "action", () => editSubagent(null))));
+    } else {
+      const list = el("div", "list lib-list");
+      list.append(...[...subs].sort((a, b) => a.name.localeCompare(b.name)).map((s) => subagentRow(s, all)));
+      body.append(list);
+      const after = el("div", "after-list");
+      after.append(button(t("＋ Add subagent"), "", () => editSubagent(null)));
+      body.append(after);
+    }
+    // what each agent does with what a subagent binds: said only when one
+    // binds something that an agent it is given to can't
+    const given = (kind) => [...new Set(subs.filter((s) => s[kind]?.length).flatMap((s) => unbound(all, s.agents || [], kind)))];
+    const noSkills = given("skills"), noMCP = given("mcp");
+    if (noSkills.length) body.append(el("p", "lib-aside lib-subagents-noskills", t("{agents} can't bind skills to a subagent: theirs gets its prompt, and every skill the agent has.", { agents: noSkills.map((a) => a.name).join(", ") })));
+    if (noMCP.length) body.append(el("p", "lib-aside lib-subagents-nomcp", t("{agents} can't bind MCP servers to a subagent: theirs gets its prompt, and every server the agent has.", { agents: noMCP.map((a) => a.name).join(", ") })));
+    // Cursor's app reads ~/.cursor/agents; its cursor-agent CLI reads
+    // only a project's .cursor/agents
+    if (subs.some((s) => s.agents?.includes("cursor"))) body.append(el("p", "lib-aside lib-subagents-cursor", t("The Cursor app has these subagents; its cursor-agent command reads only a project's own .cursor/agents.")));
+    const skip = all.filter((a) => subagentAgentOf(a.id).no);
+    if (skip.length) body.append(el("p", "lib-aside lib-subagents-no", t("magpie can't give subagents to {agents} yet: their chips are greyed, and say why.", { agents: skip.map((a) => a.name).join(", ") })));
+  }
+
+  function subagentRow(s, all) {
+    const row = el("div", "row lib-row click lib-subagent");
+    const who = el("div", "who");
+    who.append(el("div", "name mono", s.name));
+    who.append(el("div", "lib-subagentdesc", s.description));
+    const line = subagentLine(s);
+    if (line) who.append(el("div", "sub lib-subagentuses", line));
+    row.append(glyph(GLYPH.subagent), who,
+      agentChips(all, s.agents, chipsChange("subagents/agents", s.name, "subagents", (x) => subagentRow(x, all)), { problems: s.problems, blocked: subagentBlocked, all: true }));
+    row.onclick = () => editSubagent(s);
+    row.title = t("Edit {name}", { name: s.name });
+    return row;
+  }
+
+  // a menu of names to tick, for a subagent's skills or servers: the app
+  // menu, never a <select>
+  function namesPick(cls, names, d, key, head, find) {
+    const b = el("button", "sess-pick lib-menu " + cls);
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-expanded", "false");
+    const draw = () => b.replaceChildren(el("span", "", d[key].length ? d[key].join(", ") : t("None")), svg(CHEV, 11, 1.6));
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const opts = [{ v: "", name: t("None"), literalName: true, note: "", always: true }, ...names.map((n) => ({ v: n, name: n, literalName: true, note: "" }))];
+      openProtoMenu(b, opts, d[key], (v) => { d[key] = v; draw(); }, head, "", "left", true, names.length > 8 ? find : "");
+    };
+    draw();
+    if (!names.length) b.disabled = true;
+    return b;
+  }
+
+  function editSubagent(s) {
+    const all = subagentAgents();
+    const d = s ? { name: s.name, description: s.description, prompt: s.prompt, skills: [...(s.skills || [])], mcp: [...(s.mcp || [])], agents: [...(s.agents || [])] }
+      : { name: "", description: "", prompt: "", skills: [], mcp: [], agents: all.filter((a) => !subagentBlocked(a)).map((a) => a.id) };
+    const ed = el("div", "editor lib-editor lib-subagentedit");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.subagent), el("b", "", s ? s.name : t("New subagent")));
+    ed.append(head);
+    const err = el("div", "editor-error");
+    const name = field2(d.name, t("e.g. code-reviewer"), (v) => { d.name = v.trim(); });
+    name.classList.add("mono");
+    ed.append(...field(t("Name"), name, t("Lowercase letters, digits and -; it is the file's name in each agent")));
+    const box = (cls, value, placeholder, rows, max, onEnter) => {
+      const ta = el("textarea", "lib-text small " + cls);
+      ta.value = value;
+      ta.placeholder = placeholder;
+      ta.spellcheck = false;
+      ta.rows = rows;
+      ta.maxLength = max;
+      ta.onkeydown = (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === "Escape") closeLibModal(); else if (onEnter && e.key === "Enter" && modal?.save) { e.preventDefault(); modal.save(); } };
+      autosize(ta, rows * 20);
+      return ta;
+    };
+    // one paragraph, as every agent reads it (library.SaveSubagent joins
+    // its lines), so Enter saves; the prompt's Enter is a new line
+    const desc = box("lib-subagentdescin", d.description, t("e.g. Reviews a diff for bugs. Use after code changes."), 2, 1000, true);
+    desc.oninput = () => { d.description = desc.value; };
+    ed.append(...field(t("Description"), desc, t("What it does and when to use it: the agent reads this to decide when to hand it a task")));
+    const prompt = box("lib-subagentprompt", d.prompt, t("You are a careful code reviewer…"), 6, 100000, false);
+    prompt.oninput = () => { d.prompt = prompt.value; };
+    ed.append(...field(t("Prompt"), prompt, t("What the subagent is told before its task")));
+
+    // what the skills and servers reach, said under each: the agents
+    // picked that can't bind them
+    const skillsHint = el("div", "hint lib-subagenthint-skills"), mcpHint = el("div", "hint lib-subagenthint-mcp");
+    const skills = namesPick("lib-subagentskills", lib.skills.map((x) => x.name), d, "skills", "Skills", "Find a skill");
+    const servers = namesPick("lib-subagentmcp", lib.servers.map((x) => x.name), d, "mcp", "MCP servers", "Find a server");
+    const withHint = ([l, w], h) => { w.append(h); return [l, w]; };
+    ed.append(...withHint(field(t("Skills"), skills), skillsHint));
+    ed.append(...withHint(field(t("MCP servers"), servers), mcpHint));
+    const agentsBox = el("div");
+    ed.append(...field(t("Agents"), agentsBox));
+    ed.append(err);
+    function drawHints() {
+      const sk = unbound(all, d.agents, "skills"), mc = unbound(all, d.agents, "mcp");
+      skillsHint.textContent = !lib.skills.length ? t("The library has no skills yet") : sk.length ? t("Not bound for {agents}: theirs uses every skill the agent has", { agents: sk.map((a) => a.name).join(", ") }) : "";
+      mcpHint.textContent = !lib.servers.length ? t("The library has no MCP servers yet") : mc.length ? t("Not bound for {agents}: theirs uses every server the agent has", { agents: mc.map((a) => a.name).join(", ") }) : "";
+    }
+    function drawAgents() {
+      agentsBox.replaceChildren(agentChips(all, d.agents, (next) => { d.agents = next; drawAgents(); }, { names: true, blocked: subagentBlocked, all: true }));
+      drawHints();
+    }
+    drawAgents();
+
+    const bar = el("div", "bar");
+    if (s) bar.append(button(t("Remove from the library"), "danger", async () => {
+      if (!await confirmRemoval(s.name, "It will be removed from the library and the agents it was given to.")) return;
+      if (await change("subagents/remove", { name: s.name }, t("{name} is out of the library and the agents it was given to", { name: s.name }))) closeLibModal(true);
+    }));
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal));
+    const save = async () => {
+      err.textContent = "";
+      try {
+        const subagent = { name: d.name, description: d.description.trim(), prompt: d.prompt, skills: d.skills, mcp: d.mcp, agents: d.agents.filter((id) => !subagentBlocked(agentOf(id) || { id })) };
+        take(await api("library/subagents/save", { old: s ? s.name : "", subagent }));
+        report(lib.result, s ? t("{name} saved", { name: d.name }) : "");
+        closeLibModal(true);
+        render();
+      } catch (e) { err.textContent = e.message; }
+    };
+    bar.append(button(s ? t("Save") : t("Add"), "primary", save));
+    ed.append(bar);
+    const original = JSON.stringify(d);
+    modal = { save, dirty: () => JSON.stringify(d) !== original };
+    openLib(ed);
+    if (!s) requestAnimationFrame(() => name.focus());
   }
 
   // ---------- skills ----------

@@ -4,6 +4,8 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "None": "无",
+    "Prompt": "提示词",
     "Check again": "重新检测",
     "Manage": "管理",
     "Manage agents": "批量管理",
@@ -3621,6 +3623,8 @@ const I18N = {
     "~/.dsh/settings.yaml sets its own DeepSeek endpoint or key, which dsh puts over magpie's; clear it in dsh's Models page to go through magpie.": "~/.dsh/settings.yaml 设置了自己的 DeepSeek 地址或 Key，dsh 会优先用它而不是 magpie 的；请在 dsh 的 Models 页面清除它，才能走 magpie。",
   },
   "zh-TW": {
+    "None": "無",
+    "Prompt": "提示詞",
     "Check again": "重新檢測",
     "Codex thread descriptions": "Codex 對話描述",
     "Codex composer predictions": "Codex 輸入框預測",
@@ -7223,6 +7227,8 @@ const I18N = {
     "~/.dsh/settings.yaml sets its own DeepSeek endpoint or key, which dsh puts over magpie's; clear it in dsh's Models page to go through magpie.": "~/.dsh/settings.yaml 設定了自己的 DeepSeek 位址或 Key，dsh 會優先用它而不是 magpie 的；請在 dsh 的 Models 頁面清除它，才能走 magpie。",
   },
   ja: {
+    "None": "なし",
+    "Prompt": "プロンプト",
     "Check again": "再確認",
     "Manage": "管理",
     "Manage agents": "エージェントを一括管理",
@@ -10827,6 +10833,8 @@ const I18N = {
     "~/.dsh/settings.yaml sets its own DeepSeek endpoint or key, which dsh puts over magpie's; clear it in dsh's Models page to go through magpie.": "~/.dsh/settings.yaml に独自の DeepSeek エンドポイントやキーがあり、dsh は magpie のものよりそちらを優先します。magpie を経由するには dsh の Models ページで消してください。",
   },
   de: {
+    "None": "Keine",
+    "Prompt": "Prompt",
     "Check again": "Erneut prüfen",
     "Manage": "Verwalten",
     "Manage agents": "Agents verwalten",

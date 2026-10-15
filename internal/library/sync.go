@@ -84,6 +84,7 @@ func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 			l.syncInstructions(t, b, res)
 			l.syncMCP(t, b, res)
 			l.syncHooks(t, b, res)
+			l.syncSubagents(t, b, res)
 		})
 	}
 	// an edit made in an agent's copy of a skill goes to the library first,
@@ -351,11 +352,15 @@ type View struct {
 	Servers []ServerView `json:"servers"`
 	// Hooks are the library's hooks, and HookAgents what each agent on
 	// this computer can take of them (hooks.go)
-	Hooks        []HookView      `json:"hooks"`
-	HookAgents   []HookAgentView `json:"hookAgents"`
-	FoundServers []Found         `json:"foundServers"`
-	Skills       []SkillView     `json:"skills"`
-	FoundSkills  []FoundSkill    `json:"foundSkills"`
+	Hooks      []HookView      `json:"hooks"`
+	HookAgents []HookAgentView `json:"hookAgents"`
+	// Subagents are the library's subagents, and SubagentAgents what
+	// each agent on this computer makes of them (subagents.go)
+	Subagents      []SubagentView      `json:"subagents"`
+	SubagentAgents []SubagentAgentView `json:"subagentAgents"`
+	FoundServers   []Found             `json:"foundServers"`
+	Skills         []SkillView         `json:"skills"`
+	FoundSkills    []FoundSkill        `json:"foundSkills"`
 	// NewSkills are skills a check found its skills' repositories to have
 	// added beside them, to add or set aside
 	NewSkills    []NewSkill        `json:"newSkills"`
@@ -472,6 +477,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 		v.Servers = append(v.Servers, sv)
 	}
 	v.Hooks, v.HookAgents = l.hooksView(append(slices.Clone(targets), gone...), of)
+	v.Subagents, v.SubagentAgents = l.subagentsView(targets, of)
 	tr := &tracer{}
 	for _, s := range l.Skills {
 		sv := SkillView{Name: s.Name, Agents: append([]string{}, s.Agents...), Icon: skillIcon(s), Problems: of("skill:" + s.Name), Repo: tr.repoOf(s)}
