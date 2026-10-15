@@ -141,6 +141,7 @@ func builtins(home, cfg string) []*Agent {
 		workbuddyAI(home),
 		codebuddy(home),
 		pencil(home),
+		raycast(home),
 		t3code(home),
 		hanako(home),
 		atomcode(home),
