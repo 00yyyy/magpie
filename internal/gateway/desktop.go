@@ -59,19 +59,22 @@ func desktopAccepts(id string) bool {
 // it (its app.asar has neither mythos nor fable), so every reasoning-level
 // model listed by mythos-magpie-<n> vanished from its menu
 // (sublatesublate-design). The version a User-Agent names ("Mozilla/5.0 …
-// Claude/2.7032.0 Chrome/…") is the only word magpie gets of the build: 2
-// and up take mythos, anything older — or a version magpie cannot read —
-// does not, and falls back to the plain alias every build keeps (no effort
-// picker there, and those builds have no mythos effort table either).
+// Claude/2.7032.0 Chrome/…") is the only word magpie gets of the build: one
+// that says a version below 2 falls back to the plain alias every build
+// keeps (no effort picker there, and those builds have no mythos effort
+// table either). Anything else keeps the picker alias: 2 and up, and a
+// request that names no build at all, as the Code tab's Claude Code
+// ("claude-cli/… (external, claude-desktop)", known by its key) whose
+// ids are mythos-magpie-<n> already.
 var desktopUAVersion = regexp.MustCompile(` Claude/(\d+)`)
 
 func desktopKnowsMythos(ua string) bool {
 	m := desktopUAVersion.FindStringSubmatch(ua)
 	if m == nil {
-		return false
+		return true
 	}
 	n, err := strconv.Atoi(m[1])
-	return err == nil && n >= 2
+	return err != nil || n >= 2
 }
 
 // desktopAlias is the prefix of the id a model is listed by to Claude

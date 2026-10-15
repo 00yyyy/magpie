@@ -241,7 +241,7 @@ func TestClaudeDesktopOldBuildModels(t *testing.T) {
 	const oldUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Claude/1.6608.2 Chrome/140.0.0.0 Electron/37.2.0 Safari/537.36"
 
 	// the old build keeps every model it is shown
-	for _, ua := range []string{oldUA, ""} {
+	for _, ua := range []string{oldUA} {
 		for catalog, id := range list(ua) {
 			if !oldBuildKeeps(id) {
 				t.Errorf("User-Agent %q: %s is listed as %s, which the build drops", ua, catalog, id)
@@ -249,15 +249,18 @@ func TestClaudeDesktopOldBuildModels(t *testing.T) {
 		}
 	}
 
-	// a 2.x build is still offered the effort picker
-	ids := list("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Claude/2.7032.0 Chrome/140.0.0.0 Electron/37.2.0 Safari/537.36")
-	if id := ids["opencode-go/deepseek-v4.1-flash"]; !regexp.MustCompile(`^mythos-magpie-\d{10}$`).MatchString(id) {
-		t.Errorf("2.7032.0: deepseek-v4.1-flash is listed as %q, want the mythos picker alias", id)
+	// a 2.x build is still offered the effort picker, and so is a request
+	// that names no build (the Code tab's Claude Code, known by its key)
+	for _, ua := range []string{"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Claude/2.7032.0 Chrome/140.0.0.0 Electron/37.2.0 Safari/537.36", "claude-cli/2.1.295 (external, claude-desktop)", ""} {
+		if id := list(ua)["opencode-go/deepseek-v4.1-flash"]; !regexp.MustCompile(`^mythos-magpie-\d{10}$`).MatchString(id) {
+			t.Errorf("User-Agent %q: deepseek-v4.1-flash is listed as %q, want the mythos picker alias", ua, id)
+		}
 	}
 }
 
 // desktopKnowsMythos, by the version a User-Agent names: 2.x takes the
-// mythos effort alias, anything older or unreadable does not.
+// mythos effort alias, an older one does not, and a request naming no
+// build is listed as before.
 func TestDesktopKnowsMythos(t *testing.T) {
 	for _, c := range []struct {
 		ua   string
@@ -267,8 +270,11 @@ func TestDesktopKnowsMythos(t *testing.T) {
 		{"Mozilla/5.0 … Claude/2 Chrome/…", true},
 		{"Mozilla/5.0 … Claude/1.6608.2 Chrome/… Safari/537.36", false},
 		{"Mozilla/5.0 … Claude/3.0.0 Chrome/… Safari/537.36", true},
-		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", false},
-		{"", false},
+		// no build named (the Code tab's Claude Code, known by its key):
+		// listed as before, by the picker alias
+		{"claude-cli/2.1.295 (external, claude-desktop)", true},
+		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", true},
+		{"", true},
 	} {
 		if got := desktopKnowsMythos(c.ua); got != c.want {
 			t.Errorf("desktopKnowsMythos(%q) = %v, want %v", c.ua, got, c.want)
