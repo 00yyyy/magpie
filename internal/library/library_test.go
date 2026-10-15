@@ -627,6 +627,51 @@ func TestInstructions(t *testing.T) {
 	}
 }
 
+// TestInstructionsSetLinkedToAgentsFile is #2349: instructions.md linked to
+// the file Claude Code reads. The set was read with magpie's part in it, so
+// each sync wrote the whole file into its own part again and it doubled.
+func TestInstructionsSetLinkedToAgentsFile(t *testing.T) {
+	h := sandbox(t)
+	cl := filepath.Join(h, ".claude/CLAUDE.md")
+	write(t, cl, "# Mine\n\nBe brief.\n")
+	set := filepath.Join(Dir(), "instructions.md")
+	if err := os.MkdirAll(filepath.Dir(set), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(cl, set); err != nil {
+		t.Skip("no symlinks here:", err)
+	}
+	ok(t)(SaveInstructions(InstructionsChange{Agents: []string{"claude", "codex"}}))
+	for range 3 {
+		ok(t)(Sync())
+	}
+	if s := read(t, cl); s != "# Mine\n\nBe brief.\n" {
+		t.Errorf("claude's file, the set's own, was written into:\n%q", s)
+	}
+	cx := filepath.Join(h, ".codex/AGENTS.md")
+	if s := read(t, cx); s != blockBegin+"\n# Mine\n\nBe brief.\n"+blockEnd+"\n" {
+		t.Errorf("codex:\n%q", s)
+	}
+	iv, _ := ReadInstructions()
+	if iv.Shared != "# Mine\n\nBe brief." {
+		t.Errorf("shared: %q", iv.Shared)
+	}
+
+	// a file grown before: every part magpie wrote into itself comes out
+	grown := "# Mine\n\nBe brief.\n"
+	for range 4 {
+		grown = withBlock(grown, strings.TrimSpace(grown))
+	}
+	write(t, cl, grown)
+	ok(t)(Sync())
+	if s := read(t, cl); s != "# Mine\n\nBe brief.\n" {
+		t.Errorf("grown file after a sync:\n%q", s)
+	}
+	if s := read(t, cx); s != blockBegin+"\n# Mine\n\nBe brief.\n"+blockEnd+"\n" {
+		t.Errorf("codex after:\n%q", s)
+	}
+}
+
 func TestImportInstructions(t *testing.T) {
 	h := sandbox(t)
 	gm := filepath.Join(h, ".gemini/GEMINI.md")
