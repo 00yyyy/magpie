@@ -9,11 +9,11 @@ runtime, the file and the window's switch) and P1 (the window's kernel: a
 plugin's page, its error boundary, the kit it draws with and its settings
 form, with the Gateway page as the first plugin to draw its own page), and
 P2 so far (a page moved out of the core whole: its code, styles and words:
-Sessions, Library, Routing and Usage), and P3 so far (the gateway's
+Sessions, Library, Routing and Usage), and P3 (the gateway's
 extension points: the observer, with OTel export as its first plugin; the
 router strategy, with the routings besides Smart and the user's groups; and
 the middleware point, with the JS gateway middleware and privacy masking;
-and the tool point, with web search). OpenCode plugins (npm packages in
+the tool point, with web search; and the budget point, with key limits). OpenCode plugins (npm packages in
 the plugin host) are a different thing; see
 [provider and plugin ownership](provider-plugins.md) and
 [gateway middleware](gateway-middleware.md).
@@ -28,7 +28,7 @@ the plugin host) are a different thing; see
 | Ctx | What `Apply` gets: `OnDispose(f)`, `Contribute(slot, key)`, `Provide(name, v)` (withdrawn when it goes), `Service(name)`, and its composed `Config`. Disposers run in reverse, each one's panic logged and the rest still run. | [`pluginrt.go`](../../internal/pluginrt/pluginrt.go) |
 | plugins.yml | `appdir.Config()/plugins.yml`: `preset` (`essentials` or `all`) and `plugins`, rows of `{id, enabled, config}` holding only what the user set. | [`config.go`](../../internal/pluginrt/config.go) |
 | Settings schema | `SchemaOf(Settings)` makes a JSON Schema object of the struct, in its fields' order (`x-order`): each exported field with a json name is a setting, of `bool`, an int, `float64` or `string`, with tags `title` (English; the window translates it), `description`, `enum` (comma separated) and `min`/`max`. Its values are the defaults. A field a form can't draw, or a tag that doesn't parse, panics at `Register`. `Schema.Validate` takes a value only as the schema allows it (a JSON float64 or a YAML int for an integer); `SetConfig(id, config)` writes the user's row through it, and `Compose` leaves out a value edited into plugins.yml by hand that it doesn't allow, so the default stands. | [`schema.go`](../../internal/pluginrt/schema.go), [`config.go`](../../internal/pluginrt/config.go) |
-| Built-in plugins | `groups`, `library`, `otel`, `sessions`, `warmups` (P0), `gateway` (P1), the Gateway page, which is Essential and in use while a gateway key is there (`access.List`), and `routing` (P2), the Routing page, Essential and in use while the user has a routing group, since the page is where groups are made and changed. `rotation` (P3), the routings besides Smart, is Essential and in use while a provider or group is routed by one of them. `middleware` (P3), the JS gateway middleware, is Essential and in use while plugins.json has a middleware on (`middleware.On`). `redact` (P3), privacy masking, is Essential and in use while Settings → Privacy asks for any masking (`masking.Wanted`). `search` (P3), magpie's web search, is Essential and in use while a search API is set up or a searcher is picked. `usage` (P2), the Usage page, is Essential too, with no `InUse`: what it shows the gateway counts anyway, and the tray panel's Usage tab still shows the allowances with it off. The Gateway page's one setting, `callsPage` (10, 20, 50 or 100; 20), is how many recent calls the page shows at a time. The other five aren't Essential. Each one's `InUse` counts what the user made with it: routing groups not Auto and not hidden, library items given to agents, a collector sent to, gateway conversations recorded, warm-ups and check-ins on. | [`plugins/`](../../plugins) |
+| Built-in plugins | `groups`, `library`, `otel`, `sessions`, `warmups` (P0), `gateway` (P1), the Gateway page, which is Essential and in use while a gateway key is there (`access.List`), and `routing` (P2), the Routing page, Essential and in use while the user has a routing group, since the page is where groups are made and changed. `rotation` (P3), the routings besides Smart, is Essential and in use while a provider or group is routed by one of them. `middleware` (P3), the JS gateway middleware, is Essential and in use while plugins.json has a middleware on (`middleware.On`). `redact` (P3), privacy masking, is Essential and in use while Settings → Privacy asks for any masking (`masking.Wanted`). `search` (P3), magpie's web search, is Essential and in use while a search API is set up or a searcher is picked. `budget` (P3), key limits, is Essential and in use while a gateway key has a limit. `usage` (P2), the Usage page, is Essential too, with no `InUse`: what it shows the gateway counts anyway, and the tray panel's Usage tab still shows the allowances with it off. The Gateway page's one setting, `callsPage` (10, 20, 50 or 100; 20), is how many recent calls the page shows at a time. The other five aren't Essential. Each one's `InUse` counts what the user made with it: routing groups not Auto and not hidden, library items given to agents, a collector sent to, gateway conversations recorded, warm-ups and check-ins on. | [`plugins/`](../../plugins) |
 
 The boundary is checked by `TestPluginsImportOnlyCore`: no package outside
 `plugins/` imports one (but `main.go`, through `plugins/all`), a plugin never
@@ -158,8 +158,8 @@ says one of its words, which goes back to i18n.js.
 
 ## Gateway extension points (P3): observer
 
-P3 opens the gateway to plugins at four points: observer, router strategy,
-middleware and tool. The observer is the first. It only reads, so it is
+P3 opens the gateway to plugins at five points: observer, router strategy,
+middleware, tool and budget. The observer is the first. It only reads, so it is
 the safest to move first. `plugins/otel` is its first consumer, and with the
 plugin off the gateway does no observing work.
 
@@ -231,7 +231,19 @@ it, on or off.
 | Off | `searchServed` gates the three places every search path goes through: `canSearch` (the stand-in tool, `/v1/models`' search note to another magpie, the subscriptions' search, `CanSearch` for the agents' rows), `searchesOwn` (a Kimi Code or WorkBuddy plan's own search service, a Google sign-in's Gemini) and `webSearch` itself, which answers `errSearchOff` without asking a searcher or a search API. So off, a request with `web_search` goes to the vendor as it does with no searcher set up, and the MCP server and Codex's search say the plugin is off (`TestSearchOnAndOff`). | [`search.go`](../../internal/gateway/search.go), [`search_api.go`](../../internal/gateway/search_api.go), [`search_kimi.go`](../../internal/gateway/search_kimi.go) |
 | `plugins/search` | Requires `settings` and `gateway`, Essential. Apply serves `gwtool.WebSearch`. `InUse` counts the search APIs set up (`provider.SearchAPIsSet`, the file alone) and a searcher picked in Settings (neither magpie's pick nor off); an unreadable providers.json or settings.json is an error, so it stays on. The gateway's `KeepFresh` watches both files, so a search API added from the CLI or the window turns it on within 2s. | [`search.go`](../../plugins/search/search.go) |
 
-The last point is budget.
+## Gateway extension points (P3): budget
+
+The budget point holds a gateway key to the limits its owner set (#585,
+#2227) before any of the key's requests goes to a provider. It is the last
+of the P3 points. A request without a key, or of a key with no limit, never
+asks it.
+
+| Part | What it does | Source |
+| --- | --- | --- |
+| `gwbudget.Limiter` | `Reserve(who, body, model, now) (release, refused)`: lets a key's request in, holding what it is expected to use until release, or refuses it with a `Refusal` (`RetryAfter`, `ResetAt`). `Limit(l)` serves one until its remove; registering again stacks, and the last one serves. | [`gwbudget.go`](../../internal/gwbudget/gwbudget.go) |
+| Fail closed | `Limiting(who)` is nil for a request with no key or a key with no limit, the served limiter otherwise, and `ErrUnlimited` when the key has a limit and none serves. With none it first asks the refresh (the gateway's is `pluginrt.Refresh`, set by `gwbudget.Refresh` in `ListenAndServe`), at most once a second and never from inside one, then looks again, so a limit set a moment ago turns the plugin on for the request that needs it. `reserveFor` is the gateway's one way in, for the chat APIs (`keyLimited`), the search MCP server and the vision one: a refusal is 429 `gateway_key_limit` with Retry-After and X-Magpie-Limit-Reset; `ErrUnlimited` is 503 `gateway_key_limit_off`, X-Should-Retry false, nothing sent, and a rejected usage row (`TestKeyLimitsOnAndOff`, `TestVisionMCPHeldToKeyLimit`). | [`gwbudget.go`](../../internal/gwbudget/gwbudget.go), [`key_limit.go`](../../internal/gateway/key_limit.go) |
+| `plugins/budget` | Requires `settings` and `gateway`, Essential. Apply serves `budget.Limiter`, `internal/budget`'s windows and reservations as before. `InUse` counts the gateway keys with a limit (`access.List`); a keys file that can't be read is an error, so it stays on. Since it is in use whenever a key has a limit, it can only be off while none has; the 503 is for a refresh not yet seen or a plugins.yml edited by hand. The gateway's `KeepFresh` watches the keys file too, so a limit set from the CLI or the window turns it on within 2s. | [`budget.go`](../../plugins/budget/budget.go) |
+| Stays in the core | What a key has used and has left (`budget.All`, `budget.Binding`) for `/v1/magpie/limit`, the Gateway page and the CLI, and `budget.Append`, so the usage ledger counts a key's use the same with the plugin on or off. The key editor's limit fields stay with the plugin off, since setting a limit is what turns it back on. | [`budget.go`](../../internal/budget/budget.go) |
 
 ## Source of truth and composing
 

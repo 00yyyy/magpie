@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/agentenv"
+	"github.com/yetone/magpie/internal/budget"
+	"github.com/yetone/magpie/internal/gwbudget"
 	"github.com/yetone/magpie/internal/gwmw"
 	"github.com/yetone/magpie/internal/gwtool"
 	"github.com/yetone/magpie/internal/masking"
@@ -26,6 +28,7 @@ func TestMain(m *testing.M) {
 	groupsServed = provider.ServeGroups()
 	serveMiddleware()
 	searchOn = gwtool.Serve(gwtool.WebSearch)
+	limitsOn = gwbudget.Limit(budget.Limiter{})
 	code, err := isolatedTests(m)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -184,6 +187,17 @@ func withoutGroups(t *testing.T) {
 // searchOn is plugins/search on: the gateway's tests offer and answer
 // magpie's web search, as a user with it on has.
 var searchOn func()
+
+// limitsOn is plugins/budget on: the gateway's tests hold gateway keys to
+// their limits, as a user with it on has.
+var limitsOn func()
+
+// withoutLimits is plugins/budget off for t, with no refresh to turn it
+// on: a key held to a limit is refused with nothing sent.
+func withoutLimits(t *testing.T) {
+	limitsOn()
+	t.Cleanup(func() { limitsOn = gwbudget.Limit(budget.Limiter{}) })
+}
 
 // withoutSearch is plugins/search off for t, in a process serving the
 // gateway (gwtool.Gate): magpie's web search is neither offered nor

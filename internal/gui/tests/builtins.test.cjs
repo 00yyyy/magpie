@@ -19,6 +19,7 @@ const assets = path.resolve(__dirname, "../assets");
 
 // as plugins/*'s manifests say them, in pluginrt.Registered's order (by id)
 const PLUGINS = [
+  { id: "budget", name: "Key limits", sub: "Hold each gateway key to the tokens or estimated cost you set for it", one: "1 key with a limit", many: "{n} keys with a limit" },
   { id: "gateway", name: "Gateway page", sub: "The gateway's state and keys, how to connect a client, its models and recent calls", one: "1 gateway key", many: "{n} gateway keys" },
   { id: "groups", name: "Routing groups", sub: "Several models agents pick as one: each request goes to the right one, and to the next when one fails", one: "1 group in use", many: "{n} groups in use" },
   { id: "library", name: "Library", sub: "Instructions, MCP servers, skills and hooks, kept once and given to every agent", one: "1 item given to agents", many: "{n} items given to agents" },
@@ -34,9 +35,9 @@ const PLUGINS = [
 ];
 // a new install's (the Essentials preset): all off but the Gateway, Routing
 // and Usage pages, the routing strategies, the gateway middleware, privacy
-// masking and web search, which are essential, and two routing groups the
-// user made
-const START = { gateway: [true, 0], groups: [false, 2], library: [false, 0], middleware: [true, 0], otel: [false, 0], redact: [true, 0], rotation: [true, 0], routing: [true, 0], search: [true, 0], sessions: [false, 0], usage: [true, 0], warmups: [false, 0] };
+// masking, web search and key limits, which are essential, and two routing
+// groups the user made
+const START = { budget: [true, 0], gateway: [true, 0], groups: [false, 2], library: [false, 0], middleware: [true, 0], otel: [false, 0], redact: [true, 0], rotation: [true, 0], routing: [true, 0], search: [true, 0], sessions: [false, 0], usage: [true, 0], warmups: [false, 0] };
 
 // the Gateway page's settings, as pluginrt.SchemaOf makes them
 const GATEWAY_SCHEMA = {
@@ -170,13 +171,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual([rt.on, rt.disabled], ["true", false], `${where}: the Routing page, on`);
         const ro = rows.find((r) => r.id === "rotation");
         assert.deepEqual([ro.on, ro.disabled], ["true", false], `${where}: the routing strategies, on`);
-        for (const id of ["middleware", "redact", "search"]) {
+        for (const id of ["budget", "middleware", "redact", "search"]) {
           const r = rows.find((r) => r.id === id);
           assert.deepEqual([r.on, r.disabled], ["true", false], `${where}: ${id}, on`);
         }
         const us = rows.find((r) => r.id === "usage");
         assert.deepEqual([us.on, us.disabled], ["true", false], `${where}: the Usage page, on`);
-        for (const r of rows.filter((r) => !["groups", "gateway", "middleware", "redact", "rotation", "routing", "search", "usage"].includes(r.id))) assert.deepEqual([r.on, r.disabled, r.why], ["false", false, ""], `${where}: ${r.id}`);
+        for (const r of rows.filter((r) => !["budget", "groups", "gateway", "middleware", "redact", "rotation", "routing", "search", "usage"].includes(r.id))) assert.deepEqual([r.on, r.disabled, r.why], ["false", false, ""], `${where}: ${r.id}`);
         await page.locator('#builtinList [data-id="groups"] [role="switch"]').click({ force: true });
         await page.waitForTimeout(100);
         assert.deepEqual(posts, [], `${where}: a locked switch posts nothing`);
@@ -208,20 +209,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator('#builtinList [data-id="otel"] [role="switch"]').click();
         await page.waitForSelector('#builtinList [data-id="otel"] [aria-checked="true"]');
         assert.ok(await page.locator("#setTab-otel").evaluate((b) => getComputedStyle(b).display !== "none"), `${where}: Observability back`);
-        // Routing switched off: its tab and the panel's go, the page stays
+        // Routing switched off: its tab and the panel's go, the page stays.
+        // Its row and Usage's can be below the fold: the reader scrolls to
+        // them with the wheel, since the page puts back a scroll that isn't
+        // the reader's (scrollOnPurpose), a click's own too
+        const wheelTo = async (id) => {
+          const list = await page.locator("#builtinList").boundingBox();
+          await page.mouse.move(list.x + 20, list.y + 20);
+          await page.mouse.wheel(0, 400);
+          await page.waitForFunction((id) => { const r = document.querySelector(`#builtinList [data-id="${id}"] [role="switch"]`).getBoundingClientRect(), foot = document.querySelector("footer.foot"); return r.bottom <= Math.min(document.getElementById("view-plugins").getBoundingClientRect().bottom, foot && foot.offsetParent ? foot.getBoundingClientRect().top : Infinity); }, id);
+        };
+        await wheelTo("routing");
         await page.locator('#builtinList [data-id="routing"] [role="switch"]').click();
         await page.waitForSelector('#builtinList [data-id="routing"] [aria-checked="false"]');
         assert.deepEqual(posts.at(-1), ["routing", false], where);
         if (width >= 800) assert.deepEqual(await tabs(page), ["agents", "library", ...KEPT.slice(1).filter((k) => k !== "routing")], `${where}: Routing gone`);
         assert.deepEqual(await viewShown(page), ["view-plugins"], `${where}: Plugins stays`);
-        // and Usage: its tab goes. Its row can be below the fold: the reader
-        // scrolls to it with the wheel, since the page puts back a scroll
-        // that isn't the reader's (scrollOnPurpose), a click's own too
+        // and Usage: its tab goes
         const usageSwitch = page.locator('#builtinList [data-id="usage"] [role="switch"]');
-        const list = await page.locator("#builtinList").boundingBox();
-        await page.mouse.move(list.x + 20, list.y + 20);
-        await page.mouse.wheel(0, 400);
-        await page.waitForFunction(() => { const r = document.querySelector('#builtinList [data-id="usage"] [role="switch"]').getBoundingClientRect(); return r.bottom <= document.getElementById("view-plugins").getBoundingClientRect().bottom; });
+        await wheelTo("usage");
         await usageSwitch.click();
         await page.waitForSelector('#builtinList [data-id="usage"] [aria-checked="false"]');
         assert.deepEqual(posts.at(-1), ["usage", false], where);

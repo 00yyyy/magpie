@@ -181,7 +181,10 @@ limits at once, each in its own window, and a request needs every one
 the spent limit that resets last). The saved key keeps the first limit in
 `limit`, which older magpie reads, and the rest in `moreLimits`. The answer's
 `limit` is the one holding the key most (`budget.Binding`), what older
-clients read, and `limits` is each of them (`budget.All`). A local magpie
+clients read, and `limits` is each of them (`budget.All`). Holding a
+key to its limits is the Key limits plugin's, on the gateway's budget
+point ([Plugin runtime](plugin-runtime.md#gateway-extension-points-p3-budget)):
+with it off, a key held to a limit gets 503 and nothing is sent. A local magpie
 asks it with each of its remote-magpie keys for that key's card on its
 Usage page (#1547), a window per limit's cap.
 

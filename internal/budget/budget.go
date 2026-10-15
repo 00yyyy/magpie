@@ -39,6 +39,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/gwbudget"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
@@ -313,6 +314,21 @@ func (r *Refusal) Error() string {
 // RetryAfter is how long until the window resets, in whole seconds.
 func (r *Refusal) RetryAfter(now time.Time) int {
 	return max(int(r.Reset.Sub(now).Seconds()+0.999), 1)
+}
+
+// ResetAt is when the window resets.
+func (r *Refusal) ResetAt() time.Time { return r.Reset }
+
+// Limiter is Reserve as the gateway's budget point asks it
+// (gwbudget.Limiter); plugins/budget serves it.
+type Limiter struct{}
+
+func (Limiter) Reserve(who access.Identity, body int64, model string, now time.Time) (func(), gwbudget.Refusal) {
+	release, refused := Reserve(who, body, model, now)
+	if refused != nil {
+		return nil, refused
+	}
+	return release, nil
 }
 
 // Reserve lets a request of who's in, holding a reservation for it until

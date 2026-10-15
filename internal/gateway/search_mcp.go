@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/access"
-	"github.com/yetone/magpie/internal/budget"
 )
 
 // magpie's web search, the one a model that can't search is given
@@ -23,7 +22,7 @@ import (
 // POST. It is a gateway route like the others: this computer calls it with
 // any key, another one only while magpie is shared and with an enabled
 // gateway key (lanGuard), a gateway key's limit holds each search
-// (budget.Reserve), and a web page is turned away, as the MCP spec has a
+// (reserveFor), and a web page is turned away, as the MCP spec has a
 // server check Origin.
 
 // SearchMCPPath is where the web search MCP server is served. It has two
@@ -185,9 +184,9 @@ func (s *Server) searchMCPRun(r *http.Request, query string) (string, error) {
 	if query == "" {
 		return "", searchMCPError("web_search needs a query")
 	}
-	release, refused := budget.Reserve(access.Caller(r.Context()), int64(len(query)), "", limitClock())
-	if refused != nil {
-		return "", refused
+	release, err := reserveFor(access.Caller(r.Context()), int64(len(query)), "", limitClock())
+	if err != nil {
+		return "", err
 	}
 	defer release()
 	ctx := context.WithValue(r.Context(), searchForKey{}, &CallFor{Agent: callerOf(r).agent, MCP: true})
