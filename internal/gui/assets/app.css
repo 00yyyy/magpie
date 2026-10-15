@@ -266,10 +266,13 @@ body.panel .seg { display: none; }
 .update:active { transform: scale(.96); }
 .update.busy { pointer-events: none; opacity: .6; }
 /* its × on the pill's corner, shown while the pointer is over it: hides
-   the pill until a newer version is out */
+   the pill until a newer version is out. Off the pill, just touching its
+   rounded corner: over it, the × took the top right of the pill, a fifth of
+   the round arrow in a narrow header, and a click meant for Update hid it
+   (#2291, MuiseDestiny). The pill's margin is the gap to its right. */
 .update-wrap { position: relative; align-self: center; display: inline-flex; }
 .update-hide {
-  position: absolute; top: -5px; right: 3px; width: 14px; height: 14px; border-radius: 50%;
+  position: absolute; top: -9px; right: -3px; width: 14px; height: 14px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--muted); background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.12);
   opacity: 0; pointer-events: none; transition: opacity .12s, color .12s;
@@ -285,6 +288,7 @@ body.panel .seg { display: none; }
    their right (#442) */
 .top.tight .brand > span:not(.logo), .top.tight .update span { display: none; }
 .top.tight .update { width: 22px; padding: 0; justify-content: center; margin-right: 4px; }
+.top.tight .update-hide { right: -5px; }
 body.window .top.inrow .seg { position: relative; left: auto; top: auto; transform: none; margin: 0 auto; } /* relative still: its thumb sits in it, not over the whole header */
 body.window .top.inrow .actions { margin-left: 0; }
 .top.cramped .seg button { padding: 0 8px; }
