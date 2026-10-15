@@ -22264,7 +22264,7 @@ function navSubs() {
       };
       at.after(box);
     }
-    box.setAttribute("aria-label", at.querySelector("span[data-t]")?.textContent || "");
+    box.setAttribute("aria-label", (at.querySelector("span[data-t]") || at.querySelector("span"))?.textContent || "");
     for (const s of box.querySelectorAll(".nav-s")) s.remove();
     items.forEach((b, i) => {
       const [name, n] = b.textContent.trim().split(" · ");
@@ -22363,7 +22363,8 @@ function renderCrumb(items) {
     let gl = b?.previousElementSibling;
     while (gl && !gl.matches(".nav-gl")) gl = gl.previousElementSibling;
     if (gl) parts.push(gl.textContent);
-    if (b) parts.push(b.querySelector("span[data-t]").textContent);
+    // a plugin's page's tab has its own title, not one translated here
+    if (b) parts.push((b.querySelector("span[data-t]") || b.querySelector("span"))?.textContent || "");
   }
   const on = items.find((b) => b.classList.contains("on"));
   if (on) parts.push(on.textContent.trim().split(" · ")[0]);

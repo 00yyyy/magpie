@@ -86,6 +86,7 @@
     <a href="#middleware">网关中间件</a>
     <a href="#tools">给每个智能体的工具</a>
     <a href="#agents">Agent 插件</a>
+    <a href="#pages">窗口里的页面</a>
     <a href="#pi">pi 扩展包</a>
     <a href="#protocol">宿主协议</a>
     <a href="#faq">答疑</a>
@@ -753,6 +754,56 @@ claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/to
       <li><b>运行方式。</b>和<a href="#middleware">中间件</a>一样：在 magpie 自己的进程里用 moejs 运行，只能导入插件内的文件，没有 Node API，<code>console.log</code> 进 magpie 的日志。加载和 <code>connect</code> 各有一秒。模块加载失败或 <code>connect</code> 抛错的插件，会在插件页它那一行写明原因，并且什么都不写入。</li>
       <li><b>资源库。</b>写了 <code>library</code>，这个 Agent 就和内置 Agent 一样拿到资源库的内容：指令写在文件里 magpie 的两行标记之间，MCP 服务器和用户自己的写在同一个文件里（用户自己加的字段保留），技能以链接或副本放进文件夹。取消时只拿走 magpie 写的部分，文件原来的内容留在 magpie 的备份里。<code>mcpFormat</code> 不在列表中，或写了 <code>mcp</code> 却没写 <code>mcpFormat</code>，插件不会加载。</li>
       <li><b>声明方式。</b><code>package.json</code> 里写 <code>"magpie": { "agent": "./agent.js" }</code>，或者一个名为 <code>*.agent.js</code>（或 <code>.mjs</code>）的单文件。一个包可以同时是供应商、中间件和 Agent。插件市场里 Agent 条目写 <code>"kind": "agent"</code>，列在 <span class="ui">Agent</span> 下；社区包命名为 <code>@magpie-community/agent-&lt;name&gt;</code>。</li>
+    </ul>
+
+    <h2 id="pages"><a class="anchor" href="#pages">窗口里的页面</a></h2>
+    <p>插件可以在 magpie 的窗口里加一个自己的页面。插件打开后，侧边栏的<span class="ui">插件</span>分组里会出现它的标签，排在 magpie 自带页面的后面。页面就是插件文件夹里的 HTML、CSS 和 JavaScript，不需要 Bun，也不用构建。下面的例子显示今天的用量。</p>
+    <div class="code">
+      <span class="lang">package.json</span>
+      <button class="copy" data-copy="pg-pkg">复制</button>
+      <pre id="pg-pkg">{
+  <span class="s">"name"</span>: <span class="s">"magpie-usage-glance"</span>,
+  <span class="s">"version"</span>: <span class="s">"0.1.0"</span>,
+  <span class="s">"magpie"</span>: {
+    <span class="s">"page"</span>: { <span class="s">"title"</span>: <span class="s">"Usage glance"</span>, <span class="s">"file"</span>: <span class="s">"page/index.html"</span>, <span class="s">"icon"</span>: <span class="s">"page/icon.svg"</span> },
+    <span class="s">"permissions"</span>: [<span class="s">"usage:summary"</span>]
+  }
+}</pre>
+    </div>
+    <div class="code">
+      <span class="lang">page/index.html</span>
+      <button class="copy" data-copy="pg-html">复制</button>
+      <pre id="pg-html">&lt;!doctype html&gt;
+&lt;link rel="stylesheet" href="style.css"&gt;
+&lt;script src="_magpie/bridge.js"&gt;&lt;/script&gt;   <span class="c">&lt;!-- served beside every page --&gt;</span>
+&lt;script src="app.js" defer&gt;&lt;/script&gt;
+&lt;p id="calls"&gt;…&lt;/p&gt;</pre>
+    </div>
+    <div class="code">
+      <span class="lang">page/app.js</span>
+      <button class="copy" data-copy="pg-js">复制</button>
+      <pre id="pg-js"><span class="k">await</span> magpie.ready                                  <span class="c">// the window's theme, painted</span>
+<span class="k">const</span> s = <span class="k">await</span> magpie.read(<span class="s">"usage:summary"</span>, { period: <span class="s">"today"</span> })
+document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls} calls`
+<span class="k">const</span> opts = <span class="k">await</span> magpie.options.get()            <span class="c">// this plugin's own options</span>
+<span class="k">await</span> magpie.options.set({ ...opts, hideCost: <span class="k">true</span> })</pre>
+    </div>
+    <p>插件打开之前，插件页面就会在它的那一行显示这个页面和它能读什么。<code>page.file</code> 和 <code>page.icon</code> 是插件里面的路径；页面的文件就是 <code>file</code> 所在文件夹里的文件，指向外面的路径或链接不会被提供。一个包可以同时是页面、供应商、中间件或 agent。只有页面的插件不会启动插件宿主。</p>
+    <h3>页面能请求什么</h3>
+    <div class="table-wrap"><table>
+      <tr><th>字段 / 调用</th><th>给出什么</th></tr>
+      <tr><td><code>magpie.ready</code></td><td>窗口回应后得到窗口的主题。在那之前页面还没和 magpie 说过话；10 秒内没说的页面会显示为没有回应。</td></tr>
+      <tr><td><code>magpie.theme, magpie.onTheme(fn)</code></td><td><code>{ dark, lang, tokens }</code>。bridge 也会在 <code>&lt;html&gt;</code> 上设置 <code>data-theme</code>、<code>lang</code>、<code>color-scheme</code> 以及 <code>--magpie-bg</code>、<code>--magpie-fg</code>、<code>--magpie-accent</code> 等，每次变化都会再设一次。</td></tr>
+      <tr><td><code>magpie.options.get(), .set(o)</code></td><td>插件自己在 plugins.json 里的选项，不能是别的插件的。<code>set</code> 接受一个对象，返回保存后的选项，每秒最多一次。</td></tr>
+      <tr><td><code>magpie.read(name, params)</code></td><td><code>magpie.permissions</code> 声明过的读取。其他的一律拒绝，窗口拒绝一次，magpie 再拒绝一次。<code>usage:summary</code>（<code>period</code>：<code>today</code>、<code>7d</code> 或 <code>30d</code>）给出调用数、错误数、token 和费用，以及前 20 个模型；<code>providers:list</code> 给出每个供应商的 id 和名字。没有任何读取会给出密钥、账号、登录信息或请求内容。</td></tr>
+    </table></div>
+    <h3>页面不能做什么</h3>
+    <ul>
+      <li>页面运行在只允许脚本的沙盒框架里（<code>sandbox="allow-scripts"</code>，它的 <code>Content-Security-Policy</code> 里也一样），有自己独立的 origin。它碰不到窗口、magpie 的 cookie 和窗口的存储。</li>
+      <li>它的策略只允许加载自己的文件：<code>connect-src 'none'</code>，所以没有 <code>fetch</code>、WebSocket 或 beacon，也没有表单和框架。脚本必须是文件（<code>&lt;script src&gt;</code>），不能内联；内联样式和 <code>data:</code> 图片可以。</li>
+      <li>这种框架能发出的请求（<code>Origin: null</code>、框架请求、别的网站的请求），magpie 的 API 都会拒绝，所以就算没有策略，页面也进不了 API。它的文件从 <code>/_magpie/plugin/&lt;token&gt;/</code> 提供，token 每次 magpie 启动都会变。</li>
+      <li>页面仍然可以把自己跳转到别的网站，那个网站就接管了它的框架。所以读取只给不机密的东西：把页面能读到的都当作公开的。</li>
+      <li>页面没接住的错误会在它的位置显示<span class="ui">此页面已停止工作</span>和<span class="ui">重试</span>。它自己脚本的错误在页面里只显示为“Script error.”，详细内容看窗口的控制台。</li>
     </ul>
 
     <h2 id="pi"><a class="anchor" href="#pi">pi 扩展包</a></h2>

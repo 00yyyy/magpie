@@ -3083,6 +3083,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* a plugin's page that broke (kernel.js): what broke, and Try again */
 .slot-error .row { gap: 14px; padding: 12px 14px; }
 .slot-error .sub { margin-top: 2px; color: var(--fg-2); overflow-wrap: anywhere; }
+/* a community plugin's page (pluginpages.js): its frame fills the page */
+.view.plugin-page { padding: 0; }
+.plugin-frame { flex: 1; display: block; width: 100%; min-height: 240px; border: 0; background: transparent; }
+.view.plugin-page > .slot-error { margin: 0 12px; }
+img.nav-ic { border-radius: 3px; object-fit: contain; }
 .row.pref { min-height: 50px; padding: 8px 12px 8px 14px; gap: 14px; }
 .row.pref .who { flex: 1 1 auto; }
 .row.pref .sub { margin-top: 2px; color: var(--fg-2); }

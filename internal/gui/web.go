@@ -208,6 +208,13 @@ func webGuard(cookie, key string, keep time.Duration, next http.Handler) http.Ha
 		http.Redirect(rw, r, back, http.StatusSeeOther)
 	}
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		// a plugin's page's files: a sandboxed frame's requests carry no
+		// cookie, and its token, which only a signed-in /api hands out,
+		// is the key (servePluginPage serves nothing without a good one)
+		if strings.HasPrefix(r.URL.Path, pluginPagePrefix) {
+			next.ServeHTTP(rw, r)
+			return
+		}
 		if q := r.URL.Query(); q.Has("k") {
 			if !same(q.Get("k")) {
 				http.Error(rw, "this link's key is not this magpie web's: use the link it printed when it started", http.StatusUnauthorized)

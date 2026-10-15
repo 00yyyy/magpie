@@ -39,6 +39,7 @@
   const PLUG = "M6 2v3 M10 2v3 M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0z M8 11v3";
   const PIPE = "M1.5 8h3 M11.5 8h3 M4.5 4.5h7v7h-7z";
   const TERM = "M2 3.5h12v9H2z M4.5 6.5l2 1.5-2 1.5 M8 9.5h3";
+  const PAGE = "M2 3.5h12v9H2z M2 6h12 M4 4.75h.01";
   const FOLDER = "M14.7 12.7a1.3 1.3 0 0 1-1.3 1.3H2.6a1.3 1.3 0 0 1-1.3-1.3V3.3A1.3 1.3 0 0 1 2.6 2h3.3l1.3 2h6.2a1.3 1.3 0 0 1 1.3 1.3z";
 
   // a folder's path is its name whole, as plugin.Name: C:\Users\me@corp\…
@@ -112,11 +113,13 @@
   // subscription and serves its models; middleware ("mw") runs in the
   // gateway on every agent's requests and replies, whatever serves them;
   // an agent ("ag") is one magpie has no wiring of its own for, which it
-  // then connects as it does its own
+  // then connects as it does its own; a page ("pg") is a page of its own
+  // in the window's sidebar (pluginpages.js)
   const KINDS = {
     pv: [PLUG, "Provider", "Signs in to a subscription and serves its models"],
     mw: [PIPE, "Middleware", "Runs in magpie's gateway on the requests your agents send and on the replies"],
     ag: [TERM, "Agent", "Adds an agent magpie has no setup of its own for: pick its model on the Agents page and it goes through magpie"],
+    pg: [PAGE, "Page", "Adds a page of its own to the sidebar. It runs shut off from the rest of magpie and can read only what its row lists"],
   };
   const kindOf = (l) => l.kind === "middleware" ? "mw" : l.kind === "agent" ? "ag" : "pv";
   function kindChip(kind) {
@@ -129,7 +132,7 @@
   function logo(ic, big, kind) {
     const box = el("span", "pm-logo" + (big ? " big" : ""));
     if (ic) box.append(icon(ic));
-    else box.append(glyph(kind === "mw" ? PIPE : kind === "ag" ? TERM : PUZZLE, big ? 22 : 17, 1.4));
+    else box.append(glyph(kind === "mw" ? PIPE : kind === "ag" ? TERM : kind === "pg" ? PAGE : PUZZLE, big ? 22 : 17, 1.4));
     return box;
   }
 
@@ -145,6 +148,8 @@
     try {
       mine = await api("plugins");
       failed = "";
+      // a plugin turned on or off brings its page's tab, or takes it
+      window.loadPluginPages?.();
     } catch (e) {
       failed = e.message;
     }
@@ -1017,6 +1022,7 @@
     if (ag || e.isAgent) nm.append(kindChip("ag"));
     // a plugin of tools alone signs in to nothing: no Provider chip
     const toolsOnly = !!e.tools?.length && !e.providers?.length;
+    if (e.page) nm.append(kindChip("pg"));
     if (e.providers?.length || !(e.middlewareOnly || e.inMagpieOnly || toolsOnly || (mw && !e.isMiddleware) || (ag && !e.isAgent))) nm.append(kindChip("pv"));
     who.append(nm);
     const subs = subsOf(pkg);
@@ -1048,8 +1054,8 @@
         else if (!x.signedIn && subs.some((y) => y.signedIn)) s.title = t("{name} is a subscription of its own; {other} works without it", { name: x.name, other: subs.find((y) => y.signedIn).name });
         sub.append(s);
       }
-    } else if ((mw || ag || toolsOnly) && !e.providers.length) {
-      // only middleware, an agent or tools: its own line says what it does
+    } else if ((mw || ag || toolsOnly || e.page && e.inMagpieOnly) && !e.providers.length) {
+      // only middleware, an agent, tools or a page: its own line says what it does
     } else if (clashes.length && !e.providers.length) {
       // its own line below says whose it is
     } else if (e.providers.length) sub.textContent = t("Signs in to {names}", { names: e.providers.join(t(", ")) });
@@ -1063,10 +1069,12 @@
     if (mw && !e.off && !ask) who.append(mwLine(mw));
     if (ag && !e.off && !ask) who.append(agentLine(ag));
     if (e.tools?.length && !e.off && !ask) who.append(toolsLine(e.tools));
+    // off too: what its page may read is said before it is turned on
+    if (e.page && !ask) who.append(pageLine(e.page));
     if (mw && !e.off && !ask && editing?.pkg === pkg) who.append(optionsEditor(e));
     // the plugin's own picture (package.json's magpie.icon) before its
     // first provider's, which a plugin of several gives each its own (#1775)
-    r.append(logo(l?.icon || l?.npm?.icon || e.icon || subs[0]?.icon || ag?.icon, false, e.middlewareOnly ? "mw" : e.inMagpieOnly && e.isAgent && !e.isMiddleware ? "ag" : ""), who);
+    r.append(logo(l?.icon || l?.npm?.icon || e.icon || subs[0]?.icon || ag?.icon, false, e.middlewareOnly ? "mw" : e.inMagpieOnly && e.isAgent && !e.isMiddleware ? "ag" : e.inMagpieOnly && e.page && !e.isAgent && !e.isMiddleware ? "pg" : ""), who);
     const val = el("div", "val");
     const b = busy.get(pkg) || busy.get(e.spec);
     // npm's newer version, or a git one's repository at a newer commit
@@ -1238,6 +1246,18 @@
     const b = copyBtn(url, t("MCP server address"));
     b.title = t("Copy the MCP server's address ({url}): add it to an agent as an MCP server (Streamable HTTP)", { url });
     d.append(b);
+    return d;
+  }
+
+  // what a plugin's page may read of magpie's: what its package.json's
+  // magpie.permissions declares, each a read with no secret in it
+  const READS = { "usage:summary": "your usage totals, by model", "providers:list": "your providers' names" };
+  function pageLine(p) {
+    const d = el("div", "sub pm-mw pm-page");
+    const reads = (p.reads || []).map((r) => t(READS[r] || r));
+    d.textContent = d.title = reads.length
+      ? t("Adds a page to the sidebar, which can read {reads}", { reads: reads.join(t(", ")) })
+      : t("Adds a page to the sidebar, which reads nothing of magpie's");
     return d;
   }
 

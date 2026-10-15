@@ -307,6 +307,23 @@ posted and doesn't make the editor dirty.
 [`plugin-options.test.cjs`](../../internal/gui/tests/plugin-options.test.cjs)
 covers it.
 
+### A plugin's own page
+
+A community plugin that declares `magpie.page` gets a tab in a Plugins
+group at the sidebar's foot (`pluginpages.js`, loaded after `plugins.js`),
+listed from `GET /api/plugin-pages` and again whenever Plugins reloads its
+list (`window.loadPluginPages`). The tab's title is the plugin's own and is
+not translated; `renderCrumb` and the sub-nav's label read its plain
+`<span>` where a built-in tab has `span[data-t]`. The frame is made the
+first time the page opens and fills the view (`.view.plugin-page`,
+`.plugin-frame`). The theme and language reach it on every change of
+`data-theme`, `lang`, `class` or `style` on `:root`. A page gone off or
+away loses its tab, and the window goes to Plugins if it was on it. The
+security model, the bridge and the reads are in
+[plugin-runtime.md](plugin-runtime.md#p4-community-plugins-at-every-point).
+[`plugin-page.test.cjs`](../../internal/gui/tests/plugin-page.test.cjs)
+covers it in both engines, every language and a narrow window.
+
 ### Shared UI rules
 
 - Settings → General is laid out as macOS System Settings is (1ooogle on X): a row says its name alone when that says enough (Appearance, Colorblind mode, Language, Text size, the fonts, the tray click, the Codex model rows, Open at login, Show in Dock), and keeps one short line where the setting isn't clear from its name or has a consequence (Long conversations, Lightweight mode, Prevent sleep, Session terminal, Codex subagents). A font row's line shows only while its fonts load or fail; the text size keys are the choices' tooltip, and Colorblind mode's note is its Off/On control's (`#colorblindSegs`). Colorblind mode (`settings.Colorblind`, `data-colorblind="1"` on `:root`, #2073) switches the chart series (`--c1`…`--c7`) in both light and dark themes to an Okabe–Ito palette where adjacent series differ in hue and lightness. On a quota curve each window (`data-series`, its index mod 7, set by `drawQuotaPlot` and `quotaCurve`'s legend only) gets a dash of its own on `path.qc-line`, its legend key shows a sample of that line (`.qc-sample`) for the dot, and the even paces (`line.qc-even`) are dotted; the curve's tooltip says so. The balance curve sets no `data-series` and keeps its solid line, dashed fit and dot. The Context tab's "good" grade, which takes `--c2` as a colour rather than a series, keeps a blue (`--c1`). Language is one menu button showing the language picked, opened in the app's menu (`renderLangPick`). See `settings-general.test.cjs` and `quota-curve.test.cjs`.

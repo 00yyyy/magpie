@@ -86,6 +86,7 @@
     <a href="#middleware">Gateway middleware</a>
     <a href="#tools">Tools for every agent</a>
     <a href="#agents">Agent plugins</a>
+    <a href="#pages">Pages in the window</a>
     <a href="#pi">pi packages</a>
     <a href="#protocol">The host protocol</a>
     <a href="#faq">FAQ</a>
@@ -753,6 +754,56 @@ claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/to
       <li><b>How it runs.</b> As <a href="#middleware">middleware</a> does: in moejs, in magpie’s own process, with imports inside the plugin only, no Node APIs and <code>console.log</code> into magpie’s log. Loading and <code>connect</code> each have a second. A plugin whose module doesn’t load, or whose <code>connect</code> throws, says why in its row on the Plugins page and writes nothing.</li>
       <li><b>The Library.</b> With <code>library</code>, the agent is one of the Library’s agents: its instructions go between magpie’s marker lines in the file, its MCP servers into the file beside the user’s own (whose other fields are kept), and its skills linked or copied into the folder. Taking one off takes away only what magpie wrote there, and what a file held before is kept in magpie’s backups. An <code>mcpFormat</code> that isn’t one of the list, or an <code>mcp</code> without one, keeps the plugin from loading.</li>
       <li><b>Declaring it.</b> <code>"magpie": { "agent": "./agent.js" }</code> in <code>package.json</code>, or a single file named <code>*.agent.js</code> (or <code>.mjs</code>). A package can be a provider, middleware and an agent at once. In the plugin market an agent’s entry has <code>"kind": "agent"</code> and is listed under <span class="ui">Agents</span>; a community one is named <code>@magpie-community/agent-&lt;name&gt;</code>.</li>
+    </ul>
+
+    <h2 id="pages"><a class="anchor" href="#pages">Pages in the window</a></h2>
+    <p>A plugin can add a page of its own to magpie’s window. Once it is on, the page has a tab in the sidebar’s <span class="ui">Plugins</span> group, after magpie’s own pages. The page is plain HTML, CSS and JavaScript in the plugin’s folder, and needs no Bun and no build step. The example below shows today’s usage.</p>
+    <div class="code">
+      <span class="lang">package.json</span>
+      <button class="copy" data-copy="pg-pkg">Copy</button>
+      <pre id="pg-pkg">{
+  <span class="s">"name"</span>: <span class="s">"magpie-usage-glance"</span>,
+  <span class="s">"version"</span>: <span class="s">"0.1.0"</span>,
+  <span class="s">"magpie"</span>: {
+    <span class="s">"page"</span>: { <span class="s">"title"</span>: <span class="s">"Usage glance"</span>, <span class="s">"file"</span>: <span class="s">"page/index.html"</span>, <span class="s">"icon"</span>: <span class="s">"page/icon.svg"</span> },
+    <span class="s">"permissions"</span>: [<span class="s">"usage:summary"</span>]
+  }
+}</pre>
+    </div>
+    <div class="code">
+      <span class="lang">page/index.html</span>
+      <button class="copy" data-copy="pg-html">Copy</button>
+      <pre id="pg-html">&lt;!doctype html&gt;
+&lt;link rel="stylesheet" href="style.css"&gt;
+&lt;script src="_magpie/bridge.js"&gt;&lt;/script&gt;   <span class="c">&lt;!-- served beside every page --&gt;</span>
+&lt;script src="app.js" defer&gt;&lt;/script&gt;
+&lt;p id="calls"&gt;…&lt;/p&gt;</pre>
+    </div>
+    <div class="code">
+      <span class="lang">page/app.js</span>
+      <button class="copy" data-copy="pg-js">Copy</button>
+      <pre id="pg-js"><span class="k">await</span> magpie.ready                                  <span class="c">// the window's theme, painted</span>
+<span class="k">const</span> s = <span class="k">await</span> magpie.read(<span class="s">"usage:summary"</span>, { period: <span class="s">"today"</span> })
+document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls} calls`
+<span class="k">const</span> opts = <span class="k">await</span> magpie.options.get()            <span class="c">// this plugin's own options</span>
+<span class="k">await</span> magpie.options.set({ ...opts, hideCost: <span class="k">true</span> })</pre>
+    </div>
+    <p>The Plugins page shows the page, and what it may read, on the plugin’s row before it is turned on. <code>page.file</code> and <code>page.icon</code> are paths inside the plugin. The page’s files are what sits in <code>file</code>’s folder; a path out of it, or a link that leads out, isn’t served. A package can be a page and a provider, middleware or an agent too. A plugin that is only a page doesn’t start the plugin host.</p>
+    <h3>What the page can ask</h3>
+    <div class="table-wrap"><table>
+      <tr><th>Field / call</th><th>What it gives</th></tr>
+      <tr><td><code>magpie.ready</code></td><td>A promise of the window’s theme. It resolves once the window has answered. Until then the page has said nothing to magpie, and a page that doesn’t say it in 10 seconds is shown as not answering.</td></tr>
+      <tr><td><code>magpie.theme, magpie.onTheme(fn)</code></td><td><code>{ dark, lang, tokens }</code>. The bridge also sets <code>data-theme</code>, <code>lang</code>, <code>color-scheme</code> and <code>--magpie-bg</code>, <code>--magpie-fg</code>, <code>--magpie-accent</code> and so on on <code>&lt;html&gt;</code>, and again on each change.</td></tr>
+      <tr><td><code>magpie.options.get(), .set(o)</code></td><td>The plugin’s own options in plugins.json, never another plugin’s. <code>set</code> takes an object and answers with the options saved. It can be called at most once a second.</td></tr>
+      <tr><td><code>magpie.read(name, params)</code></td><td>A read that <code>magpie.permissions</code> declares. Anything else is refused, by the window and again by magpie. <code>usage:summary</code> (<code>period</code>: <code>today</code>, <code>7d</code> or <code>30d</code>) gives calls, errors, tokens and cost, with the top 20 models. <code>providers:list</code> gives each provider’s id and name. No read gives keys, accounts, sign-ins or request bodies.</td></tr>
+    </table></div>
+    <h3>What the page can’t do</h3>
+    <ul>
+      <li>The page runs in a frame sandboxed to scripts alone (<code>sandbox="allow-scripts"</code>, and the same in its <code>Content-Security-Policy</code>), in an origin of its own. It can’t reach the window, magpie’s cookie or the window’s storage.</li>
+      <li>Its policy allows its own files and nothing else: <code>connect-src 'none'</code>, so no <code>fetch</code>, WebSocket or beacon, and no forms or frames. Scripts must be files (<code>&lt;script src&gt;</code>), not inline. Inline styles and <code>data:</code> pictures are fine.</li>
+      <li>magpie’s API refuses any request a frame like this one can make (<code>Origin: null</code>, a frame or another site’s request), so it is closed to the page even without the policy. Its files are served at <code>/_magpie/plugin/&lt;token&gt;/</code>, a token that changes each time magpie starts.</li>
+      <li>A page can still send itself to another site, which then holds its frame. That is why reads give nothing secret. Treat what a page can read as public.</li>
+      <li>An error the page doesn’t catch shows <span class="ui">This page stopped working</span> in its place, with <span class="ui">Try again</span>. Its own scripts’ errors reach it as “Script error.”, so look in the window’s console for the rest.</li>
     </ul>
 
     <h2 id="pi"><a class="anchor" href="#pi">pi packages</a></h2>

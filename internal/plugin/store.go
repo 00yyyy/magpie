@@ -469,6 +469,9 @@ func notPlugin(target string) error {
 	if f, _ := Agent(target); f != "" {
 		return nil
 	}
+	if p, _ := WindowPage(target); p != nil {
+		return nil
+	}
 	var pkg struct {
 		Name    string          `json:"name"`
 		Main    string          `json:"main"`

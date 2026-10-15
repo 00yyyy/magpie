@@ -247,13 +247,15 @@ asks it.
 
 ## P4: community plugins at every point
 
-P4 opens each gateway extension point to community plugins (OpenCode
-plugins, npm packages in the plugin host), each behind the built-in plugin
-that serves the point, so off still means off.
+P4 opens each extension point, the gateway's and the window's, to
+community plugins (OpenCode plugins, npm packages in the plugin host). A
+gateway point stays behind the built-in plugin that serves it, so off
+still means off; a page is its own plugin's to turn on and off.
 
 | Point | What a community plugin gives | Served by | Reference |
 | --- | --- | --- | --- |
 | Tool | Its OpenCode `tool` hook's tools, offered to every agent by magpie's MCP server at `/mcp/magpie/tools`, each named `<plugin>_<tool>`, each call held to the calling key's limit and run in the host within 55s. Off, no tool is listed and a call says the plugin is off. | `plugins/tools` ("Plugin tools", Essential; `InUse` counts the plugins on that give tools, from `plugin-tools.json`), `gwtool.PluginTools` | [Plugin tools](plugin-tools.md) |
+| A page in the window | `magpie.page {title, file, icon}` and `magpie.permissions` in package.json, installed from npm, GitHub or a folder like any plugin (`plugin.WindowPage`: `file` an .html inside the plugin, the icon in the page's folder, reads kept to `plugin.PageReads`). An on plugin's page gets a tab in the sidebar's Plugins group, after the built-in pages (`pluginpages.js`, a kernel `page` part). It runs in an iframe sandboxed to `allow-scripts`, its files served from `/_magpie/plugin/<token>/` (an HMAC of the spec with a secret of this run) under a policy of `sandbox allow-scripts`, its own folder only, `connect-src 'none'`. The frame talks to the window by `postMessage`: the window answers only its own frame (`ev.source`), with the theme, its own options (`/api/plugin-pages/options`, at most once a second, saved without restarting the host for a page-only plugin) and the reads it declared (`/api/plugin-pages/read`, checked again by the server): `usage:summary` (totals and the top 20 models) and `providers:list` (ids and names). Nothing secret is readable, since a page can still send its frame to another site. `noFramedAPI` turns away every `/api/` request a sandboxed frame or another site can send (`Origin: null`, `Sec-Fetch-Dest` a frame, a cross-site subresource), since the desktop window's API has no key; `webGuard` lets the prefix through without the cookie the frame never sends, and the token is the key. A page that throws, or doesn't say hello in 10s, is broken through the kernel (`ctx.broke`), with Try again. The Plugins page shows the page and its reads on the row before the plugin is on. A plugin that is only a page is in-magpie-only: no Bun host starts for it. Tests: `TestWindowPageStaysInside`, `TestPluginPageServedShutIn`, `TestPluginPageReadsWhatItDeclared`, `TestPluginPageNoAPI`, `TestPluginPageWebGuard`, `plugin-page.test.cjs`. Example: `internal/gui/testdata/page-plugin`. | the window, no built-in plugin: the page is the plugin's own on/off | [`page.go`](../../internal/plugin/page.go), [`pluginpage.go`](../../internal/gui/pluginpage.go), [`pagebridge.js`](../../internal/gui/pagebridge.js), [`pluginpages.js`](../../internal/gui/assets/pluginpages.js) |
 
 ## Source of truth and composing
 

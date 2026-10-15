@@ -86,6 +86,7 @@
     <a href="#middleware">ゲートウェイミドルウェア</a>
     <a href="#tools">すべてのエージェントのツール</a>
     <a href="#agents">エージェントプラグイン</a>
+    <a href="#pages">ウィンドウのページ</a>
     <a href="#pi">pi パッケージ</a>
     <a href="#protocol">ホストプロトコル</a>
     <a href="#faq">よくある質問</a>
@@ -753,6 +754,56 @@ claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/to
       <li><b>実行のされ方。</b><a href="#middleware">ミドルウェア</a>と同じく、magpie 自身のプロセスの moejs で動きます。インポートはプラグイン内のファイルのみ、Node API はなく、<code>console.log</code> は magpie のログに出ます。読み込みと <code>connect</code> はそれぞれ 1 秒まで。モジュールが読み込めない、または <code>connect</code> が例外を投げたプラグインは、プラグインページの行に理由を表示し、何も書き込みません。</li>
       <li><b>ライブラリ。</b><code>library</code> があれば、組み込みのエージェントと同じくライブラリの中身を受け取ります：指示はファイル内の magpie の目印の行の間に、MCP サーバーはユーザー自身のものと同じファイルに（ユーザーが足したフィールドは残ります）、スキルはリンクかコピーでフォルダに入ります。外すときは magpie が書いた分だけを取り除き、元の内容は magpie のバックアップに残ります。<code>mcpFormat</code> がリストにない、または <code>mcp</code> に <code>mcpFormat</code> がないと、プラグインは読み込まれません。</li>
       <li><b>宣言。</b><code>package.json</code> の <code>"magpie": { "agent": "./agent.js" }</code>、または <code>*.agent.js</code>（または <code>.mjs</code>）という単一ファイル。1 つのパッケージがプロバイダー、ミドルウェア、エージェントを兼ねられます。プラグインマーケットではエージェントのエントリーに <code>"kind": "agent"</code> を付け、<span class="ui">エージェント</span>の下に並びます。コミュニティのものは <code>@magpie-community/agent-&lt;name&gt;</code> と名付けます。</li>
+    </ul>
+
+    <h2 id="pages"><a class="anchor" href="#pages">ウィンドウのページ</a></h2>
+    <p>プラグインは magpie のウィンドウに自分のページを追加できます。オンにすると、サイドバーの<span class="ui">プラグイン</span>グループの、magpie 自身のページの後ろにタブが出ます。ページはプラグインのフォルダにある HTML、CSS、JavaScript だけで、Bun もビルドも要りません。下の例は今日の使用量を表示します。</p>
+    <div class="code">
+      <span class="lang">package.json</span>
+      <button class="copy" data-copy="pg-pkg">コピー</button>
+      <pre id="pg-pkg">{
+  <span class="s">"name"</span>: <span class="s">"magpie-usage-glance"</span>,
+  <span class="s">"version"</span>: <span class="s">"0.1.0"</span>,
+  <span class="s">"magpie"</span>: {
+    <span class="s">"page"</span>: { <span class="s">"title"</span>: <span class="s">"Usage glance"</span>, <span class="s">"file"</span>: <span class="s">"page/index.html"</span>, <span class="s">"icon"</span>: <span class="s">"page/icon.svg"</span> },
+    <span class="s">"permissions"</span>: [<span class="s">"usage:summary"</span>]
+  }
+}</pre>
+    </div>
+    <div class="code">
+      <span class="lang">page/index.html</span>
+      <button class="copy" data-copy="pg-html">コピー</button>
+      <pre id="pg-html">&lt;!doctype html&gt;
+&lt;link rel="stylesheet" href="style.css"&gt;
+&lt;script src="_magpie/bridge.js"&gt;&lt;/script&gt;   <span class="c">&lt;!-- served beside every page --&gt;</span>
+&lt;script src="app.js" defer&gt;&lt;/script&gt;
+&lt;p id="calls"&gt;…&lt;/p&gt;</pre>
+    </div>
+    <div class="code">
+      <span class="lang">page/app.js</span>
+      <button class="copy" data-copy="pg-js">コピー</button>
+      <pre id="pg-js"><span class="k">await</span> magpie.ready                                  <span class="c">// the window's theme, painted</span>
+<span class="k">const</span> s = <span class="k">await</span> magpie.read(<span class="s">"usage:summary"</span>, { period: <span class="s">"today"</span> })
+document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls} calls`
+<span class="k">const</span> opts = <span class="k">await</span> magpie.options.get()            <span class="c">// this plugin's own options</span>
+<span class="k">await</span> magpie.options.set({ ...opts, hideCost: <span class="k">true</span> })</pre>
+    </div>
+    <p>プラグインページの行には、オンにする前からページと読めるものが表示されます。<code>page.file</code> と <code>page.icon</code> はプラグイン内のパスです。ページのファイルは <code>file</code> のフォルダにあるものだけで、外を指すパスやリンクは配信されません。1 つのパッケージがページとプロバイダ、ミドルウェア、エージェントを兼ねることもできます。ページだけのプラグインはプラグインホストを起動しません。</p>
+    <h3>ページが頼めること</h3>
+    <div class="table-wrap"><table>
+      <tr><th>フィールド / 呼び出し</th><th>返すもの</th></tr>
+      <tr><td><code>magpie.ready</code></td><td>ウィンドウが応答すると、ウィンドウのテーマが得られます。それまでページは magpie と何も話していません。10 秒以内に話さないページは応答なしと表示されます。</td></tr>
+      <tr><td><code>magpie.theme, magpie.onTheme(fn)</code></td><td><code>{ dark, lang, tokens }</code>。bridge は <code>&lt;html&gt;</code> に <code>data-theme</code>、<code>lang</code>、<code>color-scheme</code> と <code>--magpie-bg</code>、<code>--magpie-fg</code>、<code>--magpie-accent</code> なども設定し、変わるたびに設定し直します。</td></tr>
+      <tr><td><code>magpie.options.get(), .set(o)</code></td><td>plugins.json にあるそのプラグイン自身のオプションです。ほかのプラグインのものは扱えません。<code>set</code> はオブジェクトを受け取り、保存されたオプションを返します。呼べるのは 1 秒に 1 回までです。</td></tr>
+      <tr><td><code>magpie.read(name, params)</code></td><td><code>magpie.permissions</code> で宣言した読み取りです。それ以外はウィンドウが拒否し、magpie ももう一度拒否します。<code>usage:summary</code>（<code>period</code>：<code>today</code>、<code>7d</code>、<code>30d</code>）は呼び出し数、エラー数、トークン、費用と上位 20 モデルを、<code>providers:list</code> は各プロバイダの id と名前を返します。キー、アカウント、サインイン、リクエスト本文を返す読み取りはありません。</td></tr>
+    </table></div>
+    <h3>ページにできないこと</h3>
+    <ul>
+      <li>ページはスクリプトだけを許したサンドボックスのフレーム（<code>sandbox="allow-scripts"</code>、<code>Content-Security-Policy</code> でも同じ）で、独自のオリジンで動きます。ウィンドウにも、magpie の cookie にも、ウィンドウのストレージにも届きません。</li>
+      <li>ポリシーで読み込めるのは自分のファイルだけです。<code>connect-src 'none'</code> なので <code>fetch</code>、WebSocket、beacon は使えず、フォームやフレームもありません。スクリプトはファイル（<code>&lt;script src&gt;</code>）にする必要があり、インラインは使えません。インラインのスタイルと <code>data:</code> の画像は使えます。</li>
+      <li>このようなフレームが送れるリクエスト（<code>Origin: null</code>、フレームからのリクエスト、ほかのサイトのリクエスト）は magpie の API がすべて拒否するので、ポリシーがなくてもページは API に入れません。ファイルは <code>/_magpie/plugin/&lt;token&gt;/</code> から配信され、token は magpie を起動するたびに変わります。</li>
+      <li>それでもページは自分をほかのサイトへ移動できます。そのサイトがフレームを持つことになるので、読み取りは秘密でないものだけを返します。ページが読めるものは公開されたものとして扱ってください。</li>
+      <li>ページが捕まえなかったエラーは、その場所に<span class="ui">このページは動作を停止しました</span>と<span class="ui">再試行</span>を表示します。ページ自身のスクリプトのエラーはページには「Script error.」としか届かないので、詳しくはウィンドウのコンソールを見てください。</li>
     </ul>
 
     <h2 id="pi"><a class="anchor" href="#pi">pi パッケージ</a></h2>

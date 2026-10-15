@@ -25,6 +25,13 @@
       // ctx.config has it
       onConfig(fn) { p.onConfig.push(fn); },
       onDispose(fn) { p.disposers.push(fn); },
+      // a page of the plugin's that broke after its hook returned (a
+      // frame's own error, one that never answered): it shows what broke,
+      // with a Try again, as a hook that throws does
+      broke(key, err) {
+        const page = pages.get(key);
+        if (page && page.plugin === p && !page.broken) fail(page, "open", [], err);
+      },
       slots: { add: (slot, part) => add(p, slot, part) },
       ui,
     };

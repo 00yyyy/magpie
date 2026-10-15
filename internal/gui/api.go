@@ -789,6 +789,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", devPage(revalidated(http.FileServer(http.FS(staticFS())))))
 	devRoutes(mux)
+	pluginPageRoutes(mux)
 	// boot.js hands the page the saved language and theme before it paints:
 	// they came only with the settings, so the tabs showed English first
 	mux.HandleFunc("GET /boot.js", func(rw http.ResponseWriter, r *http.Request) {
@@ -2183,7 +2184,19 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	})
 	agentModelsAPI(mux)
 	devListen(mux)
-	return held(mux)
+	return noFramedAPI(held(mux))
+}
+
+// noFramedAPI turns away a request for /api that no page of the window's
+// own makes (apiFramed): a plugin's page in its frame among them.
+func noFramedAPI(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if apiFramed(r) {
+			http.Error(rw, "magpie's API answers magpie's own window only", http.StatusForbidden)
+			return
+		}
+		h.ServeHTTP(rw, r)
+	})
 }
 
 // held has a page's reads share one build of the catalog, which every row

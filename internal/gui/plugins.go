@@ -134,6 +134,10 @@ type pluginEntryJSON struct {
 	Agent        *pluginAgentJSON `json:"agent,omitempty"`
 	IsAgent      bool             `json:"isAgent,omitempty"`
 	InMagpieOnly bool             `json:"inMagpieOnly,omitempty"`
+	// Page is the page it adds to the window (magpie.page), said of one
+	// switched off too: what the row shows before it is turned on, with
+	// what the page may read of magpie's
+	Page *pluginPageInfoJSON `json:"page,omitempty"`
 	// Clashes are the providers it signs in to that another plugin signs
 	// in to as well (a plugin of the user's own beside a third party's):
 	// the host runs one plugin for each, and the row says which, with a
@@ -150,6 +154,12 @@ type pluginToolJSON struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	MCP         string `json:"mcp"` // its name on the MCP server
+}
+
+// pluginPageInfoJSON is a plugin's page as its row says it.
+type pluginPageInfoJSON struct {
+	Title string   `json:"title,omitempty"`
+	Reads []string `json:"reads"`
 }
 
 // pluginClashJSON is a provider two plugins sign in to, as a row says it.
@@ -265,6 +275,13 @@ func pluginsState(ctx context.Context, w Windows) pluginsJSON {
 			if !e.Off {
 				j.Agent = pluginAgentOf(e.Spec, agentErrs)
 			}
+		}
+		if pg, _ := plugin.WindowPage(plugin.Target(e.Spec)); pg != nil {
+			j.Page = &pluginPageInfoJSON{Title: pg.Title, Reads: pg.Reads}
+			if j.Page.Reads == nil {
+				j.Page.Reads = []string{}
+			}
+			j.InMagpieOnly = plugin.InMagpieOnly(plugin.Target(e.Spec))
 		}
 		for _, c := range clashes[e.Spec] {
 			n := idName[c.ID]
