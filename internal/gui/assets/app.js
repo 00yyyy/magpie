@@ -8512,6 +8512,16 @@ function drawEditor(p, presetID) {
     wrap.append(name, hint);
     ed.append(el("label", "", t("Name")), wrap);
   }
+  // an added preset's name is the user's, as a custom provider's is: two
+  // of a vendor's sites (Kimi and Kimi (China)) named as they tell them
+  // apart, in the list and every picker (yapechan on Discord). Left empty,
+  // it is the preset's again
+  if (p && pr && !p.account) {
+    name = input(draft.name === pr.name ? "" : draft.name, pr.name);
+    name.className = "provider-name";
+    name.oninput = () => { draft.name = name.value.trim() || pr.name; };
+    ed.append(...field(t("Name"), name));
+  }
   // an added provider's id can change: its models are picked by it, and
   // the agents and routing groups on them move to the new one
   const idField = () => {
