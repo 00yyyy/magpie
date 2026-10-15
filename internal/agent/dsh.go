@@ -111,12 +111,13 @@ func dshAt(at place) *Agent {
 			if desktop() && dshUnopened(dir) {
 				// nothing of dsh's runs on it yet to be restarted
 				notes = append(notes, noticeDsh5.String())
+			} else if len(dshProfiles(dir)) > 0 {
+				// a session dsh already has keeps the model it was on,
+				// running or not: agent-default-model is read for new
+				// ones only (#2359)
+				notes = append(notes, noticeDsh1.String())
 			} else if Running(`DeepSeek Harness\.app/`, `(^|/)dsh( |$)`) {
-				if len(dshProfiles(dir)) > 0 {
-					notes = append(notes, noticeDsh1.String())
-				} else {
-					notes = append(notes, noticeDsh2.String())
-				}
+				notes = append(notes, noticeDsh2.String())
 			}
 			if dshSearchesHere(dir) && !gateway.CanSearch() {
 				notes = append(notes, noticeDsh3.String())
@@ -2129,7 +2130,7 @@ func dshSettingsEndpoint(path string) bool {
 
 // what dsh says after a change (notice.go)
 var (
-	noticeDsh1 = newNotice("New dsh sessions start on this; one already open keeps its model until you pick another in it. A dsh started with -p or in a terminal reads it at start-up.")
+	noticeDsh1 = newNotice("New dsh sessions start on this. A session made before keeps its model, open now or reopened later, until you pick another in it with /model or the model button by its message box. A dsh started with -p or in a terminal reads it at start-up.")
 	noticeDsh2 = newNotice("dsh reads its config at start-up — restart open dsh sessions to use this.")
 	noticeDsh3 = newNotice("dsh's web search goes through magpie, which has nothing to search with yet: set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Web search.")
 	noticeDsh4 = newNotice("~/.dsh/settings.yaml sets its own DeepSeek endpoint or key, which dsh puts over magpie's; clear it in dsh's Models page to go through magpie.")
