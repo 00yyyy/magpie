@@ -1430,5 +1430,48 @@ func RenameGroup(from, to string) error {
 			f.Groups[i].Classifier = now
 		}
 	}
-	return store(f)
+	if err := store(f); err != nil {
+		return err
+	}
+	return renameGroupPicks(old, now)
+}
+
+// renameGroupPicks moves what each agent's list says of a group to its new
+// id, as renameModelPrefs does a provider's models: picked for an agent
+// shown only its picks, taken out, put in an order, sent fast. Left under
+// the old id, a group picked for Pi was off in Pi's list after its rename
+// (#2289, eachann1024), the id it was picked by no longer in the catalog.
+func renameGroupPicks(old, now string) error {
+	s := settings.Load()
+	moved := false
+	// the hidden and the picked are kept sorted (sortedIDs); an order is
+	// the user's own
+	for i, m := range []map[string][]string{s.HiddenModels, s.PickedModels, s.OrderedModels, s.FastPicks} {
+		for agent, ids := range m {
+			if !slices.Contains(ids, old) {
+				continue
+			}
+			var out []string
+			for _, id := range ids {
+				if id == old {
+					id = now
+				}
+				if !slices.Contains(out, id) {
+					out = append(out, id)
+				}
+			}
+			if i < 2 {
+				out = sortedIDs(out)
+			}
+			m[agent], moved = out, true
+		}
+	}
+	if !moved {
+		return nil
+	}
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
 }
