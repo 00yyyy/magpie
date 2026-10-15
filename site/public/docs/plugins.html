@@ -84,6 +84,7 @@
     <a href="#test">Testing</a>
     <a href="#publish">Publishing and listing</a>
     <a href="#middleware">Gateway middleware</a>
+    <a href="#tools">Tools for every agent</a>
     <a href="#agents">Agent plugins</a>
     <a href="#pi">pi packages</a>
     <a href="#protocol">The host protocol</a>
@@ -669,6 +670,35 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
     <p><code>ctx</code> has <code>protocol</code> (<code>anthropic</code>, <code>chat</code>, <code>responses</code> or <code>gemini</code>), <code>model</code> and <code>stream</code> as the agent asked, <code>path</code>, <code>agent</code> when magpie knows it, <code>options</code> (the plugin’s <a href="#middleware-options">options</a>) and <code>state</code>, an object of the request’s own.</p>
     <h3>When a hook fails</h3>
     <p>A hook has 250 ms for a request or a whole reply and 50 ms for an event; loading has a second. A hook that throws, runs out of time or returns something else goes on as if it weren’t there: the request or the event is sent as it was. Settings → Plugins shows each middleware’s hooks, how many calls it had, the average time each took and how many failed, with the last error. The hooks see what the agent sent and gets back, before magpie’s redaction on the way out and after it on the way back. magpie’s own requests (thread titles, the router’s classifier) don’t go through middleware.</p>
+
+    <h2 id="tools"><a class="anchor" href="#tools">Tools for every agent</a></h2>
+    <p>A plugin can give tools, with OpenCode’s <code>tool</code> hook, and magpie offers them to every agent, not only OpenCode: they are an MCP server of magpie’s own at <code>/mcp/magpie/tools</code> (Streamable HTTP). Add that address to any agent that takes an MCP server, and its model can call every tool your plugins that are on give. Each is named <code>&lt;plugin&gt;_&lt;tool&gt;</code>, the plugin’s short name first: <code>weather-tools_now</code> below.</p>
+    <div class="code">
+      <span class="lang">index.js</span>
+      <button class="copy" data-copy="tools-ex">Copy</button>
+      <pre id="tools-ex"><span class="k">import</span> { tool } <span class="k">from</span> <span class="s">"@opencode-ai/plugin"</span>
+
+<span class="k">export const</span> WeatherTools = <span class="k">async</span> () =&gt; ({
+  tool: {
+    now: tool({
+      description: <span class="s">"The weather now in a city."</span>,
+      args: { city: tool.schema.string().describe(<span class="s">"A city, e.g. Berlin"</span>) },
+      <span class="k">async</span> execute({ city }, ctx) {
+        <span class="k">const</span> r = <span class="k">await</span> fetch(<span class="s">`https://wttr.in/${encodeURIComponent(city)}?format=3`</span>, { signal: ctx.abort })
+        <span class="k">return</span> <span class="k">await</span> r.text()  <span class="c">// text; an object is sent as its JSON</span>
+      },
+    }),
+  },
+})</pre>
+    </div>
+    <div class="code">
+      <span class="lang">shell</span>
+      <button class="copy" data-copy="tools-cli">Copy</button>
+      <pre id="tools-cli">magpie plugin add ./weather-tools
+claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/tools   <span class="c"># Claude Code; other agents take the same address</span></pre>
+    </div>
+    <p>Settings → Plugins lists each plugin’s tools by these names and copies the server’s address. <code>args</code> is a zod shape (<code>tool.schema</code> is zod), a zod object or a JSON Schema object. The agent is shown it, and magpie checks a call’s arguments against it before <code>execute</code> runs; a wrong argument is answered as an error naming it. <code>ctx</code> is OpenCode’s, with <code>agent</code> the agent that called. A tool has 55 seconds, and <code>ctx.abort</code> fires when they are up.</p>
+    <p>The built-in plugin <span class="ui">Plugin tools</span> serves the server. It stays on while a plugin that is on gives a tool; off, no tool is listed and a call says so. A call made with a gateway key counts against that key’s limits. A tool runs in the plugin host with your rights, as a provider plugin does, and its answer goes only to the agent that called it.</p>
 
     <h2 id="agents"><a class="anchor" href="#agents">Agent plugins</a></h2>
     <p>A plugin can also add an <em>agent</em>: one magpie has no setup of its own for. It says where the agent keeps its model and what else to write there for the agent to use magpie’s gateway. The agent is then on the <span class="ui">Agents</span> page like magpie’s own: pick one of magpie’s models in its row and magpie writes it into the agent’s config, with the gateway’s address and a key of the agent’s own; switch it off and everything goes back to how the user had it. The example below adds <a href="https://aider.chat">Aider</a>.</p>

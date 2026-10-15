@@ -245,6 +245,16 @@ asks it.
 | `plugins/budget` | Requires `settings` and `gateway`, Essential. Apply serves `budget.Limiter`, `internal/budget`'s windows and reservations as before. `InUse` counts the gateway keys with a limit (`access.List`); a keys file that can't be read is an error, so it stays on. Since it is in use whenever a key has a limit, it can only be off while none has; the 503 is for a refresh not yet seen or a plugins.yml edited by hand. The gateway's `KeepFresh` watches the keys file too, so a limit set from the CLI or the window turns it on within 2s. | [`budget.go`](../../plugins/budget/budget.go) |
 | Stays in the core | What a key has used and has left (`budget.All`, `budget.Binding`) for `/v1/magpie/limit`, the Gateway page and the CLI, and `budget.Append`, so the usage ledger counts a key's use the same with the plugin on or off. The key editor's limit fields stay with the plugin off, since setting a limit is what turns it back on. | [`budget.go`](../../internal/budget/budget.go) |
 
+## P4: community plugins at every point
+
+P4 opens each gateway extension point to community plugins (OpenCode
+plugins, npm packages in the plugin host), each behind the built-in plugin
+that serves the point, so off still means off.
+
+| Point | What a community plugin gives | Served by | Reference |
+| --- | --- | --- | --- |
+| Tool | Its OpenCode `tool` hook's tools, offered to every agent by magpie's MCP server at `/mcp/magpie/tools`, each named `<plugin>_<tool>`, each call held to the calling key's limit and run in the host within 55s. Off, no tool is listed and a call says the plugin is off. | `plugins/tools` ("Plugin tools", Essential; `InUse` counts the plugins on that give tools, from `plugin-tools.json`), `gwtool.PluginTools` | [Plugin tools](plugin-tools.md) |
+
 ## Source of truth and composing
 
 What a plugin runs with is composed field by field (`Compose`), each value

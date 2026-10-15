@@ -1207,13 +1207,172 @@ const signsIn = (spec) => [...new Set(hooks.filter((h) => h.spec === spec && h.h
 // withProviders is a loaded plugin as init tells magpie of it: the provider
 // ids it signs in to, and for each one another plugin serves (two plugins
 // naming one id: the host runs one), the plugin that does. magpie says so
-// on the plugin's row rather than leave its provider missing.
+// on the plugin's row rather than leave its provider missing. And the
+// tools it gives (toolList).
 function withProviders(l) {
+  const tools = l.error ? [] : toolList(l.spec)
+  if (tools.length) l = { ...l, tools }
   const ids = l.error ? [] : signsIn(l.spec)
   if (!ids.length) return l
   const a = auths()
   const servedBy = Object.fromEntries(ids.filter((id) => a.get(id) && a.get(id).spec !== l.spec).map((id) => [id, a.get(id).spec]))
   return { ...l, provides: ids, ...(Object.keys(servedBy).length ? { servedBy } : {}) }
+}
+
+// ---- tools ----------------------------------------------------------------
+//
+// A plugin's tools are OpenCode's tool hook: {tool: {name: {description,
+// args, execute(args, ctx)}}}, args a zod shape (OpenCode's tool.schema is
+// zod) or a JSON Schema. magpie offers them to every agent through its
+// plugin tools MCP server (internal/gateway/tools_mcp.go), so each is told
+// to magpie by its name, description and a JSON Schema of its arguments.
+
+const TOOL_NAME = /^[A-Za-z0-9_-]{1,48}$/
+
+// toolsOf are the tools the plugin spec's hooks give, the last of a name
+// winning, as in OpenCode.
+function toolsOf(spec) {
+  const m = new Map()
+  for (const h of hooks) {
+    if (h.spec !== spec) continue
+    const t = h.hooks.tool
+    if (!t || typeof t !== "object") continue
+    for (const [name, def] of Object.entries(t)) {
+      if (TOOL_NAME.test(name) && def && typeof def.execute === "function") m.set(name, def)
+    }
+  }
+  return m
+}
+
+// jsonSchema is a zod schema (v3 or v4) as JSON Schema, or a JSON Schema
+// as it is. What it can't read is {}: any value.
+function jsonSchema(z, depth = 0) {
+  if (!z || typeof z !== "object" || depth > 16) return {}
+  const desc = (o) => {
+    const d = typeof z.description === "string" ? z.description : z._def?.description
+    if (d) o.description = d
+    return o
+  }
+  const v4 = z._zod?.def
+  const v3 = z._def
+  if (!v4 && !v3) return z
+  const d = v4 ?? v3
+  const kind = v4 ? d.type : String(d.typeName ?? "").replace(/^Zod/, "").toLowerCase()
+  const inner = (x) => jsonSchema(x, depth + 1)
+  switch (kind) {
+    case "string": return desc({ type: "string" })
+    case "number": return desc({ type: d.format === "safeint" || d.checks?.some?.((c) => c.kind === "int" || c._zod?.def?.format === "safeint") ? "integer" : "number" })
+    case "int": case "bigint": return desc({ type: "integer" })
+    case "boolean": return desc({ type: "boolean" })
+    case "null": return desc({ type: "null" })
+    case "enum": return desc({ type: "string", enum: v4 ? Object.values(d.entries ?? {}) : [...(d.values ?? [])] })
+    case "literal": {
+      const vals = v4 ? d.values ?? [] : [d.value]
+      return desc(vals.length === 1 ? { const: vals[0] } : { enum: vals })
+    }
+    case "array": return desc({ type: "array", items: inner(v4 ? d.element : d.type) })
+    case "object": return desc(objectSchema(typeof d.shape === "function" ? d.shape() : d.shape, depth + 1))
+    case "optional": case "nullable": case "default": case "readonly": case "catch": case "prefault": {
+      const o = { ...inner(d.innerType), ...desc({}) }
+      if (kind === "default") try { o.default = typeof d.defaultValue === "function" ? d.defaultValue() : d.defaultValue } catch {}
+      return o
+    }
+    case "union": return desc({ anyOf: (d.options ?? []).map(inner) })
+    case "record": return desc({ type: "object", additionalProperties: inner(d.valueType) })
+    default: return desc({})
+  }
+}
+
+// optionalIn is whether a zod field may be left out.
+function optionalIn(z) {
+  const t = z?._zod?.def?.type ?? String(z?._def?.typeName ?? "").replace(/^Zod/, "").toLowerCase()
+  if (z?._zod?.optin === "optional") return true
+  return t === "optional" || t === "default"
+}
+
+function objectSchema(shape, depth = 0) {
+  const properties = {}
+  const required = []
+  for (const [k, v] of Object.entries(shape ?? {})) {
+    properties[k] = jsonSchema(v, depth)
+    if (!optionalIn(v)) required.push(k)
+  }
+  return { type: "object", properties, ...(required.length ? { required } : {}) }
+}
+
+// argsSchema is a tool's arguments as JSON Schema: its args a zod shape, a
+// zod object, or a JSON Schema object.
+function argsSchema(args) {
+  if (!args || typeof args !== "object") return { type: "object", properties: {} }
+  if (args._zod || args._def) return jsonSchema(args)
+  if (typeof args.type === "string" || args.properties) return args
+  return objectSchema(args)
+}
+
+function toolList(spec) {
+  const out = []
+  for (const [name, def] of toolsOf(spec)) {
+    let schema
+    try {
+      schema = argsSchema(def.args)
+    } catch {
+      schema = { type: "object", properties: {} }
+    }
+    out.push({ name, description: shown(def.description, 2000), schema })
+  }
+  return out
+}
+
+// parsedArgs are args as the tool's zod schema parses them, as OpenCode
+// does before execute: defaults filled in, a wrong argument refused. A
+// JSON Schema is the tool's own to check.
+function parsedArgs(name, schema, args) {
+  args = args && typeof args === "object" && !Array.isArray(args) ? args : {}
+  const fail = (r) => {
+    const issues = r.error?.issues ?? []
+    const why = issues.map((i) => `${(i.path ?? []).join(".") || "arguments"}: ${i.message}`).join("; ")
+    throw new Error(`${name}'s arguments are wrong: ${why || r.error?.message || "refused"}`)
+  }
+  if (!schema || typeof schema !== "object") return args
+  if (typeof schema.safeParse === "function") {
+    const r = schema.safeParse(args)
+    if (!r.success) fail(r)
+    return r.data
+  }
+  if (schema._zod || schema._def || typeof schema.type === "string" || schema.properties) return args
+  const out = { ...args }
+  for (const [k, z] of Object.entries(schema)) {
+    if (typeof z?.safeParse !== "function") continue
+    const r = z.safeParse(args[k])
+    if (!r.success) fail({ error: { issues: (r.error?.issues ?? [{ message: r.error?.message }]).map((i) => ({ ...i, path: [k, ...(i.path ?? [])] })) } })
+    if (r.data === undefined) delete out[k]
+    else out[k] = r.data
+  }
+  return out
+}
+
+// runTool runs the plugin spec's tool name with args, within ms: its
+// answer as text (a string as it is, else JSON).
+// took is ms as Go prints a duration: 300ms, 55s.
+const took = (ms) => (ms % 1000 ? `${ms}ms` : `${ms / 1000}s`)
+
+async function runTool({ spec, name, args, ms, agent }) {
+  const def = toolsOf(spec).get(name)
+  if (!def) throw new Error(`${spec} has no tool ${name}`)
+  args = parsedArgs(name, def.args, args)
+  const abort = AbortSignal.timeout(ms > 0 ? ms : 60_000)
+  const ctx = {
+    sessionID: "", messageID: "", callID: "", agent: agent ?? "",
+    directory, worktree: directory, abort,
+    metadata() {},
+  }
+  const out = await Promise.race([
+    Promise.resolve().then(() => def.execute(args, ctx)),
+    new Promise((_, reject) => abort.addEventListener("abort", () => reject(new Error(`${name} took longer than ${took(ms || 60_000)}`)), { once: true })),
+  ])
+  if (typeof out === "string") return { text: out }
+  if (out && typeof out === "object" && typeof out.output === "string") return { text: out.output }
+  return { text: out === undefined ? "" : JSON.stringify(out) }
 }
 
 function authOf(provider) {
@@ -2069,6 +2228,7 @@ const handlers = {
   validate: (p) => ({ error: validate(p.provider, p.method, p.key, p.value) }),
   authorize,
   callback,
+  tool: runTool,
   apiKey,
   load,
   usage,

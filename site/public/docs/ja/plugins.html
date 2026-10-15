@@ -84,6 +84,7 @@
     <a href="#test">テスト</a>
     <a href="#publish">公開と掲載</a>
     <a href="#middleware">ゲートウェイミドルウェア</a>
+    <a href="#tools">すべてのエージェントのツール</a>
     <a href="#agents">エージェントプラグイン</a>
     <a href="#pi">pi パッケージ</a>
     <a href="#protocol">ホストプロトコル</a>
@@ -669,6 +670,35 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
     <p><code>ctx</code> には次のものがあります：<code>protocol</code>（<code>anthropic</code>・<code>chat</code>・<code>responses</code>・<code>gemini</code>）、エージェントが指定した <code>model</code> と <code>stream</code>、<code>path</code>、magpie が把握している場合の <code>agent</code>、<code>options</code>（そのプラグインの<a href="#middleware-options">オプション</a>）、そしてリクエストごとのオブジェクト <code>state</code>。</p>
     <h3>フックが失敗したとき</h3>
     <p>フックの持ち時間は、リクエストまたは応答全体で 250 ms、1 イベントで 50 ms、読み込みで 1 秒です。例外を投げたフック、時間切れになったフック、想定外の値を返したフックは、なかったものとして扱われます。つまりリクエストやイベントは元のまま送られます。設定 → プラグインには、ミドルウェアごとのフック、呼び出し回数、1 回あたりの平均時間、失敗回数と直近のエラーが表示されます。フックが見るのは、エージェントが送ったものと受け取るものそのものです。送信時は magpie のマスキングより前、受信時はマスク解除の後です。magpie 自身のリクエスト（スレッドのタイトル、ルーターの分類器）はミドルウェアを通りません。</p>
+
+    <h2 id="tools"><a class="anchor" href="#tools">すべてのエージェントのツール</a></h2>
+    <p>プラグインは OpenCode の <code>tool</code> フックでツールを提供でき、magpie はそれを OpenCode だけでなくすべてのエージェントに提供します。ツールは magpie 自身の MCP サーバー <code>/mcp/magpie/tools</code>（Streamable HTTP）になります。MCP サーバーを使えるエージェントにこのアドレスを追加すると、そのモデルはオンのプラグインが提供するすべてのツールを呼び出せます。名前は <code>&lt;プラグイン&gt;_&lt;ツール&gt;</code> で、プラグインの短い名前が先頭に付きます（下の例では <code>weather-tools_now</code>）。</p>
+    <div class="code">
+      <span class="lang">index.js</span>
+      <button class="copy" data-copy="tools-ex">コピー</button>
+      <pre id="tools-ex"><span class="k">import</span> { tool } <span class="k">from</span> <span class="s">"@opencode-ai/plugin"</span>
+
+<span class="k">export const</span> WeatherTools = <span class="k">async</span> () =&gt; ({
+  tool: {
+    now: tool({
+      description: <span class="s">"ある都市の今の天気。"</span>,
+      args: { city: tool.schema.string().describe(<span class="s">"都市名（例: Berlin）"</span>) },
+      <span class="k">async</span> execute({ city }, ctx) {
+        <span class="k">const</span> r = <span class="k">await</span> fetch(<span class="s">`https://wttr.in/${encodeURIComponent(city)}?format=3`</span>, { signal: ctx.abort })
+        <span class="k">return</span> <span class="k">await</span> r.text()  <span class="c">// テキスト。オブジェクトは JSON で返ります</span>
+      },
+    }),
+  },
+})</pre>
+    </div>
+    <div class="code">
+      <span class="lang">shell</span>
+      <button class="copy" data-copy="tools-cli">コピー</button>
+      <pre id="tools-cli">magpie plugin add ./weather-tools
+claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/tools   <span class="c"># Claude Code。ほかのエージェントも同じアドレスを使います</span></pre>
+    </div>
+    <p>設定 → プラグインには各プラグインのツールがこの名前で表示され、サーバーのアドレスをコピーできます。<code>args</code> は zod のフィールド定義（<code>tool.schema</code> は zod）、zod オブジェクト、または JSON Schema オブジェクトです。エージェントにはこれが示され、magpie は <code>execute</code> の前に呼び出しの引数をこれで検証します。引数が正しくなければ、その引数を示すエラーを返します。<code>ctx</code> は OpenCode と同じで、<code>agent</code> は呼び出したエージェントです。ツールの実行時間は 55 秒までで、時間切れになると <code>ctx.abort</code> が発火します。</p>
+    <p>このサーバーは組み込みプラグイン <span class="ui">プラグインのツール</span> が提供します。オンのプラグインがツールを提供している間はオンのままで、オフのときはツールが一覧に出ず、呼び出しにはオフであることが返ります。ゲートウェイキーでの呼び出しはそのキーの上限に数えられます。ツールはプロバイダープラグインと同じくあなたの権限でプラグインホスト内で動き、結果は呼び出したエージェントにだけ返ります。</p>
 
     <h2 id="agents"><a class="anchor" href="#agents">エージェントプラグイン</a></h2>
     <p>プラグインは<em>エージェント</em>を追加することもできます。magpie に組み込みの設定がないエージェントです。そのエージェントがモデルをどこに書くか、magpie のゲートウェイを使うために他に何を書くかを伝えます。するとエージェントは magpie 自身のものと同じように<span class="ui">エージェント</span>ページに並びます。その行で magpie のモデルを選ぶと、magpie はモデルをゲートウェイのアドレスとエージェント専用のキーと一緒に設定へ書き込み、スイッチを切るとすべてユーザーの元の状態に戻します。下の例は <a href="https://aider.chat">Aider</a> を追加します。</p>

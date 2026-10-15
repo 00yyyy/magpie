@@ -1015,7 +1015,9 @@
     const ag = e.agent;
     if (mw || e.isMiddleware) nm.append(kindChip("mw"));
     if (ag || e.isAgent) nm.append(kindChip("ag"));
-    if (e.providers?.length || !(e.middlewareOnly || e.inMagpieOnly || (mw && !e.isMiddleware) || (ag && !e.isAgent))) nm.append(kindChip("pv"));
+    // a plugin of tools alone signs in to nothing: no Provider chip
+    const toolsOnly = !!e.tools?.length && !e.providers?.length;
+    if (e.providers?.length || !(e.middlewareOnly || e.inMagpieOnly || toolsOnly || (mw && !e.isMiddleware) || (ag && !e.isAgent))) nm.append(kindChip("pv"));
     who.append(nm);
     const subs = subsOf(pkg);
     const sub = el("div", "sub");
@@ -1046,8 +1048,8 @@
         else if (!x.signedIn && subs.some((y) => y.signedIn)) s.title = t("{name} is a subscription of its own; {other} works without it", { name: x.name, other: subs.find((y) => y.signedIn).name });
         sub.append(s);
       }
-    } else if ((mw || ag) && !e.providers.length) {
-      // only middleware or an agent: its own line says what it does
+    } else if ((mw || ag || toolsOnly) && !e.providers.length) {
+      // only middleware, an agent or tools: its own line says what it does
     } else if (clashes.length && !e.providers.length) {
       // its own line below says whose it is
     } else if (e.providers.length) sub.textContent = t("Signs in to {names}", { names: e.providers.join(t(", ")) });
@@ -1060,6 +1062,7 @@
     if (!ask) for (const c of clashes) who.append(clashLine(e, c, nameOfSpec));
     if (mw && !e.off && !ask) who.append(mwLine(mw));
     if (ag && !e.off && !ask) who.append(agentLine(ag));
+    if (e.tools?.length && !e.off && !ask) who.append(toolsLine(e.tools));
     if (mw && !e.off && !ask && editing?.pkg === pkg) who.append(optionsEditor(e));
     // the plugin's own picture (package.json's magpie.icon) before its
     // first provider's, which a plugin of several gives each its own (#1775)
@@ -1221,6 +1224,20 @@
       return d;
     }
     d.textContent = d.title = t("Adds {name} to Agents", { name: a.name });
+    return d;
+  }
+
+  // toolsLine is the tools a plugin gives, which magpie's plugin tools MCP
+  // server offers every agent: each by the name an agent sees, its
+  // description on hover, and the server's address to copy into an agent
+  function toolsLine(tools) {
+    const d = el("div", "sub pm-mw pm-tools");
+    d.append(el("span", "", t("Tools for every agent: {names}", { names: tools.map((x) => x.mcp || x.name).join(t(", ")) })));
+    d.title = tools.map((x) => (x.mcp || x.name) + (x.description ? " — " + x.description : "")).join("\n");
+    const url = mcpAddress(state.settings || {}, "/mcp/magpie/tools");
+    const b = copyBtn(url, t("MCP server address"));
+    b.title = t("Copy the MCP server's address ({url}): add it to an agent as an MCP server (Streamable HTTP)", { url });
+    d.append(b);
     return d;
   }
 

@@ -499,6 +499,8 @@ type Loaded struct {
 	// serves, that plugin's spec: the host runs one plugin per provider
 	// id (Prefer)
 	ServedBy map[string]string `json:"servedBy,omitempty"`
+	// Tools are the tools its tool hook gives (tools.go)
+	Tools []Tool `json:"tools,omitempty"`
 }
 
 // Clash is a provider id more than one plugin signs in to. The host runs
@@ -940,6 +942,7 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		return nil, crashed, fmt.Errorf("starting plugins: %w", err)
 	}
 	h.loaded = res.Plugins
+	noteTools(res.Plugins)
 	for _, p := range res.Plugins {
 		if p.Error != "" {
 			log.Printf("plugin %s didn't load: %s", p.Spec, p.Error)

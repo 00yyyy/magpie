@@ -84,6 +84,7 @@
     <a href="#test">测试</a>
     <a href="#publish">发布与上架</a>
     <a href="#middleware">网关中间件</a>
+    <a href="#tools">给每个智能体的工具</a>
     <a href="#agents">Agent 插件</a>
     <a href="#pi">pi 扩展包</a>
     <a href="#protocol">宿主协议</a>
@@ -669,6 +670,35 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
     <p><code>ctx</code> 里有 <code>protocol</code>（<code>anthropic</code>、<code>chat</code>、<code>responses</code> 或 <code>gemini</code>）、agent 请求的 <code>model</code> 和 <code>stream</code>、<code>path</code>、magpie 知道时的 <code>agent</code>、<code>options</code>（这个插件的<a href="#middleware-options">选项</a>），以及 <code>state</code>：每个请求独有的对象。</p>
     <h3>钩子出错时</h3>
     <p>处理请求或完整回复时，钩子有 250 毫秒；处理一个事件时有 50 毫秒；加载有 1 秒。钩子抛出异常、超时或返回了别的东西，都当作它不存在：请求或事件按原样发送。设置 → 插件会显示每个中间件的钩子、调用次数、平均每次耗时和失败次数，以及最近一次错误。钩子看到的是 agent 发出和收到的原始内容：发出时在 magpie 脱敏之前，返回时在还原之后。magpie 自己的请求（会话标题、路由分类器）不经过中间件。</p>
+
+    <h2 id="tools"><a class="anchor" href="#tools">给每个智能体的工具</a></h2>
+    <p>插件可以用 OpenCode 的 <code>tool</code> 钩子提供工具，magpie 把它们提供给每个智能体，不只是 OpenCode：它们组成 magpie 自己的一个 MCP 服务器，地址是 <code>/mcp/magpie/tools</code>（Streamable HTTP）。把这个地址加到任何支持 MCP 服务器的智能体里，它的模型就能调用你已开启的插件提供的每个工具。每个工具名为 <code>&lt;插件&gt;_&lt;工具&gt;</code>，插件的短名在前，例如下面的 <code>weather-tools_now</code>。</p>
+    <div class="code">
+      <span class="lang">index.js</span>
+      <button class="copy" data-copy="tools-ex">复制</button>
+      <pre id="tools-ex"><span class="k">import</span> { tool } <span class="k">from</span> <span class="s">"@opencode-ai/plugin"</span>
+
+<span class="k">export const</span> WeatherTools = <span class="k">async</span> () =&gt; ({
+  tool: {
+    now: tool({
+      description: <span class="s">"某个城市现在的天气。"</span>,
+      args: { city: tool.schema.string().describe(<span class="s">"城市，例如 Berlin"</span>) },
+      <span class="k">async</span> execute({ city }, ctx) {
+        <span class="k">const</span> r = <span class="k">await</span> fetch(<span class="s">`https://wttr.in/${encodeURIComponent(city)}?format=3`</span>, { signal: ctx.abort })
+        <span class="k">return</span> <span class="k">await</span> r.text()  <span class="c">// 文本；对象会以 JSON 发回</span>
+      },
+    }),
+  },
+})</pre>
+    </div>
+    <div class="code">
+      <span class="lang">shell</span>
+      <button class="copy" data-copy="tools-cli">复制</button>
+      <pre id="tools-cli">magpie plugin add ./weather-tools
+claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/tools   <span class="c"># Claude Code；其他智能体填同一个地址</span></pre>
+    </div>
+    <p>设置 → 插件里会按这些名字列出每个插件的工具，并能复制服务器地址。<code>args</code> 可以是 zod 字段表（<code>tool.schema</code> 就是 zod）、zod 对象或 JSON Schema 对象。智能体会看到它，magpie 在 <code>execute</code> 运行前按它检查调用的参数；参数不对时回一个写明是哪个参数的错误。<code>ctx</code> 与 OpenCode 的相同，<code>agent</code> 是发起调用的智能体。每个工具最多运行 55 秒，到时 <code>ctx.abort</code> 触发。</p>
+    <p>这个服务器由内置插件 <span class="ui">插件工具</span> 提供。只要有已开启的插件提供工具，它就保持开启；关闭时不列出任何工具，调用会说明它已关闭。用网关密钥发起的调用计入该密钥的限额。工具和提供方插件一样，以你的权限在插件宿主里运行，结果只回给调用它的智能体。</p>
 
     <h2 id="agents"><a class="anchor" href="#agents">Agent 插件</a></h2>
     <p>插件还可以添加一个 <em>Agent</em>：magpie 没有内置接入的那种。它说明这个 Agent 把模型写在哪里，以及还要写些什么才能让 Agent 走 magpie 的网关。这样它就和 magpie 内置的 Agent 一样出现在 <span class="ui">Agent</span> 页：在它那一行选一个 magpie 的模型，magpie 就把模型连同网关地址和这个 Agent 自己的 key 写进它的配置；关掉开关，一切恢复成用户原来的样子。下面的例子添加 <a href="https://aider.chat">Aider</a>。</p>

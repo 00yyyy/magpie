@@ -6,9 +6,11 @@
 // serving the gateway (the CLI, the TUI) has them all, as before the
 // point was there.
 //
-// WebSearch is the one tool now, plugins/search's: magpie's web search for
-// a model that can't search by itself. Off, a vendor that searches by
-// itself still does; magpie offers no search of its own.
+// WebSearch is plugins/search's: magpie's web search for a model that
+// can't search by itself. Off, a vendor that searches by itself still
+// does; magpie offers no search of its own. PluginTools is plugins/tools':
+// the tools community plugins give, served to every agent over MCP. Off,
+// the server lists none and runs none.
 package gwtool
 
 import "sync"
@@ -16,6 +18,10 @@ import "sync"
 // WebSearch is magpie's web search: the stand-in web_search tool, the
 // search MCP server and Codex's search when ChatGPT can't answer it.
 const WebSearch = "web_search"
+
+// PluginTools are the tools the user's plugins give (their OpenCode tool
+// hook), served over magpie's plugin tools MCP server.
+const PluginTools = "plugin_tools"
 
 var gate struct {
 	sync.Mutex

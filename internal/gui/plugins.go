@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/middleware"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
@@ -138,6 +139,17 @@ type pluginEntryJSON struct {
 	// the host runs one plugin for each, and the row says which, with a
 	// way to pick this one
 	Clashes []pluginClashJSON `json:"clashes,omitempty"`
+	// Tools are the tools it gives, which magpie's plugin tools MCP server
+	// offers every agent under MCP's name: with their descriptions while
+	// the host runs, by name alone from what it noted last when it doesn't
+	Tools []pluginToolJSON `json:"tools,omitempty"`
+}
+
+// pluginToolJSON is one tool a plugin gives, as its row lists it.
+type pluginToolJSON struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	MCP         string `json:"mcp"` // its name on the MCP server
 }
 
 // pluginClashJSON is a provider two plugins sign in to, as a row says it.
@@ -172,6 +184,8 @@ func pluginsState(ctx context.Context, w Windows) pluginsJSON {
 	names := map[string][]string{}
 	clashes := map[string][]plugin.Clash{}
 	idName := map[string]string{}
+	var tools []plugin.PluginTools
+	asked := false
 	if len(l.Plugins) > 0 && (plugin.Running() || plugin.HasBun()) {
 		loaded, err := plugin.Plugins(ctx)
 		if err != nil {
@@ -179,9 +193,25 @@ func pluginsState(ctx context.Context, w Windows) pluginsJSON {
 		}
 		for _, p := range loaded {
 			errs[p.Spec] = p.Error
+			if p.Error == "" && len(p.Tools) > 0 {
+				tools = append(tools, plugin.PluginTools{Spec: p.Spec, Tools: p.Tools})
+			}
 		}
 		clashes = plugin.Clashes(loaded)
+		asked = err == nil
 	}
+	if !asked {
+		for _, e := range l.Plugins {
+			var ts []plugin.Tool
+			for _, n := range plugin.ToolNames()[e.Spec] {
+				ts = append(ts, plugin.Tool{Name: n})
+			}
+			if len(ts) > 0 && !e.Off {
+				tools = append(tools, plugin.PluginTools{Spec: e.Spec, Tools: ts})
+			}
+		}
+	}
+	toolNames := gateway.ToolNames(tools)
 	// each plugin's subscriptions, by the names it gave last (plugin.Cached,
 	// which holds them without starting the host or asking anyone, and asks
 	// the plugins again in the background when a sign-in or the plugins
@@ -242,6 +272,14 @@ func pluginsState(ctx context.Context, w Windows) pluginsJSON {
 				n = c.ID
 			}
 			j.Clashes = append(j.Clashes, pluginClashJSON{Clash: c, Name: n})
+		}
+		for _, pt := range tools {
+			if pt.Spec != e.Spec || e.Off {
+				continue
+			}
+			for _, x := range pt.Tools {
+				j.Tools = append(j.Tools, pluginToolJSON{Name: x.Name, Description: x.Description, MCP: toolNames[e.Spec][x.Name]})
+			}
 		}
 		j.Moved = provider.MovedOnto(e.Spec)
 		if j.Moved == nil {
