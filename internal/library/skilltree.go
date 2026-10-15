@@ -148,7 +148,7 @@ func fetchSkillFiles(src Source) (string, error) {
 		}
 		files = append(files, file{e.Path, e.SHA, e.Mode == "100755"})
 	}
-	tmp, err := os.MkdirTemp("", "magpie-skill-")
+	tmp, err := os.MkdirTemp("", skillTemp)
 	if err != nil {
 		return "", err
 	}

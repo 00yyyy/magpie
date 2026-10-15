@@ -634,9 +634,57 @@ var probes = struct {
 }{m: map[string]*probeEntry{}}
 
 type probeEntry struct {
-	p   *Probe
-	tmp string
-	at  time.Time
+	p     *Probe
+	tmp   string
+	timer *time.Timer // removes it when probeLife is up
+}
+
+// probeLife is how long a probe's download is kept for an install from it.
+var probeLife = 15 * time.Minute
+
+// skillTemp starts the name of a download's folder in the temp dir.
+const skillTemp = "magpie-skill-"
+
+// keepProbe caches p's download under input for probeLife, in place of
+// one before it; the folder is removed when it is replaced or expires, not
+// only at the next probe, which may never come (#2321).
+func keepProbe(input string, p *Probe, tmp string) {
+	e := &probeEntry{p: p, tmp: tmp}
+	probes.Lock()
+	old := probes.m[input]
+	probes.m[input] = e
+	e.timer = time.AfterFunc(probeLife, func() {
+		probes.Lock()
+		if probes.m[input] == e {
+			delete(probes.m, input)
+		}
+		probes.Unlock()
+		os.RemoveAll(tmp)
+	})
+	probes.Unlock()
+	if old != nil {
+		old.timer.Stop()
+		os.RemoveAll(old.tmp)
+	}
+}
+
+// sweepStaleDownloads removes the downloads a magpie that quit left in the
+// temp dir (#2321): a folder of ours over an hour old, longer than a probe
+// is kept or a fetch takes, so none in use.
+func sweepStaleDownloads() {
+	dir := os.TempDir()
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range ents {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), skillTemp) {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > time.Hour {
+			os.RemoveAll(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 // githubSource reads a repository out of what the user typed: owner/repo,
@@ -746,7 +794,7 @@ func fetch(src Source) (string, error) {
 	case resp.StatusCode != 200:
 		return "", fmt.Errorf("GitHub answered %s", resp.Status)
 	}
-	tmp, err := os.MkdirTemp("", "magpie-skill-")
+	tmp, err := os.MkdirTemp("", skillTemp)
 	if err != nil {
 		return "", err
 	}
@@ -892,14 +940,7 @@ func ProbeSkills(input string) (*Probe, error) {
 	if input == "" {
 		return nil, fmt.Errorf("paste a GitHub link or a folder's path")
 	}
-	probes.Lock()
-	for k, e := range probes.m {
-		if time.Since(e.at) > 15*time.Minute {
-			os.RemoveAll(e.tmp)
-			delete(probes.m, k)
-		}
-	}
-	probes.Unlock()
+	sweepStaleDownloads()
 
 	p := &Probe{Source: input}
 	if dir := expand(input); filepath.IsAbs(dir) {
@@ -921,12 +962,7 @@ func ProbeSkills(input string) (*Probe, error) {
 		}
 		p.Candidates = candidates(tmp, src.Path)
 		p.Left = tookLeftOut(tmp, src.Path)
-		probes.Lock()
-		if old := probes.m[input]; old != nil {
-			os.RemoveAll(old.tmp)
-		}
-		probes.m[input] = &probeEntry{p: p, tmp: tmp, at: time.Now()}
-		probes.Unlock()
+		keepProbe(input, p, tmp)
 	} else {
 		return nil, fmt.Errorf("that's neither a GitHub repository nor a folder's full path")
 	}
