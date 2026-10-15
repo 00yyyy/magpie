@@ -19,6 +19,7 @@ func TestCLIMissing(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("PATH", t.TempDir())
+	judgeOffWindows(t)
 	// no desktop app either, whatever this machine has installed
 	was := appFolders
 	appFolders = func() []string { return nil }
@@ -150,6 +151,7 @@ type goneCase struct {
 }
 
 func TestCLIMissingSharedFolders(t *testing.T) {
+	judgeOffWindows(t)
 	cases := []goneCase{
 		{"claude", ".claude", nil, true},
 		{"claude", ".claude", func(t *testing.T, home, _ string) {
@@ -220,24 +222,80 @@ func TestCLIMissingSharedFolders(t *testing.T) {
 	}
 }
 
+// judgeOffWindows has cliHeld judge as on Linux when the tests run on
+// Windows, where a shared folder is never gone (#1482): the cases above
+// are about the systems where its readers can be told.
+func judgeOffWindows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		judgeFor(t, "linux")
+	}
+}
+
+func judgeFor(t *testing.T, goos string) {
+	t.Helper()
+	was := goneOS
+	goneOS = goos
+	t.Cleanup(func() { goneOS = was })
+}
+
+// #1482 (edussss, Windows 11): from v0.1.1238 Claude Code and Codex both
+// showed "CLI not found", their settings hidden, though v0.1.1231 listed
+// them and the user runs them. On Windows what reads ~\.claude and
+// ~\.codex can't all be told (a Store app, a portable editor, a PATH only
+// a shell profile sets), so a shared folder is never gone there. An agent
+// whose folder is only its CLI's still is.
+func TestCLIMissingSharedFoldersWindows(t *testing.T) {
+	judgeFor(t, "windows")
+	for _, c := range []struct{ id, folder string }{{"claude", ".claude"}, {"codex", ".codex"}, {"cline", ".cline"}} {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+		t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+		t.Setenv("PATH", t.TempDir())
+		noApps(t)
+		dir := filepath.Join(home, c.folder)
+		writeT(t, filepath.Join(dir, "settings.json"), "{}")
+		a := &Agent{ID: c.id, Name: c.id, Bin: "magpie-test-gone-" + c.id, Dir: dir, Path: filepath.Join(dir, "settings.json")}
+		if !a.Detected() {
+			t.Fatalf("%s: its folder not detected", c.id)
+		}
+		if a.CLIMissing() {
+			t.Errorf("%s: its folder alone taken for gone on Windows", c.id)
+		}
+		for _, x := range installsOf([]*Agent{a}, "windows", true) {
+			if x.Missing {
+				t.Errorf("%s offered again as gone: %+v", c.id, x)
+			}
+		}
+	}
+
+	// an agent whose folder only its CLI keeps is still gone without it
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", t.TempDir())
+	noApps(t)
+	hdir := filepath.Join(home, ".hermes")
+	writeT(t, filepath.Join(hdir, "config.yaml"), "custom_providers: []\n")
+	h := &Agent{ID: "hermes", Name: "Hermes Agent", Bin: "magpie-test-gone-hermes", Dir: hdir, Path: filepath.Join(hdir, "config.yaml")}
+	if !h.CLIMissing() {
+		t.Fatal("hermes by its config.yaml alone not gone when judged for Windows")
+	}
+}
+
 // jetBrainsDirFor and zedAgentsDirFor are where jetBrainsHere and
 // zedAgentsHere look on this system.
 func jetBrainsDirFor(home string) string {
-	switch runtime.GOOS {
-	case "darwin":
+	if runtime.GOOS == "darwin" {
 		return filepath.Join(home, "Library", "Application Support", "JetBrains")
-	case "windows":
-		return filepath.Join(home, "AppData", "Roaming", "JetBrains")
 	}
 	return filepath.Join(home, ".config", "JetBrains")
 }
 
 func zedAgentsDirFor(home string) string {
-	switch runtime.GOOS {
-	case "darwin":
+	if runtime.GOOS == "darwin" {
 		return filepath.Join(home, "Library", "Application Support", "Zed", "external_agents")
-	case "windows":
-		return filepath.Join(home, "AppData", "Local", "Zed", "external_agents")
 	}
 	return filepath.Join(home, ".local", "share", "zed", "external_agents")
 }

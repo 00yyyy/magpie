@@ -6,8 +6,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/yetone/magpie/internal/appdir"
-	"github.com/yetone/magpie/internal/desktopdir"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -25,6 +23,10 @@ import (
 // cliHeld looks: Hermes' install.sh clones itself into <home>/hermes-agent
 // and links ~/.local/bin/hermes to it.
 var cliOnly = map[string]bool{"hermes": true}
+
+// goneOS is the system cliHeld judges for; a var so a test on a Mac can
+// judge for Windows.
+var goneOS = runtime.GOOS
 
 // cliHeld reports whether something here is the agent, or reads its
 // folder as the agent does, so the folder is no leftover; known is false
@@ -71,13 +73,22 @@ func (a *Agent) cliHeld() (held, known bool) {
 	if !cliShared[a.ID] {
 		return false, true
 	}
+	// On Windows the programs that read a shared folder can't all be
+	// told: a Store app, an editor run portable or with its extensions
+	// moved off ~\.vscode, a CLI on a PATH only a shell profile sets (fnm).
+	// Taking ~\.claude and ~\.codex for leftovers there hid both agents'
+	// settings, "CLI not found", from a user whose Claude Code and Codex
+	// v0.1.1231 listed (#1482, edussss). There a shared folder whose CLI
+	// isn't found is never taken for gone.
+	if goneOS == "windows" {
+		return false, false
+	}
 	// the others that keep a shared folder: editors' extensions, desktop
 	// apps, and the IDEs and editors whose agents bring their own copy of
 	// the program
 	switch a.ID {
 	case "claude":
-		if extensionHere(home, "anthropic.claude-code") || appHere("Claude.app") ||
-			desktopdir.Installed(desktopdir.OS, home, appdir.Getenv) {
+		if extensionHere(home, "anthropic.claude-code") || appHere("Claude.app") {
 			return true, true
 		}
 		return false, !jetBrainsHere(home) && !zedAgentsHere(home)
@@ -159,11 +170,6 @@ func jetBrainsHere(home string) bool {
 	switch runtime.GOOS {
 	case "darwin":
 		dirs = []string{filepath.Join(home, "Library", "Application Support", "JetBrains")}
-	case "windows":
-		if d := appdir.Getenv("APPDATA"); d != "" {
-			dirs = append(dirs, filepath.Join(d, "JetBrains"))
-		}
-		dirs = append(dirs, filepath.Join(home, "AppData", "Roaming", "JetBrains"))
 	default:
 		dirs = []string{filepath.Join(home, ".config", "JetBrains"), filepath.Join(home, ".local", "share", "JetBrains")}
 	}
@@ -183,12 +189,6 @@ func zedAgentsHere(home string) bool {
 	switch runtime.GOOS {
 	case "darwin":
 		d = filepath.Join(home, "Library", "Application Support", "Zed")
-	case "windows":
-		local := appdir.Getenv("LOCALAPPDATA")
-		if local == "" {
-			local = filepath.Join(home, "AppData", "Local")
-		}
-		d = filepath.Join(local, "Zed")
 	default:
 		d = filepath.Join(home, ".local", "share", "zed")
 	}
