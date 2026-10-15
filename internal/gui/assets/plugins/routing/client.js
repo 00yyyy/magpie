@@ -104,7 +104,10 @@ function routingPage(part) {
   const steps = el("ol", "rt-steps");
   // what the request's prompt held: its context window (context.js)
   const ctxBox = el("div", "rt-ctx");
-  log.append(logHead, steps, ctxBox);
+  // the request's own request and response, opened from its head
+  const bodies = el("div", "rt-bodies");
+  bodies.hidden = true;
+  log.append(logHead, steps, bodies, ctxBox);
   const off = el("div", "none rt-off");
   // over the stage while a replay plays: the time it is replaying, which
   // requests are in flight then, and where it is among them
@@ -1793,12 +1796,13 @@ function routingPage(part) {
   // the log is drawn again only when what it says changes: it is asked to
   // on every trace update (#308)
   let logR = null, headKey = "", stepsKey = "";
+  let bodiesFor = 0, bodiesKey = ""; // the request opened to its bodies (renderBodies)
   function renderLog() {
     const r = logR = pinned || cur;
     log.hidden = !r;
     if (!r) return;
     const on = () => listed().filter((x) => x.id >= logR.id);
-    const head = JSON.stringify([document.documentElement.lang, !!rp, pinned?.id, r.id, r.time, r.done, !!pinned && on().length > 1]);
+    const head = JSON.stringify([document.documentElement.lang, !!rp, pinned?.id, r.id, r.time, r.done, !!pinned && on().length > 1, bodiesFor === r.id]);
     if (headKey !== head) {
       headKey = head;
       logHead.replaceChildren(
@@ -1809,7 +1813,11 @@ function routingPage(part) {
         const usage = el("button", "text", t("View usage"));
         usage.dataset.feature = "usage"; // it opens on the Usage page
         usage.onclick = () => window.openUsageRoute(logR);
-        logHead.append(usage);
+        const open = bodiesFor === r.id;
+        const wire = el("button", "text rt-bodies-b", t(open ? "Hide request and response" : "Request and response"));
+        wire.setAttribute("aria-expanded", String(open));
+        wire.onclick = () => { bodiesFor = bodiesFor === logR.id ? 0 : logR.id; renderLog(); };
+        logHead.append(wire, usage);
         const again = el("button", "text", t("Replay"));
         again.onclick = () => replay([logR], pinned);
         logHead.append(again);
@@ -1828,7 +1836,68 @@ function routingPage(part) {
     }
     renderSteps(r);
     holdStory();
+    renderBodies(r);
     renderCtx(r);
+  }
+  // A request's request and response (Fate on Discord: a request on this
+  // page, a Codex prediction say, couldn't be opened to what was sent and
+  // what came back). The gateway's recent calls keep the last 40 calls'
+  // bodies, cut at 256 KB and in memory only, read when asked as the
+  // Gateway page's are (#1521); once they have let the request go, the
+  // request archive's copy, when it was on. Nothing more is recorded for
+  // it: without the archive an older request says how to keep them.
+  const bodiesGot = new Map(); // route id → { busy } | its bodies | { gone } | { error }
+  async function loadBodies(id) {
+    const pending = { busy: true };
+    bodiesGot.set(id, pending);
+    let got;
+    try {
+      const res = await fetch("/api/gateway/call?route=" + encodeURIComponent(id), { cache: "no-store" });
+      if (res.status === 404) got = { gone: true };
+      else if (!res.ok) got = { error: (await res.json().catch(() => null))?.error || res.statusText || String(res.status) };
+      else got = await res.json();
+    } catch (e) {
+      got = { error: e.message };
+    }
+    if (bodiesGot.get(id) !== pending) return;
+    bodiesGot.set(id, got);
+    bodiesKey = "";
+    if (logR) renderBodies(logR);
+  }
+  function renderBodies(r) {
+    const open = !rp && r.done && bodiesFor === r.id;
+    bodies.hidden = !open;
+    if (!open) {
+      if (bodiesKey) { bodiesKey = ""; bodies.replaceChildren(); }
+      return;
+    }
+    if (!bodiesGot.has(r.id)) loadBodies(r.id);
+    const got = bodiesGot.get(r.id);
+    const key = JSON.stringify([document.documentElement.lang, r.id, r.archive || "", got.busy ? "busy" : got.gone ? "gone" : got.error ? "error" : "in"]);
+    if (key === bodiesKey) return;
+    bodiesKey = key;
+    if (got.busy) { bodies.replaceChildren(el("div", "none", t("Fetching…"))); return; }
+    if (got.error) {
+      const again = el("button", "text", t("Try again"));
+      again.onclick = () => { bodiesGot.delete(r.id); bodiesKey = ""; renderBodies(logR); };
+      bodies.replaceChildren(el("div", "call-archive-err", t(got.error)), again);
+      return;
+    }
+    if (got.gone) {
+      if (r.archive) {
+        const draw = () => { if (bodiesFor === r.id) bodies.replaceChildren(archivePanel(r.archive, "rt|" + r.id, draw)); };
+        draw();
+        return;
+      }
+      bodies.replaceChildren(el("p", "rt-bodies-gone", t("magpie keeps the request and response of only the last 40 requests, until it quits. To keep every request's, turn on Request archive at the top of Usage › Requests.")));
+      return;
+    }
+    const grid = el("div", "call-details");
+    grid.append(
+      callBodyPanel("Request Body", got.requestBody, got.requestTruncated, undefined, "rt|" + r.id + "|req"),
+      callBodyPanel("Response Body", got.responseBody, got.responseTruncated, "rt|" + r.id),
+    );
+    bodies.replaceChildren(grid);
   }
   // holdStory keeps the story of the live request, its head and its lines,
   // as tall as it has been since the reader began following live, at this

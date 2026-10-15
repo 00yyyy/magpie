@@ -957,18 +957,25 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 	})
 	// Recent-call bodies are read only when their row is opened, not with
 	// every Providers or Gateway refresh (#1521): forty calls' bodies made
-	// /api/providers 20 MB. The ring may have moved on by then.
+	// /api/providers 20 MB. The ring may have moved on by then. ?route= is
+	// the Routing page's request instead of the ring's number (Fate on
+	// Discord: a request there is opened to its request and response).
 	mux.HandleFunc("GET /api/gateway/call", func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Cache-Control", "no-store")
 		if gw := served.Load(); gw != nil {
+			var c gateway.Call
+			ok := false
 			if id, err := strconv.ParseUint(r.URL.Query().Get("id"), 10, 64); err == nil {
-				if c, ok := gw.RecentCall(id); ok {
-					writeJSON(rw, map[string]any{
-						"requestBody": c.RequestBody, "responseBody": c.ResponseBody,
-						"requestTruncated": c.RequestTruncated, "responseTruncated": c.ResponseTruncated,
-					})
-					return
-				}
+				c, ok = gw.RecentCall(id)
+			} else if route, err := strconv.ParseInt(r.URL.Query().Get("route"), 10, 64); err == nil {
+				c, ok = gw.RouteCall(route)
+			}
+			if ok {
+				writeJSON(rw, map[string]any{
+					"requestBody": c.RequestBody, "responseBody": c.ResponseBody,
+					"requestTruncated": c.RequestTruncated, "responseTruncated": c.ResponseTruncated,
+				})
+				return
 			}
 		}
 		rw.Header().Set("Content-Type", "application/json")

@@ -305,7 +305,10 @@ func Taken() bool {
 type Call struct {
 	// ID numbers the call in the Recent-calls ring, from 1, for the page
 	// to ask for its bodies by (the ring's summary leaves them out, #1521)
-	ID    uint64    `json:"id,omitempty"`
+	ID uint64 `json:"id,omitempty"`
+	// Route: the Routing page's request (Route.ID) this call is, for it
+	// to ask for the call's bodies by while the ring still has them
+	Route int64     `json:"route,omitempty"`
 	Time  time.Time `json:"time"`
 	Agent string    `json:"agent"`         // who called, from the client's User-Agent
 	Via   string    `json:"via,omitempty"` // the computer a remote magpie's request came from (AgentHeader)
@@ -418,6 +421,19 @@ func (s *Server) Recent() []Call {
 		out[len(s.recent)-1-i] = c
 	}
 	return out
+}
+
+// RouteCall is the call the Routing page's request route was, while it is
+// still in the ring.
+func (s *Server) RouteCall(route int64) (Call, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.recent) - 1; i >= 0; i-- {
+		if route != 0 && s.recent[i].Route == route {
+			return s.recent[i], true
+		}
+	}
+	return Call{}, false
 }
 
 // RecentCall is the call numbered id while it is still in the ring.
@@ -3288,7 +3304,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			t.Served, t.Swapped, t.Routed = t.Tries[n-1].Served, t.Tries[n-1].Swapped, t.Tries[n-1].Routed
 			t.Upstream = t.Tries[n-1].Upstream
 		}
+		t.Archive = call.archiveName()
 	})
+	call.Route = tr.ID
 	s.record(call)
 	if call.To != "" {
 		rec := usage.Record{RouteID: tr.ID, Time: start, Agent: call.Agent, Via: call.Via, Provider: call.Provider, Host: where, Model: model,

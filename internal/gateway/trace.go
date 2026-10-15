@@ -125,6 +125,10 @@ type Route struct {
 	// in (shortFolder), never the whole path; a request that says none
 	// takes its session's, as said last (#1068)
 	Folder string `json:"folder,omitempty"`
+	// Archive: "<date>/<id>", where the request archive keeps the call,
+	// when it was on (Call.Archive), for the page to read its bodies back
+	// once the recent calls have let them go
+	Archive string `json:"archive,omitempty"`
 }
 
 // RouteUsage is one billable attempt's pricing inputs, kept in routing history.
