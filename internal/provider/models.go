@@ -1654,6 +1654,9 @@ func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 	if pr, ok := p.factoryFastPrice(model); ok {
 		return pr, true
 	}
+	if pr, ok := p.grokFastPrice(model); ok {
+		return pr, true
+	}
 	names := pricedNames(model)
 	if p.kimiCodeMember() {
 		if id, ok := kimiCodeAPI[strings.ToLower(strings.TrimSpace(model))]; ok {
@@ -1757,6 +1760,50 @@ func (p Provider) cursorFastPrice(model string) (catalog.Price, bool) {
 		pr.Tiers = slices.Clone(pr.Tiers)
 	}
 	return pr, ok
+}
+
+// grokBuildFast is Grok Build's id of a Grok model's fast variant, as its
+// own model list offers it (grok-4.7-build-fast, and at a window of its
+// own, grok-4.7-build-fast@500k). m[1] is the model it is fast of.
+var grokBuildFast = regexp.MustCompile(`^(grok-[0-9][0-9.]*)-build-fast(?:@[0-9]+k?)?$`)
+
+// grokFastPrice is a Grok account's (the built-in's or the Grok plugin's)
+// price for its fast variant of a Grok model: twice the model's own, every
+// tier with it, as xAI says it sells it ("We also serve a fast variant
+// with twice the output speed at twice the price",
+// https://x.ai/news/grok-4-7, read 2026-10-15). No catalog lists
+// grok-4.7-build-fast, so every call a routing group of Cursor's and
+// Grok's Grok 4.7 fast sent to Grok was unpriced, and the group's cost
+// left out half its calls (TradingLife on Discord, after cbc96b599 priced
+// Cursor's half). Only on a Grok account: no other vendor serves the id.
+func (p Provider) grokFastPrice(model string) (catalog.Price, bool) {
+	if p.Account == nil || p.Account.Agent != "grok" && p.PluginProvider() != "grok" {
+		return catalog.Price{}, false
+	}
+	base, ok := GrokBuildFast(model)
+	if !ok {
+		return catalog.Price{}, false
+	}
+	pr, ok := p.ListPrice(base)
+	if !ok {
+		return catalog.Price{}, false
+	}
+	return pr.Times(GrokFastTimes), true
+}
+
+// GrokFastTimes is how many times its model's price xAI sells a Grok
+// model's fast variant at (grokFastPrice).
+const GrokFastTimes = 2
+
+// GrokBuildFast is the Grok model id is Grok Build's fast variant of
+// (grok-4.7-build-fast is grok-4.7's), and whether it is one: for a Grok
+// CLI session, which names it bare, priced as grokFastPrice prices it.
+func GrokBuildFast(id string) (string, bool) {
+	m := grokBuildFast.FindStringSubmatch(strings.ToLower(strings.TrimSpace(id)))
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
 }
 
 // factoryFastTimes is how many times its base model's list price each
@@ -1992,7 +2039,8 @@ var grokWindow = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/@]*)@[0-9]+k?$`)
 // This is a list-price estimate, not evidence of a response's served model.
 // Other names without catalog prices stay unpriced here (grok-4.7-build,
 // grok-4.7-mini, grok-4.7-fast); a Cursor account's fast ids are priced at
-// Cursor's own fast rate (Provider.cursorFastPrice).
+// Cursor's own fast rate (Provider.cursorFastPrice), and a Grok account's
+// grok-4.7-build-fast at twice grok-4.7's (Provider.grokFastPrice).
 func pricedNames(model string) []string {
 	out := []string{model}
 	if model == "codex-auto-review" {
