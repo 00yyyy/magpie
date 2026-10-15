@@ -1096,7 +1096,13 @@ func codexIn(at place) *Agent {
 			}
 			return true, settle()
 		},
-		Joined:      joined,
+		// joined as the GUI and drift tell it: Codex's own models in its
+		// list beside magpie's. With magpie its provider (magpie API, or a
+		// ChatGPT account the Codex app holds) they are not, though the
+		// mark stays for Sync to put it back beside the sign-in: the
+		// Agents row said "its own models stay in /model" while the Codex
+		// app was meant to be in its API state (#2267)
+		Joined:      func() bool { return joined() && !asProvider() },
 		Beside:      beside,
 		Routed:      routed,
 		FailingOver: failingOver,
