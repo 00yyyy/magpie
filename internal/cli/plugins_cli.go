@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/middleware"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/pluginrt"
@@ -201,6 +203,13 @@ func listPlugins(ctx context.Context, asJSON bool) error {
 	clashes := plugin.Clashes(loaded)
 	ps, perr := plugin.Providers(ctx)
 	mws := middleware.States()
+	var pts []plugin.PluginTools
+	for _, p := range loaded {
+		if len(p.Tools) > 0 {
+			pts = append(pts, plugin.PluginTools{Spec: p.Spec, Tools: p.Tools})
+		}
+	}
+	toolNames := gateway.ToolNames(pts)
 	if asJSON {
 		b, _ := json.MarshalIndent(map[string]any{"plugins": l.Plugins, "loaded": loaded, "providers": ps, "middleware": mws}, "", "  ")
 		fmt.Println(string(b))
@@ -233,6 +242,15 @@ func listPlugins(ctx context.Context, asJSON bool) error {
 			} else {
 				fmt.Printf("  %s  %s\n", muted.Render("gateway middleware"), mwPoints(m))
 			}
+		}
+		// the tools it gives agents, by their names on the plugin tools
+		// MCP server (the host loads no plugin that is off, so one has
+		// none), and the page it adds to the window
+		if ts := toolsLine(toolNames[e.Spec]); ts != "" {
+			fmt.Printf("  %s  %s\n", muted.Render("tools"), ts)
+		}
+		if pg, _ := plugin.WindowPage(plugin.Target(e.Spec)); pg != nil {
+			fmt.Printf("  %s  %s\n", muted.Render("page"), pageLine(pg))
 		}
 		for _, p := range ps {
 			if p.Spec != e.Spec {
@@ -595,4 +613,23 @@ func mwPoints(m middleware.State) string {
 		parts = append(parts, "onUsage")
 	}
 	return strings.Join(parts, " · ")
+}
+
+// toolsLine is a plugin's tools by their MCP names, sorted.
+func toolsLine(names map[string]string) string {
+	var out []string
+	for _, n := range names {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return strings.Join(out, ", ")
+}
+
+// pageLine is a plugin's page: its title and what it may read of magpie's.
+func pageLine(pg *plugin.PageSpec) string {
+	reads := "reads nothing"
+	if len(pg.Reads) > 0 {
+		reads = "reads " + strings.Join(pg.Reads, ", ")
+	}
+	return pg.Title + " " + muted.Render("("+reads+")")
 }
