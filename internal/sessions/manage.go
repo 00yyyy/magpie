@@ -129,13 +129,7 @@ func ListAgent(agent string) []Managed {
 		s, _ := assemble(fs, price)
 		setSessionCodexIdentity(&s, identities)
 		setSessionCodexTaskTitle(&s, taskTitles)
-		if s.Resume == "" && !s.ReadOnly {
-			s.Resume = resumeCommand(s.WSL, s.Agent, s.ID, s.Cwd, s.Path)
-		}
-		if s.Carry == nil {
-			s.Carry = carries(s)
-		}
-		s.Transcript = HasTranscript(s.Agent)
+		listed(&s)
 		// a WSL distro's too (TJHHHH): moved out over \\wsl.localhost
 		m := Managed{Session: s, Files: len(fs), Deletable: Deletable(agent) && !s.ReadOnly}
 		for _, f := range fs {
@@ -158,6 +152,19 @@ func ListAgent(agent string) []Managed {
 		return out[i].ID < out[j].ID
 	})
 	return out
+}
+
+// listed fills in what assemble leaves out of a session nothing was said
+// in, as ListAgent lists it and Find finds it: how to resume it, and
+// whether its conversation can be read.
+func listed(s *Session) {
+	if s.Resume == "" && !s.ReadOnly {
+		s.Resume = resumeCommand(s.WSL, s.Agent, s.ID, s.Cwd, s.Path)
+	}
+	if s.Carry == nil {
+		s.Carry = carries(*s)
+	}
+	s.Transcript = HasTranscript(s.Agent)
 }
 
 // TrashDir is where deleted sessions are kept: <magpie dir>/trash/sessions.

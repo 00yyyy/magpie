@@ -1505,14 +1505,19 @@ func resumeCommand(distro, agent, id, cwd, path string) string {
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // Find is a session by agent and id: a listed one, else one Get finds
-// under agent:id.
+// under agent:id. One nothing was said in is found too, as ListAgent lists
+// it: the Sessions page shows it, and its conversation, Markdown and
+// Terminal open from it as from any other (#2273).
 func Find(agent, id string) (Session, bool) {
 	for _, s := range List(0) {
 		if s.Agent == agent && s.ID == id {
 			return s, true
 		}
 	}
-	if s, ok := Get(agent + ":" + id); ok && s.ID == id {
+	if s, ok, found := get(agent + ":" + id); found && s.ID == id {
+		if !ok {
+			listed(&s)
+		}
 		return s, true
 	}
 	return Session{}, false
@@ -1597,6 +1602,13 @@ func Titles(keys []string) map[string]string {
 // Get is the session whose files are grouped under key (a Summary's Key),
 // however long ago it was at work.
 func Get(key string) (Session, bool) {
+	s, ok, _ := get(key)
+	return s, ok
+}
+
+// get is Get, and whether key has files at all: ok is false for a session
+// nothing was said in, which found still says is there.
+func get(key string) (s Session, ok, found bool) {
 	mu.Lock()
 	defer mu.Unlock()
 	loadCache()
@@ -1609,7 +1621,7 @@ func Get(key string) (Session, bool) {
 		}
 	}
 	if len(fs) == 0 {
-		return Session{}, false
+		return Session{}, false, false
 	}
 	var identities map[string]CodexIdentity
 	var taskTitles map[codexTaskTitle]string
@@ -1626,8 +1638,8 @@ func Get(key string) (Session, bool) {
 	} else {
 		refresh(fs, files)
 	}
-	s, ok := assemble(fs, pricer())
+	s, ok = assemble(fs, pricer())
 	setSessionCodexIdentity(&s, identities)
 	setSessionCodexTaskTitle(&s, taskTitles)
-	return s, ok
+	return s, ok, true
 }

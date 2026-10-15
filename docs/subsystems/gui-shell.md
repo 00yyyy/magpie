@@ -202,6 +202,12 @@ The Sessions page uses `sessions.ListAgent`; Usage → Sessions uses
 `sessions.List` and `StatsFor` through the handlers in
 [`sessions.go`](../../internal/gui/sessions.go) and
 [`sessions_manage.go`](../../internal/gui/sessions_manage.go).
+`ListAgent` also lists a session nothing was said in, so it can be cleared
+away; `List` leaves such a session out. The routes a row opens
+(conversation, Markdown, Terminal) look the session up with
+`sessions.Find`. `Find` finds every session `ListAgent` lists, empty ones
+included, so such a row doesn't answer "no such session" (#2273,
+`TestFindEmptySession`, `TestEmptySessionOpens`).
 On Windows, [`internal/sessions/wsl.go`](../../internal/sessions/wsl.go)
 reads running distros through their WSL shared paths. A stopped distro keeps
 its cached listing and is not opened; running distros are relisted at most
