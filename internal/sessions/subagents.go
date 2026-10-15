@@ -3,6 +3,7 @@ package sessions
 import (
 	"bytes"
 	"cmp"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"os"
@@ -63,6 +64,11 @@ func subagentsOf(s Session, fs []file) []Subagent {
 			}
 			sa.Title, sa.Kind = ocSubagentTitle(st.Named)
 			sa.Title = cmp.Or(sa.Title, st.Title, st.First)
+			// OpenCode 2 names the agent in the session's row, and its
+			// titles no longer do (#2290)
+			if v2, ok := f.oc.(ocV2DB); ok {
+				sa.Kind = cmp.Or(v2.agent(f.path, f.sid), sa.Kind)
+			}
 		case "kimi":
 			sa.ID = filepath.Base(filepath.Dir(f.path))
 			if spawned == nil {
@@ -175,6 +181,24 @@ func ocSubagentTitle(named string) (string, string) {
 	}
 	return named, ""
 }
+
+// agent is the agent OpenCode 2 ran a session as, session_v2.agent
+// ("general", "explore"), "" when it names none or the column isn't there.
+// One found is kept: a session's agent is set as it starts.
+func (s ocV2DB) agent(path, sid string) string {
+	if v, ok := ocAgents.Load(path); ok {
+		return v.(string)
+	}
+	var a sql.NullString
+	if s.db.QueryRow(`SELECT agent FROM session_v2 WHERE id = ?`, sid).Scan(&a) != nil || a.String == "" {
+		return ""
+	}
+	k := a.String[:min(len(a.String), 128)]
+	ocAgents.Store(path, k)
+	return k
+}
+
+var ocAgents sync.Map
 
 // kimiSpawn is Kimi Code's subagent.spawned record, which the agent that
 // started a subagent writes in its own wire.jsonl.

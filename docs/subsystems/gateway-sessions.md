@@ -425,19 +425,26 @@ for the session) and `start`/`last`; its file is never sent.
   `ocRoots` records its parent. Its title splits 1.x's
   `<description> (@<agent> subagent)`; 2.x titles it the description alone
   (task tool, opencode 2.0.25), and a default `Child session - <time>` is no
-  title. ZCode shares the parser but has no transcript, so lists none.
+  title. OpenCode 2 names the agent in `session_v2.agent` (2.0.29), which
+  is the kind when set, the title's `@<agent>` otherwise (`ocV2DB.agent`,
+  kept once found; #2290). ZCode shares the parser but has no transcript,
+  so lists none.
 - Kimi Code: each `agents/agent-<n>/wire.jsonl`. 1.5's `subagent.spawned`
   record, written in the starting agent's wire, gives `subagentName`,
   `description` and `parentAgentId` (`kimiWireOf`, read again only when the
   file's size or time changes); 1.4 writes none, and the title is the
-  subagent's first `turn.prompt`.
+  subagent's first `turn.prompt`. In a subagent's own wire, a `turn.prompt`
+  from a `system_trigger` named `subagent` is the task it was given and
+  opens as its first user message, not folded context (`kimiTask`, #2290);
+  other system triggers, and any in `agents/main`, stay folded.
 
 These are read beside the parsed-session cache, not in it, so its version
 is unchanged. `GET /api/sessions/transcript` takes `sub=<id>` for a
 subagent's conversation; the id is looked up among the session's own
 `subagents` (`sessions.SubagentTranscript`), never used as a path, and one
 not listed is an error. See `TestClaudeSubagents`, `TestQoderSubagents`,
-`TestOpenCodeSubagents`, `TestKimiSubagents` and
+`TestOpenCodeSubagents`, `TestOpenCodeV2SubagentKind`, `TestKimiSubagents`,
+`TestKimiSubagentTask` and
 `TestSessionSubagentTranscript`.
 
 The Sessions page draws only main sessions on top. A session's subagents are
