@@ -141,7 +141,7 @@ var rtkSpecs = map[string]rtkSpec{
 	},
 	"opencode": {
 		flags: []string{"--opencode"}, patch: true, withClaude: true, blocked: openCodeBlocked,
-		has:    func(a *agent.Agent) bool { return exists(opencodePlugin(a)) },
+		has:    openCodeHas,
 		files:  func(a *agent.Agent) []string { return []string{opencodePlugin(a)} },
 		remove: func(a *agent.Agent) error { return rm(opencodePlugin(a)) },
 		dir:    func(a *agent.Agent) string { return filepath.Dir(a.Path) },
@@ -239,20 +239,52 @@ func opencodePlugin(a *agent.Agent) string {
 }
 
 // openCodeBlocked: rtk's OpenCode plugin (hooks/opencode/rtk.ts, which
-// rtk init --opencode writes to plugins/rtk.ts, up to rtk 0.50 and its
-// develop branch) is written for OpenCode 1's plugin API — a named export
-// of a function. OpenCode 2 reads the same plugins folder but takes only a
-// default export of {id, setup|effect}, and turns rtk's away: "Plugin must
-// export a default definition with an id and an effect or setup function"
-// (rtk-ai/rtk#4311, #3898; the fix, #4187, isn't merged). So with an
-// OpenCode 2 here, rtk isn't given to OpenCode: it would only add a plugin
-// that fails to load.
+// rtk init --opencode writes to plugins/rtk.ts) was written for OpenCode
+// 1's plugin API up to rtk 0.51 — a named export of a function. OpenCode 2
+// reads the same plugins folder but takes only a default export of
+// {id, setup|effect}, and turns that one away: "Plugin must export a
+// default definition with an id and an effect or setup function"
+// (rtk-ai/rtk#4311, #3898). rtk 0.52 on (rtk-ai/rtk#4187, in 0.52.0,
+// 1.0.0 and 1.0.1) writes one default object with OpenCode 2's id and
+// setup() beside OpenCode 1's server(). So with an OpenCode 2 here, rtk is
+// given to OpenCode only by an rtk of 0.52 or newer; an older one, or one
+// that doesn't say its version, would only add a plugin that fails to load.
 func openCodeBlocked() string {
 	v := openCodeVersion()
-	if major, _, _ := strings.Cut(v, "."); major != "" && major != "0" && major != "1" {
-		return fmt.Sprintf("RTK doesn't support OpenCode 2 yet: its plugin is written for OpenCode 1, and OpenCode %s refuses to load it (\"Plugin must export a default definition with an id and an effect or setup function\", github.com/rtk-ai/rtk/issues/4311)", v)
+	if !openCode2(v) {
+		return ""
 	}
-	return ""
+	r := rtkVersion()
+	if r != "" && !older(r, 0, 52) {
+		return ""
+	}
+	if r == "" {
+		return fmt.Sprintf("OpenCode %s needs RTK 0.52 or newer, whose plugin OpenCode 2 loads; older ones write a plugin for OpenCode 1, which OpenCode 2 refuses to load (github.com/rtk-ai/rtk/issues/4311). Install or update RTK, then switch it on", v)
+	}
+	return fmt.Sprintf("OpenCode %s needs RTK 0.52 or newer, and this RTK is %s, whose plugin is written for OpenCode 1: OpenCode 2 refuses to load it (github.com/rtk-ai/rtk/issues/4311). Update RTK (brew upgrade rtk, or its installer again), then switch it on", v, r)
+}
+
+// openCode2 says whether OpenCode version v is 2 or later.
+func openCode2(v string) bool {
+	major, _, _ := strings.Cut(v, ".")
+	return major != "" && major != "0" && major != "1"
+}
+
+// openCodeHas says whether OpenCode has rtk's plugin. Under OpenCode 2 a
+// plugin an rtk before 0.52 wrote (no setup(), OpenCode 1's API only) is
+// refused at load. With an rtk here that writes the new one, that old
+// plugin doesn't count: the row is off, and switching it on runs rtk's
+// installer, which writes the new one over it. With an older rtk it still
+// counts, so the row can be switched off to take it out.
+func openCodeHas(a *agent.Agent) bool {
+	p := opencodePlugin(a)
+	if !exists(p) {
+		return false
+	}
+	if contains(p, "setup(") || !openCode2(openCodeVersion()) {
+		return true
+	}
+	return openCodeBlocked() != ""
 }
 
 // codexBlocked: rtk has a hook for Codex from 0.50.0 on (rtk hook codex in

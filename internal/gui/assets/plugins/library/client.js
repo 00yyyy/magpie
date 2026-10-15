@@ -937,16 +937,16 @@ magpie.plugin("library", (ctx) => {
       if (a.on && !rtk.path) row.append(tag(t("RTK missing"), "warn", t("{agent}'s hook calls rtk, which isn't installed, so its shell commands fail. Install RTK, or switch this off.", { agent: a.name })));
       // …or one that is, off the PATH the agent gets
       else if (a.on && rtk.offPath) row.append(tag(t("Not on PATH"), "warn", t("{agent}'s hook runs rtk by name and can't find it, so RTK does nothing for it. Put RTK on PATH above.", { agent: a.name })));
-      // OpenCode 2 won't load rtk's plugin (written for OpenCode 1): it can't
-      // be switched on, and one already there can be switched off
       // an agent RTK has no hook for (DeepSeek Harness): listed, with why
       if (a.noHook) row.append(tag(t("No RTK hook"), "warn", t("RTK can't be given to {agent} yet: RTK works by rewriting the shell command an agent is about to run, and {agent}'s hooks can only allow or deny a command, not change it. RTK's installer has no option for it either (github.com/rtk-ai/rtk/issues/3847).", { agent: a.name })));
       // RTK before 0.51 installs Antigravity's hook only per project
       else if (a.blocked && a.id === "agy") row.append(tag(t("Update RTK"), "warn", t("{agent}'s hook needs RTK 0.51 or newer: older ones install it only per project. Update RTK (brew upgrade rtk, or its installer again), then switch it on.", { agent: a.name })));
       else if (a.blocked && a.id !== "opencode") row.append(tag(t("Update RTK"), "warn", t("{agent}'s hook needs RTK 0.50 or newer: older ones only add @RTK.md to AGENTS.md, which rewrites no command. Update RTK (brew upgrade rtk, or its installer again), then switch it on.", { agent: a.name })));
-      else if (a.blocked) row.append(tag(t("Not for OpenCode 2"), "warn", a.on
-        ? t("RTK's plugin is written for OpenCode 1, and OpenCode 2 refuses to load it. Switch this off until RTK supports OpenCode 2.")
-        : t("RTK's plugin is written for OpenCode 1, and OpenCode 2 refuses to load it. It can be switched on once RTK supports OpenCode 2.")));
+      // OpenCode 2 loads only the plugin RTK 0.52 on writes (rtk-ai/rtk#4187);
+      // an older one's, already there, can be switched off
+      else if (a.blocked) row.append(tag(t("Update RTK"), "warn", a.on
+        ? t("OpenCode 2 refuses to load this plugin: RTK before 0.52 writes it for OpenCode 1. Update RTK (brew upgrade rtk, or its installer again) and switch it on again, or switch this off.")
+        : t("OpenCode 2 needs RTK 0.52 or newer: older ones write a plugin for OpenCode 1, which OpenCode 2 refuses to load. Update RTK (brew upgrade rtk, or its installer again), then switch it on.")));
       const sw = toggle(a.on, t("{agent} runs its commands through RTK", { agent: a.name }), (on) => setRTK(a, on));
       if ((!rtk.path && !a.on) || (a.blocked && !a.on) || rtkBusy.has(a.id) || rtkInstalling || rtkUpgrading) sw.disabled = true;
       row.append(sw);
