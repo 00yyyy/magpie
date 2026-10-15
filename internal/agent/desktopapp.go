@@ -74,9 +74,20 @@ func macAppFolders(home string) []string {
 }
 
 // windowsStorePackages lists the package full names registered for the
-// current user on Windows, nil elsewhere; a var so tests never read the
-// machine's own registry.
-var windowsStorePackages = installedWindowsStorePackages
+// current user on Windows, nil elsewhere; a var so a test can give its own.
+// In a test binary testenv isolated it is none: the AppX registry is the
+// machine's own, which no home or PATH a test stages takes away, so on a
+// Windows machine with the Codex app installed every package's tests saw
+// Codex's app and codex's CLI was never gone there (#2254, ggbdpq). Only
+// agent's own TestMain stood in for it before.
+var windowsStorePackages = storePackages
+
+func storePackages() []string {
+	if proc.Isolated() {
+		return nil
+	}
+	return installedWindowsStorePackages()
+}
 
 var (
 	plistIDRe      = regexp.MustCompile(`<key>CFBundleIdentifier</key>\s*<string>([^<]+)</string>`)
