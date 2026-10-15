@@ -53,11 +53,13 @@ func TestOnExportsOffSendsNothing(t *testing.T) {
 	rt := pluginrt.New([]pluginrt.Manifest{manifest(t)})
 	defer rt.Stop()
 	// seen is every model the collector got until want came, or "" when it
-	// didn't within 10s (the first export prices its rows, which loads the
-	// catalog)
+	// didn't within a minute. The first export prices its rows, which loads
+	// the catalog: 10s wasn't enough on a machine at load 100 (the full
+	// suite). Waiting longer costs a passing run nothing, and "off sends
+	// nothing" doesn't hang on it: what came before model-again is checked.
 	seen := func(want string) string {
 		var got strings.Builder
-		deadline := time.After(10 * time.Second)
+		deadline := time.After(time.Minute)
 		for {
 			select {
 			case b := <-received:
