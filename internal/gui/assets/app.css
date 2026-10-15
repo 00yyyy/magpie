@@ -1237,10 +1237,12 @@ body.window .field.solo { grid-column: auto; }
 .led-vias .blk { cursor: pointer; text-align: left; border: 0; font: inherit; color: inherit; background: none; }
 .led-vias .blk:hover { background: var(--pill-hover); }
 .led-vias .blk:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* the one being filtered by: its own colour under the count, no blue text */
-.led-vias .blk.on { box-shadow: inset 0 -2px 0 var(--accent); }
-/* the end cells round as the strip does, inside its 1px border, so a hover,
-   the focus ring or the bar under the one filtered by doesn't square its corner */
+/* the one being filtered by: its own colour under the count, no blue text;
+   a straight bar as wide as the text, so it never bends up a rounded corner */
+.led-vias .blk { position: relative; }
+.led-vias .blk.on::after { content: ""; position: absolute; left: 15px; right: 15px; bottom: 0; height: 2px; border-radius: 1px; background: var(--accent); }
+/* the end cells round as the strip does, inside its 1px border, so a hover
+   or the focus ring doesn't square its corner */
 .led-vias .blk:first-child { border-radius: 11px 0 0 11px; }
 .led-vias .blk:last-child { border-radius: 0 11px 11px 0; }
 /* the count's unit sits after the number, small, as its label is under it */
