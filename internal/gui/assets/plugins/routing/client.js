@@ -866,6 +866,65 @@ function routingPage(part) {
       : t("{level} is the model's nearest to the {asked} {agent} asked for.", { level: tr.effort, asked: r.effort, agent }));
   }
 
+  // where a try's time went (gateway.TryNet, Discord Magic_zero: the
+  // gateway looked slow): magpie's own, the network's on the way out, and
+  // the vendor's, from the try's start to its end, the parts that took
+  // none left out. Only a try whose request magpie sent itself has it: one
+  // that went out some other way (a plugin's own fetch), or a trace from
+  // before magpie measured it, says nothing more than the time it took.
+  const ms1 = (n) => n < 10 ? t("{n} ms", { n: (Math.round(n * 10) / 10).toString() }) : took(Math.round(n));
+  function timeParts(tr) {
+    const n = tr.net, out = [], add = (who, label, v) => { if (v >= 0.1) out.push({ who, label, v }); };
+    if (!n) return out;
+    add("magpie", "Waiting for a slot", tr.queued || 0);
+    add("magpie", "In magpie", n.own || 0);
+    add("net", "Requests before it", n.before || 0);
+    // what's left of the pool's wait once a dial is out is a rounding
+    if ((n.pool || 0) >= 1) add("net", "Waiting for a connection", n.pool);
+    add("net", "DNS", n.dns || 0);
+    add("net", "Connecting", n.connect || 0);
+    add("net", "TLS", n.tls || 0);
+    add("net", "Sending", n.send || 0);
+    add("vendor", "Vendor (first byte)", n.wait || 0);
+    const head = n.head || 0;
+    if (tr.ttft > 0) {
+      add("vendor", "First token", tr.ttft - head);
+      add("vendor", "Streaming", (tr.ms || 0) - tr.ttft);
+    } else add("vendor", "Reading the reply", (tr.ms || 0) - head);
+    return out;
+  }
+  const WHO = { magpie: "magpie {ms}", net: "network {ms}", vendor: "vendor {ms}" };
+  function timeSaid(tr) {
+    const parts = timeParts(tr);
+    if (!parts.length) return "";
+    const sum = {};
+    for (const p of parts) sum[p.who] = (sum[p.who] || 0) + p.v;
+    const whose = Object.keys(WHO).filter((k) => sum[k] > 0).map((k) => t(WHO[k], { ms: ms1(sum[k]) }));
+    return [t("Where the time went"), whose.join(" · "), parts.map((p) => t(p.label) + " " + ms1(p.v)).join(" · ")].filter(Boolean).join(": ");
+  }
+  function timeElement(tr) {
+    const parts = timeParts(tr), total = parts.reduce((a, p) => a + p.v, 0) || 1;
+    const box = el("div", "rt-time");
+    const head = el("div", "rt-time-head", t("Where the time went"));
+    const sum = {};
+    for (const p of parts) sum[p.who] = (sum[p.who] || 0) + p.v;
+    for (const k of Object.keys(WHO)) if (sum[k] > 0) head.append(el("span", "rt-time-who " + k, t(WHO[k], { ms: ms1(sum[k]) })));
+    const bar = el("div", "rt-time-bar");
+    bar.setAttribute("aria-hidden", "true");
+    const list = el("ul", "rt-time-parts");
+    for (const p of parts) {
+      const seg = el("span", p.who);
+      seg.style.flexGrow = String(p.v / total);
+      seg.title = t(p.label) + " " + ms1(p.v);
+      bar.append(seg);
+      const li = el("li", p.who);
+      li.append(el("span", "k", t(p.label)), el("span", "v", ms1(p.v)));
+      list.append(li);
+    }
+    box.append(head, bar, list);
+    return box;
+  }
+
   // what the gateway adds to WorkBuddy's "unapproved channel" refusal
   // (provider.WBRefusedHint, #182): the agent gets it in English, the page
   // says it apart from the vendor's words, in its own language
@@ -1890,6 +1949,9 @@ function routingPage(part) {
     for (const a of asides(r)) items.push([a, "aside"]);
     r.tries.forEach((tr, i) => {
       items.push([tryWhy(r, i), tr.done ? (tryOk(tr) ? "ok" : "bad") : "wait"]);
+      // where its time went, once it is done
+      const when = tr.done && timeSaid(tr);
+      if (when) items.push([when, "aside time", tr]);
       // each model Copilot's Auto picked for it, where from, and whether
       // Copilot refused it, on which API and with Auto's session token or
       // without (#256)
@@ -1939,6 +2001,7 @@ function routingPage(part) {
       li.append(...(/^(why|ok|bad|wait|aside)$/.test(c) ? logoed(s, r) : [s]));
       if (c === "aside kind") li.prepend(kindTag(r), " ");
       if (c === "swap") li.prepend(swapTag(tr), " ");
+      if (c === "aside time") li.replaceChildren(timeElement(tr));
       return li;
     }));
     keptIcons = null;

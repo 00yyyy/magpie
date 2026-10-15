@@ -2290,6 +2290,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// when the request that last went out began to (GetConn), and
 		// when its body was written
 		var asking, asked, wrote atomic.Int64
+		var nt netTrace // where the try's time went (TryNet)
 		attemptBody := body
 		if from == provider.Responses {
 			// reasoning another sealed, which this one refused earlier in
@@ -2496,13 +2497,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// when the request last went out to the vendor, its body
 			// written: what came after is the vendor's (Record.Sent).
 			// Before it, from when it began to go out, is connecting and
-			// sending the body, and before that magpie's (#1532)
-			ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
-				GetConn: func(string) { asking.Store(time.Now().UnixNano()) },
-				WroteRequest: func(httptrace.WroteRequestInfo) {
-					asked.Store(asking.Load())
-					wrote.Store(time.Now().UnixNano())
-				}})
+			// sending the body, and before that magpie's (#1532); and each
+			// step of its way out, for the Routing page to say whose time
+			// a slow turn was (TryNet)
+			ctx = httptrace.WithClientTrace(ctx, nt.hooks(&asking, &asked, &wrote))
 			// a key or account with a MaxConcurrency is asked once one of
 			// its slots is free, in turn; the agent gone while it waits,
 			// nothing is sent (the 499 below)
@@ -2624,7 +2622,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		wentTier = at.tier
 		ended = time.Now()
 		try := Try{ID: c.rest, Model: c.model, Effort: wentAt, Picked: picked, Fixed: fixed, Fast: fast, Start: began, Done: true, Status: call.Status, Millis: ended.Sub(began).Milliseconds(), Error: call.Error, Queued: queued,
-			Served: call.Usage.Served, Upstream: call.Usage.Upstream, Tier: wentTier, TierServed: call.Usage.Tier, Auto: autoPicked()}
+			Served: call.Usage.Served, Upstream: call.Usage.Upstream, Tier: wentTier, TierServed: call.Usage.Tier, Auto: autoPicked(),
+			Net: nt.timing(began, queued)}
 		if resetFirst != nil {
 			// the reset spent for it before it was asked
 			try.Reset, resetFirst = resetFirst, nil
@@ -3255,6 +3254,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		t.Tokens = call.Usage.Input + call.Usage.Output + call.Usage.CacheRead + call.Usage.CacheWrite
 		t.FirstReasoning, t.ReasoningHidden = call.FirstReasoning, call.ReasoningHidden
 		t.Output, t.Reasoning, t.TTFT, t.FirstText, t.Flow = call.Usage.Output, call.Usage.Reasoning, call.TTFT, call.FirstText, call.Flow
+		t.Sent, t.Own, t.Retried, t.Queued = sentMs, ownMs, retriedMs, queuedMs
 		if prompt != nil {
 			t.Prompt = prompt.calibrated(promptCounted(t.Usage), window)
 		}
