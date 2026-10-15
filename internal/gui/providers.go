@@ -1262,6 +1262,15 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				pr.NativeCompaction = in.NativeCompaction
 				pr.PassUserAgent = in.PassUserAgent
 				pr.AuthHeader = in.AuthHeader
+				// and what its editor sets beside them: how requests spread
+				// over its keys, how long a conversation stays, the one
+				// rate limited to the back, Unlisted and each key's proxy.
+				// A decision-only preset (TypeSafe Jev) has no chat URL, so
+				// every save of its editor came here, and In order went
+				// back to Smart (fflake33 on Discord)
+				pr.Routing, pr.Affinity, pr.Sink = in.Routing, in.Affinity, in.Sink
+				pr.Unlisted = in.Unlisted
+				pr.AccountProxies = in.AccountProxies
 				if in.Name != "" {
 					pr.Name = in.Name
 				}
