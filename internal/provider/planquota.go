@@ -96,6 +96,10 @@ func readZhipuPlan(b []byte) (string, []QuotaWindow, error) {
 	if err := json.Unmarshal(b, &r); err != nil {
 		return "", nil, err
 	}
+	if code, msg, ok := zhipuEnvelope(b); ok && ZhipuKeyRefused(code) {
+		// the key itself refused, which no plan can be read past
+		return "", nil, zhipuKeyRefusal{msg}
+	}
 	if r.Success != nil && !*r.Success || r.Data == nil {
 		if r.Msg != "" {
 			return "", nil, fmt.Errorf("%s", r.Msg)
@@ -510,10 +514,47 @@ func planWindows(ctx context.Context, src planQuotaSource, key string) (plan str
 		return "", nil, fmt.Errorf("this key has no OpenCode Go subscription: Go belongs to the member who subscribed, in that workspace, so use a key that member made there (opencode.ai, the workspace's API Keys)")
 	case res.StatusCode == http.StatusUnauthorized && openCode:
 		return "", nil, fmt.Errorf("OpenCode didn't take this key (%s): it was deleted, or is mistyped", vendorSaid(b, res.Status))
+	case res.StatusCode == http.StatusUnauthorized && zhipuHost(hostOf(src.url)):
+		return "", nil, zhipuRefused(src.url, zhipuKeyRefusal{vendorSaid(b, res.Status)})
 	case res.StatusCode >= 300:
 		return "", nil, fmt.Errorf("%s", vendorSaid(b, res.Status))
 	}
-	return src.read(b)
+	plan, ws, err = src.read(b)
+	if r, ok := err.(zhipuKeyRefusal); ok {
+		err = zhipuRefused(src.url, r)
+	}
+	return plan, ws, err
+}
+
+// zhipuKeyRefusal is Zhipu or Z.ai refusing a key itself (codes
+// 1000–1005: not taken, expired), in their words.
+type zhipuKeyRefusal struct{ said string }
+
+func (e zhipuKeyRefusal) Error() string { return e.said }
+
+// zhipuRefused says a refused key's card in words that name the key and
+// what to do (@xanahopper on X: a GLM Coding Plan key Zhipu refused showed
+// only "Allowance unavailable"), keeping the vendor's own words.
+func zhipuRefused(quotaURL string, r zhipuKeyRefusal) error {
+	vendor, keys := "Zhipu", "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys"
+	if hostOf(quotaURL) == "api.z.ai" {
+		vendor, keys = "Z.ai", "https://z.ai/manage-apikey/apikey-list"
+	}
+	said := strings.TrimSpace(r.said)
+	if said == "" {
+		said = "key refused"
+	}
+	return refusedKeyErr{fmt.Sprintf("%s didn't take this key (%s): it has expired, was deleted, or is mistyped; paste a current one from %s in the provider's settings", vendor, said, keys)}
+}
+
+// refusedKeyErr is a card's error for a key Zhipu or Z.ai refused.
+type refusedKeyErr struct{ msg string }
+
+func (e refusedKeyErr) Error() string { return e.msg }
+
+func zhipuKeyRefusedErr(err error) bool {
+	_, ok := err.(refusedKeyErr)
+	return ok
 }
 
 // vendorSaid is the status, and the reason in a vendor's error body
@@ -550,7 +591,8 @@ func vendorSaid(b []byte, status string) string {
 // are asked with type=2 (zcode_team.go), and team says so.
 func planKeyWindows(ctx context.Context, p Provider, src planQuotaSource, key string) (plan string, ws []QuotaWindow, team bool, err error) {
 	plan, ws, err = planWindows(ctx, src, key)
-	if zhipu := strings.HasSuffix(src.url, "/api/monitor/usage/quota/limit"); zhipu && (err != nil || len(ws) == 0) {
+	// a key refused is refused as a team's too
+	if zhipu := strings.HasSuffix(src.url, "/api/monitor/usage/quota/limit"); zhipu && (err != nil || len(ws) == 0) && !zhipuKeyRefusedErr(err) {
 		if tplan, tws, terr := zhipuKeyTeamWindows(ctx, src.url, key, p.ZhipuTeam); terr == nil && len(tws) > 0 {
 			return tplan, tws, true, nil
 		}

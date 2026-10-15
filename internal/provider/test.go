@@ -486,6 +486,11 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 		// a GLM Coding Plan's key at Zhipu's pay-as-you-go endpoint
 		res, err = RetryZhipuCoding(p, req, res, func(r *http.Request) (*http.Response, error) { return p.Do(http.DefaultClient, r) })
 	}
+	if err == nil {
+		// Zhipu's Responses API refuses a key 200, in an envelope: the
+		// refusal it is, not a green check (@xanahopper on X)
+		res = ZhipuEnveloped(req, res)
+	}
 	r.Millis = time.Since(start).Milliseconds()
 	if err != nil {
 		r.Error = strings.TrimPrefix(err.Error(), "Post \""+url+"\": ")
