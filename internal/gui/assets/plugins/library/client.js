@@ -1479,12 +1479,62 @@ magpie.plugin("library", (ctx) => {
     const sub = el("div", "sub mono", serverLine(s));
     sub.title = serverLine(s);
     who.append(sub, toolsEl(s.name));
-    row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), who,
+    row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), who, ...removeAct(() => confirmRemoveServer(s)),
       agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true }));
     if (picking) return pickRow(row, s.name);
     row.onclick = () => editServer(s);
     row.title = t("Edit {name}", { name: s.name });
     return row;
+  }
+
+  // A server's or a hook's own Remove on its row, as a skill's has (#2364,
+  // szoxidy: a server turned off for every agent stayed in the list, its
+  // only Remove inside the editor its row opens). It asks first in the
+  // page, naming the one it takes and what goes with it. While picking,
+  // the bar's Remove is the one, and the row keeps the room it had.
+  function removeAct(run) {
+    if (picking) return [];
+    const acts = el("div", "lib-rowacts");
+    const rm = button("", "lib-icon danger lib-rm", run);
+    rm.append(svg(GLYPH.trash, 13, 1.4));
+    rm.title = t("Remove");
+    acts.append(rm);
+    return [acts];
+  }
+  function confirmRemoveOne(kind, name, title, lines) {
+    const ed = el("div", "editor lib-editor lib-rmone");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.trash), el("b", "", title));
+    ed.append(head);
+    for (const l of lines) if (l) ed.append(el("p", "lib-confirm", l));
+    const bar = el("div", "bar");
+    const go = button(t("Remove"), "primary danger-fill", async () => {
+      go.disabled = true;
+      if (await change(kind + "/remove", { name }, t("{name} removed", { name }))) closeLibModal(true);
+      else go.disabled = false;
+    });
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
+    ed.append(bar);
+    modal = { save: () => go.click() };
+    openLib(ed);
+  }
+  const takenFromOne = (x) => x.agents?.length
+    ? t("It is taken out of the library and out of {agents}.", { agents: x.agents.map(nameOf).join(", ") })
+    : t("It is taken out of the library; no agent has it.");
+  function confirmRemoveServer(s) {
+    const projects = (lib.projects || []).filter((p) => p.servers?.[s.name]?.length).length;
+    confirmRemoveOne("servers", s.name, t("Remove the MCP server {name}?", { name: s.name }), [
+      takenFromOne(s),
+      projects && t("It is taken out of the {n} projects magpie placed it in too.", { n: projects }),
+      s.signIn?.signedIn && t("magpie's sign-in to it is forgotten too."),
+      t("Servers your agents have that aren't in the library stay as they are."),
+    ]);
+  }
+  function confirmRemoveHook(h) {
+    confirmRemoveOne("hooks", h.name, t("Remove the hook {name}?", { name: h.name }), [
+      takenFromOne(h),
+      t("Hooks your agents have that aren't in the library stay as they are, and so does one you changed in an agent's file."),
+    ]);
   }
 
   // Whether a server works, as magpie found by connecting to it: started
@@ -2265,7 +2315,7 @@ magpie.plugin("library", (ctx) => {
     const cmd = el("div", "sub mono lib-hookcmd", h.command);
     cmd.title = h.command;
     who.append(cmd);
-    row.append(glyph(GLYPH.hook), who,
+    row.append(glyph(GLYPH.hook), who, ...removeAct(() => confirmRemoveHook(h)),
       agentChips(withGone(all, h.agents), h.agents, chipsChange("hooks/agents", h.name, "hooks", (x) => hookRow(x, all)), { problems: h.problems, blocked: hookBlocked(h), all: true }));
     if (picking) return pickRow(row, h.name);
     row.onclick = () => editHook(h);
