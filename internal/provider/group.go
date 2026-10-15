@@ -313,6 +313,9 @@ func groupsIn(entries []Entry) []Group {
 		}
 		out = append(out, withMatches(entries, g.own()))
 	}
+	if !served(f.Groups) { // plugins/groups is off: the user's own aren't served
+		out = slices.DeleteFunc(out, func(g Group) bool { return !g.Auto })
+	}
 	if f.NoAutoGroups {
 		return orderedGroups(out, f.GroupOrder)
 	}

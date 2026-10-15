@@ -19,6 +19,7 @@ const standInsEnv = "MAGPIE_GATEWAY_TEST_STAND_INS"
 
 func TestMain(m *testing.M) {
 	serveRotation()
+	groupsServed = provider.ServeGroups()
 	code, err := isolatedTests(m)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -134,4 +135,19 @@ func withoutRotation(t *testing.T) {
 	}
 	rotation = nil
 	t.Cleanup(serveRotation)
+}
+
+// groupsServed is plugins/groups on, as for a user with a group of their
+// own: the gateway's tests serve their groups.
+var groupsServed func()
+
+// withoutGroups is plugins/groups off for t, in a process serving the
+// gateway (provider.GateGroups): the user's own groups aren't served.
+func withoutGroups(t *testing.T) {
+	groupsServed()
+	stop := provider.GateGroups(nil)
+	t.Cleanup(func() {
+		stop()
+		groupsServed = provider.ServeGroups()
+	})
 }

@@ -187,8 +187,18 @@ the core. The five other routings are the built-in plugin `rotation`'s.
 | Off | A routing no strategy serves is its listed order. `routingOf` in the gateway reads it as `order` wherever the core asks about a routing (a turn's mark, `sinks`, a rotate group's sessions, a group's heads), so nothing of the routing is left half on. | [`routing.go`](../../internal/gateway/routing.go) |
 | `plugins/rotation` | Requires `providers` and `gateway`, `Essential`. Apply registers every `routes.Builtin` and removes them when turned off. `InUse` counts the providers and groups providers.json routes by one of them (`provider.Routings`, the file alone, not the catalog); an unreadable providers.json is an error, so it stays on. The gateway's `KeepFresh` watches providers.json too, so a routing set from the CLI or the TUI turns it on within 2s. Off, the window's routing pickers (the provider editor, the Routing page's pools and groups) offer Smart alone: their options are marked `data-feature="rotation"` (`routingSegs`). | [`rotation.go`](../../plugins/rotation/rotation.go), [`provider.go`](../../internal/provider/provider.go), [`app.js`](../../internal/gui/assets/app.js) |
 
-Groups are next on this point: `planGroup` behind it, the `groups` plugin
-serving it.
+The user's own routing groups are the `groups` plugin's on this point. The
+groups magpie finds (a model two providers serve, `auto-<model>`) stay the
+core's, as Smart does: they are how a model several providers serve is one
+model with failover, which a new install has with the Essentials preset,
+where `groups` is off. `planGroup` and the walk over a group's members are
+the core's either way: a strategy only orders a pool, and a group off is
+not offered at all.
+
+| Part | What it does | Source |
+| --- | --- | --- |
+| `GateGroups`, `ServeGroups` | The gateway holds `GateGroups` while it serves (`ListenAndServe`), and the plugin holds `ServeGroups` while it is on. Gated with none served, `groupsIn` leaves out every group not `Auto`, so `Groups`, `FindGroup`, `GroupFor`, the catalog, `/v1/models` and a group's `Unlists` go without them: a request for one is a model not served. A process not serving the gateway (the CLI, the TUI) is never gated and lists them all. Nothing built from the groups is kept past a call, so a flip is seen by the next lookup. Gated and off, a lookup that finds a group of the user's own first asks the gate's refresh (the gateway's is `pluginrt.Refresh`), at most once a second and never from inside one, then looks again: a group made a moment ago turns the plugin on and is served by the request that asks for it, not after `KeepFresh`'s next look (`TestOwnGroupRefreshesTheGate`). | [`group_serve.go`](../../internal/provider/group_serve.go), [`group.go`](../../internal/provider/group.go), [`gateway.go`](../../internal/gateway/gateway.go) |
+| `plugins/groups` | Requires `window` and `providers`, not Essential. Apply holds `ServeGroups`. `InUse` is `provider.NamedGroups`: the groups providers.json holds that are neither Auto nor hidden, read from the file, never through the gate (else off would count none and stay off); an unreadable file is an error, so it stays on. The `routing` plugin's `InUse` is the same count. The gateway's `KeepFresh` watches providers.json, so a group made with `magpie group add` turns it on within 2s, and a request for it before then turns it on itself (the gate's refresh, above); the window's New group button is `data-feature="groups"`. | [`groups.go`](../../plugins/groups/groups.go), [`routing.go`](../../plugins/routing/routing.go) |
 
 The other points follow in this order: middleware (the JS gateway middleware becomes one consumer of it, with its
 place, API and fail-open policy unchanged; redaction fails closed), then
@@ -288,5 +298,11 @@ remembering its layer (`Source`):
   the parity run with the plugin on; `TestRotationOnAndOff` turns it off),
   and `routing-save.test.cjs` (Smart alone with it off, every width and
   engine).
+- P3 groups: `go test ./internal/provider/ -run 'TestOwnGroupsWaitOnThePlugin|TestNamedGroupsUnreadable'`,
+  `go test ./plugins/groups/` (`TestOnServesOffDoesNot`, `TestInUse`) and
+  `go test ./internal/gateway/` whole (its `TestMain` holds
+  `ServeGroups`, the parity run with the plugin on; `TestGroupsOnAndOff`
+  turns it off: the user's group leaves `/v1/models` and isn't served,
+  the found one is both).
 - By hand, under a sandbox HOME: `magpie plugin builtin`, `magpie plugin
   builtin on groups`, `magpie plugin dump`, and a plugins.yml broken by hand.

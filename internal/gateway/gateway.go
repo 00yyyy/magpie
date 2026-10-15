@@ -477,6 +477,15 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	// `magpie plugin builtin`) come and go here too
 	stopObservers := usage.ServeObservers()
 	defer stopObservers()
+	// and the user's own routing groups are served while plugins/groups is
+	// on (provider.GateGroups); one made a moment ago turns it on as it is
+	// looked up, not on KeepFresh's next look
+	stopGroups := provider.GateGroups(func() {
+		if _, err := pluginrt.Refresh(); err != nil {
+			log.Printf("plugins: %v", err)
+		}
+	})
+	defer stopGroups()
 	freshCtx, stopFresh := context.WithCancel(ctx)
 	defer stopFresh()
 	go pluginrt.KeepFresh(freshCtx, 2*time.Second, settings.Path(), provider.Path())
