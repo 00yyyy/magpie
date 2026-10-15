@@ -51,6 +51,11 @@ type Target struct {
 	// gave it (held): a sync only takes things out of it, as they are
 	// unticked, and gives it nothing.
 	Gone bool
+	// Profile says the instructions file is the user's profile to the
+	// agent, not instructions alone (Alma's USER.md): magpie adds its part
+	// after the user's, but never moves the user's own lines out of it
+	// (ImportInstructions), as the agent reads who its owner is there.
+	Profile bool
 }
 
 func home() string { h, _ := os.UserHomeDir(); return h }
@@ -261,8 +266,16 @@ func targetOf(a *agent.Agent) *Target {
 		// and ~/.agents/skills besides (its skills service, #824). Its MCP
 		// servers are ~/.config/alma/mcp.json's mcpServers, read as Alma
 		// starts and when its MCP settings refresh (0.4.164's
-		// out/main/index.js, #1292). It has no user-wide instructions file,
-		// its prompts being its settings' own
+		// out/main/index.js, #1292). Its main chat puts ~/.config/alma/
+		// USER.md, on every system, in its system prompt as its owner's
+		// profile ("name, preferences, habits"), unless the thread's
+		// workspace has a USER.md of its own (0.4.164's out/main/index.js,
+		// #2315): magpie's part goes after what the user has there. The
+		// file's YAML front matter is where Alma's Telegram and Discord
+		// bots read who the owner is, so it is a Profile: the user's own
+		// lines are never moved out of it
+		t.Instructions = filepath.Join(h, ".config", "alma", "USER.md")
+		t.Profile = true
 		t.Skills = filepath.Join(h, ".config", "alma", "skills")
 		t.MCP = &mcpFile{Path: filepath.Join(h, ".config", "alma", "mcp.json"), Format: fmtAlma}
 		t.SkillsAlso = []string{"claude", "codex"}
@@ -763,7 +776,7 @@ func readsWith(ts []*Target) {
 // whether any place is left.
 func (t *Target) open() bool {
 	if t.Instructions != "" && agent.Taken(filepath.Dir(t.Instructions)) {
-		t.Instructions, t.Override, t.Note = "", "", ""
+		t.Instructions, t.Override, t.Note, t.Profile = "", "", "", false
 	}
 	if t.MCP != nil && slices.ContainsFunc(t.MCP.files(), func(p string) bool { return agent.Taken(filepath.Dir(p)) }) {
 		t.MCP, t.MCPVia = nil, ""

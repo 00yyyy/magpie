@@ -304,6 +304,7 @@ type AgentInstructions struct {
 	Own      int    `json:"own"`                // lines of the user's own in the file
 	Edited   bool   `json:"edited,omitempty"`   // magpie's part was changed in the file
 	Override string `json:"override,omitempty"` // a file the agent reads instead
+	Profile  bool   `json:"profile,omitempty"`  // the file is the user's profile to the agent (Target.Profile)
 }
 
 // InstructionsView is the Instructions page.
@@ -347,7 +348,7 @@ func (l *Library) instructionsView(targets []*Target) *InstructionsView {
 		}
 		id := t.Agent.ID
 		ai := AgentInstructions{Agent: id, Name: t.Agent.Name, Icon: t.Agent.Icon, Path: t.Instructions,
-			On: slices.Contains(l.Instructions.Agents, id), Extra: readText(extraPath(id))}
+			On: slices.Contains(l.Instructions.Agents, id), Extra: readText(extraPath(id)), Profile: t.Profile}
 		file := readText(t.Instructions)
 		if o := own(file); o != "" {
 			ai.Own = strings.Count(o, "\n") + 1
@@ -455,6 +456,11 @@ func ImportInstructions(id string) (*Result, error) {
 	t := targetByID(id)
 	if t == nil || t.Instructions == "" {
 		return nil, fmt.Errorf("%s has no instructions file magpie knows", id)
+	}
+	if t.Profile {
+		// moved out, the profile would go into every agent's file, and the
+		// agent would lose who its owner is (Alma's USER.md, #2315)
+		return nil, fmt.Errorf("%s is %s's profile of its owner, not instructions alone: what is in it stays there", t.Instructions, t.Agent.Name)
 	}
 	return changeInstructions(func(l *Library) error {
 		if l.isSetFile(t.Instructions) {

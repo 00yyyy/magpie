@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -157,19 +158,104 @@ func TestCrushInstructionsWhereCrushReadsThem(t *testing.T) {
 	}
 }
 
-// Alma takes skills, in ~/.config/alma/skills (#824), and MCP servers, in
-// ~/.config/alma/mcp.json (#1292), but has no user-wide place for
-// instructions, and the library says so rather than recording it as given
-// any.
-func TestTakesRefusesAlma(t *testing.T) {
+// Alma takes skills, in ~/.config/alma/skills (#824), MCP servers, in
+// ~/.config/alma/mcp.json (#1292), and instructions, in
+// ~/.config/alma/USER.md, which its main chat reads into its system
+// prompt (#2315).
+func TestTakesAlma(t *testing.T) {
 	sandbox(t)
-	if id, err := Takes("alma", "instructions"); err == nil || !strings.Contains(err.Error(), "Alma has no user-wide place") {
-		t.Errorf("instructions: %q %v", id, err)
-	}
-	for _, kind := range []string{"skills", "mcp"} {
+	for _, kind := range []string{"instructions", "skills", "mcp"} {
 		if id, err := Takes("alma", kind); err != nil || id != "alma" {
 			t.Errorf("%s: %q %v", kind, id, err)
 		}
+	}
+}
+
+// almaHere makes Alma's data folder, which is what has it detected, and
+// returns its USER.md.
+func almaHere(t *testing.T, h string) string {
+	t.Helper()
+	t.Setenv("APPDATA", filepath.Join(h, "AppData", "Roaming"))
+	cfg, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(cfg, "alma"), 0o755)
+	return filepath.Join(h, ".config", "alma", "USER.md")
+}
+
+// almaFront is how Alma reads its owner from USER.md (getOwnerInfo in
+// 0.4.164's out/main/index.js): the YAML front matter, from the file's
+// first line, unanchored otherwise.
+var almaFront = regexp.MustCompile(`^---\n([\s\S]*?)\n---`)
+
+// Jie211's USER.md, as Alma's own setup writes one, keeps its front matter
+// first and its profile whole when Alma is given the shared instructions:
+// magpie's part goes after it, and turning Alma off leaves the file as it
+// was (#2315).
+func TestAlmaInstructionsKeepTheProfile(t *testing.T) {
+	h := sandbox(t)
+	user := almaHere(t, h)
+	if tg := targetByID("alma"); tg == nil || tg.Instructions != user || !tg.Profile {
+		t.Fatalf("alma: %+v", tg)
+	}
+	mine := "---\nname: \"Jie\"\ntelegram_id: \"123456789\"\ndiscord_id: \"\"\n---\n# About My Human\n- Name: Jie\n- Language: 中文\n"
+	write(t, user, mine)
+	shared := "交流用中文，代码注释和文档默认用英文。"
+	ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{"alma"}}))
+	got := read(t, user)
+	if want := mine + "\n" + blockBegin + "\n" + shared + "\n" + blockEnd + "\n"; got != want {
+		t.Errorf("USER.md:\n%q\nwant\n%q", got, want)
+	}
+	if m := almaFront.FindStringSubmatch(got); m == nil || !strings.Contains(m[1], `telegram_id: "123456789"`) {
+		t.Errorf("Alma no longer reads its owner from USER.md:\n%s", got)
+	}
+	ok(t)(SaveInstructions(InstructionsChange{Agents: []string{}}))
+	if got := read(t, user); got != mine {
+		t.Errorf("USER.md after Alma is off:\n%q", got)
+	}
+}
+
+// Alma with no USER.md gets one with magpie's part alone, taken away again
+// when Alma is turned off.
+func TestAlmaInstructionsWithoutUserMD(t *testing.T) {
+	h := sandbox(t)
+	user := almaHere(t, h)
+	shared := "Reply in English."
+	ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{"alma"}}))
+	if got := read(t, user); got != blockBegin+"\n"+shared+"\n"+blockEnd+"\n" {
+		t.Errorf("USER.md:\n%q", got)
+	}
+	ok(t)(SaveInstructions(InstructionsChange{Agents: []string{}}))
+	if _, err := os.Stat(user); !os.IsNotExist(err) {
+		t.Errorf("USER.md left behind: %v", err)
+	}
+}
+
+// Moving Alma's own lines into the shared text would take its owner's
+// profile out of USER.md, and the telegram_id Alma knows its owner by,
+// into every agent's file: it is refused and nothing changes (#2315).
+func TestAlmaProfileIsNotImported(t *testing.T) {
+	h := sandbox(t)
+	user := almaHere(t, h)
+	mine := "---\nname: \"Jie\"\ntelegram_id: \"123456789\"\n---\n# About My Human\n- Name: Jie\n"
+	write(t, user, mine)
+	if _, err := ImportInstructions("alma"); err == nil || !strings.Contains(err.Error(), "profile") {
+		t.Errorf("import: %v", err)
+	}
+	if got := read(t, user); got != mine {
+		t.Errorf("USER.md:\n%q", got)
+	}
+	v, err := ReadInstructions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Shared != "" {
+		t.Errorf("shared text: %q", v.Shared)
+	}
+	i := slices.IndexFunc(v.Agents, func(a AgentInstructions) bool { return a.Agent == "alma" })
+	if i < 0 || !v.Agents[i].Profile || v.Agents[i].On {
+		t.Errorf("alma on the page: %+v", v.Agents)
 	}
 }
 
