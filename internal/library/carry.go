@@ -55,8 +55,10 @@ const (
 func Collect() (*Bundle, error) {
 	mu.Lock()
 	defer mu.Unlock()
-	if _, err := os.Stat(path()); err != nil {
+	if _, err := os.Stat(path()); errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
+	} else if err != nil { // there, but unknown: never carried as no library (#2269)
+		return nil, err
 	}
 	l, err := load()
 	if err != nil {
