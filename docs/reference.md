@@ -1343,6 +1343,18 @@ including fixed headers for custom providers in
 subsequent changes to agent settings are not automatically copied to magpie.
 Entries that point back to magpie or only name an `env_key` are skipped.
 
+The same dialog reads OpenCode's own sign-ins, `auth.json` in
+`$XDG_DATA_HOME/opencode` (`~/.local/share/opencode` when unset, on Windows
+too), where `opencode auth login` keeps them. An API key comes in on the
+magpie preset at the same address: OpenCode Go's key on OpenCode Go, Zen's
+(`opencode`) on OpenCode Zen, and a vendor's (OpenAI, Anthropic, DeepSeek,
+OpenRouter and others) on its own. OpenCode keeps no address beside a key,
+so one of a provider magpie has no preset for is listed and skipped. Sign-ins
+(Claude Pro/Max, Copilot, an enterprise server's token) are listed and
+skipped; add the subscription in magpie instead. OpenCode is read only when
+you open the dialog: the Providers page's automatic check leaves it out, as
+the file holds every sign-in OpenCode has. magpie never writes to it.
+
 ### How magpie picks an account
 
 When a subscription has several accounts on (Claude Code's or Codex's
