@@ -3586,7 +3586,14 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// the user's own fields for the provider (#1604), last, so the
 		// body is as it goes out when they fill in what it lacks, and
 		// before it is signed
-		body = p.WithExtraBody(body, cmp.Or(sessionOf(in), conversationID(in, body)))
+		extra := p.WithExtraBody(body, cmp.Or(sessionOf(in), conversationID(in, body)))
+		if to == provider.Anthropic && !bytes.Equal(extra, body) {
+			// a thinking budget the user's fields put in is fitted to a
+			// model that thinks only adaptively as the agent's is, its
+			// display to the provider
+			extra = s.withoutRefusedShapes(p, adaptiveThinking(extra))
+		}
+		body = extra
 	}
 	if !countsTokens(path) {
 		// the tier it goes at, the user's own fields in it (#1784)
