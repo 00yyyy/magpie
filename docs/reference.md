@@ -1421,6 +1421,11 @@ each of these groups ordered by the share used.
   Claude account not known goes first once, as in Smart; another unknown
   account counts as a fresh week.
 
+The routings besides Smart are the built-in plugin `rotation` (Routing
+strategies in Plugins › Built-in). It stays on while a provider or group is
+routed by one of them. Turned off, the pickers offer Smart alone, and a
+provider or group still set to one of them is tried in its listed order.
+
 **Make first** sets the accounts' order. How much that order counts
 depends on the routing:
 

@@ -4472,7 +4472,7 @@ function routingPage(part) {
 
     const rHint = el("div", "hint", t(GROUP_HINT[d.routing] || GROUP_HINT[""]));
     const rw = el("div");
-    rw.append(segs(GROUP_ROUTE_OPTS.map(([id, n]) => [id, t(n)]), d.routing, (v) => { d.routing = v; rHint.textContent = t(GROUP_HINT[v] || GROUP_HINT[""]); draw(); drawRules(); drawSink(); }), rHint);
+    rw.append(routingSegs(GROUP_ROUTE_OPTS.map(([id, n]) => [id, t(n)]), d.routing, (v) => { d.routing = v; rHint.textContent = t(GROUP_HINT[v] || GROUP_HINT[""]); draw(); drawRules(); drawSink(); }), rHint);
     rw.append(el("div", "hint", t(GROUP_NEST)));
     ed.append(el("label", "", t("Routing")), rw);
     // one rate limited with quota left: its place, or the back
@@ -5162,7 +5162,7 @@ function routingPage(part) {
       // by weight is a key's share (#841), set beside each key in the provider's editor
       const opts = p.kind === "account" ? ROUTE_OPTS : [...ROUTE_OPTS, ["weight", "By weight"]];
       ctl.append(
-        lab(t("Routing"), segs(opts.map(([id, n]) => [id, t(n)]), p.routing || "", (v) => set("route", { id: p.provider, routing: v }, t("{name}: {routing}", { name: p.name, routing: t(opts.find(([id]) => id === v)[1]) })))),
+        lab(t("Routing"), routingSegs(opts.map(([id, n]) => [id, t(n)]), p.routing || "", (v) => set("route", { id: p.provider, routing: v }, t("{name}: {routing}", { name: p.name, routing: t(opts.find(([id]) => id === v)[1]) })))),
         lab(t("Stays"), segs(AFF_OPTS.map(([id, n]) => [id, t(n)]), p.affinity || "", (v) => set("affinity", { id: p.provider, affinity: v }, t("{name}: {routing}", { name: p.name, routing: t(AFF_OPTS.find(([id]) => id === v)[1]) })))));
       if (sinkable(p.routing || "")) {
         const k = lab(t("Rate limited"), segs(SINK_OPTS.map(([id, n]) => [id, t(n)]), p.sink ? "sink" : "", (v) => set("sink", { id: p.provider, sink: v === "sink" }, t("{name}: {routing}", { name: p.name, routing: t(SINK_OPTS.find(([id]) => id === v)[1]) }))));

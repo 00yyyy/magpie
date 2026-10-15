@@ -23,14 +23,15 @@ const PLUGINS = [
   { id: "groups", name: "Routing groups", sub: "Several models agents pick as one: each request goes to the right one, and to the next when one fails", one: "1 group in use", many: "{n} groups in use" },
   { id: "library", name: "Library", sub: "Instructions, MCP servers, skills and hooks, kept once and given to every agent", one: "1 item given to agents", many: "{n} items given to agents" },
   { id: "otel", name: "Observability", sub: "Send each request's traces and metrics to an OpenTelemetry collector, such as Langfuse", one: "Sending to a collector", many: "Sending to a collector" },
+  { id: "rotation", name: "Routing strategies", sub: "The routings besides Smart: In order, In turn, Least used first, Weekly pace and By weight", one: "1 provider or group routed so", many: "{n} providers and groups routed so" },
   { id: "routing", name: "Routing", sub: "Each request as the gateway routes it, the accounts it weighed and what each answered, and your routing groups", one: "1 group in use", many: "{n} groups in use" },
   { id: "sessions", name: "Sessions", sub: "Your agents' past conversations: read, search, resume and export them", one: "Recording gateway conversations", many: "Recording gateway conversations" },
   { id: "usage", name: "Usage", sub: "Your allowances, what was spent and on what, each request, and what filled the context window" },
   { id: "warmups", name: "Warm-up and check-in", sub: "Start a subscription's usage window at a time you pick, and claim vendors' daily check-in credits", one: "1 warm-up or check-in on", many: "{n} warm-ups and check-ins on" },
 ];
 // a new install's (the Essentials preset): all off but the Gateway, Routing
-// and Usage pages, which are essential, and two routing groups the user made
-const START = { gateway: [true, 0], groups: [false, 2], library: [false, 0], otel: [false, 0], routing: [true, 0], sessions: [false, 0], usage: [true, 0], warmups: [false, 0] };
+// and Usage pages and the routing strategies, which are essential, and two routing groups the user made
+const START = { gateway: [true, 0], groups: [false, 2], library: [false, 0], otel: [false, 0], rotation: [true, 0], routing: [true, 0], sessions: [false, 0], usage: [true, 0], warmups: [false, 0] };
 
 // the Gateway page's settings, as pluginrt.SchemaOf makes them
 const GATEWAY_SCHEMA = {
@@ -162,9 +163,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual([gw.on, gw.disabled], ["true", false], `${where}: the Gateway page, on`);
         const rt = rows.find((r) => r.id === "routing");
         assert.deepEqual([rt.on, rt.disabled], ["true", false], `${where}: the Routing page, on`);
+        const ro = rows.find((r) => r.id === "rotation");
+        assert.deepEqual([ro.on, ro.disabled], ["true", false], `${where}: the routing strategies, on`);
         const us = rows.find((r) => r.id === "usage");
         assert.deepEqual([us.on, us.disabled], ["true", false], `${where}: the Usage page, on`);
-        for (const r of rows.filter((r) => !["groups", "gateway", "routing", "usage"].includes(r.id))) assert.deepEqual([r.on, r.disabled, r.why], ["false", false, ""], `${where}: ${r.id}`);
+        for (const r of rows.filter((r) => !["groups", "gateway", "rotation", "routing", "usage"].includes(r.id))) assert.deepEqual([r.on, r.disabled, r.why], ["false", false, ""], `${where}: ${r.id}`);
         await page.locator('#builtinList [data-id="groups"] [role="switch"]').click({ force: true });
         await page.waitForTimeout(100);
         assert.deepEqual(posts, [], `${where}: a locked switch posts nothing`);

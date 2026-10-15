@@ -9,6 +9,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/routes"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -17,6 +18,7 @@ import (
 const standInsEnv = "MAGPIE_GATEWAY_TEST_STAND_INS"
 
 func TestMain(m *testing.M) {
+	serveRotation()
 	code, err := isolatedTests(m)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -113,4 +115,23 @@ func TestRunsAsAnIsolatedTestBinary(t *testing.T) {
 	if os.Getenv(testenv.Marker) == "" {
 		t.Fatalf("TestMain left %s unset", testenv.Marker)
 	}
+}
+
+// rotation is what serveRotation registered: the routings plugins/rotation
+// serves, which the gateway's tests route by as a user with it on does.
+var rotation []func()
+
+func serveRotation() {
+	for name, s := range routes.Builtin {
+		rotation = append(rotation, routes.Register(name, s))
+	}
+}
+
+// withoutRotation takes them away for t, as plugins/rotation off does.
+func withoutRotation(t *testing.T) {
+	for _, remove := range rotation {
+		remove()
+	}
+	rotation = nil
+	t.Cleanup(serveRotation)
 }

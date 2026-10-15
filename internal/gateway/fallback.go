@@ -341,7 +341,7 @@ func (s *Server) plan(p provider.Provider, model string, from provider.Protocol)
 		cs, wg := weigh(q, cs, m, from)
 		for i, c := range cs {
 			w := weighed(c, q, wg, fallback, from)
-			w.Turn = i == 0 && (q.Routing == provider.Rotate || q.Routing == provider.Weighted) && len(cs) > 1
+			w.Turn = i == 0 && goesRound(q.Routing) && len(cs) > 1
 			pl.order = append(pl.order, w)
 		}
 		pl.order = append(pl.order, asideOf(aside, q, fallback, from)...)
@@ -433,7 +433,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		}
 		return cs
 	}
-	if g.Routing != provider.Ordered {
+	if routingOf(g.Routing) != provider.Ordered {
 		// what the group weighs: each of its models' keys or accounts,
 		// and each group in it as one — planned by its own routing, put
 		// where the one it would try first is, the rest of it after
@@ -445,7 +445,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		}
 		// a group routed by weight weighs its members, each whole: a
 		// model's keys in its provider's order, a group in it in its own
-		byWeight := g.Routing == provider.Weighted
+		byWeight := routingOf(g.Routing) == provider.Weighted
 		var units []unit
 		var heads []candidate
 		at := map[string][]int{} // a head's seat → its units, in turn
@@ -480,7 +480,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 				var order []Weighed
 				for k, c := range cs {
 					w := weighed(c, m.Provider, wg, false, from)
-					w.Turn = k == 0 && (m.Provider.Routing == provider.Rotate || m.Provider.Routing == provider.Weighted) && len(cs) > 1
+					w.Turn = k == 0 && goesRound(m.Provider.Routing) && len(cs) > 1
 					w.Via = m.Groups()
 					order = append(order, w)
 				}
@@ -534,7 +534,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 			w := weighed(c, u.m.Provider, wg, false, from)
 			w.Routing, w.Via = g.Routing, u.m.Groups()
 			w.Sunk = nil // weighed as the group's, whose own Sink tells
-			w.Turn = i == 0 && g.Routing == provider.Rotate && len(weighedHeads) > 1
+			w.Turn = i == 0 && routingOf(g.Routing) == provider.Rotate && len(weighedHeads) > 1
 			pl.order = append(pl.order, w)
 			out = append(out, c)
 		}
@@ -562,7 +562,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		cs, wg := weigh(m.Provider, keys(m), m.Model, from)
 		for k, c := range cs {
 			w := weighed(c, m.Provider, wg, false, from)
-			w.Turn = k == 0 && (m.Provider.Routing == provider.Rotate || m.Provider.Routing == provider.Weighted) && len(cs) > 1
+			w.Turn = k == 0 && goesRound(m.Provider.Routing) && len(cs) > 1
 			w.Via = m.Groups()
 			pl.order = append(pl.order, w)
 		}

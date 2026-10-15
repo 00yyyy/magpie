@@ -491,6 +491,28 @@ func FileError() error {
 	return err
 }
 
+// Routings is the routing of each provider and group providers.json sets
+// one for, read from the file alone: for what asks often (the rotation
+// plugin's InUse), without building the catalog and reading every sign-in.
+func Routings() ([]string, error) {
+	f, err := read()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range f.Providers {
+		if p.Routing != "" {
+			out = append(out, p.Routing)
+		}
+	}
+	for _, g := range f.Groups {
+		if g.Routing != "" {
+			out = append(out, g.Routing)
+		}
+	}
+	return out, nil
+}
+
 // store replaces providers.json whole, through a file renamed over it, so
 // that a read at that moment sees the old catalog or the new one, never a
 // file cut short.

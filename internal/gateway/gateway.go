@@ -479,7 +479,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	defer stopObservers()
 	freshCtx, stopFresh := context.WithCancel(ctx)
 	defer stopFresh()
-	go pluginrt.KeepFresh(freshCtx, 2*time.Second, settings.Path())
+	go pluginrt.KeepFresh(freshCtx, 2*time.Second, settings.Path(), provider.Path())
 	srv := &http.Server{Handler: lanGuard(s.Handler()), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 5 * time.Minute}
 	// the magpie serving the gateway, and only it, keeps the saved accounts
 	// signed in, so two never refresh one sign-in at once
@@ -1842,14 +1842,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// a conversation's affinity is to one model: another's cache is its
 	// own, and an agent's side requests (a title, a summary) to a smaller
 	// model leave the conversation where it is
-	scope, mode, rotate := p.ID+"/"+model, p.Affinity, p.Routing == provider.Rotate
+	scope, mode, rotate := p.ID+"/"+model, p.Affinity, routingOf(p.Routing) == provider.Rotate
 	leadScope := scope // where the lead of a subagent is kept
 	if isGroup {
 		// a routing group: every member's keys or accounts weighed together
 		cands, pl = s.planGroup(g, ms, from)
 		group = groupRef(g, ms)
 		group.Paused = paused
-		scope, mode, rotate = provider.GroupPrefix+g.ID, g.Affinity, g.Routing == provider.Rotate
+		scope, mode, rotate = provider.GroupPrefix+g.ID, g.Affinity, routingOf(g.Routing) == provider.Rotate
 		leadScope = scope
 		if words != "" {
 			// a subagent a rule sends elsewhere mustn't take its agent's
