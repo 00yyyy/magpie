@@ -215,7 +215,9 @@ func TestOpenCodeWritesVariants(t *testing.T) {
 // thinking switch alone, gets no variants in opencode.json — under Xiaomi's
 // preset or a relay of the user's alike — and no thinking levels in Pi:
 // OpenCode offered it the resellers' levels up to max, which Xiaomi turns
-// away with a 400 (#214). A model no maker lists keeps the resellers'.
+// away with a 400 (#214). A model no maker lists keeps the resellers'. Pi is
+// told it reasons, as /v1/models says (#2380), with no map, so Pi offers
+// its own off to high and never xhigh or max.
 func TestOpenCodeNoResellerLevelsForSwitchModel(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -284,7 +286,7 @@ func TestOpenCodeNoResellerLevelsForSwitchModel(t *testing.T) {
 		switch m.ID {
 		case "xiaomi/mimo-v2.6-flash", "relay/mimo-v2.6-flash":
 			seen++
-			if m.Reasoning || m.Levels != nil {
+			if !m.Reasoning || m.Levels != nil {
 				t.Errorf("pi %s: reasoning %v, levels %v", m.ID, m.Reasoning, m.Levels)
 			}
 		case "relay/open-model":

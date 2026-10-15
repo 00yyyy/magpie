@@ -733,6 +733,14 @@ func Labels(es []Entry) []string {
 // Discord: "· Relay A" and "· routing group" stayed under Off).
 func (e Entry) PlainName() string { return cmp.Or(e.Plain, e.Name) }
 
+// Thinks is whether the model thinks, as /v1/models says it and every
+// agent's list is told it: a model with levels, or one marked Reasoning
+// with a thinking switch alone. An export that read the levels alone
+// marked Trae CN's kimi-k3-max, which always thinks and has no levels
+// magpie knows, not reasoning for Pi, and `magpie pi effort high` was
+// clamped to off (#2380).
+func (e Entry) Thinks() bool { return e.Reasoning || len(e.Efforts) > 0 }
+
 // The ways the agents' lists name models (SuffixMode): every name with its
 // provider's after it, as by default; all but the names the user gave
 // models (#92); or none (#335).

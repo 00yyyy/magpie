@@ -453,8 +453,12 @@ func piBlockKept(path string, value func() any) func() any {
 // api and baseUrl); without it the model is left on the provider's
 // openai-completions (Pencil, pencil.go).
 func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
-	// reasoning lets Pi offer its thinking levels for the model
-	e := map[string]any{"id": m.ID, "name": m.Name, "reasoning": len(m.Efforts) > 0}
+	// reasoning lets Pi offer its thinking levels for the model: as
+	// /v1/models says it (provider.Entry.Thinks), so one that thinks with
+	// no levels magpie knows (Trae CN's kimi-k3-max, #2380) is offered
+	// Pi's own off to high, which the gateway fits to the model, where
+	// it had off alone
+	e := map[string]any{"id": m.ID, "name": m.Name, "reasoning": m.Reasoning || len(m.Efforts) > 0}
 	// each model is asked on the API its provider speaks natively,
 	// so the gateway relays what Pi sent as it is instead of
 	// translating Chat. One served on OpenAI's Responses API alone,
