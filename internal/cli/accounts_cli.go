@@ -775,13 +775,14 @@ func checkinWorkBuddy(asJSON bool) error {
 		case provider.CheckinCaptcha:
 			fmt.Println(muted.Render("·"), r.User, muted.Render(strings.TrimSpace("asks for a captcha: check in in its own app "+r.Msg)))
 		case provider.CheckinOwnApp:
-			// Trae CN's 9074 (#808): it pays only its own app; WorkBuddy's
-			// check-in answered 401 while the sign-in works
+			// Trae CN's 9074 (#808): Trae CN refused the claim (#1920);
+			// WorkBuddy's check-in answered 401 while the sign-in works
+			if r.By == "trae" {
+				fmt.Println(muted.Render("·"), r.User, muted.Render(provider.TraeRefusedWords))
+				break
+			}
 			name := r.Vendor
-			switch r.By {
-			case "trae":
-				name = "Trae CN"
-			case "":
+			if r.By == "" {
 				name = "WorkBuddy"
 			}
 			fmt.Println(muted.Render("·"), r.User, muted.Render(name+" only gives check-in credits to its own app; check in in the "+name+" app"))

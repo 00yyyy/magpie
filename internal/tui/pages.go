@@ -982,9 +982,13 @@ func ownAppName(r provider.WorkBuddyCheckin) string {
 	return "the vendor"
 }
 
-// ownAppWords says a check-in the vendor pays only to its own app
-// (Trae CN's 9074, #808) is to be done in that app.
+// ownAppWords says a check-in the vendor pays only to its own app is to
+// be done in that app. Trae CN's (9074, #808) says what is known: Trae CN
+// refused it; that only its app is paid isn't so (#1920).
 func ownAppWords(r provider.WorkBuddyCheckin) string {
+	if r.By == "trae" {
+		return provider.TraeRefusedWords
+	}
 	name := ownAppName(r)
 	return name + " only gives check-in credits to its own app; check in in the " + name + " app"
 }
@@ -1017,6 +1021,9 @@ func checkinCell(q provider.SubscriptionQuota, now time.Time) string {
 	case provider.CheckinCaptcha:
 		return sMuted.Render("签到 needs a captcha · check in in its app")
 	case provider.CheckinOwnApp:
+		if r.By == "trae" {
+			return sMuted.Render("签到 refused by Trae CN (9074) · check in in its app")
+		}
 		return sMuted.Render("签到 only in " + ownAppName(*r) + "'s own app · check in there")
 	}
 	return sBad.Render("签到 failed") + sMuted.Render(" · c tries again")

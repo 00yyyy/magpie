@@ -16776,9 +16776,12 @@ function checkinRow(q, first, subs) {
         text = t("Asks for a captcha; check in in its own app") + (r.msg ? " · " + r.msg : "");
         break;
       case "own-app":
-        // the vendor pays only its own app (Trae CN's 9074, #808): not
-        // tried again today
-        text = t("{name} only gives check-in credits to its own app; check in in the {name} app", { name: checkinVendorName(r, q.name) });
+        // to be done in the vendor's own app, not tried again today;
+        // Trae CN's 9074 (#808) says Trae refused it, which is what is
+        // known, not that only its app is paid (#1920)
+        text = r.by === "trae"
+          ? t("Trae CN refused this check-in (9074: too many taking part); check in in the Trae CN app")
+          : t("{name} only gives check-in credits to its own app; check in in the {name} app", { name: checkinVendorName(r, q.name) });
         break;
       default:
         kind = "bad";
@@ -21452,7 +21455,9 @@ function wbCheckinLine(r) {
     case "captcha":
       return t("{user} is asked for a captcha; check in in the app", { user: r.user });
     case "own-app":
-      return t("{user}: {name} only gives check-in credits to its own app; check in in the {name} app", { user: r.user, name: checkinVendorName(r) });
+      return r.by === "trae"
+        ? t("{user}: Trae CN refused this check-in (9074: too many taking part); check in in the Trae CN app", { user: r.user })
+        : t("{user}: {name} only gives check-in credits to its own app; check in in the {name} app", { user: r.user, name: checkinVendorName(r) });
     default:
       return t("{user} couldn't check in, tried again later", { user: r.user });
   }
