@@ -167,6 +167,9 @@ var cliSpecs = map[string]cliSpec{
 	"atomcode": {npm: []string{"@atomgit.com/atomcode"}, brew: []string{"atomcode"}},
 	// Snow CLI is published on npm alone (snow-ai)
 	"snow": {npm: []string{"snow-ai"}},
+	// MothX: its npm installer package, which brings the native binary
+	// for the platform as an optional dependency
+	"mothx": {npm: []string{"mothx-installer"}},
 	// omo update, however it was installed: OmO's own updater, which moves
 	// the engine it pins (senpi) with it
 	"omo": {npm: []string{"omo-ai"},

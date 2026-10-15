@@ -46,6 +46,8 @@ var Vars = []string{
 	"PRIME_AGENT_CODING_AGENT_DIR",
 	// StepCode: config root resolution and folder overrides
 	"STEP_CODING_AGENT_DIR", "STEPCODE_CONFIG_DIR",
+	// MothX's config folder ($MOTHX_DIR/settings.json)
+	"MOTHX_DIR",
 	// omp
 	"OMP_PROFILE",
 	// Qoder's two builds, the global site's and China's

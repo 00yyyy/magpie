@@ -533,6 +533,10 @@ var wslKinds = []wslKind{
 	// Reasonix's native CLI (1.39 on), by its command and the version it
 	// gives: the historical npm client is reasonix too, and ~/.reasonix is
 	// both's
+	// MothX's ~/.mothx in the distro: its MOTHX_DIR there isn't read
+	{id: "mothx", name: "MothX", dir: ".mothx", bin: "mothx", in: mothxIn,
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open mothx sessions to use this."),
+		asleep:  wslOwnAsleep("mothx", "model")},
 	{id: "reasonix", name: "Reasonix", bin: "reasonix", in: reasonixIn, version: true,
 		accept: func(d distro) bool {
 			v := d.Versions["reasonix"]
