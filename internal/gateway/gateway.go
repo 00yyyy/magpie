@@ -1344,6 +1344,10 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 		}
 		if from == provider.Chat {
 			body = thinkingEffort(body)
+			// a tool Pi adds during a conversation, in a message of its
+			// own: in the request's tools for every route, the relay's
+			// and every check that reads them (#2322)
+			body = liftMessageTools(body)
 		}
 		// Claude Code's headers, for a test asked as Claude Code to ask
 		// with (provider.TestAs), whatever serves this model: a

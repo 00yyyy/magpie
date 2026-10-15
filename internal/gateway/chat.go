@@ -71,6 +71,7 @@ type cRequest struct {
 }
 
 func parseChat(body []byte) (*Request, error) {
+	body = liftMessageTools(body) // a request handle didn't see (#2322)
 	var c cRequest
 	if err := decodeJSON(body, &c); err != nil {
 		return nil, fmt.Errorf("invalid request: %v", err)
