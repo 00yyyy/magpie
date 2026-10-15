@@ -405,7 +405,8 @@ button.rt-session { cursor: pointer; }
 /* a classifier that failed (#1929): a dot, never a stripe */
 .rt-group .mem.clsfail { color: var(--amber); }
 .rt-group .mem.clsfail .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; }
-.rt-patadd { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.rt-patadd { display: flex; gap: 6px; align-items: center; }
+.rt-pats .fbl:not(:empty) + .rt-patadd { margin-top: 4px; }
 .rt-patadd input { flex: 1; min-width: 0; }
 .rt-group .tags { display: flex; gap: 4px; flex: none; }
 .rt-group .tag { font-size: 11px; line-height: 18px; padding: 0 8px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); white-space: nowrap; }
@@ -440,8 +441,9 @@ button.rt-session { cursor: pointer; }
 .rt-gedit { cursor: default; scroll-margin-top: 12px; }
 .rt-gedit .ehead.fold { cursor: pointer; }
 .rt-gedit .segs { max-width: 100%; }
-.rt-gedit .ctx-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rt-gedit .ctx-wrap .hint { flex-basis: 100%; }
+/* its hint as close under the choices as every other row's: 4px */
+.rt-gedit .ctx-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.rt-gedit .ctx-wrap .hint { flex-basis: 100%; margin-top: 0; }
 .rt-gedit .gsuffix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .rt-gedit .gsuffix .hint { overflow-wrap: anywhere; }
 .rt-gedit .ctx-wrap input.ctx-in { width: 96px; flex: none; }
@@ -553,7 +555,6 @@ button.rt-session { cursor: pointer; }
 .rt-gadds > [hidden] { display: none; }
 /* a group's rules, each one line read as a sentence: the conditions it
    has, → and the model it sends that turn to first; its acts under ⋯ */
-.rt-rules .fbl:empty { display: none; }
 .rt-rules .fbl:not(:empty) + .rt-gadds { margin-top: 2px; }
 /* the rules share their columns (each rule a subgrid of the list), so
    every rule's → and model start at one x: the number, the conditions

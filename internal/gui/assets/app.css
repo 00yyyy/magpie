@@ -2635,6 +2635,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .signing .mark { width: 16px; height: 16px; flex: none; margin-top: 1px; border-radius: 50%; display: grid; place-items: center; background: var(--fg); color: var(--card); font-size: 11px; font-weight: 700; }
 .fallback { display: grid; gap: 6px; }
 .fallback .fbl { display: grid; gap: 2px; }
+/* an empty list takes no row, so the control under it starts level with its
+   label rather than a gap lower */
+.fallback .fbl:empty { display: none; }
 .fbrow { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 12.5px; }
 .fbrow .i { width: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .fbrow .grow { flex: 1; }
