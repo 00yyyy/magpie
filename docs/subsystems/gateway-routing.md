@@ -515,6 +515,20 @@ search, the tool error says where to add a search API. Settings › Models ›
 Web search shows the address (`#searchMcpRow`, from the Settings page's own
 `gateway` address).
 
+Its second tool, `web_fetch` (`search_fetch.go`, #2286), reads a page by
+its URL for an agent with no fetch tool of its own. The URL is the agent's,
+so it is downloaded as a caller's image is (`webFetchClient`, which is
+`publicClient`): public addresses only, every resolved address checked and
+pinned, through at most five redirects each checked the same, a request
+from this computer included. It reads for at most 30 seconds and 5 MiB. An
+HTML page is decoded from its charset and given as Markdown (`htmlText`:
+headings, lists, links made absolute, code; scripts, styles and hidden
+elements dropped), other text as it is, anything else is a tool error, and
+so is a status of 400 or more. It answers `max_chars` characters (20000 by
+default, at most 100000) from `offset`, and says the offset the rest starts
+at. Each call reserves the calling key's limit as a search does.
+`TestWebFetchReadsAPage` and `TestWebFetchOnlyPublic`.
+
 A POST's body is read by `readMCPBody`, up to 1 MiB here and 32 MiB for
 vision and for a signed-in server's `/mcp/{name}`. A longer body is refused
 whole with 413, before any message in it runs or is passed on: the length is

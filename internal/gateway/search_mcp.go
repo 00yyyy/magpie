@@ -121,7 +121,7 @@ func (s *Server) searchMCPCall(r *http.Request, m mcpMessage) (any, map[string]a
 			"protocolVersion": mcpVersion(m),
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "magpie-web-search", "title": "Magpie Web Search", "version": Version},
-			"instructions":    "web_search searches the web with the search magpie gives its models: a provider that can search, or the search APIs set up in magpie (Settings → Models → Web search).",
+			"instructions":    "web_search searches the web with the search magpie gives its models: a provider that can search, or the search APIs set up in magpie (Settings → Models → Web search). web_fetch reads a page it found, by its URL.",
 		}, nil
 	case "ping":
 		return map[string]any{}, nil
@@ -133,21 +133,28 @@ func (s *Server) searchMCPCall(r *http.Request, m mcpMessage) (any, map[string]a
 			"description": t.Description,
 			"inputSchema": t.Schema,
 			"annotations": map[string]any{"readOnlyHint": true, "openWorldHint": true},
-		}}}, nil
+		}, fetchTool()}}, nil
 	case "tools/call":
 		var p struct {
 			Name      string `json:"name"`
 			Arguments struct {
 				Query string `json:"query"`
+				fetchArgs
 			} `json:"arguments"`
 		}
 		if err := json.Unmarshal(m.Params, &p); err != nil {
 			return nil, map[string]any{"code": -32602, "message": "invalid params: " + err.Error()}
 		}
-		if p.Name != searchMCPTool {
-			return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": this server has " + searchMCPTool}
+		var said string
+		var err error
+		switch p.Name {
+		case searchMCPTool:
+			said, err = s.searchMCPRun(r, strings.TrimSpace(p.Arguments.Query))
+		case fetchMCPTool:
+			said, err = s.fetchMCPRun(r, p.Arguments.fetchArgs)
+		default:
+			return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": this server has " + searchMCPTool + " and " + fetchMCPTool}
 		}
-		said, err := s.searchMCPRun(r, strings.TrimSpace(p.Arguments.Query))
 		if err != nil {
 			return toolResult(err.Error(), true), nil
 		}
