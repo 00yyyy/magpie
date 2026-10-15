@@ -209,6 +209,16 @@ for the answer. A group classifier of decision models fails over the same
 way (`askDecisionGroup`, `decideRefused` carrying the vendor's status). A
 decision group is kept out of the agents' catalog (`groupEntries`), and a
 conversation asked of it is refused 400 pointing at `/v1/systemone`.
+A single decision provider of several keys or accounts (TypeSafe Jev with
+a key out of quota, fflake33 on Discord) is asked the same way, at
+`/v1/systemone` (`serveSystemOne`) and as a classifier (`askClassifier` →
+`askDecider`): `decideKeys` plans its keys in its routing's order (Smart,
+In order), `probeOne` leaves out all but the resting one back soonest, and
+`serveDecideTries` / `askDecideTries` ask each in turn as for a group, a
+refused one resting. Before, every call went to its first key, whatever the
+others' state. A gateway key held to some accounts is asked only on those
+(`allowedCandidates`), and refused 403 when none of them serves the model.
+`TestDecisionProviderKeysFailOver`.
 [`embeddings.go`](../../internal/gateway/embeddings.go) relays retrieval
 bodies and options (`serveRetrieval`), and
 [`transcribe.go`](../../internal/gateway/transcribe.go) speech-to-text's

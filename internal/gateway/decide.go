@@ -485,97 +485,36 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, http.StatusForbidden, keyModelError(keyWho, asked))
 		return
 	}
+	// its keys or accounts in its routing's order, each asked until one
+	// answers (decideKeys): one out of quota rests, and the next takes the
+	// request (fflake33 on Discord). One the user set not to serve the
+	// model is never asked; with every one so, the request is refused
+	cs, pl := s.decideKeys(p, model)
+	barred := len(cs) == 0 && len(pl.left) > 0 && !slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred })
 	// and held to some accounts (#905): the decision model's provider must
-	// have one the key may use, the call spend landing on it as any's —
-	// and asked on one such key, not the provider's first, which may be
-	// one the key may not: of the keys in use, the first the key may use
-	// and that is let serve the model, the request refused without one.
-	// A provider with no key asks as it is: an account's tokens, or none
-	// at all
+	// have one the key may use and that is let serve the model, the call
+	// spend landing on it as any's, and only those are asked
 	if accWho, accHeld := accountHolds(r); accHeld {
-		if !accountServes(accWho, p, model) {
+		if !accountServes(accWho, p, model) || barred {
 			writeError(w, provider.Chat, http.StatusForbidden, keyAccountsError(accWho, asked))
 			return
 		}
-		if p.Account == nil && p.Key != "" {
-			kept := false
-			for _, k := range p.KeysOn() {
-				if q := p.WithKey(k); accountAllowed(accWho, candidate{p: q, model: model}) && p.AccountServes(q.AccountID(), model) {
-					p, kept = q, true
-					break
-				}
-			}
-			if !kept {
-				writeError(w, provider.Chat, http.StatusForbidden, keyAccountsError(accWho, asked))
-				return
-			}
+		var held bool
+		if cs, pl, held = allowedCandidates(accWho, cs, pl, nil); len(cs) == 0 && held {
+			writeError(w, provider.Chat, http.StatusForbidden, keyAccountsError(accWho, asked))
+			return
 		}
 	}
-	seat := decideSeat(p, model)
-	var used Usage
-	who := callerOf(r)
-	tr := s.trace.beginFor(r, Route{Time: start, Agent: who.agent, Session: sessionOf(r.Header), Model: asked, Provider: p.ID,
-		Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Start: start}}})
-	end := func(status int, msg string, tokens int) {
-		ms := time.Since(start).Milliseconds()
-		s.trace.update(tr, func(t *Route) {
-			try := &t.Tries[0]
-			try.Done, try.Status, try.Millis, try.Error = true, status, ms, msg
-			if status >= 400 {
-				try.Fail = failure(status, []byte(msg))
-			}
-			t.Done, t.Status, t.Error, t.Millis, t.Tokens = true, status, msg, ms, tokens
-			t.Usage = routeUsage(p.ID, model, used)
-		})
-	}
-	status, b, header, err := s.postDecide(r.Context(), p, model, body)
-	ctype := header.Get("Content-Type")
-	if err != nil {
-		writeError(w, provider.Chat, http.StatusBadGateway, err.Error())
-		end(http.StatusBadGateway, err.Error(), 0)
+	if barred {
+		writeError(w, provider.Chat, http.StatusForbidden, barredError(asked, pl.left))
 		return
 	}
-	var use struct {
-		Model string `json:"model"` // the one that answered, when the reply says
-		Usage struct {
-			Input  int `json:"input_tokens"`
-			Output int `json:"output_tokens"`
-		} `json:"usage"`
+	cs = probeOne(cs) // of those resting, only the one back soonest (#1799)
+	if len(cs) == 0 {
+		writeError(w, provider.Chat, http.StatusServiceUnavailable, fmt.Sprintf("no key or account of %s may be asked %s now", p.Name, model))
+		return
 	}
-	_ = decodeJSON(b, &use)
-	errMsg := ""
-	if status >= 300 {
-		errMsg = provider.APIError(b, fmt.Sprintf("%d %s", status, http.StatusText(status)))
-	}
-	tokens := use.Usage.Input + use.Usage.Output
-	used = Usage{Input: use.Usage.Input, Output: use.Usage.Output}
-	var keyID, keyName string
-	if p.Account == nil && p.Key != "" {
-		keyID, keyName = provider.KeyID(p.Key), p.KeyName
-	}
-	appendUsage(r, usage.Record{RouteID: tr.ID, Time: start, Agent: who.agent, Via: who.via, Provider: p.ID, Host: p.Where(), Model: model, Requested: asked, Served: use.Model,
-		ProviderKeyID: keyID, ProviderKeyName: keyName, ProviderAccount: accountOf(p),
-		Input: use.Usage.Input, Output: use.Usage.Output, Millis: time.Since(start).Milliseconds(), Status: status})
-	end(status, errMsg, tokens)
-	if ctype == "" || status < 300 {
-		ctype = "application/json"
-	}
-	w.Header().Set("Content-Type", ctype)
-	w.WriteHeader(status)
-	w.Write(b)
-}
-
-// decideSeat is the one account a System One request is sent to: a decision
-// provider has no pool of conversation keys, only the key it is asked with.
-func decideSeat(p provider.Provider, model string) Weighed {
-	w := Weighed{ID: p.ID, Provider: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Model: model, Kind: "provider"}
-	if p.Key != "" {
-		w.Kind, w.Who = "key", p.KeyName
-		if w.Who == "" {
-			w.Who = provider.Mask(p.Key)
-		}
-	}
-	return w
+	s.serveDecideTries(w, r, body, asked, start, cs, pl, nil)
 }
 
 // withEffort asks a request, in the client's own API, for reasoning at
