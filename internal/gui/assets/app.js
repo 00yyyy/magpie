@@ -8394,7 +8394,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -9181,7 +9181,16 @@ function drawEditor(p, presetID) {
     const bal = input(draft.balanceURL, "https://…/api/usage/token", "url");
     bal.classList.add("bal-url");
     bal.oninput = () => { draft.balanceURL = bal.value; balPath.placeholder = balanceFieldOf(bal.value); };
-    inner.append(...field(t("Balance URL"), bal, t("Where the vendor tells what is left on the key, asked with it like a chat request; {key} in it or in a header is each key's own, for a vendor that takes the key in the URL (…?key={key}); shown on the Usage page")));
+    // how the URL is asked: GET, or POST with no body for a vendor that
+    // answers only a POST (#2368)
+    const method = segs([["", "GET"], ["POST", "POST"]], draft.balanceMethod === "POST" ? "POST" : "", (v) => { draft.balanceMethod = v; });
+    method.classList.add("bal-method");
+    method.setAttribute("role", "group");
+    method.setAttribute("aria-label", t("Balance request method"));
+    method.title = t("How the Balance URL is asked: GET, or POST with no body for a vendor that answers only a POST");
+    const balAsk = el("div", "pair bal-ask");
+    balAsk.append(method, bal);
+    inner.append(...field(t("Balance URL"), balAsk, t("Where the vendor tells what is left on the key, asked with it like a chat request; {key} in it or in a header is each key's own, for a vendor that takes the key in the URL (…?key={key}); shown on the Usage page")));
     const balPath = input(draft.balancePath, balanceFieldOf(draft.balanceURL));
     balPath.classList.add("bal-path");
     balPath.oninput = () => { draft.balancePath = balPath.value; };
@@ -9198,7 +9207,7 @@ function drawEditor(p, presetID) {
       check.onclick = async () => {
         check.classList.add("busy");
         res.className = "bal-res wait"; res.textContent = "…"; res.title = "";
-        const body = { id: p.id, balanceURL: (draft.balanceURL || "").trim(), balancePath: (draft.balancePath || "").trim(), headers: headersOf(draft.headers) };
+        const body = { id: p.id, balanceURL: (draft.balanceURL || "").trim(), balancePath: (draft.balancePath || "").trim(), balanceMethod: draft.balanceMethod || "", headers: headersOf(draft.headers) };
         if (draft.balanceToken) body.balanceToken = draft.balanceToken;
         else if (draft.clearBalanceToken) body.clearBalanceToken = true;
         try {
@@ -9258,7 +9267,7 @@ function drawEditor(p, presetID) {
       }
       body.baseAPI = draft.api === "openai" ? "chat" : draft.api;
     }
-    if (custom) { body.icon = draft.icon || "generic"; body.balanceURL = (draft.balanceURL || "").trim(); body.balancePath = (draft.balancePath || "").trim(); body.modelsURL = (draft.modelsURL || "").trim(); }
+    if (custom) { body.icon = draft.icon || "generic"; body.balanceURL = (draft.balanceURL || "").trim(); body.balancePath = (draft.balancePath || "").trim(); body.balanceMethod = draft.balanceMethod || ""; body.modelsURL = (draft.modelsURL || "").trim(); }
     if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; body.noModels = noneChosen(); body.modelPrefs = modelPrefsOfDraft(); Object.assign(body, routingOfDraft(p)); }
     body.searches = !!draft.searches && searchable();
     body.pinUpstream = !!draft.pinUpstream;

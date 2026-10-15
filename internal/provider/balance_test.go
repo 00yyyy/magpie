@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -649,5 +650,57 @@ func TestBalanceKeyAsBearer(t *testing.T) {
 	got = nil
 	if _, _, err := Balance(context.Background(), p); err == nil || len(got) != 1 || got[0] != "tok" {
 		t.Fatalf("an access token went as %q (%v)", got, err)
+	}
+}
+
+// A balance endpoint that answers only a POST is asked with one, with no
+// body, when the provider says so (#2368, yaofeng); a GET is still what
+// every other Balance URL gets, and a method that is neither is refused
+// rather than sent. The reply's amount comes as a string, read as any other
+// field is.
+func TestBalanceMethod(t *testing.T) {
+	var asked []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		asked = append(asked, r.Method+" "+string(b))
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Write([]byte(`{"error":"Method not allowed"}`))
+			return
+		}
+		w.Write([]byte(`{"usd_balance":"0.94306040","nano_balance":"1.5"}`))
+	}))
+	defer srv.Close()
+	base := Provider{ID: "relay", Chat: srv.URL + "/v1", Key: "sk-1", BalanceURL: srv.URL + "/api/check-balance", BalancePath: "$usd_balance"}
+	for _, c := range []struct {
+		method, want string
+		ok           bool
+	}{
+		{"POST", "POST ", true},
+		{" post ", "POST ", true},
+		{"", "GET ", false},
+		{"GET", "GET ", false},
+	} {
+		p := base
+		p.BalanceMethod = c.method
+		asked = nil
+		amount, ok, err := Balance(context.Background(), p)
+		if len(asked) != 1 || asked[0] != c.want {
+			t.Errorf("%q: asked %q, want %q", c.method, asked, c.want)
+		}
+		if c.ok && (err != nil || !ok || amount != "$0.94") {
+			t.Errorf("%q: balance = %q %v %v", c.method, amount, ok, err)
+		}
+		if !c.ok && err == nil {
+			t.Errorf("%q: a 405 read as %q", c.method, amount)
+		}
+	}
+	for _, m := range []string{"PUT", "DELETE", "POST\r\nX: y"} {
+		p := base
+		p.BalanceMethod = m
+		asked = nil
+		if _, _, err := Balance(context.Background(), p); err == nil || len(asked) != 0 {
+			t.Errorf("%q: err %v, asked %q", m, err, asked)
+		}
 	}
 }

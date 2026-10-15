@@ -131,9 +131,10 @@ type providerJSON struct {
 	AccountNames map[string]string `json:"accountNames,omitempty"`
 	AccountSeats map[string]string `json:"accountSeats,omitempty"`
 	// where a custom provider's balance is asked (see provider.Balance)
-	BalanceURL  string `json:"balanceURL,omitempty"`
-	BalancePath string `json:"balancePath,omitempty"`
-	ModelsURL   string `json:"modelsURL,omitempty"`
+	BalanceURL    string `json:"balanceURL,omitempty"`
+	BalancePath   string `json:"balancePath,omitempty"`
+	BalanceMethod string `json:"balanceMethod,omitempty"`
+	ModelsURL     string `json:"modelsURL,omitempty"`
 	// an account-wide balance token (provider.BalanceToken): whether the
 	// vendor takes one, and whether one is saved; never the token itself
 	BalanceToken struct {
@@ -544,7 +545,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(), MarksKinds: p.MarksKinds(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Picks(), Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Unlisted: p.Unlisted, NoModels: p.ServesNone(), Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
@@ -1510,6 +1511,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					if provider.Preset(in.Preset) != nil {
 						in.BalanceURL = cmp.Or(in.BalanceURL, old.BalanceURL)
 						in.BalancePath = cmp.Or(in.BalancePath, old.BalancePath)
+						in.BalanceMethod = cmp.Or(in.BalanceMethod, old.BalanceMethod)
 						in.ModelsURL = cmp.Or(in.ModelsURL, old.ModelsURL)
 					}
 				}
@@ -1794,6 +1796,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 			q := *p
 			q.BalanceURL, q.BalancePath = strings.TrimSpace(in.BalanceURL), strings.TrimSpace(in.BalancePath)
+			q.BalanceMethod = in.BalanceMethod
 			if in.Headers != nil {
 				q.Headers = in.Headers
 			}

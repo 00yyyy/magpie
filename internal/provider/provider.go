@@ -313,6 +313,10 @@ type Provider struct {
 	// magpie knows need neither.
 	BalanceURL  string `json:"balanceURL,omitempty"`
 	BalancePath string `json:"balancePath,omitempty"`
+	// BalanceMethod is how BalanceURL is asked: "" (or GET), or POST with
+	// no body, for an endpoint that answers only a POST (#2368). Any other
+	// is refused when the balance is read (balanceMethodOf).
+	BalanceMethod string `json:"balanceMethod,omitempty"`
 	// BalanceToken is what a vendor tells the whole account's balance to,
 	// where a key is told only what is left on itself: AiHubMix's system
 	// access token, or a new-api relay's for its /api/user/self named in

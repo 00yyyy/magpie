@@ -31,7 +31,7 @@ const providerUsage = `usage:
   magpie provider <id>                    show one provider and its models
   magpie provider add <preset> <key>      add a preset vendor   e.g. magpie provider add deepseek sk-…
                                           again, it adds another (deepseek-2); k=v pairs too: id, name, header.X-Foo
-  magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, gemini, decide, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.token, models.url, search, user-agent,
+  magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, gemini, decide, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.method, balance.token, models.url, search, user-agent,
                                           access.key, access.secret (a Volcengine access key, or a Tencent Cloud SecretId and SecretKey, for its plan's windows)
   magpie provider set <id> k=v…           change a provider's settings, with the same k=v pairs as add;
                                           codex=as-sent sends Codex's Responses requests as Codex sent them
@@ -120,6 +120,8 @@ const providerUsage = `usage:
                                     requests as written; not for a local relay that passes them on to a vendor)
        magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… balance=https://relay.example.com/api/usage/token balance.path='$data.total_available / 500000'
        magpie provider set my-relay balance.path='(1 - credits.monthlyCredits / 70) %'
+       magpie provider set my-relay balance.method=POST
+                                   (a balance endpoint that answers only a POST: asked with no body)
        magpie provider set my-relay balance=https://relay.example.com/api/user/self balance.path='$data.quota / 500000' balance.token=<access token> header.New-Api-User=<user id>
                                    (a new-api relay's whole account: its access token and user id, from its personal settings)
                                    (balance.path: where the amount is in the reply, or a sum of those with + - * / and
@@ -851,6 +853,9 @@ func showProvider(p provider.Provider) error {
 		// where it was asked: a panel's key query when its account query
 		// has no token left to ask with
 		if u, field := provider.BalanceQuery(p); u != "" {
+			if p.BalanceMethod != "" {
+				u = strings.ToUpper(p.BalanceMethod) + " " + u
+			}
 			from = muted.Render("  from " + u + " " + field)
 		}
 		if err != nil {
@@ -998,6 +1003,17 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			p.BalanceURL = v
 		case "balance.path":
 			p.BalancePath = v
+		case "balance.method":
+			// GET (the default) or POST, for an endpoint that answers
+			// only a POST (#2368)
+			switch strings.ToUpper(strings.TrimSpace(v)) {
+			case "GET", "":
+				p.BalanceMethod = ""
+			case "POST":
+				p.BalanceMethod = "POST"
+			default:
+				return fmt.Errorf("balance.method=GET|POST, not %q", v)
+			}
 		case "balance.token":
 			p.BalanceToken = v
 		case "access.key":
