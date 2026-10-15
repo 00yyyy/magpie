@@ -159,6 +159,17 @@ var (
 	// answer ("切换其他模型", "switch to the other models"): its limit is
 	// the model's, and the model alone rests
 	otherModels = regexp.MustCompile(`(?i)switch(?:ing)? to (?:the )?other models?|切换(?:到)?其他模型`)
+	// clineFreeLimit: Cline's refusal of a free model whose day's allowance
+	// is used up, 429 "Daily free limit reached on model deepseek/deepseek-
+	// v4-flash. Try again in 23h 59m", as its own clients read it (cline/
+	// cline sdk/packages/llms/src/providers/errors.ts,
+	// isClineFreeModelLimitMessage, which tells the user to pick another
+	// model): the limit is that model's, and the model alone rests
+	// (#1398, wuasakura)
+	clineFreeLimit = regexp.MustCompile(`(?i)free limit reached on model`)
+	// tryAgainIn: how long Cline's free-model refusal says until it is
+	// back ("Try again in 23h 59m"), in the units resetsInWords reads
+	tryAgainIn = regexp.MustCompile(`(?i)\btry again in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?`)
 	// quotaCodes: a vendor's own code for a used-up allowance, which alone
 	// makes a server error (5xx) one over the quota: Claude Code's resets
 	// line, the ChatGPT backend's usage_limit_reached, Google's
@@ -568,7 +579,28 @@ var resetsInWords = regexp.MustCompile(`(?i)\bresets? in (?:(\d+)\s*d(?:ays?)?\b
 // resetsAfter is how long the refusal says until it is back (resetsInWords),
 // held to longestWritten. Zero when it doesn't say.
 func resetsAfter(body []byte) time.Duration {
-	m := resetsInWords.FindSubmatch(wordsOf(body))
+	return spanWritten(resetsInWords.FindSubmatch(wordsOf(body)))
+}
+
+// clineModelLimited says c, a provider whose requests reach Cline's API,
+// was refused for one free model's own daily limit (clineFreeLimit).
+func clineModelLimited(c candidate, body []byte) bool {
+	return c.p.ClinePinnable() && clineFreeLimit.Match(wordsOf(body))
+}
+
+// clineBackIn is how long Cline's free-model refusal says until the model
+// is back (tryAgainIn), held to longestWritten. Zero for another refusal,
+// or one that doesn't say.
+func clineBackIn(c candidate, body []byte) time.Duration {
+	if !clineModelLimited(c, body) {
+		return 0
+	}
+	return spanWritten(tryAgainIn.FindSubmatch(wordsOf(body)))
+}
+
+// spanWritten is the days, hours and minutes a match of resetsInWords or
+// tryAgainIn names, held to longestWritten. Zero when it names none.
+func spanWritten(m [][]byte) time.Duration {
 	if m == nil || len(m[1])+len(m[2])+len(m[3]) == 0 {
 		return 0
 	}
@@ -677,6 +709,8 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		}
 		if w := resetsAt(body, now); w > 0 {
 			d, r.By = w, "resets"
+		} else if w := clineBackIn(c, body); w > 0 {
+			d, r.By = w, "resets"
 		} else if w := resetsNoted(header, now); w > 0 {
 			d, r.By = w, "resets"
 		} else if t := c.full(now); !t.IsZero() {
@@ -776,6 +810,11 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// models is the model's limit: the others still answer (WorkBuddy's
 	// "您也可以切换其他模型继续使用", #1669)
 	if pooled || unserved || modelBackoff || why == failQuota && resetsWhen.Match(wordsOf(body)) && otherModels.Match(wordsOf(body)) {
+		id = c.restID()
+	}
+	// Cline's daily limit of one free model is that model's: its others,
+	// free or the plan's, still answer (#1398, wuasakura)
+	if why == failQuota && clineModelLimited(c, body) {
 		id = c.restID()
 	}
 	// out of credit, or of a quota, on a model that costs credits where
