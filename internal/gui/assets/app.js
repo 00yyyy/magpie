@@ -125,7 +125,10 @@ async function api(path, body, heads, signal) {
     // reader's language
     if (data?.code === "no_models") err.message = t("Add a provider or subscription in magpie first, then connect {agent}", { agent: data.agent });
     // magpie has models, and none is left in the agent's model list (#1989)
-    if (data?.code === "all_hidden") err.message = t("None of magpie's models is left in {agent}'s model list: pick one under Model list → Pick, then connect {agent}", { agent: data.agent });
+    if (data?.code === "all_hidden") {
+      err.code = data.code;
+      err.message = t("None of magpie's models is left in {agent}'s model list: pick one under Model list → Pick, then connect {agent}", { agent: data.agent });
+    }
     if (data?.why) err.why = data.why; // a failed move's reason, said in the reader's language
     // an account the agent is signed in to, refused removal while it has
     // another: said in the reader's language
@@ -1098,6 +1101,8 @@ function connectSwitch(a) {
   s.setAttribute("aria-label", t("Connect {agent} to magpie", { agent: a.name }));
   s.title = a.wired ? t("Connected · switch off to put back what {agent} had before magpie", { agent: a.name }) : t("Switch on and {agent}'s model list gets magpie's models", { agent: a.name });
   s.append(el("i"));
+  // the list opened from a failed connect, drawn again while it is open
+  if (!a.wired) holdAgentModels(a, s);
   s.onclick = async (e) => {
     e.stopPropagation();
     if (a.wired) { askDisconnect(a); return; }
@@ -1114,6 +1119,15 @@ function connectSwitch(a) {
     } catch (err) {
       s.disabled = false;
       s.classList.remove("on");
+      // every model taken out of its list: the Pick that puts one back is
+      // in a connected agent's row only, so its list opens here (塔哥 on
+      // Discord: Grok Build, all hidden, then switched off, couldn't be
+      // connected again)
+      if (err.code === "all_hidden") {
+        status(t("None of magpie's models is left in {agent}'s model list: pick one, then connect {agent}", { agent: a.name }), "err");
+        openAgentModels(a, s, e);
+        return;
+      }
       status(t(err.message), "err");
     }
   };
@@ -1609,7 +1623,7 @@ function guideCard(g) {
       b.disabled = !ready || !!guideBusy;
       b.classList.toggle("busy", guideBusy === a.id);
       b.title = ready ? t("Switch on and {agent}'s model list gets magpie's models", { agent: a.name }) : t("Add a key or a subscription first; then there are models to connect");
-      b.onclick = (e) => { e.stopPropagation(); guideConnect(a); };
+      b.onclick = (e) => { e.stopPropagation(); guideConnect(a, e); };
       chips.append(b);
     }
     if (found.length > GUIDE_CHIPS) chips.append(el("span", "guide-more", t("+{n} more below", { n: found.length - GUIDE_CHIPS })));
@@ -1673,7 +1687,7 @@ function guideRedraw() {
   fit();
 }
 
-async function guideConnect(a) {
+async function guideConnect(a, ev) {
   if (guideBusy) return;
   guideBusy = a.id;
   guideRedraw();
@@ -1687,6 +1701,14 @@ async function guideConnect(a) {
   } catch (err) {
     guideBusy = "";
     guideRedraw();
+    // every model taken out of its list: its list opens at its chip, as
+    // at the row's switch (connectSwitch)
+    const chip = err.code === "all_hidden" && document.querySelector(`.guide-agent[data-id="${CSS.escape(a.id)}"]`);
+    if (chip) {
+      status(t("None of magpie's models is left in {agent}'s model list: pick one, then connect {agent}", { agent: a.name }), "err");
+      openAgentModels(a, chip, ev);
+      return;
+    }
     status(t(err.message), "err");
   }
 }
