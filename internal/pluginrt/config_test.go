@@ -3,6 +3,7 @@ package pluginrt
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -102,7 +103,7 @@ func TestSettleAndSet(t *testing.T) {
 // is never written over.
 func TestBrokenFileIsKept(t *testing.T) {
 	home(t)
-	if err := os.MkdirAll(strings.TrimSuffix(Path(), "/plugins.yml"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(Path()), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	broken := []byte("plugins: [ {id: x\n")
