@@ -1078,12 +1078,29 @@ func promptRefused(status int, body []byte) bool {
 // for the model isn't one.
 var shapeWords = regexp.MustCompile(`(?i)failed to deserialize|unknown (item |content |input )?(type|variant|field|parameter)|unknown_parameter|unrecognized (request argument|field|parameter)|extra (inputs|fields) are not permitted|additional properties are not allowed|schema exceeds the maximum (nesting )?depth|schema[^"]{0,60}\bnesting depth\b`)
 
+// unsaidWords are Command Code's Provider API turning a request away with
+// nothing but a trace id: {"message":"invalid request error trace_id:
+// <hex>","type":"invalid_request_error"}, a 400 (a 422 before), no code,
+// no param (#2313, lqisgod). What it turns away is the request's size:
+// the reporter's A/B on one agent conversation (~748K tokens of history
+// and tools) answered 200 with max_completion_tokens 64000 and this 400
+// with 384000, the model's own listed max output, so the history and the
+// output asked for together are over a limit below the 1M context it
+// lists; its tracker has more of the kind (CommandCodeAI/command-code#960,
+// #976). The key and the account are fine, and another member, whose
+// model has room for it, may well take the same request: it is asked,
+// once, as for shapeWords, and Command Code doesn't rest. Its overflow
+// that says so names the model's context length before the trace id, and
+// isn't one. The message may come after a provider's name ("Command Code:
+// "), as magpie tells it on.
+var unsaidWords = regexp.MustCompile(`(?i)(^|"|\\"|: )invalid request error trace_id: [0-9a-f]{16,}(\\?"|\s*$)`)
+
 // shapeRefused says a request failed over its shape alone: the next
 // member is asked, and this one doesn't rest, as nothing is wrong with it.
 func shapeRefused(status int, body []byte) bool {
 	// the words are matched decoded, too (#1669)
 	body = wordsOf(body)
-	return (status == 400 || status == 422) && shapeWords.Match(body) &&
+	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body)) &&
 		!quotaWords.Match(body) && !unservedWords.Match(body) && !refusedWords.Match(body)
 }
 
@@ -1153,7 +1170,7 @@ func retryable(status int, body []byte) bool {
 		// in front of zcode.z.ai): another provider goes another way
 		return true
 	case status == 400, status == 422:
-		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body) || regionWords.Match(body)
+		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body) || unsaidWords.Match(body) || regionWords.Match(body)
 	}
 	return false
 }
