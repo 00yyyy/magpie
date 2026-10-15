@@ -142,3 +142,18 @@ func TestGeminiCompatTranslatedEndedShort(t *testing.T) {
 		t.Errorf("unstreamed cut: %d %s", code, body)
 	}
 }
+
+// A Gemini reply that ended done but inside a line still gets its
+// finish_reason as an event of its own, not as more of that line (#2446).
+func TestGeminiCompatFinishAfterPartialLine(t *testing.T) {
+	const ask = `{"model":"MODEL","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"user","content":"hi"}]}`
+	_, body := compatServer(t, "gemini-4-argon", compatCall+`data: {"choi`, "/v1/chat/completions", ask)
+	i := strings.Index(body, `"finish_reason":"tool_calls"`)
+	if i < 0 {
+		t.Fatalf("no finish_reason filled in: %s", body)
+	}
+	j := strings.LastIndex(body[:i], "data: ")
+	if j < 0 || !strings.HasSuffix(body[:j], "\n\n") {
+		t.Errorf("the finish_reason began inside the line still pending: %q", body)
+	}
+}

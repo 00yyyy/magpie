@@ -4391,6 +4391,27 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	buf := make([]byte, 32<<10)
 	var rerr error
+	// atLine says whether what the client has ends a line, so what is
+	// appended below begins one of its own: appended after a line still
+	// pending, an event's name lands inside that line's data, and the
+	// client reads one event it can't parse where the protocol's error was
+	// meant (TestPassthroughStreamCutMidLine)
+	atLine := true
+	write := func(b []byte) (int, error) {
+		if len(b) > 0 {
+			atLine = b[len(b)-1] == '\n'
+		}
+		return w.Write(b)
+	}
+	// apart is what goes before an event magpie appends: a blank line,
+	// after the line still pending if the upstream's last write stopped
+	// inside one
+	apart := func() []byte {
+		if atLine {
+			return []byte("\n")
+		}
+		return []byte("\n\n")
+	}
 	for {
 		n, err := rd.Read(buf)
 		if n > 0 {
@@ -4420,7 +4441,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			if phases != nil {
 				out = phases.write(out)
 			}
-			if _, werr := w.Write(out); werr != nil {
+			if _, werr := write(out); werr != nil {
 				return res.StatusCode, "", true
 			}
 			if f != nil {
@@ -4448,39 +4469,39 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		if written != nil {
 			out = append(written.write(out), written.flush()...)
 		}
-		w.Write(sign(out))
+		write(sign(out))
 	} else if written != nil {
-		w.Write(sign(written.flush()))
+		write(sign(written.flush()))
 	}
 	if whole != nil {
 		out := whole.flush()
 		if spaces != nil {
 			out = spaces.write(out)
 		}
-		w.Write(sign(out))
+		write(sign(out))
 	}
 	if search != nil {
 		out := search.flush()
 		if spaces != nil {
 			out = spaces.write(out)
 		}
-		w.Write(sign(out))
+		write(sign(out))
 	}
 	if spaces != nil {
-		w.Write(sign(spaces.flush()))
+		write(sign(spaces.flush()))
 	}
 	if ints != nil {
 		b := ints.flush()
 		if sigs != nil {
 			b = sigs.write(b)
 		}
-		w.Write(out(b))
+		write(out(b))
 	}
 	if sigs != nil {
-		w.Write(out(sigs.flush()))
+		write(out(sigs.flush()))
 	}
 	if phases != nil {
-		w.Write(phases.flush())
+		write(phases.flush())
 	}
 	if sse {
 		sniff.drain()
@@ -4499,7 +4520,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if fin := sniff.tail.finish(); sse && unfinished && fin != "" && (rerr == nil || rerr == io.EOF) && r.Context().Err() == nil {
 		// only the finish_reason was lost, after the generation was done
 		// (chatTail): the client gets it, and the reply is whole
-		w.Write([]byte("data: " + string(finishChunk(fin)) + "\n\n"))
+		w.Write(append(apart(), "data: "+string(finishChunk(fin))+"\n\n"...))
 		if !sniff.ended {
 			w.Write([]byte("data: [DONE]\n\n"))
 		}
@@ -4524,7 +4545,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			failed = p.Name + ": " + errEndedShort.Error()
 		}
 		if failed != "" {
-			w.Write(streamFailure(proto, failed))
+			// what is appended begins after a blank line: the event still
+			// pending is left to stand, and the failure is read as an
+			// event of its own (TestPassthroughStreamEndsOnLineEnd)
+			w.Write(append(apart(), streamFailure(proto, failed)...))
 			if f != nil {
 				f.Flush()
 			}
