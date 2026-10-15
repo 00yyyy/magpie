@@ -160,8 +160,8 @@ type Agent struct {
 	Joined func() bool
 	// Beside reports an agent set on one of magpie's models beside its own
 	// (Codex by the base URL beside its ChatGPT sign-in), now on one of its
-	// own written in by the agent: still connected, as joined, though the
-	// change is told as drift (#940).
+	// own written in by the agent: still connected, as joined (#940), and
+	// a pick in the agent rather than drift (#2424).
 	Beside func() bool
 	// OwnVia is the catalog id magpie serves one of the agent's own models
 	// by on a sign-in of the user's, which its model field lists as its
