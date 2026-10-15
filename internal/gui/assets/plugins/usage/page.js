@@ -605,17 +605,31 @@ const ledAborted = (e) => e?.name === "AbortError";
 // quiet: a refresh while it's looked at, redrawn only on a change
 async function loadLedger(quiet) {
   if (!ledger && !quiet) renderLedgerLoading();
+  // a pick over rows shown: they stay, dimmed, till its answer comes, so
+  // the pick is seen taken (#1990, overstarry: over a long history the
+  // read takes seconds, and the table sat as it was, as if the pick
+  // hadn't been)
+  else if (!quiet) ledPending(true);
   loadLedHeat().catch(() => {});
   const want = ledParams({ offset: ledOffset, limit: LED_PAGE });
   let l;
   try { l = await ledRead("page", "usage/requests?", want); } catch (e) {
     if (ledAborted(e)) return; // another page or filter was picked, and is read instead
+    ledPending(false);
     throw e;
   }
   if (want !== ledParams({ offset: ledOffset, limit: LED_PAGE })) return; // another page or filter was picked meanwhile
+  ledPending(false);
   if (quiet && JSON.stringify(l) === JSON.stringify(ledger)) return;
   ledger = l;
   if (view === "usage" && usageTab === "requests") renderLedger();
+}
+
+function ledPending(on) {
+  const wrap = $("#ledWrap");
+  wrap.classList.toggle("led-pending", on);
+  if (on) wrap.setAttribute("aria-busy", "true");
+  else wrap.removeAttribute("aria-busy");
 }
 
 function renderLedgerLoading() {

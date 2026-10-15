@@ -17719,7 +17719,14 @@ function sessPick(btn, all, value, opts, head, choose) {
   btn.onclick = (e) => {
     e.stopPropagation();
     if (btn.classList.contains("open")) return closeProtoMenu();
-    openSessCombo(btn, all, opts, value, choose, head);
+    // the button says the pick at once, not when what it reads comes
+    // back: over a long history that is seconds (#1990)
+    openSessCombo(btn, all, opts, value, (v) => {
+      btn.classList.toggle("set", !!v);
+      btn.firstChild.textContent = v ? (opts.find((o) => o.v === v)?.name || v) : t(all);
+      btn.title = v || "";
+      choose(v);
+    }, head);
   };
 }
 

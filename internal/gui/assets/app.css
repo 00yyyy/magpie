@@ -1278,6 +1278,8 @@ body.window .field.solo { grid-column: auto; }
 /* the table scrolls sideways in its own box, never the page */
 .led-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
 .led-wrap.none { overflow: visible; }
+.led-wrap.led-pending > * { opacity: .55; transition: opacity .15s; }
+@media (prefers-reduced-motion: reduce) { .led-wrap.led-pending > * { transition: none; } }
 /* its own scrollbar is at the table's foot, fifty rows down and out of
    sight (#799): this one stands in for it, held at the bottom of the window
    while the table is in it, and drawn always, the Mac's overlay one too */
