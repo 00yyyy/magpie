@@ -3588,10 +3588,12 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// shapes a provider refused are taken out, as it asks a display
 		body = adaptiveThinking(body)
 		body = s.withoutRefusedShapes(p, body)
-		if isKimi(p, to) {
+		if isKimi(p, to) || p.IsOpenCode() && strings.Contains(strings.ToLower(modelOf(body)), "deepseek") {
 			// Claude Code's deferred-tool blocks, for which Kimi's
 			// Anthropic endpoint turns the whole request away with a 400
-			// that names nothing to learn from (#2042)
+			// that names nothing to learn from (#2042). OpenCode's
+			// DeepSeek route hides the refusal behind a 422 "Endpoint
+			// is unavailable."; other OpenCode models keep their blocks.
 			body = withoutDeferredTools(body)
 		}
 		body = thinkingOffAsTaken(body, path)
