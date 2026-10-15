@@ -979,7 +979,7 @@ body.window .field.solo { grid-column: auto; }
    card's other lines do (#840) */
 .quota-refresh { display: inline-flex; align-items: center; justify-content: center; width: 0; height: 14px; margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--faint); vertical-align: -3px; opacity: 0; overflow: hidden; cursor: pointer; transition: width .12s, margin .12s, opacity .12s; }
 .quota-refresh svg { flex: none; }
-.subscription-card:hover .quota-refresh, .quota-refresh.busy { width: 14px; margin: 0 3px 0 -2px; opacity: 1; }
+.subscription-card:hover .quota-refresh, .pq-card:hover .quota-refresh, .quota-refresh.busy { width: 14px; margin: 0 3px 0 -2px; opacity: 1; }
 /* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
 .quota-refresh:focus-visible { width: 14px; margin: 0 3px 0 -2px; opacity: 1; }
 .quota-refresh:hover { color: var(--fg); background: var(--pill-hover); }
@@ -1813,6 +1813,12 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-bn { display: flex; align-items: center; gap: 6px; }
 .pq-bn > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pq-bn .ic { width: 14px; height: 14px; flex: none; }
+/* the card's own refresh before the logo: closed, the row's gap closed with
+   it; open, as wide as on the Usage page (#840) */
+.pq-bn > .quota-refresh { margin-right: -6px; }
+.pq-card:hover .pq-bn > .quota-refresh, .pq-bn > .quota-refresh.busy { margin: 0 -3px 0 -2px; }
+.pq-bn > .quota-refresh:focus-visible { margin: 0 -3px 0 -2px; }
+@media (hover: none) { .pq-bn > .quota-refresh { margin: 0 -3px 0 -2px; } }
 .pq-amt { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); font-variant-numeric: tabular-nums; }
 /* a balance field's several amounts on a balance's card (#420) */
 .pq-lead { display: flex; align-items: baseline; gap: 6px; min-width: 0; }

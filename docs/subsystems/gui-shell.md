@@ -53,6 +53,13 @@ refreshing it preserves local providers and other remote magpies.
 `usage-card-refresh.test.cjs` checks the real button in both browser
 engines and all five languages. A cached `readDeferred` card says no
 refresh was requested this time; a failed read retains its failure notice.
+The tray panel's Allowances cards use the same `quotaRefresh`, at the
+start of the line under the account (the reset deadline, the error, or a
+balance's name), opened as the card is hovered or the button is focused.
+That line names the deadline ("Resets 14:26"), so no bare `↻` stands for
+it; `renderPanelQuota` puts the focus back on the button after the redraw.
+`panel-quota-refresh.test.cjs` covers it in both engines, all five
+languages, at 440 and 360px.
 
 ### Streamed output speed
 

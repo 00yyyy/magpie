@@ -16050,6 +16050,9 @@ function renderPanelQuota() {
   // a row held in the arranging: drawn when it's let go
   if (usageArranging && box.querySelector(".pq-arow")) { usageRenderPending = true; return; }
   const view = box.closest(".view"), keep = view?.scrollTop;
+  // a card's own refresh keeps the keyboard's focus through the redraw
+  const focused = document.activeElement?.matches?.("#panelQuota .quota-refresh")
+    ? document.activeElement.closest(".pq-card")?.dataset.card : "";
   const restoreFlash = keepQuotaFlash(box);
   box.replaceChildren();
   if (none) { quotaFocus = ""; panelArranging = false; fit(); return; }
@@ -16129,6 +16132,7 @@ function renderPanelQuota() {
   if (away.size) foot.append(el("span", "pq-hidden", t("{n} hidden", { n: away.size })));
   box.append(foot);
   restoreFlash();
+  if (focused) box.querySelector(`.pq-card[data-card="${CSS.escape(focused)}"] .quota-refresh`)?.focus({ preventScroll: true });
   if (view && view.scrollTop !== keep && !box.querySelector(".pq-card.flash")) view.scrollTop = keep;
   panelAge();
   fit();
@@ -16149,7 +16153,7 @@ function panelBalances(bals) {
     card.title = [q.name, q.user].filter(Boolean).join(" · ");
     // whose balance, at a glance: the provider's logo before its name
     const who = el("span", "pq-sub pq-bn");
-    who.append(icon(q.icon || "generic"), el("span", "", q.name));
+    who.append(quotaRefresh(q), icon(q.icon || "generic"), el("span", "", q.name));
     card.append(who);
     // a balance field with several amounts: the first as the figure,
     // the others each a quiet line, a percent a meter (#420)
@@ -16282,7 +16286,9 @@ function panelQuotaCard(q) {
   card.title = [q.name, q.alias, q.user, q.seat && q.seat !== q.alias && "≡ " + q.seat, q.plan, q.until ? planTerm(q) : "", q.balance && t("Balance") + " " + q.balance].filter(Boolean).join(" · ");
   if (q.error) {
     card.classList.add("err");
-    card.append(el("span", "pq-sub err", quotaError(q.error)));
+    const why = el("span", "pq-sub err", quotaError(q.error));
+    why.prepend(quotaRefresh(q));
+    card.append(why);
     card.title += "\n" + q.error;
     return card;
   }
@@ -16294,7 +16300,9 @@ function panelQuotaCard(q) {
   // a pool's 5-hour and weekly rings, two pools of them, else three
   const fam = familyWindows(q.windows.filter((w) => !w.unlimited));
   if (!fam.length && q.windows.some((w) => w.unlimited)) {
-    card.append(el("span", "pq-sub", t("Unlimited")));
+    const sub = el("span", "pq-sub", t("Unlimited"));
+    sub.prepend(quotaRefresh(q));
+    card.append(sub);
     if (balance) card.append(balance);
     return card;
   }
@@ -16304,19 +16312,23 @@ function panelQuotaCard(q) {
   const sub = el("span", "pq-sub", begun.length
     ? begun.map((w, i) => {
       const at = new Date(w.resetsAt);
+      // the first deadline named as one: a bare "↻ 14:26" read as a
+      // refresh to click (#840, hhh2210)
       return at <= Date.now() ? (i || w.members ? ringName(w) + " " : "") + resetText(at)
-        : (i || w.members ? ringName(w) + " " : "↻ ") + resetClock(at);
+        : i || w.members ? ringName(w) + " " + resetClock(at) : resetText(at);
     }).join(" · ")
     : t("Not used yet"));
   // The first window's own pace as well, in the line already about its
   // deadline: the thin line under it has no room for what it only hints at,
   // and a card with no readings of that window has nothing to say (#2079).
   // Only while that line is drawn (curves on), and only when the deadline
-  // the line names is that window's alone: after "↻ 14:26 · Weekly Oct 31"
+  // the line names is that window's alone: after "Resets 14:26 · Weekly Oct 31"
   // it would read as the week's.
   const line = quotaRange !== "off" && begun.length === 1 && begun[0] === ws[0] && !ws[0].tiers ? quotaWindowLine(q, ws[0]) : null;
   const pace = line ? quotaEtaText(line, Date.now()) : "";
   if (pace) sub.append(el("span", "pq-pace", " · " + pace));
+  // the card's own refresh, as on the Usage page: shown as it's hovered
+  sub.prepend(quotaRefresh(q));
   card.append(sub);
   const rings = el("span", "pq-rings");
   for (const w of ws) {
