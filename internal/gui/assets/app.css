@@ -1046,6 +1046,13 @@ body.window .field.solo { grid-column: auto; }
 .kpi b .u:last-child { margin-right: 0; }
 .kpi span { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
 .kpi small { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the Overview's tokens tile names how they are counted, a pop-up of the two
+   ways (#2378): the label's own look, a small chevron after it */
+.kpi .kpi-pick { align-self: flex-start; display: inline-flex; align-items: center; gap: 3px; max-width: 100%; margin: 2px 0 -1px -4px; padding: 1px 4px; border-radius: 5px; color: var(--muted); transition: background .12s, color .12s; }
+.kpi .kpi-pick > span { margin-top: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi .kpi-pick svg { flex: none; }
+.kpi .kpi-pick:hover, .kpi .kpi-pick.open { background: var(--pill); color: var(--fg-2); }
+.kpi .kpi-pick:hover > span, .kpi .kpi-pick.open > span { color: inherit; }
 .chart { position: relative; margin-top: 8px; padding: 12px 14px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; flex: none; }
 .chart .peak { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; margin: 0 0 5px; }
 .chart .bars { display: flex; align-items: flex-end; gap: 3px; height: 72px; border-bottom: 1px solid var(--line-2); }
@@ -1085,6 +1092,8 @@ body.window .field.solo { grid-column: auto; }
 /* the hidden ones: a quiet line under the list, opening them dimmed */
 .us-hid { display: flex; flex-direction: column; flex: none; }
 .us-hid[hidden] { display: none; }
+/* a list folded under its heading (#2378) */
+#usagePane .list.folded, #usagePane .us-hid.folded { display: none; }
 .us-hid .us-hidline { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin: 4px 0 0 2px; font-size: 11.5px; color: var(--faint); }
 .us-hid .us-hidline:hover { color: var(--fg-2); }
 .us-hid .us-hidline svg { transition: transform .15s; }
@@ -1128,6 +1137,14 @@ body.window .field.solo { grid-column: auto; }
 .led-strip .sub.jumps { white-space: normal; overflow: visible; }
 /* the wait for the first token and its count wrap rather than cut the count off */
 .led-strip .sub.ttft { white-space: normal; }
+/* a line of counts, as the Tokens card's in, out and cache: each kept whole,
+   wrapping between them rather than cutting the last off (#2378) */
+/* a line in parts wraps between them, each kept whole; only a part wider
+   than its card on its own is cut (#2378: "缓存 879…") */
+.led-strip .sub.parts, .kpi small.parts { white-space: normal; }
+.led-strip .sub.parts > span, .kpi small.parts > span { display: inline-block; max-width: 100%; vertical-align: bottom; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* not the tile's label: .kpi span is its small capitals */
+.kpi small.parts > span { margin-top: 0; font: inherit; letter-spacing: normal; text-transform: none; color: inherit; }
 .led-strip .led-jump { text-align: start; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 .led-strip .led-jump.bad { color: var(--red); }
 .led-strip .led-jump:hover, .led-strip .led-jump.on { text-decoration-style: solid; }

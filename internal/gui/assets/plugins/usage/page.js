@@ -295,9 +295,84 @@ function fitChartLabels() {
 }
 new ResizeObserver(fitChartLabels).observe($("#view-usage"));
 
+// The Overview's lists — Agents, Models, Accounts, Gateway keys — each fold
+// away under their heading (#2378: 日常看账号维度较多，都要拉到最底下), and
+// stay folded across a reload (magpie.usageFolded, the folded ones' names).
+let usageFolded = new Set();
+try { usageFolded = new Set(JSON.parse(localStorage.getItem("magpie.usageFolded") || "[]")); } catch {}
+const USAGE_FOLDS = { agents: ["usageAgents", "usageAgentsHid"], models: ["usageModels"], accounts: ["usageAccounts"], keys: ["usageKeys"] };
+const USAGE_FOLD_TITLES = {
+  agents: ["Show the agents", "Fold the agents away"],
+  models: ["Show the models", "Fold the models away"],
+  accounts: ["Show the accounts", "Fold the accounts away"],
+  keys: ["Show the gateway keys", "Fold the gateway keys away"],
+};
+function mountUsageFolds() {
+  for (const b of $$("#usagePane .row-head .fold[data-fold]")) {
+    b.prepend(svg(CHEV_R, 11, 1.6));
+    b.onclick = () => {
+      const id = b.dataset.fold;
+      if (usageFolded.has(id)) usageFolded.delete(id); else usageFolded.add(id);
+      try { localStorage.setItem("magpie.usageFolded", JSON.stringify([...usageFolded])); } catch {}
+      showUsageFolds();
+      backToReader($("#view-usage"));
+    };
+  }
+  showUsageFolds();
+}
+// a folded list is out of sight by its class, so the page's own hidden
+// (no calls, no accounts) is left as it is
+function showUsageFolds() {
+  for (const b of $$("#usagePane .row-head .fold[data-fold]")) {
+    const id = b.dataset.fold, folded = usageFolded.has(id);
+    b.setAttribute("aria-expanded", String(!folded));
+    b.title = t(USAGE_FOLD_TITLES[id][folded ? 0 : 1]);
+    for (const box of USAGE_FOLDS[id]) $("#" + box)?.classList.toggle("folded", folded);
+  }
+}
+
+// usageParts: a line of counts, each kept whole in a span of its own and
+// " · " between them, where the line may wrap ("{a} in · {b} out" is two)
+function usageParts(texts) {
+  const out = [];
+  for (const x of texts.flatMap((s) => s.split(" · "))) out.push(...(out.length ? [" · "] : []), el("span", "", x));
+  return out;
+}
+
+// The Overview's token totals count what went in and out; the cache's
+// tokens, read and written, can be counted in them too (#2378), as the
+// Requests tab's total always has them. Kept as the reader left it
+// (magpie.usageWithCache).
+let usageWithCache = false;
+try { usageWithCache = localStorage.getItem("magpie.usageWithCache") === "1"; } catch {}
+const cacheOf = (x) => (x.cache_read || 0) + (x.cache_write || 0);
+const usageTokens = (x) => tokensOf(x) + (usageWithCache ? cacheOf(x) : 0);
+// the tokens tile's label: a pop-up of the two ways to count
+function usageTokensPick() {
+  const b = el("button", "kpi-pick");
+  b.type = "button";
+  b.setAttribute("aria-haspopup", "menu");
+  b.append(el("span", "", t(usageWithCache ? "tokens with cache" : "tokens")), svg(CHEV, 10, 1.6));
+  b.title = t("Count the cache's tokens in the totals, or leave them out");
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, [
+      { v: "", name: "Without cache", note: "Input and output" },
+      { v: "1", name: "With cache", note: "Cache read and written counted too" },
+    ], usageWithCache ? "1" : "", (v) => {
+      usageWithCache = v === "1";
+      try { localStorage.setItem("magpie.usageWithCache", usageWithCache ? "1" : "0"); } catch {}
+      renderUsage();
+    }, "Token totals", "sess-menu");
+  };
+  return b;
+}
+
 function renderUsage() {
   const u = usage;
   const view = $("#view-usage");
+  showUsageFolds();
   view.classList.remove("loading");
   view.removeAttribute("aria-busy");
   renderPeriod();
@@ -324,11 +399,17 @@ function renderUsage() {
   const tile = (n, label, sub, title) => {
     const t = el("div", "kpi");
     if (title) t.title = title;
-    t.append(el("b", "", n), el("span", "", label));
-    if (sub) t.append(el("small", "", sub));
+    t.append(el("b", "", n), typeof label === "string" ? el("span", "", label) : label);
+    // a line in parts keeps each whole, wrapping between them rather than
+    // cutting the last off
+    if (Array.isArray(sub)) {
+      const s = el("small", "parts");
+      s.append(...usageParts(sub));
+      t.append(s);
+    } else if (sub) t.append(el("small", "", sub));
     stats.append(t);
   };
-  tile(fmtN(tokensOf(u)), t("tokens"), t("{a} in · {b} out", { a: fmtN(u.input), b: fmtN(u.output) }));
+  tile(fmtN(usageTokens(u)), usageTokensPick(), [t("{a} in · {b} out", { a: fmtN(u.input), b: fmtN(u.output) }), ...(usageWithCache && cacheOf(u) ? [t("{a} cache", { a: fmtN(cacheOf(u)) })] : [])]);
   // cache reads are billed at a fraction of input, so how much of the prompt
   // came from cache is the number that explains the bill; input here already
   // excludes the cached tokens, read and written (the gateway subtracts
@@ -345,7 +426,7 @@ function renderUsage() {
   const chart = $("#chart");
   chart.replaceChildren();
   const bars = el("div", "bars");
-  const peak = Math.max(1, ...u.series.map(tokensOf));
+  const peak = Math.max(1, ...u.series.map(usageTokens));
   const labels = el("div", "labels");
   const n = u.series.length;
   const every = n <= 8 ? 1 : n <= 31 ? Math.ceil(n / 6) : Math.ceil(n / 5);
@@ -354,11 +435,12 @@ function renderUsage() {
   u.series.forEach((p, i) => {
     const b = el("div", "bar");
     const inp = el("i", "in"), out = el("i", "out");
-    inp.style.height = (100 * p.input / peak).toFixed(1) + "%";
+    // counted with the cache, its tokens are in the prompt's part
+    inp.style.height = (100 * (usageTokens(p) - p.output) / peak).toFixed(1) + "%";
     out.style.height = (100 * p.output / peak).toFixed(1) + "%";
     b.append(out, inp);
     const when = u.bucket === "hour" ? `${p.label}:00` : u.bucket === "week" ? t("week of {label}", { label: dayOf(p) }) : dayOf(p);
-    b.title = p.calls ? t(p.calls === 1 ? "{when} · {tokens} tokens · {n} call" : "{when} · {tokens} tokens · {n} calls", { when, tokens: fmtN(tokensOf(p)), n: p.calls }) + (fmtCost(p) ? " · ≈" + fmtCost(p) : "") : t("{when} · nothing", { when });
+    b.title = p.calls ? t(p.calls === 1 ? "{when} · {tokens} tokens · {n} call" : "{when} · {tokens} tokens · {n} calls", { when, tokens: fmtN(usageTokens(p)), n: p.calls }) + (fmtCost(p) ? " · ≈" + fmtCost(p) : "") : t("{when} · nothing", { when });
     bars.append(b);
     const last = i === n - 1 && (n - 1) % every >= every / 2;
     labels.append(el("span", "", i % every === 0 || last ? dayOf(p) : ""));
@@ -366,7 +448,7 @@ function renderUsage() {
   chart.append(el("div", "peak", fmtN(peak)), bars, labels);
   fitChartLabels();
 
-  const total = Math.max(1, tokensOf(u));
+  const total = Math.max(1, usageTokens(u));
   const list = (id, groups, act) => {
     const box = typeof id === "string" ? $("#" + id) : id;
     box.replaceChildren();
@@ -401,16 +483,16 @@ function renderUsage() {
       r.append(who);
       const share = el("div", "share");
       const fill = el("i");
-      fill.style.width = Math.max(1.5, 100 * tokensOf(g) / total).toFixed(1) + "%";
+      fill.style.width = Math.max(1.5, 100 * usageTokens(g) / total).toFixed(1) + "%";
       share.append(fill);
-      share.title = t("{n}% of tokens", { n: Math.round(100 * tokensOf(g) / total) });
+      share.title = t("{n}% of tokens", { n: Math.round(100 * usageTokens(g) / total) });
       r.append(share);
       const num = el("div", "num");
       // how much of its prompt came from the cache, counted as the cache
       // read tile counts it (#925)
       const prompt = g.input + g.cache_read + (g.cache_write || 0);
       const hit = g.cache_read && prompt ? " · " + t("hit rate {p}", { p: Math.round(100 * g.cache_read / prompt) + "%" }) : "";
-      num.append(el("b", "", fmtN(tokensOf(g))), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "") + hit));
+      num.append(el("b", "", fmtN(usageTokens(g))), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "") + hit));
       r.append(num);
       r.append(el("div", "cost", fmtCost(g) ? "≈" + fmtCost(g) : ""));
       if (act) act(r, g);
@@ -951,7 +1033,11 @@ function renderLedgerDash(l) {
   // a line holding a count's button wraps rather than cut the button off
   // (German's "nach erneutem Versuch beantwortet" runs past a narrow card)
   const jumps = (...parts) => { const s = line(...parts); s.classList.add("jumps"); return s; };
-  block("Tokens", fmtN(total), line(t("{a} in · {b} out", { a: fmtN(l.input), b: fmtN(l.output) }), " · ", t("{a} cache", { a: fmtN(l.cache_read + l.cache_write) })), "", ledNum(total));
+  // its parts kept whole, the cache's going under in a card too narrow for
+  // all three rather than cut (#2378: 缓存 879… in a wide window's five cards)
+  const tokParts = line(...usageParts([t("{a} in · {b} out", { a: fmtN(l.input), b: fmtN(l.output) }), t("{a} cache", { a: fmtN(l.cache_read + l.cache_write) })]));
+  tokParts.classList.add("parts");
+  block("Tokens", fmtN(total), tokParts, "", ledNum(total));
   // a request is counted once, by how it ended: one a later try answered
   // is not a failure, and is counted beside them as answered on a retry
   // (小一 on Discord). Each count is a button for its requests in the list.
