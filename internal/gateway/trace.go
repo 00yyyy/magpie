@@ -328,6 +328,11 @@ type Try struct {
 	// waited, so nobody was asked again (#1894: the Routing page's story
 	// otherwise ended on "tried again in 1s", a retry that never came)
 	Gone bool `json:"gone,omitempty"`
+	// Earlier: the last try, its allowance run out, whose error the agent
+	// wasn't told: it got the first failure before it that wasn't an
+	// allowance's (Discord, waroy). Whether a try went on is the next
+	// try in Tries, which is appended only as it is asked (#2281)
+	Earlier bool `json:"earlier,omitempty"`
 	// Queued: ms it waited for one of its key's or account's slots, the
 	// provider's MaxConcurrency out already (concurrency.go)
 	Queued int64 `json:"queued,omitempty"`

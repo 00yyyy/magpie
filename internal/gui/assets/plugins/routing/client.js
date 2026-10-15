@@ -890,6 +890,11 @@ function routingPage(part) {
     if (w && tr.auto?.length) name = `${who(w)} (${w.model} → ${tr.auto[tr.auto.length - 1].model})`;
     if (tr.effort && tr.fail !== "prompt") name += " " + t("at {level} reasoning", { level: tr.effort });
     if (!tr.done) return t("{who} is answering…", { who: name });
+    // what came of a try is what the gateway did next, never guessed from
+    // where it stood in the order: a later try is the request going on,
+    // as the gateway appends one only as it asks it, and with none the
+    // error ended the request, the agent's once the route is done (#2281)
+    const next = r.tries[i + 1], nw = next && tried(r, next);
     // a Codex reset spent by itself: with Codex's own sign-in the one try
     // it was spent for is the one that then answered
     const spent = tr.reset && tr.status < 400
@@ -911,12 +916,10 @@ function routingPage(part) {
         { who: name, status: tr.status, account: tr.reset.who, agent });
     if (tr.fail === "canceled")
       return t("{agent} canceled the request while {who} was answering: nobody failed, so nobody rests and nobody else is asked.", { who: name, agent });
-    if (tr.fail === "auth") {
-      const next = r.tries[i + 1], nw = next && tried(r, next);
+    if (tr.fail === "auth")
       return next
         ? t("{who} could not authenticate. Sign in again in magpie; this login is not retried. The request went to {next}.", { who: name, next: nw ? who(nw) : t("the next") })
         : t("{who} could not authenticate. Sign in again in magpie; this login is not retried. No other account could answer.", { who: name });
-    }
     if (tr.fail === "foreign")
       return t("{who} couldn't read the reasoning another account wrote earlier in this conversation, so it is asked again without it, before any of the reply reaches {agent}.", { who: name, agent });
     if (tr.fail === "floor")
@@ -940,7 +943,9 @@ function routingPage(part) {
         ? t("{who} answered {status}: its plan doesn't take the reasoning effort asked for, so another account goes on with it before any of the reply reaches {agent}. {who} serves other efforts, so it doesn't rest.", { who: name, status: tr.status, agent })
         : t("{who} answered {status}: its plan doesn't take the reasoning effort asked for, and no account left that does could answer, so {agent} gets an error saying so.", { who: name, status: tr.status, agent });
     if (tr.fail === "slow")
-      return t("{who} hadn't begun answering after {ms}, so the request went on to the next before any of it reached {agent}. Nothing is wrong with {who}, so it doesn't rest.", { who: name, ms: took(tr.ms), agent });
+      return !next && r.done
+        ? t("{who} hadn't begun answering after {ms}, and nobody is left to try, so {agent} gets the error.", { who: name, ms: took(tr.ms), agent })
+        : t("{who} hadn't begun answering after {ms}, so the request went on to the next before any of it reached {agent}. Nothing is wrong with {who}, so it doesn't rest.", { who: name, ms: took(tr.ms), agent });
     if (tr.fail === "proxy")
       return r.tries[i + 1]
         ? t("{who}: the proxy magpie goes through didn't take the connection, so the request never reached the vendor and goes on to the next. Nothing is wrong with {who}, so it doesn't rest: once the proxy is up it is asked first again.", { who: name })
@@ -956,13 +961,26 @@ function routingPage(part) {
     if (tr.again)
       return t("{who} answered {status} · {fail}, and nobody else is left to ask — a failure that may pass, so it is tried again in {d}, before any of the reply reaches {agent}.",
         { who: name, status: tr.status, fail: failWord(tr.fail), d: took(tr.again), agent });
-    if (tr.rest) {
-      const next = r.tries[i + 1], nw = next && tried(r, next);
-      return t("{who} answered {status} · {fail}. {how}; the request goes on to {next} before any of the reply reaches {agent}.",
-        { who: name, status: tr.status, fail: failWord(tr.fail), how: restHow(tr.rest, at(tr.start) + (tr.ms || 0)), next: nw ? who(nw) : t("the next"), agent });
-    }
-    const last = i >= r.order.length - 1;
-    return last
+    // the last one left out of its allowance, after another failed
+    // otherwise: the agent was told that one's error (Try.Earlier)
+    if (tr.earlier && !next)
+      return t("{who} answered {status} and nobody is left to try. {agent} gets the error an earlier try gave, not this used-up allowance, so it doesn't stop as if every account were out.", { who: name, status: tr.status, agent });
+    // the error came, and nothing after it is known yet
+    if (!next && !r.done) return t("{who} answered {status}.", { who: name, status: tr.status });
+    const how = tr.rest && restHow(tr.rest, at(tr.start) + (tr.ms || 0));
+    if (next)
+      return tr.rest
+        ? t("{who} answered {status} · {fail}. {how}; the request goes on to {next} before any of the reply reaches {agent}.",
+          { who: name, status: tr.status, fail: failWord(tr.fail), how, next: nw ? who(nw) : t("the next"), agent })
+        : t("{who} answered {status}, and the request goes on to {next} before any of the reply reaches {agent}. {who} doesn't rest for it.",
+          { who: name, status: tr.status, next: nw ? who(nw) : t("the next"), agent });
+    if (tr.rest)
+      return t("{who} answered {status} · {fail}. {how}; nobody is left to try, so {agent} gets the error.",
+        { who: name, status: tr.status, fail: failWord(tr.fail), how, agent });
+    // the gateway stopped here with accounts left in the order: one it
+    // would not go on from (the same history refused on every account of
+    // a vendor, with no other vendor left)
+    return i >= r.order.length - 1
       ? t("{who} answered {status} and nobody is left to try, so {agent} gets the error.", { who: name, status: tr.status, agent })
       : t("{who} answered {status} — an error another account wouldn't fix, so {agent} gets it.", { who: name, status: tr.status, agent });
   }
@@ -1596,13 +1614,18 @@ function routingPage(part) {
       // rests by key or account, and by key or account and model for a
       // rest of one model only: the account's other models' rows don't
       // rest with it (#1960)
-      const r = src().get(row.rid) || pinned || cur, answered = new Set(), rests = new Map(), gave = new Map();
+      const r = src().get(row.rid) || pinned || cur, answered = new Set(), rests = new Map(), gave = new Map(), went = new Map();
       const restAt = (id, m, rest) => { const rm = restModel(rest, m); rests.set(rm ? id + "\u0000" + rm : id, rest); };
       const modelOf = (tr) => tried(r, tr)?.model || tr.model || "";
       for (const w of r.order) if (w.rest) restAt(w.id, w.model, w.rest);
       for (const tr of r.tries) {
         if (tr.done && tryOk(tr)) answered.add(tryseat(r, tr));
-        else if (tr.done && !tr.rest && !tr.again) gave.set(tryseat(r, tr), tr); // the error the agent got
+        // the error the agent got: the last try's, once the request is
+        // done, not one the gateway went on from (#2281)
+        else if (tr.done && !tr.rest && !tr.again && !tr.earlier && r.done && tr === r.tries[r.tries.length - 1]) gave.set(tryseat(r, tr), tr);
+        // one the gateway went on from says what it answered, and that the
+        // request went on, not that the agent got it
+        else if (tr.done && !tr.rest && !tr.again && tr !== r.tries[r.tries.length - 1]) went.set(tryseat(r, tr), tr);
         if (tr.rest) restAt(tr.id, modelOf(tr), tr.rest);
       }
       // it answered: whatever rest it began in is over
@@ -1616,6 +1639,7 @@ function routingPage(part) {
       else if (trying.has(id)) s = r.id !== cur.id && agents.size <= 1 ? t("answering another request…") : t("answering…");
       else if (answered.has(id)) s = agents.size > 1 ? t("answered {agent}", { agent: agentName(r.agent) }) : t("answered this request");
       else if (gave.has(id)) s = t("{status} · {fail} · passed to {agent}", { status: gave.get(id).status, fail: failWord(gave.get(id).fail), agent: agentName(r.agent) });
+      else if (went.has(id)) s = t("{status} · {fail} · went on to the next", { status: went.get(id).status, fail: failWord(went.get(id).fail) });
       else if (w.noURL) s = noURLWord(w);
       else if (w.sunk) s = t("rate limited at {time} · at the back", { time: clock(w.sunk) });
       else if (w.known) {

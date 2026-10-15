@@ -3127,7 +3127,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// the allowance's — Codex, told its usage is exhausted, stops
 			// taking input though another member would answer next time
 			// (Discord, waroy)
-			try.Fail = f
+			try.Fail, try.Earlier = f, true
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			call.Status, call.Error = other.Status, other.Error
 			failTo(w, kept, from, call.Status, call.Error)
