@@ -882,6 +882,7 @@ var wsl struct {
 	names   []string        // every distro installed
 	running map[string]bool // those running
 	runAt   time.Time       // when running was listed
+	runOK   bool            // running is wsl.exe's answer, not a failure
 	listed  bool            // names is a real answer, and may forget distros
 	seen    map[string]*distro
 	probed  map[string]bool
@@ -897,6 +898,10 @@ const (
 	// WSL) is seen stopped within it, before anything opens its files,
 	// which would start it again (TJHHHH on Discord)
 	wslRunningAge = 3 * time.Second
+	// wslRunningFailedAge is how long wsl.exe failing to say is kept: each
+	// ask that times out holds wsl's lock, and so the GUI, for 10s, and
+	// leaves a wsl.exe behind (#2341)
+	wslRunningFailedAge = 30 * time.Second
 )
 
 // wslOn is whether there is WSL to look in: on Windows, or in tests.
@@ -1035,10 +1040,15 @@ func wslForgetOldBins() {
 // wsl.exe can't say, none is taken to run: a distro is never opened on a
 // guess.
 func wslRunningLocked() {
-	if !wsl.runAt.IsZero() && time.Since(wsl.runAt) <= wslRunningAge {
+	age := wslRunningAge
+	if !wsl.runOK {
+		age = wslRunningFailedAge
+	}
+	if !wsl.runAt.IsZero() && time.Since(wsl.runAt) <= age {
 		return
 	}
-	run, _ := wslList("-l", "--running", "-q")
+	run, ok := wslList("-l", "--running", "-q")
+	wsl.runOK = ok
 	wsl.running = map[string]bool{}
 	for _, n := range run {
 		wsl.running[n] = true
