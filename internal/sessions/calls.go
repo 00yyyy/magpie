@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/desktopdir"
@@ -394,28 +393,8 @@ func SubagentParent(p string) string {
 	if SubagentOf(p) == "" {
 		return ""
 	}
-	meta := strings.TrimSuffix(p, ".jsonl") + ".meta.json"
-	if v, ok := subagentParents.Load(meta); ok {
-		return v.(string)
-	}
-	b, err := os.ReadFile(meta)
-	if err != nil {
-		return ""
-	}
-	var m struct {
-		ParentAgentID string `json:"parentAgentId"`
-	}
-	if json.Unmarshal(b, &m) != nil {
-		return ""
-	}
-	parent := m.ParentAgentID[:min(len(m.ParentAgentID), 128)]
-	subagentParents.Store(meta, parent)
-	return parent
+	return ccMeta(p).ParentAgentID
 }
-
-// subagentParents: SubagentParent's meta files read, by path. Claude Code
-// writes one as it starts the subagent and never changes it.
-var subagentParents sync.Map
 
 // str is s kept once per file, as the calls of a file repeat a few.
 func (st *callFile) str(s string) string {

@@ -249,7 +249,13 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, errors.New("no such session"))
 			return
 		}
-		t, err := sessions.TranscriptOf(s)
+		// sub: one of its subagents, found among those the session lists
+		// (#2261)
+		read := sessions.TranscriptOf
+		if sub := q.Get("sub"); sub != "" {
+			read = func(s sessions.Session) (sessions.Transcript, error) { return sessions.SubagentTranscript(s, sub) }
+		}
+		t, err := read(s)
 		if err != nil {
 			fail(rw, err)
 			return

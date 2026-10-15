@@ -139,6 +139,9 @@ type Session struct {
 	Carry []Carry `json:"carry,omitempty"`
 	// Transcript says its conversation can be read (TranscriptOf)
 	Transcript bool `json:"transcript,omitempty"`
+	// Subagents are the conversations its agent started inside it, each
+	// read with SubagentTranscript (subagents.go)
+	Subagents []Subagent `json:"subagents,omitempty"`
 	// WSL is the WSL distro the session ran in, its files read through
 	// \\wsl.localhost (see wsl.go); "" for this computer's own
 	WSL string `json:"wsl,omitempty"`
@@ -375,9 +378,11 @@ type file struct {
 	main  bool // the session's own file, not a subagent's
 	size  int64
 	mod   time.Time
-	// OpenCode and ZCode: the session, and where it is kept
-	sid string
-	oc  ocStore
+	// OpenCode and ZCode: the session, and where it is kept; parent is
+	// the session that started it, "" for one the user did
+	sid    string
+	parent string
+	oc     ocStore
 	// Cline: the session's manifest, beside its messages; Grok Build: its
 	// summary.json, beside its updates; Droid: its settings, beside its
 	// transcript
@@ -1131,6 +1136,9 @@ func assemble(fs []file, price func(string) *catalog.Price) (Session, bool) {
 		s.Resume = resumeCommand(s.WSL, s.Agent, s.ID, s.Cwd, s.Path)
 	}
 	s.Carry, s.Transcript = carries(s), HasTranscript(s.Agent)
+	if s.Transcript {
+		s.Subagents = subagentsOf(s, fs)
+	}
 	return s, true
 }
 
