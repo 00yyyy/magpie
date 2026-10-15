@@ -6411,7 +6411,10 @@ func writeErrorSaid(w http.ResponseWriter, proto provider.Protocol, status int, 
 		typ = "permission_error"
 	case status == 404:
 		typ = "not_found_error"
-	case status == 413 && proto == provider.Anthropic:
+	case status == 413:
+		// Anthropic's own type, in every shape: pi (overflow.ts) compacts
+		// and tries once more on it, and an OpenAI-shaped api_error left
+		// it stopped (@wilsonxuuuu on X)
 		typ = "request_too_large"
 	case status == 429:
 		typ = "rate_limit_error"
