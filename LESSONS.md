@@ -372,9 +372,12 @@ Two habits from them:
 now" is in the code standards. What the reviews found about finding the
 cause:
 - TestPluginSOCKSProxy timed out at 60s on ubuntu CI and was rerun as "load
-  jitter". It takes 3s on a Mac every time, and a dead local proxy should
-  refuse in milliseconds, so something on that path waits. Its cause
-  isn't found yet.
+  jitter". The cause (9a852ae9d, 10-15): the test freed a port for a dead
+  SOCKS proxy, the netproxy bridge's :0 listen was handed that same port,
+  and the bridge dialled itself under a one-minute read deadline. Found by
+  injecting the reuse (60.03s red, 2.4s green after), not by rerunning. A
+  port a test frees can be handed to anything next: d0ccbbebc fixed the
+  gateway's proxy-down tests for the same reason.
 - TestUnreadLoginsNotWrittenOver needed two writes inside one wall-clock
   second (a `.bad-<second>` name) and failed on Linux CI (237d216b). Test a
   name made from time.Now() across a second boundary.
