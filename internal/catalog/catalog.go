@@ -84,6 +84,11 @@ type Model struct {
 	// (gateway Request.Tier): Codex offers it the tiers of its own entry
 	// for the same model, Fast on another GPT model.
 	OwnTier bool `json:",omitempty"`
+	// CodexFast is set on a GPT model a ChatGPT account serves itself, not
+	// through a routing group: one Codex's /fast (service_tier "priority")
+	// is asked of, which OpenCode is offered as fast variants (#2379).
+	// Not kept with a list: it is the provider's, worked out each time.
+	CodexFast bool `json:"-"`
 	// AgentsV2 is set on a model Codex is told multi-agent V2 for, so its
 	// Ultra hands work to Codex's agents: one offering Ultra that no
 	// ChatGPT account answers for (provider.Entry's).

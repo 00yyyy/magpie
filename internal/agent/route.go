@@ -181,6 +181,12 @@ func magpieModels(agent string) []catalog.Model {
 		// lists offer them: Fast in the Codex CLI magpie writes
 		// magpie-models.json for (#1530)
 		provider.CodexTiers(&m, e, members)
+		// Codex's /fast on a ChatGPT account's own GPT model, which
+		// OpenCode has no command for and takes as variants (#2379); a
+		// group is sent fast as the group says, as a fast pick is
+		if a := e.Provider.Account; e.Group == "" && a != nil && a.Agent == "codex" {
+			m.CodexFast = provider.CanFast(e.Provider, e.Model)
+		}
 		out = append(out, m)
 	}
 	return out

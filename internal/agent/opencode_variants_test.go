@@ -27,9 +27,26 @@ func TestOpenCodeVariants(t *testing.T) {
 		// and high of its own
 		{nil, `{}`},
 	} {
-		b, err := json.Marshal(openCodeVariants(c.efforts))
+		b, err := json.Marshal(openCodeVariants(c.efforts, false))
 		if err != nil || string(b) != c.want {
 			t.Errorf("%v: got %s (%v), want %s", c.efforts, b, err, c.want)
+		}
+	}
+	// a model Codex's /fast is asked of: each level again, fast, after them,
+	// the tier both as OpenCode 1 sends an option (service_tier as it is)
+	// and as OpenCode 2 does (extraBody); fast alone with no levels (#2379)
+	for _, c := range []struct {
+		efforts []string
+		want    string
+	}{
+		{[]string{"high", "low"}, `{"low":{"reasoningEffort":"low"},"high":{"reasoningEffort":"high"},` +
+			`"low-fast":{"extraBody":{"service_tier":"priority"},"reasoningEffort":"low","service_tier":"priority"},` +
+			`"high-fast":{"extraBody":{"service_tier":"priority"},"reasoningEffort":"high","service_tier":"priority"}}`},
+		{nil, `{"fast":{"extraBody":{"service_tier":"priority"},"service_tier":"priority"}}`},
+	} {
+		b, err := json.Marshal(openCodeVariants(c.efforts, true))
+		if err != nil || string(b) != c.want {
+			t.Errorf("fast %v: got %s (%v), want %s", c.efforts, b, err, c.want)
 		}
 	}
 }
