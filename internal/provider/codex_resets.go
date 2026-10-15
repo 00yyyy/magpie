@@ -238,6 +238,8 @@ func useCodexReset(ctx context.Context, user, why string) (ResetOutcome, error) 
 	subscriptionUsageCache.at = time.Time{}
 	subscriptionUsageCache.data = nil
 	subscriptionUsageCache.Unlock()
+	// the menu bar reads the account afresh now, not at its next tick (#2357)
+	toldUsage()
 	return out, nil
 }
 

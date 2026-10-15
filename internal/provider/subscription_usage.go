@@ -212,6 +212,16 @@ func OnSubscriptionUsage(f func()) {
 
 var onSubscriptionUsage atomic.Pointer[func()]
 
+// toldUsage tells OnSubscriptionUsage's hook that what Quotas answers has
+// changed: a whole read landing, a card read again on its own, a Codex
+// reset spent. The menu bar reads again then, not at its next tick
+// minutes later, so it says what the panel does (#2357).
+func toldUsage() {
+	if f := onSubscriptionUsage.Load(); f != nil {
+		(*f)()
+	}
+}
+
 // subscriptionTimeout bounds one refresh; the vendors' endpoints can be
 // unreachable without a proxy, and then each fetch would hang to it.
 // A plugin's account waits as long as the plugin itself does (20s).
@@ -260,9 +270,7 @@ func SubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			c.Unlock()
 			// told before done is closed, so whoever waits for the refresh
 			// has it finished, hook and all
-			if f := onSubscriptionUsage.Load(); f != nil {
-				(*f)()
-			}
+			toldUsage()
 			close(done)
 		}()
 	}
