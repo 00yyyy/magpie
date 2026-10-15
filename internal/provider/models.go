@@ -615,7 +615,7 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 		if anthropic {
 			ctx = p.listAuth(ctx)
 		}
-		ms, err := catalog.FetchURL(ctx, u, p.Key, anthropic, p.listHeaders())
+		ms, err := catalog.FetchURL(ctx, u, p.Key, anthropic, p.listHeadersAt(u))
 		if err != nil {
 			return fetched{}, err
 		}
@@ -672,7 +672,7 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 			// listed as the Gemini API lists them, the key in its header,
 			// and merged like any other protocol's list (#1346)
 			asked[protoBase] = true
-			ms, _, err := catalog.FetchGemini(ctx, protoBase, p.Key, p.listHeaders())
+			ms, _, err := catalog.FetchGemini(ctx, protoBase, p.Key, p.listHeadersAt(protoBase))
 			if err != nil {
 				if !slices.Contains(errs, err.Error()) {
 					errs = append(errs, err.Error())
@@ -718,7 +718,7 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 			continue
 		}
 		asked[protoBase] = true
-		ms, u, err := catalog.FetchAtListed(lctx, protoBase, p.Key, proto == Anthropic, p.listHeaders(), listed)
+		ms, u, err := catalog.FetchAtListed(lctx, protoBase, p.Key, proto == Anthropic, p.listHeadersAt(protoBase), listed)
 		if err == nil && proto == Anthropic && HostOf(protoBase) == openRouterHost {
 			// the pages of the list are followed to its end, and what
 			// comes back is still not a list of models to serve

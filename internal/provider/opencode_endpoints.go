@@ -17,7 +17,7 @@ func openCodeRoot(base string) (root, catalogID string) {
 	if err != nil || u.Scheme == "" {
 		return "", ""
 	}
-	if h := strings.ToLower(u.Hostname()); h != "opencode.ai" && !strings.HasSuffix(h, ".opencode.ai") {
+	if !openCodeHost(u.Hostname()) {
 		return "", ""
 	}
 	switch path := strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/v1"); path {

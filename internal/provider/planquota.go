@@ -498,6 +498,9 @@ func planWindows(ctx context.Context, src planQuotaSource, key string) (plan str
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Language", "en-US,en")
+	// Go's usage is asked at its gateway, which routes nothing that names
+	// no session
+	OpenCodeSession(req.Header, src.url)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", nil, err

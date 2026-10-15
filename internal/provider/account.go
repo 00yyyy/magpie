@@ -193,6 +193,9 @@ func (p Provider) Sign(ctx context.Context, req *http.Request, proto Protocol, b
 	if p.Account != nil && p.Account.sign != nil {
 		return p.Account.sign(ctx, req, body)
 	}
+	// OpenCode's gateway routes nothing that names no session; the user's
+	// own header, below, still has the last word
+	OpenCodeSession(req.Header, req.URL.String())
 	if p.IsVertex() {
 		// a Google token, which goes nowhere but the project's own address
 		if base := p.vertexBase(); base == "" || !strings.HasPrefix(req.URL.String(), base+"/") {

@@ -3692,9 +3692,11 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		}
 		provider.SawClient(provider.ClientCodex, seen)
 	}
-	if p.IsOpenCode() {
-		// as OpenCode itself sends it, which Zen's free tier asks for
-		provider.OpenCodeClient(req.Header, conversationID(in, body))
+	if provider.OpenCodeURL(req.URL.String()) {
+		// as OpenCode itself sends it, which Zen's free tier asks for,
+		// with the conversation's own session, which Zen and Go route and
+		// cache by and answer 400 without
+		provider.OpenCodeClient(req.Header, openCodeSeed(in, body))
 	}
 	if p.IsCline() {
 		// as Cline's desktop app sends it: its free models are 403'd
@@ -3742,6 +3744,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		sent = provider.CodexCompressed(req, body)
 	}
 	res, err := p.Do(s.client, req)
+	if err == nil && res.StatusCode >= 400 && provider.OpenCodeURL(req.URL.String()) {
+		logOpenCodeRefusal(p, req, res.StatusCode)
+	}
 	if err == nil && to == provider.Anthropic {
 		// a vendor that takes the key in x-api-key or Authorization
 		// alone, refusing both (Aloha on Discord): asked again with one

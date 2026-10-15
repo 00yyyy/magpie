@@ -493,8 +493,8 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 	if proto == Anthropic {
 		req.Header.Set("anthropic-version", "2023-06-01")
 	}
-	if p.IsOpenCode() {
-		OpenCodeClient(req.Header, "")
+	if OpenCodeURL(url) {
+		OpenCodeClient(req.Header, "") // a session of the probe's own
 	}
 	if p.IsCline() {
 		ClineClient(req.Header)

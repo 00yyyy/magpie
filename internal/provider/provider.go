@@ -1552,8 +1552,7 @@ func (p Provider) Where() string {
 // which routes and caches by conversation and turns away requests that do
 // not name one in x-opencode-session.
 func (p Provider) IsOpenCode() bool {
-	h := p.Host()
-	return h == "opencode.ai" || strings.HasSuffix(h, ".opencode.ai")
+	return OpenCodeURL("//" + p.Host()) // its port, if it names one, aside
 }
 
 // IsBedrock reports whether the provider is Amazon Bedrock's runtime: made
