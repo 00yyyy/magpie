@@ -14454,7 +14454,7 @@ let quotaRefreshVersion = 0;
 const quotaRefreshVersions = new Map();
 function loadQuotas(asked, again) {
   if (quotasLoading && (!asked || quotasLoading.asked)) return quotasLoading;
-  if (asked) quotasAskedAt = performance.now();
+  if (asked) { quotasAskedAt = performance.now(); quotaCycleHolds.clear(); }
   if (!again) quotasTries = 0;
   let reading = false, same = false, began;
   const p = Promise.resolve(quotasLoading).catch(() => {})
@@ -15203,6 +15203,26 @@ function quotaPastCycles(lines, now) {
   return { line: longest, cycles: quotaRecordedCycles(longest).filter((c, i, all) => i < all.length - 1 || c.end <= now).reverse() };
 }
 const quotaCyclePicks = new Map(); // account -> recorded cycle's first reading
+const quotaCycleHolds = new Map(); // account and completed cycle -> its own estimates
+function quotaCycleHoldsOf(sub, picked) {
+  if (!sub.user || sub.from) return { windows: [], pending: false };
+  const key = usageAcctKey(sub) + "\0" + picked.id + "\0" + picked.end;
+  if (!quotaCycleHolds.has(key)) {
+    const entry = { windows: [], pending: true };
+    quotaCycleHolds.set(key, entry);
+    const args = new URLSearchParams({ provider: sub.provider, user: sub.user || "", from: new Date(picked.start).toISOString(), to: new Date(picked.end).toISOString() });
+    api("usage/quotas/history/holds?" + args).then((cards) => {
+      if (quotaCycleHolds.get(key) !== entry || !Array.isArray(cards)) return;
+      entry.windows = cards.flatMap((q) => q.windows || []);
+    }).catch(() => {}).finally(() => {
+      if (quotaCycleHolds.get(key) !== entry) return;
+      entry.pending = false;
+      if (quotaCyclePicks.get(usageAcctKey(sub)) === picked.id && quotaRange === "cycle") renderQuotas();
+    });
+  }
+  return quotaCycleHolds.get(key);
+}
+
 // One selection drives both the meters and the curve. A snapshot contains
 // only the fields history actually kept, never today's counts or holds.
 function quotaHistoryView(sub, lines = quotaLines(sub), now = Date.now()) {
@@ -15218,12 +15238,16 @@ function quotaHistoryView(sub, lines = quotaLines(sub), now = Date.now()) {
   return { picked, shown };
 }
 function quotaHistoryCard(sub, { picked, shown }) {
+  const estimates = quotaCycleHoldsOf(sub, picked);
   const windows = familyWindows(sub.windows).map((w) => {
     const name = w.pool ? w.pool + " · " + w.name : w.name;
     const last = shown.find((l) => l.name === name)?.points.at(-1);
     const base = { name: w.name, pool: w.pool, historyMissing: !last };
     if (!last) return base;
+    // the server reckons a past whole for an account's own windows only
+    const est = w.pool || w.family ? null : estimates.windows.find((x) => x.name === w.name);
     return { ...base, used: 100 - last.left, recordedAt: last.at,
+      holds: est?.holds, holdsWhy: est?.holdsWhy, holdsPending: estimates.pending,
       resetsAt: new Date(Math.min(last.reset ?? picked.end, picked.end)).toISOString() };
   });
   const at = Math.max(...windows.filter((w) => !w.historyMissing).map((w) => w.recordedAt));
@@ -16958,6 +16982,7 @@ function quotaRefresh(q) {
     e.stopPropagation();
     if (quotaRefreshing.has(key)) return;
     quotaRefreshing.add(key);
+    for (const k of quotaCycleHolds.keys()) if (k.startsWith(key + "\0")) quotaCycleHolds.delete(k);
     b.classList.add("busy");
     const began = quotaRefreshVersion;
     try {
@@ -17167,11 +17192,17 @@ function quotaWindows(sub) {
     // the reset's line, so the window keeps its three rows
     if (w.holds) {
       if (!r) quota.append(r = el("div", "quota-reset"));
-      r.append(holdsLine(w.holds));
-    } else if (w.holdsWhy && holdsWhy[w.holdsWhy] && !sub.history) {
+      const line = holdsLine(w.holds);
+      // a past cycle's whole is reckoned at its own last reading (#2009)
+      if (sub.history) line.title = t("Estimated from the window that began {start}, read {at}", { start: quotaCycleDate(Date.parse(w.holds.since)), at: quotaCycleDate(w.recordedAt) }) + "\n" + line.title;
+      r.append(line);
+    } else if (w.holdsWhy && holdsWhy[w.holdsWhy]) {
       // and where it can't be told, so, and why in its tooltip (#2045)
       if (!r) quota.append(r = el("div", "quota-reset"));
       r.append(holdsUnknownLine(w.holdsWhy));
+    } else if (sub.history && w.holdsPending) {
+      if (!r) quota.append(r = el("div", "quota-reset"));
+      r.append(el("span", "quota-holds-why", t("Loading…")));
     }
     // a model family's figure: its models, level by level, in its tooltip
     if (w.tiers) quota.title = t("{family}: the most used of its models", { family: w.name }) + "\n" + tiersText(w);

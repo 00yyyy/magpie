@@ -2442,3 +2442,16 @@ observed duration rather than the nominal window name. Regression checks
 cover missing windows, historical end and sampling dates, Used/Left,
 restoring live values on 2 days/current cycle, and hiding live account
 controls while inspecting history.
+
+
+`quota-curve.test.cjs` also checks that a completed cycle loads its own
+5-hour and weekly whole-window estimates from
+`/api/usage/quotas/history/holds`, never today's (#2009). It shows
+"Loading…" while the answer is pending and drops an answer that arrives
+after another cycle was picked. It reuses a cycle's answer until the card's
+Refresh. A window the server can't reckon says "not enough data" with its
+reason, and one with no estimate and no reason shows nothing, as a live card
+does. Both engines, at 440px. The reckoning itself is covered by
+`TestHistoricalWindowHoldsUsesEachWindowsOwnReading`,
+`TestWindowHoldsResetBeforeRefillReading` and
+`TestWindowHoldsDryAgainAfterReset`.

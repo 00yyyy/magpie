@@ -162,6 +162,31 @@ it; multiple resets between readings and refills hidden by subsequent
 spending cannot be recovered. Sampling compression and sync merging keep
 readings on both sides of detected boundaries.
 
+Whole-window estimates in [`window_holds.go`](../../internal/usage/window_holds.go)
+leave out a window whose calls fall in one of the account's dry runs, since a
+call answered there may have been paid from credits or extra usage (#2010,
+NorethSea). A known vendor reset ends a dry run, even when the next poll sees
+the refill later, and a following dry run starts no earlier than that reset,
+so calls between the two still count. A reset time that isn't known keeps the
+run open. A stale dry reading taken after its own reset can't extend a run.
+Credit balances are read account-wide and shown rounded, and the ledger has no
+per-request credit charge. Comparing two balances can't tell which concurrent
+or outside call spent credits, so no per-call attribution is attempted.
+A refill observed later than reset minus span (`QuotaPoint.StartsCycleAfter`,
+the same boundaries history sampling keeps) starts what is reckoned, so calls
+before a fixed-deadline refill stay in the cycle before it. The card's window
+keeps its span, so its Pace is the vendor's (`withSpansOf`). A first reading
+with no recorded start is not a reset. `HistoricalWindowHolds`
+([`window_holds_history.go`](../../internal/usage/window_holds_history.go))
+reckons a past cycle's windows the same way, each at its own last reading in
+the range, with that reading's percentage and bounds, the cached card's model
+scope, and only calls and readings before that reading. A card that is gated
+live (a balance, a remote, an error) is gated for past cycles too, and a
+window no longer on the cached card is left out. Past prices aren't kept, so
+the cost is at today's API list prices. See
+`TestWindowHoldsDryAgainAfterReset`, `TestWindowHoldsUsesObservedRefillStart`
+and `TestHistoricalWindowHoldsUsesEachWindowsOwnReading`.
+
 - A successful Codex allowance reset invalidates an account's in-flight reading even when the read and reset have the same clock timestamp. `Allowances` snapshots `usedCache.generation` under its lock, and `forgetAllowance` advances the generation for that account; a reading from before the reset is dropped before routing can use it. [`routing.go`](../../internal/provider/routing.go), `TestResetAllowanceKnownAtOnce`.
 - Each refresh token has exactly one holder. Vendors rotate tokens on refresh, so two copies of one token would sign each other out. `savedTokenMu` stops two requests refreshing one saved account at once.
 - A Claude subscription account is used only for Claude Code, through the genuine Claude Code binary (see [Claude subscription bridge](claude-subscription-bridge.md)).

@@ -21,6 +21,7 @@ function page() {
     let quotas = [], quotasAt = 0, quotaHist = [], quotasAskedAt = 0, view = "usage";
     const requests = [], errors = [];
     const usageAcctKey = q => q.provider + "\\n" + (q.user || "").toLowerCase();
+    const quotaCycleHolds = new Map(); // past cycles' estimates (#2009), cleared by a refresh
     const t = x => x;
     const el = () => ({ classList: { add() {} }, setAttribute() {} });
     function renderQuotas() {}
