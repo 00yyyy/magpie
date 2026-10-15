@@ -10,6 +10,8 @@
 .rt-wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .rt-wires path { fill: none; stroke: var(--line); stroke-width: 1.5; transition: opacity .3s; }
 .rt-wires path.live { stroke: var(--agent, var(--muted)); stroke-dasharray: 3 5; animation: rtflow .7s linear infinite; }
+/* lit: the way the request shown went, over; only a request in flight flows (#2386) */
+.rt-wires path.lit { stroke: var(--agent, var(--muted)); }
 .rt-wires path.rest { stroke-dasharray: 2 6; opacity: .45; }
 @keyframes rtflow { to { stroke-dashoffset: -8; } }
 /* the magpies, over the nodes: one carries each request out, another
@@ -86,7 +88,8 @@
 .rt-accts li.on { border-color: var(--fg); }
 .rt-accts li.on em { color: var(--fg); }
 .rt-accts li.on .bar i { background: var(--fg); }
-.rt-accts li.on .dot { background: var(--fg); border-color: var(--fg); animation: rtlive 1.8s infinite; }
+.rt-accts li.on .dot { background: var(--fg); border-color: var(--fg); }
+.rt-accts li.now .dot { animation: rtlive 1.8s infinite; }
 @keyframes rtlive { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fg) 40%, transparent); } 70%, 100% { box-shadow: 0 0 0 6px transparent; } }
 .rt-accts li.low em { color: var(--fg-2); }
 .rt-accts li.rest { border-style: dashed; }
@@ -135,7 +138,7 @@
 .rt-steps li.wait::before { animation: rtlive 1.8s infinite; }
 .rt-off { padding: 18px 4px; text-align: center; color: var(--muted); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) {
-  .rt-accts li.on .dot, .rt-wires path.live, .rt-sky .pkt.held, .rt-accts li.new, .rt-accts li.hit, .rt-hub.tick, .rt-src.tick, .rt-cap.in, .rt-steps li.wait::before, .masking .pii { animation: none; }
+  .rt-accts li.now .dot, .rt-wires path.live, .rt-sky .pkt.held, .rt-accts li.new, .rt-accts li.hit, .rt-hub.tick, .rt-src.tick, .rt-cap.in, .rt-steps li.wait::before, .masking .pii { animation: none; }
   .rt-accts li { transition: none; }
 }
 /* The narrow and wide layouts below go by a box's own width, as container

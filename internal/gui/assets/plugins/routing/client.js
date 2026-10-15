@@ -1600,6 +1600,16 @@ function routingPage(part) {
     goRouting(e, g.dataset.go);
   });
 
+  // lightRow lights a row and its wire: on for the one answering or that
+  // answered the request shown, now and a flowing wire only while a
+  // request is with it (#2386)
+  function lightRow(li, wire, on, now) {
+    li.classList.toggle("on", on);
+    li.classList.toggle("now", on && now);
+    wire.classList.toggle("live", on && now);
+    wire.classList.toggle("lit", on && !now);
+  }
+
   // what a row says now: resting, answering, or what routing weighed it by
   function render() {
     if (!cur) return;
@@ -1662,12 +1672,16 @@ function routingPage(part) {
       const bar = w.known;
       row.li.classList.toggle("nobar", !bar);
       row.bi.style.width = bar ? fill(w) : "0";
-      const on = !resting && (trying.has(id) || answered.has(id) || onWire.has(id));
-      row.li.classList.toggle("on", on);
+      // on: the row answers or answered the request shown; flying: a
+      // request is with it now. Only that moves (the dot's pulse, the
+      // wire's flow): an answer that is over stays lit, still, or a
+      // finished request reads as one still being called (#2386)
+      const flying = !resting && (trying.has(id) || onWire.has(id));
+      const on = flying || (!resting && answered.has(id));
+      lightRow(row.li, row.wire, on, flying);
       row.li.classList.toggle("low", !!(!w.routing && w.known && w.used >= 90));
       row.li.classList.toggle("rest", !!resting || gave.has(id));
       row.li.classList.toggle("left", !!w.unlisted);
-      row.wire.classList.toggle("live", on);
       if (on) row.wire.style.setProperty("--agent", hueOf(r.agent));
       row.wire.classList.toggle("rest", !!resting || !!w.unlisted);
     }
@@ -1676,7 +1690,7 @@ function routingPage(part) {
     // rest
     const together = (f, ms) => {
       const has = (m, c) => m.li.classList.contains(c);
-      const on = ms.find((m) => has(m, "on")), resting = ms.filter((m) => has(m, "rest")).length;
+      const on = ms.find((m) => has(m, "now")) || ms.find((m) => has(m, "on")), resting = ms.filter((m) => has(m, "rest")).length;
       const held = ms.filter((m) => !has(m, "rest") && has(m, "left")).length; // at a cap, or used up (#2129)
       const parts = [];
       if (on) parts.push(`${who(on.w)}: ${on.st.textContent}`);
@@ -1684,8 +1698,7 @@ function routingPage(part) {
       if (resting) parts.push(t("{n} resting", { n: resting }));
       if (held) parts.push(t("{n} held", { n: held }));
       setText(f.st, parts.join(" · "));
-      f.li.classList.toggle("on", !!on);
-      f.wire.classList.toggle("live", !!on);
+      lightRow(f.li, f.wire, !!on, ms.some((m) => has(m, "now")));
       if (on) f.wire.style.setProperty("--agent", on.wire.style.getPropertyValue("--agent"));
       return !!ms.length && resting + held === ms.length;
     };
@@ -1709,9 +1722,8 @@ function routingPage(part) {
       setText(s.n, "");
       setText(s.st, "");
       s.li.classList.remove("rest");
-      const lit = ms.find((row) => row.li.classList.contains("on"));
-      s.li.classList.toggle("on", !!lit);
-      s.wire.classList.toggle("live", !!lit);
+      const lit = ms.find((row) => row.li.classList.contains("now")) || ms.find((row) => row.li.classList.contains("on"));
+      lightRow(s.li, s.wire, !!lit, ms.some((row) => row.li.classList.contains("now")));
       if (lit) s.wire.style.setProperty("--agent", lit.wire.style.getPropertyValue("--agent"));
     }
     for (const [id, a] of agents) a.wire.classList.toggle("live", busy.has(id));

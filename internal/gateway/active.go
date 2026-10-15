@@ -39,6 +39,9 @@ type inflight struct {
 	start   time.Time
 	route   atomic.Pointer[Route]
 	phase   atomic.Value // string
+	// begun: every route begun for it, the first its own, for endBroken
+	mu    sync.Mutex
+	begun []*Route
 }
 
 type inflightKey struct{}
@@ -94,6 +97,40 @@ func notePhase(ctx context.Context, phase string) (restore func()) {
 func noteRoute(ctx context.Context, rt *Route) {
 	if f := inflightOf(ctx); f != nil {
 		f.route.CompareAndSwap(nil, rt)
+		f.mu.Lock()
+		f.begun = append(f.begun, rt)
+		f.mu.Unlock()
+	}
+}
+
+// panicEnded is what a route ended by endBroken says.
+const panicEnded = "magpie broke off this request: an internal error (in magpie's log)"
+
+// endBroken ends every route begun for f that its handler left in flight
+// when it panicked, and each of their tries still out: net/http recovers
+// the panic and drops the connection, but a route not done says
+// "answering…" on the Routing page and counts as in progress for good, and
+// the trace never trims it (#2386).
+func (s *Server) endBroken(f *inflight) {
+	if f == nil {
+		return
+	}
+	f.mu.Lock()
+	begun := append([]*Route(nil), f.begun...)
+	f.mu.Unlock()
+	for _, rt := range begun {
+		s.trace.update(rt, func(r *Route) {
+			if r.Done {
+				return
+			}
+			ms := time.Since(r.Time).Milliseconds()
+			for i := range r.Tries {
+				if t := &r.Tries[i]; !t.Done {
+					t.Done, t.Status, t.Error, t.Millis = true, http.StatusInternalServerError, panicEnded, time.Since(t.Start).Milliseconds()
+				}
+			}
+			r.Done, r.Status, r.Error, r.Millis = true, http.StatusInternalServerError, panicEnded, ms
+		})
 	}
 }
 

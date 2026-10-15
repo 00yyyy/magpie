@@ -45,6 +45,12 @@ func (s *Server) counted(h http.Handler) http.Handler {
 		s.inFlight.Add(1)
 		r, done := s.active.add(r)
 		defer func() {
+			// a panic is net/http's to recover, as before; the routes it
+			// left in flight end first (#2386)
+			if p := recover(); p != nil {
+				s.endBroken(inflightOf(r.Context()))
+				defer panic(p)
+			}
 			done()
 			s.lastDone.Store(time.Now().UnixNano())
 			s.inFlight.Add(-1)
