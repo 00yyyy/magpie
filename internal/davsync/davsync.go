@@ -38,6 +38,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/profile"
@@ -547,7 +548,14 @@ func loadState() state {
 	return st
 }
 
+// saveState writes st. loadState reads a file that doesn't parse as no
+// state, which starts sync afresh and loses a restore's Undo and the Blind
+// guard: such a file is kept aside first, and one that can't be isn't
+// written over.
 func saveState(st state) {
+	if lastgood.KeepUnparsed(path("sync-state.json"), lastgood.Into[state]) != nil {
+		return
+	}
 	b, _ := json.MarshalIndent(st, "", "  ")
 	edit.WriteAtomic(path("sync-state.json"), b)
 }

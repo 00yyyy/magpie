@@ -3,14 +3,13 @@ package sessions
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -79,21 +78,7 @@ func writeHidden(list []hiddenGateway) error {
 // magpie made before, and a read that came back empty is unknown, not
 // nothing. A copy that can't be made stops the write.
 func keepUnreadHidden() error {
-	p := gatewayHiddenPath()
-	b, err := os.ReadFile(p)
-	if err != nil || len(b) == 0 {
-		return nil
-	}
-	var list []hiddenGateway
-	if json.Unmarshal(b, &list) == nil {
-		return nil
-	}
-	bad := p + ".bad-" + time.Now().Format("20060102-150405.000000000")
-	if err := os.WriteFile(bad, b, 0o600); err != nil {
-		return fmt.Errorf("gateway-sessions-hidden.json doesn't parse and couldn't be kept aside: %w", err)
-	}
-	log.Printf("gateway-sessions-hidden.json didn't parse; it is kept as %s", filepath.Base(bad))
-	return nil
+	return lastgood.KeepUnparsed(gatewayHiddenPath(), lastgood.Into[[]hiddenGateway])
 }
 
 // GatewayHidden says whether a gateway session was deleted: true when it

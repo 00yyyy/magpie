@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -251,6 +252,12 @@ func DesktopTiers() map[string]string {
 // SetDesktopTier picks the model (a catalog id) Claude Desktop runs a tier
 // on; "" takes the pick away.
 func SetDesktopTier(tier, id string) error {
+	// DesktopTiers reads a file that doesn't parse as no pick: what it held,
+	// every other tier's pick, is kept aside before it is written over or
+	// taken away
+	if err := lastgood.KeepUnparsed(desktopTiersPath(), lastgood.Into[map[string]string]); err != nil {
+		return err
+	}
 	tiers := DesktopTiers()
 	if id == "" {
 		delete(tiers, tier)

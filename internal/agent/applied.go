@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -44,7 +46,15 @@ func appliedLoad() map[string]applied {
 	return out
 }
 
+// appliedSave writes m as applied.json. It holds what magpie set on every
+// agent, and appliedLoad reads a file that doesn't parse as empty: such a
+// file is copied aside first, and one that can't be copied isn't written
+// over (#2263).
 func appliedSave(m map[string]applied) {
+	if err := lastgood.KeepUnparsed(appliedPath(), lastgood.Into[map[string]applied]); err != nil {
+		log.Printf("applied.json wasn't written over: %v", err)
+		return
+	}
 	b, _ := json.MarshalIndent(m, "", "  ")
 	os.MkdirAll(filepath.Dir(appliedPath()), 0o755)
 	os.WriteFile(appliedPath(), b, 0o600)

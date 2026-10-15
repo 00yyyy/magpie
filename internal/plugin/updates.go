@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/ghtoken"
+	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
 	"github.com/yetone/magpie/internal/update"
@@ -110,6 +111,17 @@ func readUpdates() Updates {
 		_ = json.Unmarshal(b, &u)
 	}
 	return u
+}
+
+// writeUpdates writes b as plugin-updates.json. readUpdates reads a file
+// that doesn't parse as no updates, and Updated, the plugins magpie updated
+// by itself, can't be found again: such a file is kept aside first, and
+// one that can't be isn't written over.
+func writeUpdates(b []byte) error {
+	if err := lastgood.KeepUnparsed(updatesPath(), lastgood.Into[Updates]); err != nil {
+		return err
+	}
+	return writeWhole(updatesPath(), b)
 }
 
 // PendingUpdates is what the last look found, less what has changed since:
@@ -214,7 +226,7 @@ func CheckUpdates(ctx context.Context) (Updates, error) {
 	}
 	if b, err := json.MarshalIndent(u, "", "  "); err == nil {
 		if err := os.MkdirAll(settings.Dir(), 0o700); err == nil {
-			_ = writeWhole(updatesPath(), b)
+			_ = writeUpdates(b)
 		}
 	}
 	updatesMu.Unlock()
@@ -440,7 +452,7 @@ func CheckNow(ctx context.Context) VersionChecks {
 	u.Checked, u.Waiting = now, waiting
 	if b, err := json.MarshalIndent(u, "", "  "); err == nil {
 		if err := os.MkdirAll(settings.Dir(), 0o700); err == nil {
-			_ = writeWhole(updatesPath(), b)
+			_ = writeUpdates(b)
 		}
 	}
 	updatesMu.Unlock()

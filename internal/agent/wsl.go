@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
@@ -1067,11 +1069,20 @@ func wslSave() {
 	wslSaveLocked()
 }
 
+// wslSaveLocked writes wsl.seen when it changed. wsl.json holds every
+// distro's last probe, and wslDistros reads a file that doesn't parse as
+// no distro: such a file is copied aside first, and one that can't be
+// copied isn't written over (#2263).
 func wslSaveLocked() {
-	if wsl.dirty {
-		if b, err := json.MarshalIndent(wsl.seen, "", "  "); err == nil && edit.WriteAtomic(wslStatePath(), b) == nil {
-			wsl.dirty = false
-		}
+	if !wsl.dirty {
+		return
+	}
+	if err := lastgood.KeepUnparsed(wslStatePath(), lastgood.Into[map[string]*distro]); err != nil {
+		log.Printf("wsl.json wasn't written over: %v", err)
+		return
+	}
+	if b, err := json.MarshalIndent(wsl.seen, "", "  "); err == nil && edit.WriteAtomic(wslStatePath(), b) == nil {
+		wsl.dirty = false
 	}
 }
 

@@ -39,6 +39,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lastgood"
 )
 
 // loginSwitchEvery is how often the account each agent is on is looked at.
@@ -297,6 +298,11 @@ func setLoginReturn(agent string, r loginReturn) {
 		m[agent] = r
 	}
 	b, err := json.MarshalIndent(m, "", "  ")
+	if err == nil {
+		// readLoginReturns reads a file that doesn't parse as none: it is
+		// kept aside before it is written over
+		err = lastgood.KeepUnparsed(loginReturnsPath(), lastgood.Into[map[string]loginReturn])
+	}
 	if err == nil {
 		err = writePrivate(loginReturnsPath(), append(b, '\n'))
 	}
