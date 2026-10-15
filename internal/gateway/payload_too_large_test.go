@@ -145,7 +145,9 @@ func TestPayloadTooLargeOverWindowTriesMemberWithRoom(t *testing.T) {
 	s := New()
 	code, body := postAs(t, s, "", `{"model":"group/g","messages":[{"role":"user","content":"`+strings.Repeat("word ", 2400)+`"}]}`)
 	route := lastRoute(s)
-	if code != 200 || !strings.Contains(body, "hello") || a.n != 1 || b.n != 0 || c.n != 1 || len(route.Tries) != 2 || route.Tries[0].Status != 400 || route.Tries[0].Fail != failOverflow || route.Tries[0].Rest != nil {
+	// text past a's and b's windows isn't sent them at all (roomy): only
+	// c, which holds it, is asked
+	if code != 200 || !strings.Contains(body, "hello") || a.n != 0 || b.n != 0 || c.n != 1 || len(route.Tries) != 1 || route.Tries[0].ID != "c" {
 		t.Fatalf("text overflow: %d %s (a %d, b %d, c %d), tries %+v", code, body, a.n, b.n, c.n, route.Tries)
 	}
 }

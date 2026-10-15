@@ -2131,6 +2131,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			return
 		}
 	}
+	// a member whose model is known to take less than the request isn't
+	// asked: it would only refuse it
+	cands, pl = roomy(cands, pl, from, body)
 	// of those resting, only the one back soonest is asked (#1799); the
 	// whole list still finds a Codex account to spend a reset on
 	all := cands

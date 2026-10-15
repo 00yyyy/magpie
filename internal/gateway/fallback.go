@@ -1234,10 +1234,16 @@ func tooLongUnsaid(p provider.Provider, model string, tokens, status int, body [
 // the one set for all the provider's models is no larger than the model's
 // own, #2112), else the one set for all of them.
 func windowOf(p provider.Provider, model string) int {
+	return windowIn(provider.Served, p, model)
+}
+
+// windowIn is windowOf with the catalog read from served, for a caller
+// that weighs several models to read it once.
+func windowIn(served func() []provider.Entry, p provider.Provider, model string) int {
 	if n := p.Contexts[model]; n > 0 {
 		return n
 	}
-	for _, e := range provider.Served() {
+	for _, e := range served() {
 		if e.Group == "" && e.Provider.ID == p.ID && (e.Model == model || e.ID == model) && e.Context > 0 {
 			return e.Context
 		}
@@ -1292,12 +1298,81 @@ func withRoom(left []candidate, c candidate, tokens int) []candidate {
 		if x.p.ID == c.p.ID && x.model == c.model {
 			continue
 		}
-		if w := windowOf(x.p, x.model); w > 0 && tokens >= w {
+		if !holds(x, tokens) {
 			continue
 		}
 		out = append(out, x)
 	}
 	return out
+}
+
+// holds is whether c's model may hold a request of about tokens: its
+// window isn't known, or is larger.
+func holds(c candidate, tokens int) bool {
+	w := windowOf(c.p, c.model)
+	return w <= 0 || tokens < w
+}
+
+// roomy leaves out, before any is asked, the candidates whose model is
+// known to take less than the request (dgqyushen on Discord: OpenCode
+// Zen's free DeepSeek V4.1 Flash, 200K, first in a group with a 1M
+// subscription of it second). Asked, such a member only refuses it, a
+// request spent against its limits, and a refusal that doesn't say why,
+// for a request short of tooLongUnsaid's margin past the window, reached
+// the agent as the vendor's error while the next member had room. The
+// request's size is estimate's, which mostly counts low (four bytes a
+// token), so a member is passed over only when the request is past its
+// window by that count; one nearer may still be refused and falls over
+// (withRoom). A model whose window isn't known is kept, a
+// request that doesn't parse leaves every one, and so does one no
+// candidate holds: the first is asked, and the agent told it overflowed,
+// to compact.
+func roomy(cs []candidate, pl planned, from provider.Protocol, body []byte) ([]candidate, planned) {
+	if len(cs) < 2 {
+		return cs, pl
+	}
+	served := sync.OnceValue(provider.Served) // the catalog, read once
+	least, windows := 0, map[string]int{}
+	key := func(c candidate) string { return c.p.ID + "\x00" + c.model }
+	for _, c := range cs {
+		if _, ok := windows[key(c)]; ok {
+			continue
+		}
+		w := windowIn(served, c.p, c.model)
+		windows[key(c)] = w
+		if w > 0 && (least == 0 || w < least) {
+			least = w
+		}
+	}
+	// one model has nothing to choose between, and a body shorter than
+	// the least window can't estimate past it: neither is parsed
+	if len(windows) < 2 || least == 0 || len(body)/4 < least {
+		return cs, pl
+	}
+	req, err := parse(from, body)
+	if err != nil {
+		return cs, pl
+	}
+	tokens := estimate(req)
+	var out []candidate
+	var order []Weighed
+	parallel := len(pl.order) == len(cs)
+	for i, c := range cs {
+		if w := windows[key(c)]; w > 0 && tokens >= w {
+			continue
+		}
+		out = append(out, c)
+		if parallel {
+			order = append(order, pl.order[i])
+		}
+	}
+	if len(out) == 0 || len(out) == len(cs) {
+		return cs, pl
+	}
+	if parallel {
+		pl.order = order
+	}
+	return out, pl
 }
 
 // matesFirst puts first, of the candidates left, the other keys or
