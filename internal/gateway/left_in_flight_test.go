@@ -117,7 +117,7 @@ func TestAgentGoneMidRequestLeavesNothingInFlight(t *testing.T) {
 
 // A request whose handling panics (net/http recovers it and drops the
 // connection) still ends every route begun for it, each try too: a route
-// left not done says "answering…" on the Routing page and counts as in
+// left not done shows as still answering on the Routing page and counts as in
 // progress for good, and the trace never trims it (#2386). The route is
 // over as failed, and the panic goes on to net/http as before.
 func TestPanicEndsTheRequestsRoutes(t *testing.T) {

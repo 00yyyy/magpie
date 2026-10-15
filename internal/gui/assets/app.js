@@ -20348,7 +20348,8 @@ function renderSearch(s, keep) {
     tools.push(sw);
     const r = row(`${n + 1}. ${a.name}`, a.off ? [t("Off"), what].filter(Boolean).join(" · ") : what, ...tools);
     r.classList.add("search-api");
-    if (a.keys > 1 || a.quota) searchKeysRow(s, a, row, set);
+    // with-keys, not :has(), which Safari before 15.4 can't parse
+    if (a.keys > 1 || a.quota) { unit.classList.add("with-keys"); searchKeysRow(s, a, row, set); }
     into = box;
   });
   searchArrange(box, units, set);

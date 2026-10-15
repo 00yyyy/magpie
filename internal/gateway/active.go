@@ -108,8 +108,8 @@ const panicEnded = "magpie broke off this request: an internal error (in magpie'
 
 // endBroken ends every route begun for f that its handler left in flight
 // when it panicked, and each of their tries still out: net/http recovers
-// the panic and drops the connection, but a route not done says
-// "answering…" on the Routing page and counts as in progress for good, and
+// the panic and drops the connection, but a route not done shows as still
+// answering on the Routing page and counts as in progress for good, and
 // the trace never trims it (#2386).
 func (s *Server) endBroken(f *inflight) {
 	if f == nil {

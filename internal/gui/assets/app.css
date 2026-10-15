@@ -3242,7 +3242,7 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 .search-unit { position: relative; background: var(--card); cursor: grab; }
 .search-unit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .search-unit > .grip { position: absolute; left: 4px; top: 50%; translate: 0 -50%; width: 6px; height: 11px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; pointer-events: none; }
-.search-unit:has(> .search-keys) > .grip { top: 24px; translate: none; }
+.search-unit.with-keys > .grip { top: 24px; translate: none; }
 .search-unit:is(:hover, .dragging) > .grip { opacity: 1; }
 .search-unit:focus-visible > .grip { opacity: 1; }
 @media (hover: none) { .search-unit > .grip { opacity: 1; } }
