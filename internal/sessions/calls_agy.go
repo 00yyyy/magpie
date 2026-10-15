@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/dirent"
 )
 
 // Antigravity CLI's (agy's) calls (#2097, parkavenue9639: a call agy made
@@ -47,7 +49,7 @@ func agyCallFiles() []file {
 	dirs, _ := os.ReadDir(filepath.Join(AgyDir(), "brain"))
 	var out []file
 	for _, d := range dirs {
-		if !d.IsDir() {
+		if !dirent.IsFolder(filepath.Join(AgyDir(), "brain"), d) {
 			continue
 		}
 		p := filepath.Join(AgyDir(), "brain", d.Name(), ".system_generated", "logs", "transcript_full.jsonl")

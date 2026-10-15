@@ -34,6 +34,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/dirent"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -424,7 +425,7 @@ func ccFiles(agent, dir string) []file {
 	projects := filepath.Join(dir, "projects")
 	var out []file
 	for _, project := range readDirectory(projects) {
-		if !project.IsDir() && project.Type()&os.ModeSymlink == 0 {
+		if !dirent.IsFolder(projects, project) {
 			continue
 		}
 		root := filepath.Join(projects, project.Name())
@@ -435,7 +436,7 @@ func ccFiles(agent, dir string) []file {
 				if stat(&f) {
 					out = append(out, f)
 				}
-			} else if e.IsDir() || e.Type()&os.ModeSymlink != 0 {
+			} else if dirent.IsFolder(root, e) {
 				subs := filepath.Join(path, "subagents")
 				for _, sub := range readDirectory(subs) {
 					if sub.IsDir() || !strings.HasSuffix(sub.Name(), ".jsonl") {
@@ -447,7 +448,7 @@ func ccFiles(agent, dir string) []file {
 					}
 				}
 				for _, run := range readDirectory(filepath.Join(subs, "workflows")) {
-					if !run.IsDir() {
+					if !dirent.IsFolder(filepath.Join(subs, "workflows"), run) {
 						continue
 					}
 					dir := filepath.Join(subs, "workflows", run.Name())

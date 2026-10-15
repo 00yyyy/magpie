@@ -29,6 +29,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/yetone/magpie/internal/dirent"
 	"github.com/yetone/magpie/internal/edit"
 )
 
@@ -209,7 +210,7 @@ func hermesProfiles(at place) []string {
 	es, _ := os.ReadDir(ps)
 	for _, e := range es {
 		name := e.Name()
-		if !e.IsDir() || name == "default" || !hermesProfileID.MatchString(name) {
+		if !dirent.IsFolder(ps, e) || name == "default" || !hermesProfileID.MatchString(name) {
 			continue
 		}
 		if _, err := os.Stat(filepath.Join(ps, ".deleted", name)); err == nil {

@@ -20,6 +20,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/dirent"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
@@ -163,7 +164,7 @@ func ompProfiles(home string) []*Agent {
 	var names []string
 	for _, e := range entries {
 		name := e.Name()
-		if !e.IsDir() || !ompProfileOK(name) {
+		if !dirent.IsFolder(filepath.Join(root, "profiles"), e) || !ompProfileOK(name) {
 			continue
 		}
 		if filepath.Join(root, "profiles", name, "agent") == cur {

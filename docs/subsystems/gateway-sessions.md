@@ -371,6 +371,16 @@ writes for a subagent a subagent started (`sessions.SubagentParent`, through
 to a file row keeps the gateway's own. Both were checked against Claude Code
 2.1.296 spawning a subagent from a subagent.
 
+A folder these readers go into may be a link: a symlink, or on Windows a
+junction, which Go lists as irregular rather than as a folder or a symlink.
+Each reader that picks the entries it goes into (a Claude Code, Qoder or
+Cowork project folder, a session's own folder and a workflow run's, a Hermes
+profile, an Antigravity CLI conversation) asks `dirent.IsFolder`, which
+follows such an entry with `os.Stat`; none of them recurses through one. A
+walk root that is a link is walked where it leads, its files still named
+under the agent's folder (`walkLinked`, #2233). `TestIsFolder` and the
+`*BehindALink` tests make real links, junctions on Windows (#2268).
+
 Codex session identity is read from native thread metadata, rather than inferred
 from a shared session header or `Kind` (`x-openai-subagent`). The sessions API
 adds `role` (`main`, `subagent` or `unknown`), and when native metadata
