@@ -94,6 +94,18 @@ func codexSessionIdentity(b []byte) (SessionIdentity, bool) {
 		UserID: cmp.Or(claimString(claims, "https://api.openai.com/auth", "chatgpt_user_id"), claimString(claims, "https://api.openai.com/auth", "user_id")), User: user}, id != "" && user != ""
 }
 
+// CodexSignedInAccount is the ChatGPT account id (chatgpt-account-id)
+// Codex's auth.json is signed in to now; "" when it is signed in to none,
+// on an API key, or can't be read.
+func CodexSignedInAccount() string {
+	b, err := readAccountFile(codexAuthPath())
+	if err != nil {
+		return ""
+	}
+	id, _ := codexSessionIdentity(b)
+	return id.AccountID
+}
+
 func claudeSessionIdentity(b []byte) (SessionIdentity, bool) {
 	var a struct {
 		Account string `json:"accountUuid"`
