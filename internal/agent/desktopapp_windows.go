@@ -18,3 +18,21 @@ func installedWindowsStorePackages() []string {
 	names, _ := key.ReadSubKeyNames(-1)
 	return names
 }
+
+// registeredWindowsApp reads what an electron-builder installer registered
+// for the current user: HKCU\Software\<guid>'s InstallLocation, and the
+// DisplayVersion of its Uninstall entry.
+func registeredWindowsApp(guid string) (dir, version string) {
+	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\`+guid, registry.QUERY_VALUE); err == nil {
+		dir, _, _ = k.GetStringValue("InstallLocation")
+		k.Close()
+	}
+	if dir == "" {
+		return "", ""
+	}
+	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Uninstall\`+guid, registry.QUERY_VALUE); err == nil {
+		version, _, _ = k.GetStringValue("DisplayVersion")
+		k.Close()
+	}
+	return dir, version
+}

@@ -24,13 +24,17 @@ import (
 // id tells it from the ChatGPT chat app (com.openai.chat) of the same name.
 // win is its executable under %LOCALAPPDATA%\Programs, where a per-user
 // installer puts it on Windows. store and publisher identify a Microsoft
-// Store package by its package name and publisher id.
+// Store package by its package name and publisher id. guid is the key an
+// electron-builder installer registers the app under for the current user
+// (HKCU\Software\<guid>'s InstallLocation, and its Uninstall entry's
+// DisplayVersion): its installer lets the user pick another folder.
 type desktopApp struct {
 	id        string
 	names     []string
 	win       string
 	store     string
 	publisher string
+	guid      string
 }
 
 var desktopApps = map[string]desktopApp{
@@ -40,8 +44,12 @@ var desktopApps = map[string]desktopApp{
 	// profiles/desktop, beside the CLI's — and needs no CLI: its terminal
 	// command is optional (star on Discord: 未找到 CLI with the desktop app
 	// in use). On Windows its installer (electron-builder's per-user NSIS,
-	// productName DeepSeek Harness) puts it under %LOCALAPPDATA%\Programs.
-	"dsh": {id: "com.deepseek.dsh", names: []string{"DeepSeek Harness.app"}, win: filepath.Join("DeepSeek Harness", "DeepSeek Harness.exe")},
+	// productName DeepSeek Harness) puts it under %LOCALAPPDATA%\Programs
+	// by default; the folder can be changed ("Choose an empty folder or the
+	// registered DeepSeek Harness installation folder"), and the installer
+	// registers it under HKCU\Software\1bf39983-… (#2279, read from
+	// 0.2.0-rc.2's dsh-latest-windows-x64.exe installer script).
+	"dsh": {id: "com.deepseek.dsh", names: []string{"DeepSeek Harness.app"}, win: filepath.Join("DeepSeek Harness", "DeepSeek Harness.exe"), guid: "1bf39983-50d0-5fe0-9ef4-cece76f67c5e"},
 }
 
 // appFolders are where apps are installed; a var so tests can point it
@@ -88,6 +96,11 @@ func storePackages() []string {
 	}
 	return installedWindowsStorePackages()
 }
+
+// windowsRegisteredApp is the folder and version an installer registered
+// the app with guid under for the current user on Windows, "" elsewhere or
+// when none is; a var so tests never read the machine's own registry.
+var windowsRegisteredApp = registeredWindowsApp
 
 var (
 	plistIDRe      = regexp.MustCompile(`<key>CFBundleIdentifier</key>\s*<string>([^<]+)</string>`)
@@ -136,7 +149,23 @@ func (a *Agent) AppVersion() string {
 	if app.store != "" {
 		return storeAppVersion(windowsStorePackages(), app.store, app.publisher)
 	}
+	if dir, v := app.registered(); dir != "" {
+		return v
+	}
 	return ""
+}
+
+// registered is the folder the app's installer registered, where its
+// executable is, and the version it registered; "" when there is none.
+func (app desktopApp) registered() (dir, version string) {
+	if app.guid == "" || app.win == "" {
+		return "", ""
+	}
+	dir, version = windowsRegisteredApp(app.guid)
+	if dir == "" || !isFile(filepath.Join(dir, filepath.Base(app.win))) {
+		return "", ""
+	}
+	return dir, strings.TrimSpace(version)
 }
 
 // storeAppVersion finds the newest version of an app among Microsoft Store
@@ -178,7 +207,8 @@ func storeAppVersion(packages []string, name, publisher string) string {
 }
 
 // HasApp reports whether the agent's desktop app is installed here: its
-// bundle on macOS (AppVersion), its executable on Windows.
+// bundle on macOS (AppVersion), its executable on Windows: under
+// %LOCALAPPDATA%\Programs, or in the folder its installer registered.
 func (a *Agent) HasApp() bool {
 	if a.AppVersion() != "" {
 		return true
@@ -192,5 +222,6 @@ func (a *Agent) HasApp() bool {
 			return true
 		}
 	}
-	return false
+	dir, _ := app.registered()
+	return dir != ""
 }

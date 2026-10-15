@@ -35,6 +35,9 @@ func TestMain(m *testing.M) {
 	// Microsoft Store apps are read from the current user's AppX registry;
 	// never this machine's (a Windows box with the Codex app installed)
 	windowsStorePackages = func() []string { return nil }
+	// nor what an installer registered there (DeepSeek Harness Desktop's
+	// folder, #2279)
+	windowsRegisteredApp = func(string) (string, string) { return "", "" }
 	// Aside's default is changed through the aside binary, which answers for
 	// the account the developer is actually running: a test that picks a
 	// model would change the real Aside's default, and the running one would

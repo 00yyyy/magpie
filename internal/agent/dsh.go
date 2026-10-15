@@ -91,18 +91,27 @@ func dshAt(at place) *Agent {
 	if dir == "" {
 		dir = filepath.Join(at.home, ".dsh")
 	}
+	// DeepSeek Harness Desktop, on this machine (a distro has none)
+	desktop := func() bool { return at.spell == nil && (&Agent{ID: "dsh"}).HasApp() }
 	path := filepath.Join(dir, "config.yaml")
 	if files := dshProfiles(dir); len(files) > 0 {
 		path = files[0]
+	} else if desktop() {
+		path = dshDesktopFile(dir)
 	}
 	return &Agent{
 		ID: "dsh", Name: "DeepSeek Harness", Icon: "deepseek-color", Aliases: []string{"deepseek-harness"}, Spelled: prefixed,
 		UA:  []string{"deepseek-harness"},
 		Bin: "dsh", Dir: dir, Path: path,
+		// the desktop app installed and not opened yet has no ~/.dsh (#2279)
+		sign: desktop,
 		Sync: func() error { return dshSync(dir, gw()) },
 		Notice: func() string {
 			var notes []string
-			if Running(`DeepSeek Harness\.app/`, `(^|/)dsh( |$)`) {
+			if desktop() && dshUnopened(dir) {
+				// nothing of dsh's runs on it yet to be restarted
+				notes = append(notes, noticeDsh5.String())
+			} else if Running(`DeepSeek Harness\.app/`, `(^|/)dsh( |$)`) {
 				if len(dshProfiles(dir)) > 0 {
 					notes = append(notes, noticeDsh1.String())
 				} else {
@@ -152,10 +161,21 @@ func dshAt(at place) *Agent {
 			}
 			return dshEnv(dir, gw(), false, false)
 		},
+		// what magpie made for a desktop app never opened goes (#2279)
+		Restore: func() error { return dshTidyUnopened(dir) },
 		Fields: []Field{{
 			Key: "model", Label: "model",
 			Get: func() string { return dshGet(dir) },
-			Set: func(v string) error { return dshSet(dir, v, gw()) },
+			Set: func(v string) error {
+				// the desktop app not opened yet: its profile is made as
+				// it makes it, and it keeps the patch list it finds (#2279)
+				if v != "" && len(dshProfiles(dir)) == 0 && desktop() {
+					if err := dshMakeDesktop(dir); err != nil {
+						return err
+					}
+				}
+				return dshSet(dir, v, gw())
+			},
 			Options: func(map[string]string) []Option {
 				own := append([]Option{}, dshModels...)
 				// since 0.1.5 dsh's own go to DeepSeek on its own key, its
@@ -201,6 +221,79 @@ func dshProfiles(dir string) []string {
 		}
 	}
 	return append(web, rest...)
+}
+
+// dshProfileTemplate is the patch list dsh writes for a new profile
+// (PROFILE_PATCH_TEMPLATE in DeepSeek Harness Desktop 0.2.0-rc.2's
+// lib/main.js, initProfile).
+const dshProfileTemplate = "# Your patch layer for this dsh profile, applied after every bundle layer:\n" +
+	"# a top-level YAML array of loader patch entries (id-targeted config\n" +
+	"# overrides, disables, and insert lists; `!!js` expressions allowed).\n" +
+	"[]\n"
+
+// dshDesktopFile is the desktop app's profile's patch list: the app's
+// profile is $DSH_HOME/profiles/desktop (resolveDesktopPaths).
+func dshDesktopFile(dir string) string {
+	return filepath.Join(dir, "profiles", "desktop", "cordis.patch.yml")
+}
+
+// dshMakeDesktop makes the desktop app's patch list, as dsh's template,
+// for an app installed and never opened (#2279, liangjinyuan-sihan): with
+// no profile at all magpie had nowhere to write, and DeepSeek Harness
+// Desktop has no ~/.dsh until its first start. The app's initProfile
+// writes each of a profile's files only where it is missing ("Existing
+// files are never touched"), so on its first start it adds its
+// package.json and pnpm-workspace.yaml beside this one and keeps
+// magpie's entries. The folder is owner-only, as the app makes it.
+func dshMakeDesktop(dir string) error {
+	f := dshDesktopFile(dir)
+	if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
+		return err
+	}
+	if _, err := os.Stat(f); err == nil {
+		return nil
+	}
+	return os.WriteFile(f, []byte(dshProfileTemplate), 0o644)
+}
+
+// dshUnopened says the desktop app's profile is one magpie made and the
+// app hasn't started on yet: it has no package.json, which the app's first
+// start writes.
+func dshUnopened(dir string) bool {
+	f := dshDesktopFile(dir)
+	if !isFile(f) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(filepath.Dir(f), "package.json"))
+	return errors.Is(err, os.ErrNotExist)
+}
+
+// dshTidyUnopened takes out, on Disconnect, what magpie made for a desktop
+// app never opened since: the profile's patch list back to dsh's template
+// with nothing beside it, and the folders that leaves empty. A patch list
+// holding anything else, or a profile the app has started on, stays.
+func dshTidyUnopened(dir string) error {
+	f := dshDesktopFile(dir)
+	if !dshUnopened(dir) {
+		return nil
+	}
+	b, err := os.ReadFile(f)
+	if err != nil || strings.ReplaceAll(string(b), "\r\n", "\n") != dshProfileTemplate {
+		return nil
+	}
+	if es, err := os.ReadDir(filepath.Dir(f)); err != nil || len(es) != 1 {
+		return nil
+	}
+	if err := os.Remove(f); err != nil {
+		return err
+	}
+	// only folders left empty: os.Remove refuses one that isn't
+	for _, d := range []string{filepath.Dir(f), filepath.Join(dir, "profiles")} {
+		if os.Remove(d) != nil {
+			break
+		}
+	}
+	return nil
 }
 
 // dshHomePatch is dsh's home patch layer, $DSH_HOME/cordis.patch.yml: it is
@@ -2040,4 +2133,5 @@ var (
 	noticeDsh2 = newNotice("dsh reads its config at start-up — restart open dsh sessions to use this.")
 	noticeDsh3 = newNotice("dsh's web search goes through magpie, which has nothing to search with yet: set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Web search.")
 	noticeDsh4 = newNotice("~/.dsh/settings.yaml sets its own DeepSeek endpoint or key, which dsh puts over magpie's; clear it in dsh's Models page to go through magpie.")
+	noticeDsh5 = newNotice("DeepSeek Harness Desktop hasn't been opened yet: it starts on this the first time it opens.")
 )

@@ -208,3 +208,145 @@ func TestDshDesktopProfileMadeWhileServing(t *testing.T) {
 		t.Fatalf("the user's profile written:\n%s", b)
 	}
 }
+
+// #2279 (liangjinyuan-sihan): DeepSeek Harness Desktop installed and not yet
+// opened has no ~/.dsh, so the Agents page had no DeepSeek Harness row and
+// magpie nowhere to write: with no profile, a model picked went to
+// config.yaml, which no dsh since 0.1.5 reads. The app now counts as dsh
+// here, and its profile is made as the app's first start makes it — dsh's
+// template — with magpie's route in it. The app keeps a patch list it
+// finds (initProfile writes only missing files), so its first start adds
+// its package.json beside it. Disconnect before then takes it out again;
+// the user's own key in dsh's store survives both.
+func TestDshDesktopNeverOpened(t *testing.T) {
+	home, dir, _ := dshRouteHome(t)
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir()) // no dsh CLI
+	apps := t.TempDir()
+	was := appFolders
+	appFolders = func() []string { return []string{apps} }
+	t.Cleanup(func() { appFolders = was })
+	desktop := filepath.Join(dir, "profiles", "desktop", "cordis.patch.yml")
+	read := func(p string) string { b, _ := os.ReadFile(p); return string(b) }
+
+	if dsh(home).Detected() {
+		t.Fatal("neither app nor CLI, yet detected")
+	}
+	installApp(t, apps, "DeepSeek Harness.app", dshAppPlist)
+	a := dsh(home)
+	if !a.Detected() || a.CLIMissing() {
+		t.Fatalf("the desktop app alone: detected %v, CLI missing %v", a.Detected(), a.CLIMissing())
+	}
+	if a.Path != desktop {
+		t.Fatalf("names %s, not the desktop app's profile", a.Path)
+	}
+	if dshProfileTemplate != dshDesktopPatch {
+		t.Fatal("the template magpie writes isn't dsh's")
+	}
+
+	// the user's own key in dsh's store, set before magpie came
+	creds := filepath.Join(dir, ".credentials.yaml")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(creds, []byte("version: 1\nrefs:\n  MINE_API_KEY: sk-mine\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := a.Pick("model", "magpie/deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	s := read(desktop)
+	if !strings.HasPrefix(s, strings.TrimSuffix(dshDesktopPatch, "[]\n")) || !strings.Contains(s, "apiKeyEnv: "+dshKeyRef) || !strings.Contains(s, "provider: "+dshRoute) {
+		t.Fatalf("the desktop profile magpie made:\n%s", s)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "config.yaml")); err == nil {
+		t.Fatal("wrote config.yaml, which dsh 0.2 doesn't read")
+	}
+	if c := read(creds); !strings.Contains(c, "MINE_API_KEY: sk-mine") || !strings.Contains(c, dshKeyRef+": ") {
+		t.Fatalf("dsh's key store:\n%s", c)
+	}
+	a = dsh(home)
+	if !a.Wired() || a.Check() != "" || a.Drift() != nil {
+		t.Fatalf("not wired: wired %v, check %q, drift %+v", a.Wired(), a.Check(), a.Drift())
+	}
+	if n := a.Notice(); !strings.Contains(n, noticeDsh5.String()) {
+		t.Fatalf("notice: %q", n)
+	}
+
+	// Disconnect before the app ever opened: what magpie made goes, the
+	// user's key stays
+	if err := a.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "profiles")); !os.IsNotExist(err) {
+		t.Fatalf("the profile magpie made outlived Disconnect: %v\n%s", err, read(desktop))
+	}
+	if c := read(creds); !strings.Contains(c, "MINE_API_KEY: sk-mine") || strings.Contains(c, dshKeyRef) {
+		t.Fatalf("dsh's key store after Disconnect:\n%s", c)
+	}
+
+	// connected again, and the app's first start: its files beside
+	// magpie's patch list, which it keeps
+	a = dsh(home)
+	if err := a.Pick("model", "magpie/deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"package.json": "{\n  \"name\": \"dsh-profile-desktop\"\n}\n", "pnpm-workspace.yaml": "packages:\n  - .\n"} {
+		if err := os.WriteFile(filepath.Join(filepath.Dir(desktop), name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a = dsh(home)
+	if n := a.Notice(); strings.Contains(n, noticeDsh5.String()) {
+		t.Fatalf("an opened app said never opened: %q", n)
+	}
+	// a model the user picks in the app is theirs, and stays on Disconnect
+	own := strings.Replace(read(desktop), "provider: "+dshRoute, "provider: deepseek-official", 1)
+	own = strings.Replace(own, `model: "deepseek/flash"`, "model: deepseek-v4-pro", 1)
+	if err := os.WriteFile(desktop, []byte(own), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	s = read(desktop)
+	if !strings.Contains(s, "model: deepseek-v4-pro") || strings.Contains(s, "apiKeyEnv: "+dshKeyRef) {
+		t.Fatalf("the opened app's profile after Disconnect:\n%s", s)
+	}
+	if !isFile(filepath.Join(filepath.Dir(desktop), "package.json")) {
+		t.Fatal("the app's own files went")
+	}
+}
+
+// #2279: DeepSeek Harness Desktop's Windows installer lets the user pick
+// its folder, and registers it under HKCU\Software\<its guid>; an app there
+// is found, with the version its Uninstall entry gives.
+func TestDshDesktopRegisteredFolder(t *testing.T) {
+	apps, picked := t.TempDir(), t.TempDir()
+	wasFolders, wasReg := appFolders, windowsRegisteredApp
+	appFolders = func() []string { return []string{apps} }
+	reg := map[string][2]string{}
+	windowsRegisteredApp = func(guid string) (string, string) { r := reg[guid]; return r[0], r[1] }
+	t.Cleanup(func() { appFolders, windowsRegisteredApp = wasFolders, wasReg })
+	a := &Agent{ID: "dsh", Name: "DeepSeek Harness", Bin: "dsh"}
+	if a.HasApp() {
+		t.Fatal("nothing installed, yet an app")
+	}
+	// registered, its folder since emptied by hand: not installed
+	reg["1bf39983-50d0-5fe0-9ef4-cece76f67c5e"] = [2]string{picked, "0.2.0-rc.2"}
+	if a.HasApp() || a.AppVersion() != "" {
+		t.Fatal("a registered folder without the app taken for it")
+	}
+	if err := os.WriteFile(filepath.Join(picked, "DeepSeek Harness.exe"), []byte("MZ"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !a.HasApp() || a.AppVersion() != "0.2.0-rc.2" {
+		t.Fatalf("the app in its registered folder: has %v, version %q", a.HasApp(), a.AppVersion())
+	}
+	if (&Agent{ID: "dsh@wsl:Ubuntu", WSL: "Ubuntu", Bin: "dsh"}).HasApp() {
+		t.Fatal("WSL twin has the Windows app")
+	}
+}
