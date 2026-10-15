@@ -4235,7 +4235,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 		keepRetry(w.Header(), res.Header, b)
 		u.ErrType = provider.ErrorType(b)
-		return writeError(w, proto, res.StatusCode, msg), msg, true
+		return writeVendorError(w, proto, res.StatusCode, msg, b), msg, true
 	}
 	rd, sse := eventStream(res)
 	client := w
@@ -5285,7 +5285,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		if turnedAway {
 			u.ErrType = turnedAwayErrType
 		}
-		return writeError(w, from, res.StatusCode, msg), msg
+		return writeVendorError(w, from, res.StatusCode, msg, b), msg
 	}
 	dec := decoder(actual)
 	rd, sse := eventStream(res)
@@ -5328,7 +5328,10 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 			said += " — " + antigravityTurnedAwayHint
 			u.ErrType = turnedAwayErrType
 		}
-		return writeError(w, from, 502, p.Name+": "+said), said
+		// a request the vendor refused in its stream is answered as
+		// refused, with its code (magpie-releases#18); anything else is
+		// the vendor failing
+		return writeVendorError(w, from, cmp.Or(col.errStatus, 502), p.Name+": "+said, col.errSaid), said
 	}
 	if col.err == "" && !ended && (actual == provider.Anthropic || actual == provider.Responses || geminiKin(actual)) && r.Context().Err() == nil {
 		// an Anthropic stream that just stopped — no stop_reason, no
@@ -6202,6 +6205,30 @@ func streamError(w http.ResponseWriter, proto provider.Protocol, status int, msg
 
 // writeError answers in the client's own error shape.
 func writeError(w http.ResponseWriter, proto provider.Protocol, status int, msg string) int {
+	return writeErrorSaid(w, proto, status, msg, nil, nil)
+}
+
+// writeVendorError answers a vendor's error status in the client's own
+// shape, as writeError does, keeping the code and param the vendor named
+// (an OpenAI-shaped error's strings) for a client of OpenAI's shape: the
+// ChatGPT backend's invalid_access_program on access_programs.cyber
+// (magpie-releases#18) reaches the agent as the backend said it.
+func writeVendorError(w http.ResponseWriter, proto provider.Protocol, status int, msg string, body []byte) int {
+	var code, param any
+	if e := gjson.GetBytes(body, "error"); e.IsObject() {
+		if c := e.Get("code"); c.Type == gjson.String && c.String() != "" {
+			code = c.String()
+		}
+		if p := e.Get("param"); p.Type == gjson.String && p.String() != "" {
+			param = p.String()
+		}
+	}
+	return writeErrorSaid(w, proto, status, msg, code, param)
+}
+
+// writeErrorSaid is writeError with the code and param an OpenAI-shaped
+// answer names, nil for none.
+func writeErrorSaid(w http.ResponseWriter, proto provider.Protocol, status int, msg string, code, param any) int {
 	typ := "api_error"
 	switch {
 	case status == 400:
@@ -6219,7 +6246,6 @@ func writeError(w http.ResponseWriter, proto provider.Protocol, status int, msg 
 	case status == 529:
 		typ = "overloaded_error"
 	}
-	var code any
 	if tooLong(status, msg) {
 		// said the way the client's own API says it, so the agent
 		// compacts the conversation and tries again rather than stopping
@@ -6246,7 +6272,7 @@ func writeError(w http.ResponseWriter, proto provider.Protocol, status int, msg 
 		}
 		v = map[string]any{"error": map[string]any{"code": status, "message": msg, "status": st}}
 	default:
-		v = map[string]any{"error": map[string]any{"message": msg, "type": typ, "code": code, "param": nil}}
+		v = map[string]any{"error": map[string]any{"message": msg, "type": typ, "code": code, "param": param}}
 	}
 	writeJSON(w, status, v)
 	return status

@@ -64,6 +64,10 @@ type cRequest struct {
 	ServiceTier         string          `json:"service_tier,omitempty"`
 	PromptCacheKey      string          `json:"prompt_cache_key,omitempty"`
 	ResponseFormat      json.RawMessage `json:"response_format,omitempty"`
+	// not a Chat field: OpenCode merges a model's options into its body
+	// whichever API it speaks, and a Codex model it asks on Chat is asked
+	// on Responses (Request.AccessPrograms)
+	AccessPrograms json.RawMessage `json:"access_programs,omitempty"`
 }
 
 func parseChat(body []byte) (*Request, error) {
@@ -73,7 +77,7 @@ func parseChat(body []byte) (*Request, error) {
 	}
 	r := &Request{Model: c.Model, MaxTokens: c.MaxCompletionTokens, Temp: c.Temperature, TopP: c.TopP,
 		Stream: c.Stream, Effort: effortOf(c.ReasoningEffort), Parallel: c.ParallelToolCalls, Fast: c.ServiceTier == "priority", Tier: c.ServiceTier,
-		CacheKey: c.PromptCacheKey, Format: openAIFormat(c.ResponseFormat)}
+		CacheKey: c.PromptCacheKey, Format: openAIFormat(c.ResponseFormat), AccessPrograms: c.AccessPrograms}
 	if r.MaxTokens == 0 {
 		r.MaxTokens = c.MaxTokens
 	}
@@ -1191,6 +1195,7 @@ func (e *chatEncoder) event(ev Event) {
 		if ev.Code != "" {
 			failed["code"] = ev.Code // preserve the upstream error type, including refusals
 		}
+		saidError(failed, ev.Said)
 		e.w.event("", map[string]any{"error": failed})
 	}
 	e.col.add(ev)

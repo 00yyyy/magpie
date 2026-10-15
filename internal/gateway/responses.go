@@ -5,10 +5,12 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -213,6 +215,7 @@ type rRequest struct {
 	PromptCacheKey    string          `json:"prompt_cache_key,omitempty"`
 	Include           []string        `json:"include,omitempty"`
 	ClientMetadata    json.RawMessage `json:"client_metadata,omitempty"`
+	AccessPrograms    json.RawMessage `json:"access_programs,omitempty"`
 	Text              json.RawMessage `json:"text,omitempty"`
 	Reasoning         *struct {
 		Effort  string `json:"effort,omitempty"`
@@ -257,7 +260,7 @@ func parseResponses(body []byte) (*Request, error) {
 	}
 	r := &Request{Model: q.Model, System: q.Instructions, MaxTokens: q.MaxOutputTokens, Temp: q.Temperature,
 		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority" || q.ServiceTier == "ultrafast", Ultrafast: q.ServiceTier == "ultrafast", Tier: q.ServiceTier, CacheKey: q.PromptCacheKey, Include: q.Include,
-		ClientMetadata: sentRaw(q.ClientMetadata)}
+		ClientMetadata: sentRaw(q.ClientMetadata), AccessPrograms: q.AccessPrograms}
 	r.Text, r.Format = textFormat(sentRaw(q.Text))
 	if q.Reasoning != nil {
 		r.Effort = effortOf(q.Reasoning.Effort)
@@ -1135,6 +1138,9 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	if len(r.ClientMetadata) > 0 {
 		out["client_metadata"] = r.ClientMetadata
 	}
+	if len(r.AccessPrograms) > 0 {
+		out["access_programs"] = r.AccessPrograms
+	}
 	if len(r.Text) > 0 || r.Format != nil {
 		text := map[string]any{}
 		decodeJSON(r.Text, &text)
@@ -1406,7 +1412,8 @@ func (d *responsesDecoder) decode(data string, emit func(Event)) error {
 			if ev.Response.Error != nil {
 				msg = ev.Response.Error.Message
 			}
-			emit(Event{Kind: KError, Text: cmp.Or(msg, streamErrorText(data)), Code: refusedCode(data)})
+			status, said := requestRefused(data)
+			emit(Event{Kind: KError, Text: cmp.Or(msg, streamErrorText(data)), Code: refusedCode(data), Status: status, Said: said})
 			return nil
 		}
 		stop := "stop"
@@ -1433,9 +1440,42 @@ func (d *responsesDecoder) decode(data string, emit func(Event)) error {
 		if ev.Error != nil {
 			msg = cmp.Or(ev.Error.Message, msg)
 		}
-		emit(Event{Kind: KError, Text: cmp.Or(msg, streamErrorText(data)), Code: refusedCode(data)})
+		status, said := requestRefused(data)
+		emit(Event{Kind: KError, Text: cmp.Or(msg, streamErrorText(data)), Code: refusedCode(data), Status: status, Said: said})
 	}
 	return nil
+}
+
+// requestRefused is 400 and the vendor's error, as {"error":{…}}, when a
+// Responses stream's error event or failed response says the request
+// itself is at fault (type invalid_request_error): the ChatGPT backend
+// answers an access program the workspace doesn't have with a 200 stream
+// whose error event is access_program_not_enabled (magpie-releases#18).
+// Asked again, on this account or another, it is refused the same way, so
+// it is neither retried nor resumed, and a client answered whole gets its
+// code and param. Read by the error object's type, never by its words.
+func requestRefused(data string) (int, json.RawMessage) {
+	for _, path := range []string{"error", "response.error"} {
+		e := gjson.Get(data, path)
+		if e.IsObject() && e.Get("type").String() == "invalid_request_error" {
+			return http.StatusBadRequest, json.RawMessage(`{"error":` + e.Raw + `}`)
+		}
+	}
+	return 0, nil
+}
+
+// saidError puts the type, code and param of the vendor's own error (an
+// Event's Said) on the error a stream encoder writes, so a request the
+// vendor refused reads as refused (invalid_request_error) to the agent and
+// to the hold that decides whether to ask again, not as magpie's api_error
+// (magpie-releases#18). Without Said it is left as it was.
+func saidError(failed map[string]any, said json.RawMessage) {
+	e := gjson.GetBytes(said, "error")
+	for _, k := range []string{"type", "code", "param"} {
+		if v := e.Get(k); v.Type == gjson.String && v.String() != "" {
+			failed[k] = v.String()
+		}
+	}
 }
 
 // responsesEncoder writes events as a Responses stream. Codex reads the
@@ -1693,7 +1733,9 @@ func (e *responsesEncoder) event(ev Event) {
 		if ev.Code != "" {
 			code = ev.Code
 		}
-		e.send("response.failed", map[string]any{"response": e.response("failed", map[string]any{"error": map[string]any{"code": code, "message": ev.Text}})})
+		failed := map[string]any{"code": code, "message": ev.Text}
+		saidError(failed, ev.Said)
+		e.send("response.failed", map[string]any{"response": e.response("failed", map[string]any{"error": failed})})
 	}
 	e.col.add(ev)
 }

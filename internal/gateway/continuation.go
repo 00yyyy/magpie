@@ -441,7 +441,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				if turnedAway {
 					u.ErrType = turnedAwayErrType
 				}
-				return writeError(w, from, res.StatusCode, failed), failed
+				return writeVendorError(w, from, res.StatusCode, failed, b), failed
 			}
 		}
 		if err == nil && res.StatusCode < 400 {
