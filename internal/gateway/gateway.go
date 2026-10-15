@@ -2201,6 +2201,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	rounds := 0            // the rounds they were asked again in
 	var waitFrom time.Time // when every member had first failed so
 	refusals := 0          // the tries the safety filter refused so
+	// a reply passed through whose reasoning looped before it said a word,
+	// asked again (loopReasks); reasked, the times a translated one was
+	// asked again in place, tries the route doesn't list (#2436)
+	reloops, reasked := 0, 0
 	// ended is when the last try's reply ended: the request's ms end there,
 	// not after what magpie writes down of it once it has (#1939: sticks
 	// and the provider's last answer, saved to disk, took seconds on a busy
@@ -2264,6 +2268,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// a reply stuck in a loop is ended, not let run to its limit
 			// (#1359)
 			hw.loop = &loopGuard{}
+			hw.reloop = reloops < loopReasks
 		}
 		// a member of a group in the group is timed by the innermost
 		// group that sets a FirstToken (#2246), else by the group asked for
@@ -2575,6 +2580,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			break
 		}
 		hw.settle()
+		reasked += hw.reasked
 		if hw.passing {
 			clientResponseID = call.Usage.ResponseID
 		}
@@ -2669,6 +2675,26 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				other = &Try{Status: call.Status, Error: call.Error}
 			}
 			skipped = append(skipped, c.label()+": "+call.Error)
+			continue
+		}
+		if hw.relooped {
+			// its reasoning ran into a loop before it said a word (#1359),
+			// and it was let go: asked again, once, of the same one, as a
+			// translated reply is in place; asked again, it mostly doesn't
+			// loop. The agent keeps what it has, and the next try's stream
+			// follows it. Nobody rests: the model looped, not the account
+			// (#2436: pi's Chat to WorkBuddy was ended at once)
+			reloops++
+			call.Error = c.p.Name + ": " + reloopedError
+			try.Status, try.Error, try.Fail = call.Status, call.Error, failLoop
+			call.TTFT, call.FirstText, call.Flow, call.FirstReasoning = 0, 0, 0, 0
+			watched.attempt(call, try, c.p.ID, sent, hw, capture)
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			select {
+			case <-time.After(retryPause):
+			case <-r.Context().Done():
+			}
+			i--
 			continue
 		}
 		watched.attempt(call, try, c.p.ID, sent, hw, capture)
@@ -3242,7 +3268,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	tries := 0 // the request's tries, as its route lists them
 	s.trace.update(tr, func(t *Route) {
 		t.Done, t.Status, t.Error, t.Millis = true, call.Status, call.Error, call.Millis
-		tries = len(t.Tries)
+		tries = len(t.Tries) + reasked
 		if t.TitleLink != nil && isTitleKind(t.Kind) && call.Status < 400 && call.Error == "" && !call.ResponseTruncated {
 			link := *t.TitleLink
 			link.Reply = replyDigest

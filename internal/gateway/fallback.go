@@ -1534,6 +1534,13 @@ type holdWriter struct {
 	// reply is asked again instead of ended: the guard then reads the
 	// next try's afresh
 	reask func(loopTrip) bool
+	// reasked is how many times reask asked the reply again in place,
+	// tries of the request its route doesn't list (#2436)
+	reasked int
+	// reloop: a reply passed through, whose reasoning loops before it
+	// said anything, may be let go for the request to ask it again
+	// (loopReasks, #2436); relooped says it was
+	reloop, relooped bool
 
 	// wantWhole: a reply wanted only whole, a compaction's summary (#2274): its
 	// stream is held to its end, never let through at its first content,
@@ -1634,7 +1641,7 @@ func (h *holdWriter) Write(b []byte) (int, error) {
 	if h.slow {
 		return 0, errSlowStart
 	}
-	if h.looped != "" {
+	if h.looped != "" || h.relooped {
 		return 0, errLooped
 	}
 	if h.status == 0 {
@@ -1642,10 +1649,15 @@ func (h *holdWriter) Write(b []byte) (int, error) {
 	}
 	if h.loop != nil && !h.whole && h.status < 400 {
 		if t, ok := h.loop.feed(b); ok {
-			if h.reask == nil || !h.reask(t) {
+			switch {
+			case h.reask != nil && h.reask(t):
+				h.reasked++
+				h.loop = &loopGuard{}
+			case h.reask == nil && h.mayReloop(t):
+				return h.letGoLoop(b)
+			default:
 				return h.cutLoop(b, t)
 			}
-			h.loop = &loopGuard{}
 		}
 	}
 	h.see(b)
@@ -1703,6 +1715,46 @@ func (h *holdWriter) cutLoop(b []byte, t loopTrip) (int, error) {
 	streamError(h.w, proto, http.StatusBadGateway, msg)
 	h.looped, h.ended = msg, true
 	h.flush()
+	if h.stop != nil {
+		h.stop()
+	}
+	return 0, errLooped
+}
+
+// mayReloop says whether a reply passed through, found stuck in a loop
+// (t), is let go for the request to ask it again (letGoLoop) rather than
+// ended: its reasoning looped before it said a text or a call, the
+// request has an ask left (reloop), and the next try's stream can follow
+// what the agent has. Nothing of it sent, any can; sent, only a Chat
+// stream, whose chunks are deltas the agent adds up: a second stream's
+// follow the first's as they would its own. An Anthropic or Responses
+// stream begun can't be followed by another's message_start or
+// response.created, so it ends with the loop's error, as before.
+func (h *holdWriter) mayReloop(t loopTrip) bool {
+	if !h.reloop || !t.reasoning || h.loop.spoke || h.alive == nil || h.ctx != nil && h.ctx.Err() != nil {
+		return false
+	}
+	return !h.passing || h.alive.proto == provider.Chat
+}
+
+// letGoLoop lets a reply go whose reasoning looped before it said a word
+// (mayReloop), for the request to ask it again: the vendor's request is
+// let go, and the try's writes after it fail. Held, none of it reaches
+// the agent; passing, its events go up to the end of the one the loop was
+// found in, for the next try's stream to begin on a whole event.
+func (h *holdWriter) letGoLoop(b []byte) (int, error) {
+	if h.passing {
+		b = b[:max(len(b)-len(h.loop.pending), 0)]
+		h.sent(b)
+		h.w.Write(b)
+		h.flush()
+		// the next try's stream follows this one: its 200 and headers
+		// are not sent again
+		h.alive.sent = true
+	} else {
+		h.held.Reset()
+	}
+	h.relooped = true
 	if h.stop != nil {
 		h.stop()
 	}
@@ -2316,7 +2368,7 @@ func (h *holdWriter) watch() func() {
 // comments only (keepAlive), none of the try, which another account may
 // still answer instead; passed, a comment goes between two lines of it.
 func (h *holdWriter) keepQuiet() {
-	if h.slow || h.ended || h.alive == nil || h.alive.proto == provider.Gemini || h.ctx != nil && h.ctx.Err() != nil {
+	if h.slow || h.relooped || h.ended || h.alive == nil || h.alive.proto == provider.Gemini || h.ctx != nil && h.ctx.Err() != nil {
 		return
 	}
 	if !h.heard.IsZero() && time.Since(h.heard) >= keepaliveLongest {
