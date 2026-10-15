@@ -1035,7 +1035,9 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	// sealed reasoning, and may refuse an item without it.
 	replay := replaysReasoning(model, host)
 	var input []any
-	for _, m := range r.Messages {
+	// a second answer to one call is left out, as the Chat and Messages
+	// builds leave it (dropSecondAnswers)
+	for _, m := range dropSecondAnswers(r.Messages) {
 		var content []map[string]any
 		flushMsg := func() {
 			if len(content) == 0 {
