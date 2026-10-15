@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -8,6 +9,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/proc"
@@ -166,18 +169,110 @@ var (
 // of its names: with its bundle id, or an Info.plist that isn't XML (a
 // binary one says nothing either way, and the name is the app's own).
 func macBundle(app desktopApp) bool {
-	for _, dir := range appFolders() {
-		for _, name := range app.names {
-			b, err := os.ReadFile(filepath.Join(dir, name, "Contents", "Info.plist"))
-			if err != nil {
-				continue
-			}
-			if id := plistIDRe.FindSubmatch(b); id == nil || strings.TrimSpace(string(id[1])) == app.id {
-				return true
-			}
+	for _, bundle := range macBundles(app) {
+		b, err := os.ReadFile(filepath.Join(bundle, "Contents", "Info.plist"))
+		if err != nil {
+			continue
+		}
+		if id := plistIDRe.FindSubmatch(b); id == nil || strings.TrimSpace(string(id[1])) == app.id {
+			return true
 		}
 	}
 	return false
+}
+
+// macBundles are where app's bundle may be on a Mac, the likeliest first:
+// under one of its names in appFolders, or in a folder of theirs one level
+// down (sungoku keeps DeepSeek Harness.app in /Applications/AI, and magpie
+// 0.1.1253 said 未找到 CLI, #2325), then wherever Spotlight knows its bundle
+// id to be (spotlightApps), as Zed's is found (zedAppPath). A caller still
+// reads each one's Info.plist.
+func macBundles(app desktopApp) []string {
+	out := inAppFolders(appFolders(), app.names...)
+	if app.id != "" {
+		for _, p := range spotlightApps(app.id) {
+			if strings.HasSuffix(p, ".app") && !slices.Contains(out, p) {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// inAppFolders are the paths names may have in dirs, a Mac's app folders:
+// in each, then in each folder of its one level down that is no bundle
+// itself (/Applications/AI/DeepSeek Harness.app, #2325).
+func inAppFolders(dirs []string, names ...string) []string {
+	var out []string
+	for _, dir := range dirs {
+		for _, name := range names {
+			out = append(out, filepath.Join(dir, name))
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() || strings.HasSuffix(e.Name(), ".app") || strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			for _, name := range names {
+				out = append(out, filepath.Join(dir, e.Name(), name))
+			}
+		}
+	}
+	return out
+}
+
+// spotlightApps are the bundles Spotlight has with bundle id id, on a Mac;
+// none elsewhere. A var so tests never ask this machine's Spotlight.
+var spotlightApps = spotlightBundles
+
+// spotlight keeps each bundle id's answer for spotlightFresh: the Agents
+// page asks whether an app is installed on every read, and an app that
+// isn't anywhere would ask mdfind each time.
+var spotlight struct {
+	sync.Mutex
+	m map[string]spotlightAnswer
+}
+
+type spotlightAnswer struct {
+	paths []string
+	at    time.Time
+}
+
+const spotlightFresh = 5 * time.Minute
+
+// spotlightSandbox is testenv.Marker, which agent can't import: set in a
+// test binary testenv isolated, where this Mac's Spotlight would find the
+// developer's own apps (#1823) from every package that asks for one.
+const spotlightSandbox = "MAGPIE_TEST_SANDBOX"
+
+func spotlightBundles(id string) []string {
+	if runtime.GOOS != "darwin" || os.Getenv(spotlightSandbox) != "" {
+		return nil
+	}
+	spotlight.Lock()
+	defer spotlight.Unlock()
+	if a, ok := spotlight.m[id]; ok && time.Since(a.at) < spotlightFresh {
+		return a.paths
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var paths []string
+	out, err := proc.CommandContext(ctx, "mdfind", "kMDItemCFBundleIdentifier == '"+id+"'").Output()
+	if err == nil {
+		for _, p := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if p = strings.TrimSpace(p); p != "" {
+				paths = append(paths, p)
+			}
+		}
+	}
+	if spotlight.m == nil {
+		spotlight.m = map[string]spotlightAnswer{}
+	}
+	spotlight.m[id] = spotlightAnswer{paths: paths, at: time.Now()}
+	return paths
 }
 
 // AppVersion is the version of the agent's desktop app installed here, ""
@@ -188,18 +283,16 @@ func (a *Agent) AppVersion() string {
 	if !ok || a.WSL != "" {
 		return ""
 	}
-	for _, dir := range appFolders() {
-		for _, name := range app.names {
-			b, err := os.ReadFile(filepath.Join(dir, name, "Contents", "Info.plist"))
-			if err != nil {
-				continue
-			}
-			id, v := plistIDRe.FindSubmatch(b), plistVersionRe.FindSubmatch(b)
-			if id == nil || v == nil || strings.TrimSpace(string(id[1])) != app.id {
-				continue
-			}
-			return strings.TrimSpace(string(v[1]))
+	for _, bundle := range macBundles(app) {
+		b, err := os.ReadFile(filepath.Join(bundle, "Contents", "Info.plist"))
+		if err != nil {
+			continue
 		}
+		id, v := plistIDRe.FindSubmatch(b), plistVersionRe.FindSubmatch(b)
+		if id == nil || v == nil || strings.TrimSpace(string(id[1])) != app.id {
+			continue
+		}
+		return strings.TrimSpace(string(v[1]))
 	}
 	if app.store != "" {
 		return storeAppVersion(windowsStorePackages(), app.store, app.publisher)

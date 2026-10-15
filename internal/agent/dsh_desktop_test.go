@@ -378,3 +378,70 @@ func TestDshDesktopRegisteredAnyHive(t *testing.T) {
 		}
 	}
 }
+
+// sungoku (#2325, macOS 15.8.1, magpie 0.1.1253): DeepSeek Harness.app in
+// /Applications/AI, a folder of the user's own, and no dsh CLI; the Agents
+// page said 未找到 CLI. The app is found one folder down in an app folder,
+// and wherever Spotlight has its bundle id; a bundle of another id there
+// is still not dsh's, nor is an app inside another app's bundle.
+func TestDshDesktopAppInASubfolder(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("DSH_HOME", "")
+	t.Setenv("PATH", t.TempDir()) // no dsh CLI
+	apps := t.TempDir()
+	var spotlit []string
+	wasFolders, wasSpot := appFolders, spotlightApps
+	appFolders = func() []string { return []string{apps} }
+	spotlightApps = func(id string) []string {
+		if id != "com.deepseek.dsh" {
+			return nil
+		}
+		return spotlit
+	}
+	t.Cleanup(func() { appFolders, spotlightApps = wasFolders, wasSpot })
+	desktop := filepath.Join(home, ".dsh", "profiles", "desktop", "cordis.patch.yml")
+	if err := os.MkdirAll(filepath.Dir(desktop), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(desktop, []byte(dshDesktopPatch), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := dsh(home)
+	a.Bin = "magpie-test-gone-dsh"
+	if !a.CLIMissing() {
+		t.Fatal("no app, no CLI: not missing")
+	}
+
+	// another app's bundle holding one of that name is no folder of apps
+	installApp(t, filepath.Join(apps, "Other.app"), "DeepSeek Harness.app", dshAppPlist)
+	if !a.CLIMissing() {
+		t.Fatal("an app inside another app's bundle taken for the desktop app")
+	}
+
+	// another bundle id in /Applications/AI is not dsh's
+	installApp(t, filepath.Join(apps, "AI"), "DeepSeek Harness.app", strings.Replace(dshAppPlist, "com.deepseek.dsh", "com.example.other", 1))
+	if !a.CLIMissing() {
+		t.Fatal("another bundle id in a subfolder taken for the desktop app")
+	}
+
+	// sungoku's: /Applications/AI/DeepSeek Harness.app
+	os.RemoveAll(filepath.Join(apps, "AI"))
+	installApp(t, filepath.Join(apps, "AI"), "DeepSeek Harness.app", dshAppPlist)
+	if a.CLIMissing() || a.AppVersion() != "0.2.0-rc.2" {
+		t.Fatalf("app in /Applications/AI: missing %v, version %q", a.CLIMissing(), a.AppVersion())
+	}
+
+	// deeper, or on another disk: where Spotlight has it, under any name
+	os.RemoveAll(filepath.Join(apps, "AI"))
+	elsewhere := t.TempDir()
+	installApp(t, filepath.Join(elsewhere, "Tools", "AI"), "DSH.app", dshAppPlist)
+	if !a.CLIMissing() {
+		t.Fatal("found with Spotlight saying nothing")
+	}
+	spotlit = []string{filepath.Join(elsewhere, "Tools", "AI", "DSH.app")}
+	if a.CLIMissing() || a.AppVersion() != "0.2.0-rc.2" {
+		t.Fatalf("app Spotlight knows: missing %v, version %q", a.CLIMissing(), a.AppVersion())
+	}
+}

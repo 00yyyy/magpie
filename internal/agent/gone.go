@@ -152,16 +152,14 @@ func extensionHere(home, id string) bool {
 }
 
 // appHere reports whether one of the bundles names is in a Mac's app
-// folders.
+// folders, or a folder of theirs one level down (inAppFolders).
 func appHere(names ...string) bool {
 	if runtime.GOOS != "darwin" {
 		return false
 	}
-	for _, dir := range appFolders() {
-		for _, n := range names {
-			if isDir(filepath.Join(dir, n)) {
-				return true
-			}
+	for _, p := range inAppFolders(appFolders(), names...) {
+		if isDir(p) {
+			return true
 		}
 	}
 	return false
