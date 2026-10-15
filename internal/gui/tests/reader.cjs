@@ -33,12 +33,19 @@ async function inView(page, locator) {
 // isn't the reader's, and one partly in sight it doesn't scroll at all, so
 // its press can wait on a control out of sight or under a bar till it times
 // out (in WebKit; Chromium gets through some of these by a few pixels).
+// Each wheel step waits for its scroll to land before the control is
+// looked at again: a wheel's scroll reaches the page a frame or more after
+// it is sent, and on a busy machine a fixed pause read where the control
+// was before it. The next step was sent on that stale reading, the view
+// went past the control, under the header, and the click that followed
+// was on a control out of sight (#2370).
 async function reach(page, locator) {
   await locator.waitFor({ state: "visible" });
   const id = await locator.evaluate((e) => e.closest(".view")?.id || "");
   if (!id) return;
   const v = await page.locator("#" + id).boundingBox();
   await page.mouse.move(v.x + v.width / 2, v.y + v.height / 2);
+  let stalls = 0;
   for (let i = 0; i < 120; i++) {
     const at = await locator.evaluate((e) => {
       const b = e.getBoundingClientRect(), v = e.closest(".view").getBoundingClientRect();
@@ -47,10 +54,36 @@ async function reach(page, locator) {
       return { clear: inside && !!hit && (e === hit || e.contains(hit)), down: y > v.top + v.height / 2 };
     });
     if (at.clear) { await page.waitForTimeout(300); return; }
-    await page.mouse.wheel(0, at.down ? 20 : -20);
-    await page.waitForTimeout(40);
+    // landed, or the view is at its end and the wheel moves nothing: three
+    // of those in turn and the control can't be brought clear
+    stalls = (await wheeled(page, id, at.down ? 20 : -20)) ? 0 : stalls + 1;
+    if (stalls >= 3) break;
   }
   throw new Error("control did not come clear into sight: " + JSON.stringify({ view: v, target: await locator.boundingBox() }));
+}
+
+// wheeled sends one wheel over the view and waits for its scroll to land;
+// false when the view didn't move in a second (it is at its end).
+async function wheeled(page, id, dy) {
+  const was = await page.locator("#" + id).evaluate((v) => v.scrollTop);
+  await page.mouse.wheel(0, dy);
+  return page.waitForFunction(([id, was]) => document.getElementById(id).scrollTop !== was, [id, was], { timeout: 1000 }).then(() => true, () => false);
+}
+
+// wheelTo scrolls the page the way a reader does, down till the control's
+// top is at y or above, so a click that moved the page would show; then
+// reach makes sure it is clear in sight. Each wheel lands before the
+// control is looked at again (#2370).
+async function wheelTo(page, locator, y) {
+  await locator.waitFor({ state: "visible" });
+  const id = await locator.evaluate((e) => e.closest(".view")?.id || "");
+  const v = await page.locator("#" + id).boundingBox();
+  await page.mouse.move(v.x + v.width / 2, v.y + v.height / 2);
+  for (let i = 0; i < 80; i++) {
+    if ((await locator.evaluate((e) => e.getBoundingClientRect().top)) <= y) break;
+    if (!(await wheeled(page, id, 50))) break;
+  }
+  await reach(page, locator);
 }
 
 async function click(page, locator) {
@@ -104,4 +137,4 @@ async function openPart(page, id) {
   await page.locator(`:is(#setTab-${id}, .nav-s[data-of=setTab-${id}]):visible`).press("Enter");
 }
 
-module.exports = { inView, reach, click, openPart, watchSettingsReads, settingsDrawn };
+module.exports = { inView, reach, wheelTo, click, openPart, watchSettingsReads, settingsDrawn };
