@@ -67,6 +67,9 @@ let pick = null; // { agent, field, options, items, cursor, anchor }
 let editing = null; // provider id being edited; { preset } or { custom: true } for a new one
 let draft = null; // the editor's working copy
 let naming = null; // the provider whose models' names and levels are open in its editor
+let advanced = null; // { of, open }: the editor's Advanced as it was opened or closed by hand, kept by
+// what the editor edits (editing), not its draft: a move to the plugin or a
+// refresh made under it starts a new draft, and the fold stays as left
 let adding = false; // the preset sheet is open
 // the partners counted as shown since the sheet opened: once an opening,
 // however often it is drawn (countPartner)
@@ -7621,8 +7624,87 @@ function priceRateOfDraft() {
   if (!(n >= 0 && n <= 1000) || Math.abs(n * 1000 - Math.round(n * 1000)) > 1e-6) return undefined;
   return n;
 }
+// shown opens every fold x sits in (the editor's Advanced), so a field a
+// Save names is there to see and type in; it gives x back
+function shown(x) {
+  for (let d = x?.closest("details"); d; d = d.parentElement?.closest("details")) d.open = true;
+  return x;
+}
+// An editor's fold (Advanced, Server address, More endpoints) opens and
+// closes as a disclosure does on iOS: its content grows out of the line
+// on a spring, its rows coming in one after another, and the dialog round
+// it grows or shrinks on the same curve — so the change shows even where
+// the fold is taller than the dialog and goes on out of sight below. Its
+// arrow turns. At once with Reduce motion, and for a fold a Save opens
+// (shown). A click while it moves turns it back from where it is.
+const foldMoves = new WeakMap();
+document.addEventListener("click", (e) => {
+  const sum = e.target.closest?.(".editor details.more > summary");
+  const d = sum?.parentElement, inner = d?.querySelector(":scope > .inner");
+  if (!inner) return;
+  const was = foldMoves.get(d);
+  const closing = was ? !was.closing : d.open;
+  // told now, not at the toggle a task later: a redraw in between would
+  // read it as it was
+  d.onfold?.(!closing);
+  if (calm()) return;
+  e.preventDefault();
+  const box = d.closest(".modal .dialog");
+  // where it is now, partway included; a shut fold's content still
+  // measures its whole height
+  const from = was || closing ? inner.getBoundingClientRect().height : 0;
+  const boxFrom = box?.getBoundingClientRect().height;
+  const fade = was ? +getComputedStyle(inner).opacity : 1;
+  for (const x of was?.anims || []) x.cancel();
+  // and where it ends, measured as it will be
+  inner.style.overflow = "";
+  d.open = !closing;
+  const to = closing ? 0 : inner.getBoundingClientRect().height;
+  const boxTo = box?.getBoundingClientRect().height;
+  d.open = true;
+  d.classList.toggle("closing", closing);
+  inner.style.overflow = "hidden";
+  const shape = closing ? { duration: 420, easing: IOS_EASE } : { duration: 570, easing: SPRING };
+  const pad = getComputedStyle(inner).paddingTop;
+  const grow = inner.animate([
+    { height: from + "px", paddingTop: from ? pad : "0px" },
+    { height: to + "px", paddingTop: closing ? "0px" : pad },
+  ], shape);
+  const anims = [grow];
+  if (box && Math.abs(boxTo - boxFrom) > 0.5) anims.push(box.animate([{ height: boxFrom + "px" }, { height: boxTo + "px" }], shape));
+  if (closing) anims.push(inner.animate([{ opacity: fade }, { opacity: 0, offset: 0.55 }, { opacity: 0 }], { duration: shape.duration, easing: "ease-out" }));
+  else {
+    if (fade < 1) anims.push(inner.animate([{ opacity: fade }, { opacity: 1 }], { duration: 200, easing: "ease-out" }));
+    // the rows come in from just above, one after another; those past
+    // the first dozen together
+    let i = 0;
+    for (const row of inner.children) {
+      if (row.style.display === "none" || row.hidden) continue;
+      anims.push(row.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+        { duration: 420, delay: 40 + Math.min(i++, 12) * 16, easing: IOS_EASE, fill: "backwards" }));
+    }
+  }
+  const move = { anims, closing };
+  foldMoves.set(d, move);
+  grow.finished.then(() => {
+    if (foldMoves.get(d) !== move) return;
+    foldMoves.delete(d);
+    inner.style.overflow = "";
+    d.classList.remove("closing");
+    if (closing) d.open = false;
+  }, () => {});
+}, true); // before the editor, which keeps its clicks to itself
+// advancedSet says whether a setting under the editor's Advanced is set,
+// which opens it: none hides behind a fold
+function advancedSet(d, p) {
+  return (d.headers || []).some(([k]) => (k || "").trim()) || !!(d.extraBody || "").trim() ||
+    !!d.proxyMode || Object.values(d.accountProxies || {}).some((x) => x?.mode) ||
+    [d.concurrency, d.queueLimit, d.queueWait, d.maxRPM, d.priceRate, d.contexts, d.outputs, d.compacts].some((v) => String(v ?? "").trim()) ||
+    !!(d.searches || d.authHeader || d.passUserAgent || d.unredacted || d.pinUpstream || d.nativeCompaction || d.balanceToken) ||
+    !!d.fallback?.length || !!p?.balanceToken?.set;
+}
 function priceRateError(ed) {
-  ed.querySelector("input.price-rate")?.focus({ preventScroll: true });
+  shown(ed.querySelector("input.price-rate"))?.focus({ preventScroll: true });
   return editorError(t("Price rate: a number from 0 to 1000, at most three decimals"), "warn");
 }
 function concurrencyDraft(p) {
@@ -7645,10 +7727,10 @@ function queueOfDraft() {
 }
 function queueError(ed, bad) {
   if (bad === "maxRPM") {
-    ed.querySelector("input.rpm")?.focus({ preventScroll: true });
+    shown(ed.querySelector("input.rpm"))?.focus({ preventScroll: true });
     return editorError(t("Requests per minute: a whole number from 0 to 10000"), "warn");
   }
-  ed.querySelector(bad === "queueLimit" ? "input.queue-limit" : "input.queue-wait")?.focus({ preventScroll: true });
+  shown(ed.querySelector(bad === "queueLimit" ? "input.queue-limit" : "input.queue-wait"))?.focus({ preventScroll: true });
   return editorError(bad === "queueLimit" ? t("Queue size: a whole number from 0 to 10000") : t("Queue wait: a whole number of seconds from 0 to 3600"), "warn");
 }
 // concurrencyOfDraft is the draft's limit as it is saved — null for none
@@ -7660,7 +7742,7 @@ function concurrencyOfDraft() {
   return +v;
 }
 function concurrencyError(ed) {
-  ed.querySelector("input.concurrency")?.focus({ preventScroll: true });
+  shown(ed.querySelector("input.concurrency"))?.focus({ preventScroll: true });
   return editorError(t("Concurrency: a whole number from 0 to 1000"), "warn");
 }
 function proxyDraft(p) {
@@ -8158,6 +8240,89 @@ $("#modal").addEventListener("keydown", (e) => {
   e.preventDefault();
   (e.shiftKey ? last : first).focus();
 });
+// A dialog opens centred, then stays put while what it holds grows or
+// shrinks (a fold opening, an error line, a list filling): it holds the
+// place of whatever the reader last pressed or focused in it, and grows
+// and shrinks round that, down to the window's foot, where it stays and
+// its fields scroll as a full-height dialog's do. Where there is no
+// room left to move, its fields shorten over a pressed button below them,
+// so an error line over Remove doesn't push Remove down; a pressed field
+// goes with what grows above it, as nothing a click does scrolls. Centred all along, a dialog
+// shorter than the window moved by half of every change, the line just
+// clicked sliding from under the pointer. Its place is a relative top and
+// a cap on its height. A change made in the page is held before it is
+// drawn (a mutation's microtask); one that only resizes (an animation, the
+// window) a frame later, as an observer can't resize what it observes.
+const modalHold = { off: 0, at: null, y: 0, cap: null, capSet: "" };
+// how far down the dialog an element sits, to the fraction of a pixel,
+// what moves it in an animation (a row coming in) left out. An element
+// that scales (a Copy button's pop) is measured by what holds it, as its
+// top moves round its middle by more than the matrix says.
+function modalDepth(a, d) {
+  if (!a?.isConnected || !d.contains(a) || a === d || !a.offsetParent) return null;
+  if (getComputedStyle(d).transform === "none") {
+    const moves = [];
+    for (let x = a; x && x !== d; x = x.parentElement) {
+      const t = getComputedStyle(x).transform;
+      if (t === "none") continue;
+      const m = new DOMMatrixReadOnly(t);
+      if (m.m11 === 1 && m.m22 === 1 && !m.m12 && !m.m21) moves.push(m.m42);
+      else { a = x.parentElement; moves.length = 0; }
+    }
+    if (a === d) return null;
+    return moves.reduce((y, m) => y - m, a.getBoundingClientRect().top - d.getBoundingClientRect().top - d.clientTop);
+  }
+  // the dialog itself coming in: whole pixels, by offsets
+  let y = 0;
+  for (let x = a; x && x !== d; x = x.offsetParent) { if (!d.contains(x)) return null; y += x.offsetTop; }
+  for (let x = a.parentElement; x && x !== d; x = x.parentElement) y -= x.scrollTop;
+  return y;
+}
+function modalMark(a) {
+  const d = $("#modal").firstElementChild, y = modalDepth(a, d);
+  if (y == null) return;
+  // a new place to hold lets go of the last one's cap, at the next change
+  if (a !== modalHold.at) modalHold.cap = null;
+  modalHold.at = a; modalHold.y = y;
+}
+const modalCap = () => modalHold.cap == null ? `calc(100% - ${modalHold.off}px)` : `min(calc(100% - ${modalHold.off}px), ${modalHold.cap}px)`;
+function holdModal(later) {
+  const m = $("#modal"), d = m.firstElementChild;
+  if (m.hidden || !m.classList.contains("held")) return;
+  // what was pressed, or failing that what has the focus (a redraw swaps
+  // the pressed element for its copy, and gives that copy the focus)
+  let y = modalDepth(modalHold.at, d);
+  if (y == null && d.contains(document.activeElement)) { modalHold.at = document.activeElement; y = modalDepth(modalHold.at, d); }
+  const want = modalHold.off + (y == null ? 0 : modalHold.y - y);
+  const c = getComputedStyle(m), h = d.getBoundingClientRect().height;
+  const space = m.clientHeight - parseFloat(c.paddingTop) - parseFloat(c.paddingBottom);
+  // grown to the window's foot it stays, capped there, its fields scrolling;
+  // it moves up only for a window grown too short to show half of it
+  modalHold.off = Math.max(0, Math.min(want, Math.max(space - h, modalHold.off), space / 2));
+  if (y != null && want < -0.5) {
+    // no room above: the fields over a button below them give way
+    const body = d.querySelector(".ebody");
+    if (body && !body.contains(modalHold.at)) modalHold.cap = Math.max(0, h + want);
+  }
+  d.style.top = modalHold.off + "px";
+  const cap = () => {
+    if (!m.classList.contains("held") || modalCap() === modalHold.capSet) return;
+    d.style.maxHeight = modalHold.capSet = modalCap();
+  };
+  if (later) requestAnimationFrame(cap);
+  else cap();
+  if (y != null) modalHold.y = modalDepth(modalHold.at, d) ?? y;
+}
+{
+  const m = $("#modal"), d = m.firstElementChild, later = () => holdModal(true);
+  new ResizeObserver(later).observe(d);
+  new ResizeObserver(later).observe(m);
+  new MutationObserver(() => holdModal()).observe(d, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "hidden", "open"] });
+  m.addEventListener("pointerdown", (e) => modalMark(e.target), true);
+  m.addEventListener("focusin", (e) => modalMark(e.target), true);
+  // a scroll moves the marked element, not the dialog
+  m.addEventListener("scroll", () => modalMark(modalHold.at), true);
+}
 function openModal(content) {
   const m = $("#modal"), d = m.firstElementChild;
   const fresh = m.hidden || m.classList.contains("out");
@@ -8195,6 +8360,16 @@ function openModal(content) {
   if (body) body.scrollTop = top; // a re-render keeps the place
   const nextNames = content.querySelector(".mnames:not([hidden])");
   if (namesAt && nextNames?.dataset.provider === namesAt.provider) nextNames.scrollTop = namesAt.top;
+  if (fresh) {
+    m.classList.remove("held");
+    d.style.top = d.style.maxHeight = "";
+    modalHold.off = d.offsetTop - parseFloat(getComputedStyle(m).paddingTop);
+    modalHold.at = modalHold.cap = null;
+    m.classList.add("held");
+    d.style.top = modalHold.off + "px";
+    d.style.maxHeight = modalHold.capSet = modalCap();
+  }
+  holdModal();
   if (!fresh) return;
   for (const a of [...m.getAnimations(), ...d.getAnimations()]) a.cancel();
   d.style.opacity = d.style.transform = m.style.opacity = "";
@@ -8241,6 +8416,8 @@ function closeModal() {
     if (modalDone !== done) return;
     modalDone = null;
     m.hidden = true;
+    m.classList.remove("held");
+    d.style.top = d.style.maxHeight = "";
     m.classList.remove("out");
     d.replaceChildren();
     modalFormBase = "";
@@ -8681,6 +8858,17 @@ function drawEditor(p, presetID) {
     return field(t("Upstream"), ptk, t("Cline serves a model from any host its gateway picks; pinned, a request for a DeepSeek model goes only to DeepSeek, which keeps its prompt cache, and fails when DeepSeek can't take it"));
   };
 
+  // the settings few need — headers, proxy, limits, windows, fallback —
+  // folded under Advanced, out of the way of the key and the models: open
+  // when one of them is set, or as it was left in this editor
+  const adv = el("details", "more advanced");
+  adv.open = advanced && advanced.of === editing ? advanced.open : advancedSet(draft, p);
+  const of = editing;
+  adv.onfold = (open) => { advanced = { of, open }; };
+  adv.append(el("summary", "", t("Advanced")));
+  const advIn = el("div", "inner");
+  adv.append(advIn);
+
   if (p?.account) {
     // the sign-in belongs to the agent; magpie only borrows it
     const a = p.account;
@@ -8700,24 +8888,25 @@ function drawEditor(p, presetID) {
     // a subscription's window too: Codex's backend says 272K for models
     // that take 872K (#120)
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
-    ed.append(...field(t("Context window"), contextPicks(p, cx), t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
-    ed.append(...outputField());
-    ed.append(...compactField());
-    if (p.carriesCompaction) ed.append(...nativeCompactionField(() => true)[0]);
-    ed.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
+    advIn.append(...field(t("Context window"), contextPicks(p, cx), t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
+    advIn.append(...outputField());
+    advIn.append(...compactField());
+    if (p.carriesCompaction) advIn.append(...nativeCompactionField(() => true)[0]);
+    advIn.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
     const proxies = el("div", "stack");
     proxies.append(proxyPicker());
     const perAccount = subOf(a.agent) ? accountProxyPicker(a) : null;
     if (perAccount) proxies.append(perAccount);
-    ed.append(...field(t("Proxy"), proxies));
-    ed.append(...concurrencyField(p));
-    ed.append(...priceRateField());
-    if (p.cline) ed.append(...upstreamField());
+    advIn.append(...field(t("Proxy"), proxies));
+    advIn.append(...concurrencyField(p));
+    advIn.append(...priceRateField());
+    if (p.cline) advIn.append(...upstreamField());
     ed.append(...pluginOptionsField(subOf(a.agent)));
     // a plugin's provider is reached inside magpie: its plugin:// URLs go
     // nowhere to show or test
     const urls = [p.chat, p.responses, p.anthropic].filter(Boolean);
     if (urls.length && !urls.some((u) => u.startsWith("plugin://"))) ed.append(...field(t("Endpoints"), renderEndpoints(p, p)));
+    ed.append(adv);
     const bar = el("div", "bar");
     // removing only hides it from magpie; the agent stays signed in
     const del = el("button", "text danger", t("Remove"));
@@ -8729,17 +8918,17 @@ function drawEditor(p, presetID) {
     const saveBtn = el("button", "text primary", t("Save"));
     saveBtn.onclick = () => {
       const cx = parseContexts(draft.contexts || "");
-      if (cx.error) return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn");
+      if (cx.error) { shown(ed.querySelector("input.contexts"))?.focus({ preventScroll: true }); return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn"); }
       const ox = parseContexts(draft.outputs || "");
       if (ox.error) return outputError(ed, ox.error);
       const cpx = parseContexts(draft.compacts || "");
       if (cpx.error) return compactError(ed, cpx.error);
       const proxy = proxyOfDraft();
-      if (proxy === null) { ed.querySelector(".proxy-url")?.focus(); return editorError(t("Proxy: type its address, like http://127.0.0.1:7890"), "warn"); }
+      if (proxy === null) { shown(ed.querySelector(".proxy-url"))?.focus({ preventScroll: true }); return editorError(t("Proxy: type its address, like http://127.0.0.1:7890"), "warn"); }
       const own = accountProxiesOfDraft();
       if (own.missing) {
         const line = [...ed.querySelectorAll(".acct-proxy")].find((x) => x.dataset.user.toLowerCase() === own.missing);
-        line?.querySelector(".proxy-url")?.focus({ preventScroll: true });
+        shown(line?.querySelector(".proxy-url"))?.focus({ preventScroll: true });
         return editorError(t("Proxy of {user}: type its address, like http://127.0.0.1:7890", { user: line?.dataset.user || own.missing }), "warn");
       }
       const maxConcurrency = concurrencyOfDraft();
@@ -8897,21 +9086,21 @@ function drawEditor(p, presetID) {
   // accounts returned above use the agent's own authentication headers.
   if (custom) {
     if (!draft.headers.length) draft.headers.push(["", ""]);
-    ed.append(...field(t("Headers"), headerEditor(), t("Extra HTTP headers sent to the vendor, applied after auth. For gateways that need a private scheme.")));
+    advIn.append(...field(t("Headers"), headerEditor(), t("Extra HTTP headers sent to the vendor, applied after auth. For gateways that need a private scheme.")));
   } else {
-    ed.append(...field(t("Headers"), headerEditor(pr?.headerHints || []), t("Optional headers sent with every request to {p}, applied after auth.", { p: pr?.name || p?.name })));
+    advIn.append(...field(t("Headers"), headerEditor(pr?.headerHints || []), t("Optional headers sent with every request to {p}, applied after auth.", { p: pr?.name || p?.name })));
   }
   // and JSON fields of the user's own for each request's body (#1604)
-  ed.append(...field(t("Extra body"), extraBodyEditor(), t("JSON fields added to the body of every request to the vendor. A field the request has already is kept; write \"!name\" to replace it. ${sessionId} is the conversation's id.")));
+  advIn.append(...field(t("Extra body"), extraBodyEditor(), t("JSON fields added to the body of every request to the vendor. A field the request has already is kept; write \"!name\" to replace it. ${sessionId} is the conversation's id.")));
   const proxies = el("div", "stack");
   proxies.append(proxyPicker());
   const perKey = keyProxyPicker(p);
   if (perKey) proxies.append(perKey);
-  ed.append(...field(t("Proxy"), proxies));
-  ed.append(...concurrencyField(p));
-  ed.append(...priceRateField());
+  advIn.append(...field(t("Proxy"), proxies));
+  advIn.append(...concurrencyField(p));
+  advIn.append(...priceRateField());
 
-  if (p?.cline || (isNew && pr?.id === "clinepass")) ed.append(...upstreamField());
+  if (p?.cline || (isNew && pr?.id === "clinepass")) advIn.append(...upstreamField());
 
   // a relay in front of Anthropic's or OpenAI's API searches the web as
   // they do, which magpie can't tell from its host (#359): a client's web
@@ -8923,7 +9112,7 @@ function drawEditor(p, presetID) {
     const row = field(t("Web search"), stk, t("For a relay in front of Anthropic's or OpenAI's own API: Claude Code's WebSearch and Codex's web_search go to it as they were sent, not through magpie's search. magpie doesn't automatically search with it for other models, but you can name it as the searcher."));
     showSearch = () => { for (const e of row) e.style.display = searchable() ? "" : "none"; };
     showSearch();
-    ed.append(...row);
+    advIn.append(...row);
   }
 
   // which header the key goes in on a third-party Anthropic API: both by
@@ -8946,7 +9135,7 @@ function drawEditor(p, presetID) {
     const row = field(t("Key header"), seg, t("Which header the API key goes in on the Anthropic API. Most services take both; pick one for a service that refuses the two together. magpie also switches to one by itself when a service says so."));
     showAuth = () => { for (const e of row) e.style.display = twoKeyHeaders() ? "" : "none"; };
     showAuth();
-    ed.append(...row);
+    advIn.append(...row);
   }
 
   // a coding plan that serves only agents it names knows them by their
@@ -8958,7 +9147,7 @@ function drawEditor(p, presetID) {
   if (uaPassable()) {
     const [utk, ucb] = tick(t("Send the agent's own User-Agent"), !!draft.passUserAgent);
     ucb.onchange = () => { draft.passUserAgent = ucb.checked; };
-    ed.append(...field(t("User-Agent"), utk, t("For a plan that serves only the coding agents it names: each request goes with the User-Agent the agent sent (pi, OpenCode, Claude Code…), not magpie's. Requests magpie makes itself, and ones the agent sent without one, still go as magpie. A User-Agent set in Headers above always wins.")));
+    advIn.append(...field(t("User-Agent"), utk, t("For a plan that serves only the coding agents it names: each request goes with the User-Agent the agent sent (pi, OpenCode, Claude Code…), not magpie's. Requests magpie makes itself, and ones the agent sent without one, still go as magpie. A User-Agent set in Headers above always wins.")));
   }
 
   // a model on this computer or the local network (Ollama, LM Studio, a
@@ -8973,7 +9162,7 @@ function drawEditor(p, presetID) {
     const row = field(t("Redaction"), ltk, t("For a model running on this computer or your local network: secrets, personal data and your masked words go to it as written. Leave it off for a local relay or proxy that passes requests on to a vendor."));
     showLocal = () => { for (const e of row) e.style.display = onLAN() ? "" : "none"; };
     showLocal();
-    ed.append(...row);
+    advIn.append(...row);
   }
 
   // a provider the user added whose server has a certificate nothing
@@ -9022,7 +9211,7 @@ function drawEditor(p, presetID) {
       // make it or unmake it
       ed.addEventListener("input", () => balFix.refresh());
     }
-    ed.append(label, wrap);
+    advIn.append(label, wrap);
   }
 
   // StepFun tells a Step Plan's 5-hour, weekly and credit windows only to
@@ -9138,16 +9327,16 @@ function drawEditor(p, presetID) {
     // the window agents are told a model has, over what the vendor or
     // models.dev says: one for all of them, and model=size for one
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
-    if (!decideOnly(p || pr)) ed.append(...field(t("Context window"), contextPicks(p, cx), t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
-    if (!decideOnly(p || pr)) ed.append(...outputField());
+    if (!decideOnly(p || pr)) advIn.append(...field(t("Context window"), contextPicks(p, cx), t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
+    if (!decideOnly(p || pr)) advIn.append(...outputField());
     if (!decideOnly(p || pr)) {
-      ed.append(...compactField());
+      advIn.append(...compactField());
       const [row, refresh] = nativeCompactionField(carriesCompaction);
-      ed.append(...row);
+      advIn.append(...row);
       showCompaction = refresh;
     }
   }
-  if (p && !decideOnly(p)) ed.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
+  if (p && !decideOnly(p)) advIn.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
   else if (custom) {
     const ex = input(draft.extra.join(", "), t("model ids, comma separated · e.g. gpt-5.5, claude-sonnet-5"));
     const pick = addFormModels(ex);
@@ -9202,6 +9391,7 @@ function drawEditor(p, presetID) {
     refreshEndpoints();
     ed.append(...row);
   }
+  ed.append(adv);
 
   if (custom) {
     const more = el("details", "more");
@@ -9307,7 +9497,7 @@ function drawEditor(p, presetID) {
     const body = { id: p ? slug(draft.id) || p.id : draft.id, from: p?.id, name: draft.name, preset: draft.preset, key: draft.key || "", chat: draft.chat, responses: draft.responses, anthropic: draft.anthropic, gemini: (draft.gemini || "").trim(), catalog: draft.catalog, models: p ? chosenIds() : draft.extra, headers: headersOf(draft.headers), new: isNew };
     if (isNew && draft.copyOf) body.copyOf = draft.copyOf;
     const xb = extraBodyOf(draft.extraBody);
-    if (xb.error) { ed.querySelector(".extra-body textarea")?.focus({ preventScroll: true }); return editorError(t("Extra body: {why}", { why: xb.error }), "warn"); }
+    if (xb.error) { shown(ed.querySelector(".extra-body textarea"))?.focus({ preventScroll: true }); return editorError(t("Extra body: {why}", { why: xb.error }), "warn"); }
     body.extraBody = xb.value;
     if (decides || custom) body.decide = (custom && draft.api !== "decide" && !p?.decide ? "" : draft.decide || "").trim();
     if ((body.decide || "").includes(WORKSPACE)) { ed.querySelector(".workspace-id")?.focus({ preventScroll: true }); return editorError(t("Give the workspace ID your API key belongs to, or pick the Token Plan"), "warn"); }
@@ -9330,7 +9520,7 @@ function drawEditor(p, presetID) {
     if (!decideOnly(p || pr)) body.nativeCompaction = !!draft.nativeCompaction && carriesCompaction();
     body.passUserAgent = !!draft.passUserAgent && uaPassable();
     const cx = parseContexts(draft.contexts || "");
-    if (cx.error) return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn");
+    if (cx.error) { shown(ed.querySelector("input.contexts"))?.focus({ preventScroll: true }); return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn"); }
     body.contexts = cx.map;
     if (!decideOnly(p || pr)) {
       const ox = parseContexts(draft.outputs || "");
@@ -9341,12 +9531,12 @@ function drawEditor(p, presetID) {
       body.compacts = cpx.map;
     }
     body.proxy = proxyOfDraft();
-    if (body.proxy === null) { ed.querySelector(".proxy-url")?.focus(); return editorError(t("Proxy: type its address, like http://127.0.0.1:7890"), "warn"); }
+    if (body.proxy === null) { shown(ed.querySelector(".proxy-url"))?.focus({ preventScroll: true }); return editorError(t("Proxy: type its address, like http://127.0.0.1:7890"), "warn"); }
     if (perKey) {
       const own = accountProxiesOfDraft();
       if (own.missing) {
         const line = ed.querySelector(`.acct-proxy[data-key="${own.missing}"]`);
-        line?.querySelector(".proxy-url")?.focus({ preventScroll: true });
+        shown(line?.querySelector(".proxy-url"))?.focus({ preventScroll: true });
         return editorError(t("Proxy of {user}: type its address, like http://127.0.0.1:7890", { user: line?.querySelector(".who")?.textContent || own.missing }), "warn");
       }
       body.accountProxies = own.map;
@@ -9411,6 +9601,7 @@ function contextsText(cx) {
 // GPT-6: 272K said, 872K taken), their own most: sizes nobody remembers
 // (#120). The pick matching what is typed is lit.
 function contextPicks(p, cx) {
+  cx.classList.add("contexts");
   const size = (n) => contextsText({ "*": n });
   const picks = [128e3, 200e3, 256e3, 400e3, 512e3, 1e6].map((n) => ({ label: size(n).toUpperCase(), value: size(n) }));
   // above the window its vendor says, not the one set here: a model set to
@@ -9523,12 +9714,12 @@ function compactField() {
 }
 
 function compactError(ed, v) {
-  ed.querySelector("input.compacts")?.focus({ preventScroll: true });
+  shown(ed.querySelector("input.compacts"))?.focus({ preventScroll: true });
   return editorError(t("Compact at: {v} is not a number of tokens like 272k", { v }), "warn");
 }
 
 function outputError(ed, v) {
-  ed.querySelector("input.outputs")?.focus({ preventScroll: true });
+  shown(ed.querySelector("input.outputs"))?.focus({ preventScroll: true });
   return editorError(t("Max output: {v} is not a number of tokens like 32k", { v }), "warn");
 }
 
@@ -10534,11 +10725,15 @@ function renderModels(p) {
   // saved on its own, every one rewriting the agents' files, so picking a
   // model's levels lagged a click behind (ARNO on Discord).
   const drawNames = () => {
-    // drawn again, the list stays where it was scrolled to
-    const top = names.scrollTop;
+    // drawn again, the list stays where it was scrolled to, and as tall
+    // while its rows go back in: a row measured on the way (its API's
+    // slider) lays the editor out with the list empty, and WebKit pulls
+    // the editor's scroll up to fit, the button just clicked moving away
+    const top = names.scrollTop, tall = names.offsetHeight;
     names.replaceChildren();
     names.hidden = naming !== p.id;
     if (names.hidden) return;
+    names.style.minHeight = tall + "px";
     // its own quiet title and a Fold where it opened (Hu9956, #868: the
     // only way to close it was the button under the list, out of sight
     // once it was open, and the editor read as one long run of settings)
@@ -10861,6 +11056,7 @@ function renderModels(p) {
       drawReset();
       names.append(row);
     }
+    names.style.minHeight = "";
     names.scrollTop = top;
   };
   // what the provider serves, said in so many words (#1831, kchen0x: with
@@ -12794,8 +12990,8 @@ function balanceFix(p) {
           const field = ed?.querySelector(".bal-path");
           if (bal) bal.value = draft.balanceURL;
           if (field) { field.value = draft.balancePath; field.placeholder = balanceFieldOf(draft.balanceURL); }
-          const more = ed?.querySelector("details.more");
-          if (more) more.open = true;
+          // the Balance URL's own fold, not the first one in the editor
+          if (bal) shown(bal);
           box.refresh();
         };
         box.append(use);

@@ -2918,8 +2918,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .more { grid-column: 1 / -1; }
 .editor .more summary { font-size: 12px; color: var(--muted); list-style: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; margin-left: 86px; }
 .editor .more summary::-webkit-details-marker { display: none; }
-.editor .more summary::before { content: "▸"; font-size: 10px; color: var(--faint); }
-.editor .more[open] summary::before { content: "▾"; }
+.editor .more summary::before { content: "▸"; font-size: 10px; color: var(--faint); display: inline-block; transition: transform .42s cubic-bezier(.32, .72, 0, 1); }
+.editor .more[open]:not(.closing) summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .editor .more summary::before { transition: none; } }
 .editor .more summary:hover { color: var(--fg); }
 /* its labels are longer (Anthropic 地址, Responses-URL): their column takes
    the longest, on one line, rather than wrap a last 址 under it (#875) */
@@ -3383,6 +3384,9 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
 }
 /* opening and closing are animated from app.js (openModal, closeModal) */
 .modal.out { pointer-events: none; }
+/* open, it holds its place from a top app.js gives it (holdModal) */
+.modal.held { align-items: flex-start; }
+.modal .dialog { position: relative; }
 .modal .dialog {
   width: min(600px, 100%); min-width: 0; max-height: 100%; overflow-y: auto;
   border-radius: 14px; background: var(--card);
