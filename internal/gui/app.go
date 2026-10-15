@@ -678,6 +678,14 @@ func panelOptions(goos, theme string) application.WebviewWindowOptions {
 			// out of sight, until the user swiped back (#2141).
 			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces |
 				application.MacWindowCollectionBehaviorFullScreenAuxiliary,
+			// and shown without activating magpie, as a menu bar extra's
+			// panel is: an ordinary window's Focus activated the app, and
+			// the Mac then took the user to the Space of magpie's other
+			// windows (the desktop the main window is on), off the
+			// full-screen app's, panel and all (#2141, witt-bit, on
+			// v0.1.1246). A non-activating panel still takes the keyboard.
+			WindowClass:      application.MacWindowClassPanel,
+			PanelPreferences: application.MacPanelPreferences{NonActivating: true},
 		},
 		Windows: application.WindowsWindow{HiddenOnTaskbar: true},
 	}
