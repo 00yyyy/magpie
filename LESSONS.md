@@ -589,6 +589,20 @@ each one.
     bumped and never reached npm (plugins#56). Done right: every mover min
     raised on 10-14 (0337ce4bc, 50929661f, bd4cb7a26, 2c18c697c,
     aae49d086) named a version npm had.
+- **10-15, criteria still missed.**
+  - A large commit has a body with what was run: 113 of the 120 commits
+    pushed at 23:08 (728cb2d29 to a7a012202) end "Full suite:
+    SUITE_LINE", a placeholder no one filled in. The batch's real record
+    is in 386d341e7 alone. Before pushing, grep the bodies for a
+    template's placeholder.
+  - A tag is not a release, and a release is not Latest: v0.1.1255
+    (a1f7b8c13) was published 25 minutes after v0.1.1256 (37fec1240), so
+    GitHub marked the older one Latest and the site's downloads served
+    it until the review moved the mark. Publish in tag order, or pass
+    `--latest` to the newest.
+  - A rerun's green hides the first try: a1f7b8c13's run is green on
+    attempt 2, its attempt 1 red (#2390, fixed at its cause in
+    4a6bf80f4). Read `attempt` before calling a run green.
 - **Done right on 10-14.** 86cc7ac56 (hhh2210) ran -race -count=20 and
   says its ordering was injected, not captured. f074996d9 named its load
   red's issue (#2066). bfef5d51b checked the reverted page's screenshots
