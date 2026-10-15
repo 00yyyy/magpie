@@ -268,6 +268,29 @@ function routingPage(part) {
   byWidth(list, { max460: (w) => w <= 460, max560: (w) => w <= 560 });
   byWidth(more, { max520: (w) => w <= 520, min1150: (w) => w >= 1150 });
   for (const col of [colA, colB]) byWidth(col, { max440: (w) => w <= 440, max760: (w) => w <= 760 });
+  // A request's numbers on a line of their own, under where it went, where
+  // they no longer fit their column on one line (#2288): a list of about
+  // 800px, as beside the accounts on a laptop's screen, cut where the request
+  // went to "Op… · deepseek-v4.1-fla…" and broke its numbers over two lines.
+  // Measured on one line each time, the mark taken off and put back before
+  // the frame is drawn: measured under, they can fit their column's share
+  // and still wrap beside a wide model, and the row would flip each frame.
+  // The rows are shorter on one line, so what scrolls keeps its place.
+  let metaFitting = 0;
+  const metaFit = () => { if (!metaFitting) metaFitting = requestAnimationFrame(() => {
+    metaFitting = 0;
+    if (colA.classList.contains("max760") || !reqs.offsetParent) return;
+    const kept = [];
+    for (let p = reqs; p; p = p.parentElement) if (p.scrollTop) kept.push([p, p.scrollTop]);
+    colA.classList.remove("meta-under");
+    const wraps = [...reqs.querySelectorAll(".rt-req .meta:not([hidden])")].some((m) => {
+      const k = m.children;
+      return k.length > 1 && k[k.length - 1].getBoundingClientRect().top - k[0].getBoundingClientRect().top > 2;
+    });
+    colA.classList.toggle("meta-under", wraps);
+    for (const [p, top] of kept) if (p.scrollTop !== top) p.scrollTop = top;
+  }); };
+  new ResizeObserver(metaFit).observe(colA);
 
   const path = () => { const p = document.createElementNS(NS, "path"); wires.appendChild(p); return p; };
   const setText = (e, s) => { if (e.textContent !== s) e.textContent = s; };
@@ -2403,6 +2426,7 @@ function routingPage(part) {
       while (kids.length > els.length) reqs.lastElementChild.remove();
       if (reqs.scrollTop !== listTop) reqs.scrollTop = listTop;
     }
+    metaFit();
     renderActs(rs);
   }
   function reqRow(r, said, how, tr, ag, meta, metrics, title) {
