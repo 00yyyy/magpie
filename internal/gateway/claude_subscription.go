@@ -2988,6 +2988,28 @@ func (r *subscriptionRun) offers(tools []Tool) bool {
 	return true
 }
 
+// untold is how many of tools the run's agent was never told of, and
+// their names, the first five and a count of the rest, for the log
+// (whyNoRun).
+func (r *subscriptionRun) untold(tools []Tool) (int, string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.tools == nil {
+		return 0, ""
+	}
+	var names []string
+	for _, t := range tools {
+		if !r.tools[t.Name] {
+			names = append(names, t.Name)
+		}
+	}
+	n := len(names)
+	if n > 5 {
+		names = append(names[:5], fmt.Sprintf("%d more", n-5))
+	}
+	return n, strings.Join(names, ", ")
+}
+
 // saidWithResults is the user's words after tool results in the messages
 // since the last reply: a message the user sent while a tool ran (#872),
 // or what a request forked from the conversation asks (Claude Code's
@@ -3664,6 +3686,12 @@ func ownerAccount(owner string) (user string, own bool) {
 // is told the whole conversation (#1638): a run of the conversation waits
 // under another key or at an earlier turn, or is busy, or it ended and
 // why, or none had it.
+//
+// A run whose conversation the client sent back rewritten (Alma, #912)
+// and whose Claude Code wasn't told a tool the client offers now is named
+// by those tools (#2375): its conversation is no longer the one the run
+// had, so none of the conversation's keys is the run's, and the line said
+// no run had ever had it.
 func (b *subscriptionBridge) whyNoRun(req *Request, owner string) string {
 	key, _ := nextTurn(req, owner)
 	if key == "" {
@@ -3672,6 +3700,11 @@ func (b *subscriptionBridge) whyNoRun(req *Request, owner string) string {
 	keys := conversationKeys(owner, req.Messages)
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if r, _ := b.rewritten(req, owner); r != nil {
+		if n, names := r.untold(req.Tools); n > 0 {
+			return fmt.Sprintf("its run waits under another key: the client offers %d tool(s) its Claude Code wasn't told of (%s), and a run is told its tools when it starts", n, names)
+		}
+	}
 	for _, r := range b.idle {
 		if r.behindKey == key {
 			return "its run went on with a turn this one doesn't follow, and wasn't taken back"
