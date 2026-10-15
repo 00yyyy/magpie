@@ -257,8 +257,6 @@ type moveJSON struct {
 	Why *provider.MoveWhy `json:"why,omitempty"`
 }
 
-// stepPlanJSON: whether a StepFun provider's platform sign-in is kept, and
-// where and how the user gets one
 // accessKeyJSON is a provider's account access key as the editor sees
 // it: whose ("volcengine", "tencent"), the ID, and whether a Secret is
 // saved, never the Secret.
@@ -289,6 +287,8 @@ func presetAccessKey(pr provider.PresetDef) (string, []string) {
 	return vendor, ids
 }
 
+// stepPlanJSON: whether a StepFun provider's own platform sign-in is kept,
+// and where and how the user gets one
 type stepPlanJSON struct {
 	Site        string `json:"site"`
 	SignedIn    bool   `json:"signedIn"`
@@ -599,7 +599,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		}
 	}
 	if site := provider.StepFunSite(p); site != "" {
-		out.StepPlan = &stepPlanJSON{site, provider.StepFunSignedIn(site), provider.StepFunSignInURL(site), provider.StepFunBookmarklet()}
+		out.StepPlan = &stepPlanJSON{site, provider.StepFunSignedIn(p.ID), provider.StepFunSignInURL(site), provider.StepFunBookmarklet()}
 	}
 	out.Key.Set = p.Key != ""
 	out.Key.Masked = provider.Mask(p.Key)
@@ -2098,11 +2098,19 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}{res, providersState()})
 	})
 	// StepFun's Step Plan windows: the session the user copied from their
-	// browser with magpie's bookmarklet
-	mux.HandleFunc("POST /api/stepfun/{site}/session", func(rw http.ResponseWriter, r *http.Request) {
-		site := r.PathValue("site")
-		if provider.StepFunSignInURL(site) == "" {
+	// browser with magpie's bookmarklet, the provider's own (two on one
+	// site can be two accounts, #2384), on the provider's platform
+	stepfunOf := func(rw http.ResponseWriter, r *http.Request) (string, string, bool) {
+		p, err := provider.Find(r.PathValue("id"))
+		if err != nil || provider.StepFunSite(*p) == "" {
 			http.NotFound(rw, r)
+			return "", "", false
+		}
+		return p.ID, provider.StepFunSite(*p), true
+	}
+	mux.HandleFunc("POST /api/stepfun/{id}/session", func(rw http.ResponseWriter, r *http.Request) {
+		id, site, ok := stepfunOf(rw, r)
+		if !ok {
 			return
 		}
 		var in struct{ Text string }
@@ -2112,14 +2120,18 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
-		if err := provider.SaveStepFunPaste(ctx, site, in.Text); err != nil {
+		if err := provider.SaveStepFunPaste(ctx, id, site, in.Text); err != nil {
 			fail(rw, err)
 			return
 		}
 		writeJSON(rw, providersState())
 	})
-	mux.HandleFunc("POST /api/stepfun/{site}/signout", func(rw http.ResponseWriter, r *http.Request) {
-		if err := provider.SignOutStepFun(r.PathValue("site")); err != nil {
+	mux.HandleFunc("POST /api/stepfun/{id}/signout", func(rw http.ResponseWriter, r *http.Request) {
+		id, _, ok := stepfunOf(rw, r)
+		if !ok {
+			return
+		}
+		if err := provider.SignOutStepFun(id); err != nil {
 			fail(rw, err)
 			return
 		}

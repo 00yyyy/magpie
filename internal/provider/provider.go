@@ -1124,7 +1124,12 @@ func Delete(id string) error {
 		return fmt.Errorf("no provider %q", id)
 	}
 	f.Providers = keep
-	return store(f)
+	if err := store(f); err != nil {
+		return err
+	}
+	// its StepFun sign-in goes with it, not to a provider added later
+	// under the same id
+	return forgetStepFun(id)
 }
 
 // keyOptional is true for local servers, which usually have no key.
