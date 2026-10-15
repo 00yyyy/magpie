@@ -731,7 +731,7 @@ func searcherSpent(p provider.Provider, model string) error {
 	}
 	when := ""
 	if !back.IsZero() {
-		when = " until " + back.Local().Format("Jan 2 15:04")
+		when = " until " + heldClock(back, time.Now())
 	}
 	return fmt.Errorf("%s/%s: out of its allowance%s, not asked", p.ID, model, when)
 }

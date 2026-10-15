@@ -239,7 +239,7 @@ func autoSpent(model string) error {
 	}
 	when := ""
 	if !back.IsZero() {
-		when = " until " + back.Local().Format("Jan 2 15:04")
+		when = " until " + heldClock(back, time.Now())
 	}
 	return fmt.Errorf("%s is out of its allowance%s, as is every other model magpie could describe it with, and none is asked until one is back", model, when)
 }

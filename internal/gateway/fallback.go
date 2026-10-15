@@ -651,7 +651,7 @@ func cappedError(model string, ws []Weighed, now time.Time) (string, time.Time) 
 			s = fmt.Sprintf("%s (%s) has used up a usage window and is set not to spend its credits", w.Name, w.Who)
 		}
 		if w.CapBack != nil {
-			s += ", until " + w.CapBack.Local().Format("Jan 2 15:04")
+			s += ", until " + heldClock(*w.CapBack, now)
 			if soonest.IsZero() || w.CapBack.Before(soonest) {
 				soonest = *w.CapBack
 			}
