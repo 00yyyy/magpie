@@ -25,8 +25,6 @@ import (
 	"sync"
 	"time"
 
-	toml "github.com/pelletier/go-toml/v2"
-
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filelock"
@@ -529,7 +527,7 @@ func codexAuthPath() string { return filepath.Join(appdir.CodexHome(), "auth.jso
 // sign-in is a key's, and spends no account a gateway key's list
 // governs.
 func CodexAPIKeySignedIn() bool {
-	b, err := readAccountFile(codexAuthPath())
+	b, _, err := readCodexLogin(codexHome(), false)
 	if err != nil {
 		return false
 	}
@@ -618,43 +616,39 @@ func savedButSignedOut() []Exclusion {
 		if _, ok := liveLogin(a); ok {
 			continue
 		}
-		why, signIn := "nothing at "+codexAuthPath(), "codex login"
 		n := "1 account is"
 		if saved[a] > 1 {
 			n = fmt.Sprintf("%d accounts are", saved[a])
 		}
-		if store := codexCredentialsStore(); store == "keyring" || store == "auto" {
-			// Codex keeps its sign-in in the system keyring, which magpie
-			// doesn't read: it is signed in, only not where magpie looks
-			// (#2312, Dony2050)
-			out = append(out, Exclusion{Agent: a, SignedOut: true, Users: users[a],
-				Why: fmt.Sprintf("%s saved in magpie, and they are only offered beside the account Codex is signed in to. Codex keeps its sign-in in the system keychain (cli_auth_credentials_store = %q in %s), which magpie doesn't read: it reads only %s. Set cli_auth_credentials_store = \"file\" there and sign in again (codex login).", n, store, codexConfigPath(), codexAuthPath())})
-			continue
-		}
 		out = append(out, Exclusion{Agent: a, SignedOut: true, Users: users[a],
-			Why: fmt.Sprintf("%s saved in magpie, but it isn't signed in here (%s), and they are only offered beside the account it is signed in to. Sign in (%s) with this HOME.", n, why, signIn)})
+			Why: fmt.Sprintf("%s saved in magpie, and they are only offered beside the account Codex is signed in to. %s", n, codexSignedOutWhy())})
 	}
 	return out
 }
 
-// codexCredentialsStore is where Codex keeps its ChatGPT sign-in, as its
-// config.toml's top-level cli_auth_credentials_store says: "file" (Codex's
-// default, auth.json), "keyring", "auto" (the keyring when there is one) or
-// "ephemeral"; "" when it isn't set or the file can't be read. Codex
-// 0.162's keyring and auto save to the keyring and remove auth.json
-// (codex-rs/login/src/auth/storage.rs).
-func codexCredentialsStore() string {
-	b, err := os.ReadFile(codexConfigPath())
-	if err != nil {
-		return ""
+// codexSignedOutWhy says why magpie sees no Codex sign-in: none where
+// Codex's config.toml keeps it, or one kept where magpie couldn't read it
+// (#2312, #2367, Dony2050), and what to do.
+func codexSignedOutWhy() string {
+	_, _, err := readCodexLogin(codexHome(), false)
+	var se *codexStoreError
+	if !errors.As(err, &se) {
+		where := codexAuthPath()
+		if s, serr := readCodexStoreSetting(codexHome()); serr == nil && s.keychainItem() {
+			where = fmt.Sprintf("the keychain item %q for %s", codexKeychainService, codexHome())
+			if s.Mode == "auto" {
+				where += " nor " + codexAuthPath()
+			}
+		}
+		return fmt.Sprintf("Codex isn't signed in here (nothing in %s). Sign in (codex login) with this HOME.", where)
 	}
-	var c struct {
-		Store string `toml:"cli_auth_credentials_store"`
+	switch {
+	case se.Setting.Mode == "ephemeral":
+		return se.Error() + ". Set cli_auth_credentials_store = \"file\" there and sign in again (codex login)."
+	case se.Cause != nil:
+		return se.Error() + ". Allow magpie when macOS asks for the keychain, or set cli_auth_credentials_store = \"file\" there and sign in again (codex login)."
 	}
-	if toml.Unmarshal(b, &c) != nil {
-		return ""
-	}
-	return strings.ToLower(strings.TrimSpace(c.Store))
+	return se.Error() + fmt.Sprintf(": here it reads only %s. Set cli_auth_credentials_store = \"file\" there and sign in again (codex login).", codexAuthPath())
 }
 
 // liveLogin reads the account an agent is signed in to now.
@@ -664,7 +658,7 @@ func liveLogin(agent string) (savedLogin, bool) {
 	}
 	switch agent {
 	case "codex":
-		b, err := readAccountFile(codexAuthPath())
+		b, _, err := readCodexLogin(codexHome(), false)
 		if err != nil {
 			return savedLogin{}, false
 		}
@@ -1143,6 +1137,10 @@ func switchSavedLogin(agent, user string) (from string, _ error) {
 		// old one is dead (0xAncientTwo on X: signed out again and again)
 		forgetClaudeCredential()
 	}
+	if agent == "codex" {
+		// so for Codex's keychain item, which Codex may have refreshed
+		forgetCodexKeychain()
+	}
 	if live, ok := liveLogin(agent); ok {
 		if strings.EqualFold(live.User, want.User) {
 			return "", nil
@@ -1164,7 +1162,9 @@ func switchSavedLogin(agent, user string) (from string, _ error) {
 	var err error
 	switch agent {
 	case "codex":
-		err = writePrivate(codexAuthPath(), append(bytes.TrimSpace(want.Auth), '\n'))
+		// where Codex's config.toml keeps it (#2367); never over a sign-in
+		// there that couldn't be read
+		err = saveCodexLogin(codexHome(), want.Auth)
 	case "claude":
 		if err = putClaudeLogin(want); err == nil {
 			// Claude Code's own now: its only holder
@@ -1319,8 +1319,9 @@ func forgetLogin(agent, user string) (signedOut bool, err error) {
 		if agent != "codex" || other {
 			return false, &SignedInError{Agent: agent, User: user}
 		}
-		// as `codex logout` does: the sign-in's file goes, all of it
-		if err := os.Remove(codexAuthPath()); err != nil && !os.IsNotExist(err) {
+		// as `codex logout` does: the sign-in goes, all of it, from the
+		// keychain item and auth.json both (#2367)
+		if err := deleteCodexLogin(codexHome()); err != nil {
 			return false, err
 		}
 		signedOut = true
@@ -1379,6 +1380,8 @@ func ForgetAccounts() {
 	clear(newFetches.m)
 	newFetches.Unlock()
 	forgetAccountCaches()
+	// Codex's keychain item is asked again (#2367)
+	forgetCodexKeychain()
 	// the revoked sign-ins known are read from logins.json again
 	resetRevoked()
 }

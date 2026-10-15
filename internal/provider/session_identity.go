@@ -125,13 +125,21 @@ func currentSessionIdentities(codexDir string) []SessionIdentity {
 	}
 	var out []SessionIdentity
 	// Cache only the identity parse, not another copy of the credential blob.
-	current, _ := filememo.Read("session codex identity", filepath.Join(codexDir, "auth.json"), func(b []byte) ([]SessionIdentity, error) {
+	if b, st, err := readCodexLogin(codexDir, false); err == nil && st.keychain {
+		// Codex keeps its sign-in in the keychain item (#2367); one
+		// auth.json left beside it isn't the one Codex goes by
 		if id, ok := codexSessionIdentity(b); ok {
-			return []SessionIdentity{id}, nil
+			out = append(out, id)
 		}
-		return nil, nil
-	})
-	out = append(out, current...)
+	} else {
+		current, _ := filememo.Read("session codex identity", filepath.Join(codexDir, "auth.json"), func(b []byte) ([]SessionIdentity, error) {
+			if id, ok := codexSessionIdentity(b); ok {
+				return []SessionIdentity{id}, nil
+			}
+			return nil, nil
+		})
+		out = append(out, current...)
+	}
 	if acct, ok := claudeProfileAccount(); ok {
 		b, _ := json.Marshal(acct)
 		if id, ok := claudeSessionIdentity(b); ok {

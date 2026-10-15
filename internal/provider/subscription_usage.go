@@ -454,8 +454,8 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			if ls := accountsOf("codex"); len(ls) > 1 {
 				fetches = append(fetches, perLogin(via("codex"), ls, accountCard("codex"))...)
 			} else {
-				auth := filepath.Join(appdir.CodexHomeIn(home), "auth.json")
-				fetches = append(fetches, withUser(ctx, p.Account.User, func() SubscriptionQuota { return codexSubscriptionUsage(viaLogin("codex", p.Account.User), auth) }))
+				dir := appdir.CodexHomeIn(home)
+				fetches = append(fetches, withUser(ctx, p.Account.User, func() SubscriptionQuota { return codexSubscriptionUsage(viaLogin("codex", p.Account.User), dir) }))
 			}
 		}
 		// Every Copilot account magpie knows, the editors' or the CLI's own
@@ -912,19 +912,19 @@ func claudeScopeModel(name string) string {
 	return strings.NewReplacer(" ", "-", ".", "-").Replace(strings.ToLower(name))
 }
 
-func codexSubscriptionUsage(ctx context.Context, path string) SubscriptionQuota {
+func codexSubscriptionUsage(ctx context.Context, dir string) SubscriptionQuota {
 	q := SubscriptionQuota{Provider: "codex", Name: "Codex", Icon: "codex-color", Windows: []QuotaWindow{}}
 	if holding(ctx) {
 		q.Error = errNotAsked.Error()
 		return q
 	}
-	token, accountID, err := codexToken(ctx, path)
+	token, accountID, err := codexToken(ctx, dir)
 	if err != nil {
 		q.Error = err.Error()
 		return q
 	}
 	q.Plan, q.Windows, q.Resets, q.Balance, q.Held, err = codexWindows(ctx, token, accountID)
-	if b, rerr := readAccountFile(path); rerr == nil {
+	if b, _, rerr := readCodexLogin(dir, false); rerr == nil {
 		q.Until = codexUntil(b, time.Now())
 	}
 	if err != nil {

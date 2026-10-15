@@ -1012,7 +1012,8 @@ func addLogin(l savedLogin) (using bool, err error) {
 	if using {
 		switch l.Agent {
 		case "codex":
-			err = writePrivate(codexAuthPath(), append(bytes.TrimSpace(l.Auth), '\n'))
+			// where Codex's config.toml keeps it (#2367)
+			err = saveCodexLogin(codexHome(), l.Auth)
 		case "claude":
 			err = putClaudeLogin(l)
 		}

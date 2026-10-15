@@ -397,7 +397,7 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	switch {
 	case l.Agent == "claude": // Claude Code reads its own (claudeWindows)
 	case l.Active:
-		tok, accountID, err = codexToken(ctx, codexAuthPath())
+		tok, accountID, err = codexToken(ctx, codexHome())
 	default:
 		tok, accountID, err = savedLoginToken(ctx, l.Agent, l.User)
 	}
@@ -489,10 +489,10 @@ func loginReadingKnown(l Login) (loginUsageEntry, bool) {
 }
 
 // codexLoginAuth is the auth.json of a ChatGPT account magpie knows: the
-// file Codex is signed in with, or the one kept for it.
+// sign-in Codex goes by (auth.json or its keychain item), or the one kept for it.
 func codexLoginAuth(l Login) []byte {
 	if l.Active {
-		b, _ := readAccountFile(codexAuthPath())
+		b, _, _ := readCodexLogin(codexHome(), false)
 		return b
 	}
 	loginsMu.Lock()

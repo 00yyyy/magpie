@@ -971,8 +971,10 @@ func codexAccount(home string) (Provider, bool) {
 	if settings.AccountDiscoveryOff() {
 		return Provider{}, false
 	}
-	path := filepath.Join(appdir.CodexHomeIn(home), "auth.json")
-	b, err := readAccountFile(path)
+	dir := appdir.CodexHomeIn(home)
+	// where Codex's config.toml keeps it: auth.json, or the macOS
+	// keychain item (#2367)
+	b, _, err := readCodexLogin(dir, false)
 	var a codexAuth
 	if err != nil || json.Unmarshal(b, &a) != nil || a.Tokens.AccessToken == "" || a.AuthMode == "apikey" {
 		return Provider{}, false
@@ -987,7 +989,7 @@ func codexAccount(home string) (Provider, bool) {
 		// the email is "email · Team · <workspace>" (#1424)
 		acct.User = codexLiveName(acct.User, bytes.TrimSpace(b))
 	}
-	acct.sign = codexSign(func(ctx context.Context) (string, string, error) { return codexToken(ctx, path) })
+	acct.sign = codexSign(func(ctx context.Context) (string, string, error) { return codexToken(ctx, dir) })
 	acct.body = codexBody
 	acct.models = catalog.Codex
 	acct.fetch = func(ctx context.Context) ([]catalog.Model, error) {
@@ -1003,44 +1005,70 @@ func codexAccount(home string) (Provider, bool) {
 	return Provider{ID: "codex", Name: "Codex", Icon: "codex-color", Responses: CodexBase, Website: "https://chatgpt.com/codex", Account: acct}, true
 }
 
-// codexToken returns a usable access token, refreshing it through OpenAI
-// when it is about to expire. A refresh rotates the tokens, so the new
-// ones go back into auth.json for Codex CLI to find.
-func codexToken(ctx context.Context, path string) (tok, accountID string, err error) {
+// codexToken returns a usable access token for the Codex home dir,
+// refreshing it through OpenAI when it is about to expire. A refresh
+// rotates the tokens, so the new ones go back where Codex keeps its
+// sign-in (auth.json or the keychain item, codexStore.write) for Codex to
+// find.
+func codexToken(ctx context.Context, dir string) (tok, accountID string, err error) {
 	codexMu.Lock()
 	defer codexMu.Unlock()
+	b, st, err := readCodexLogin(dir, false)
 	var a codexAuth
-	if !readJSON(path, &a) || a.Tokens.AccessToken == "" {
-		return "", "", errors.New("Codex is signed out; run codex login")
+	if err == nil && json.Unmarshal(b, &a) == nil && a.Tokens.AccessToken != "" {
+		if exp, _ := jwtClaims(a.Tokens.AccessToken)["exp"].(float64); exp == 0 || time.Until(time.Unix(int64(exp), 0)) > 5*time.Minute {
+			return a.Tokens.AccessToken, codexAccountID(a), nil
+		}
+		// about to be refreshed: the store's own, not a kept read, which
+		// Codex may have rotated since (its refresh token spent)
+		if st.keychain {
+			b, st, err = readCodexLogin(dir, true)
+			a = codexAuth{}
+			if err == nil && json.Unmarshal(b, &a) == nil && a.Tokens.AccessToken != "" {
+				if exp, _ := jwtClaims(a.Tokens.AccessToken)["exp"].(float64); exp == 0 || time.Until(time.Unix(int64(exp), 0)) > 5*time.Minute {
+					return a.Tokens.AccessToken, codexAccountID(a), nil
+				}
+			}
+		}
 	}
-	accountID = a.Tokens.AccountID
-	if accountID == "" {
-		accountID = claimString(jwtClaims(a.Tokens.IDToken), "https://api.openai.com/auth", "chatgpt_account_id")
-	}
-	if exp, _ := jwtClaims(a.Tokens.AccessToken)["exp"].(float64); exp == 0 || time.Until(time.Unix(int64(exp), 0)) > 5*time.Minute {
-		return a.Tokens.AccessToken, accountID, nil
+	var se *codexStoreError
+	if errors.As(err, &se) {
+		return "", "", se
 	}
 	var raw map[string]any
-	if !readJSON(path, &raw) {
+	if err != nil || a.Tokens.AccessToken == "" || json.Unmarshal(b, &raw) != nil {
 		return "", "", errors.New("Codex is signed out; run codex login")
 	}
+	accountID = codexAccountID(a)
 	tok, err = codexRefresh(ctx, raw)
 	if err != nil {
 		return "", "", err
 	}
-	// keep every other field of the file as Codex CLI wrote it. The file
-	// is the user's own sign-in, which Codex CLI and the Codex app read:
-	// written beside it, flushed and renamed in, never truncated in place,
-	// so a machine going down mid-write leaves the old one whole and a
-	// file held for a moment on Windows is waited out (#2239, #1505). A
-	// write that still fails loses the rotation, said in the log; the
-	// fresh access token in hand still serves this request.
+	// keep every other field as Codex wrote it. auth.json is the user's
+	// own sign-in, which Codex CLI and the Codex app read: written beside
+	// it, flushed and renamed in, never truncated in place, so a machine
+	// going down mid-write leaves the old one whole and a file held for a
+	// moment on Windows is waited out (#2239, #1505). A write that still
+	// fails loses the rotation, said in the log; the fresh access token in
+	// hand still serves this request.
 	if out, err := json.MarshalIndent(raw, "", "  "); err == nil {
-		if werr := writePrivate(path, append(out, '\n')); werr != nil {
-			log.Printf("codex: the refreshed sign-in didn't reach %s: %v", path, werr)
+		if werr := st.write(out); werr != nil {
+			where := st.file()
+			if st.keychain {
+				where = "the keychain item " + codexKeychainService
+			}
+			log.Printf("codex: the refreshed sign-in didn't reach %s: %v", where, werr)
 		}
 	}
 	return tok, accountID, nil
+}
+
+// codexAccountID is the ChatGPT account a sign-in's requests name.
+func codexAccountID(a codexAuth) string {
+	if a.Tokens.AccountID != "" {
+		return a.Tokens.AccountID
+	}
+	return claimString(jwtClaims(a.Tokens.IDToken), "https://api.openai.com/auth", "chatgpt_account_id")
 }
 
 // codexRefresh renews the tokens of an auth.json-shaped sign-in in place,

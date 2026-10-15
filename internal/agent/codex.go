@@ -1792,8 +1792,10 @@ func codexChatGPT(dir string) bool {
 			Access string `json:"access_token"`
 		} `json:"tokens"`
 	}
-	b, err := os.ReadFile(filepath.Join(dir, "auth.json"))
-	if err != nil || json.Unmarshal(b, &a) != nil {
+	// auth.json, or the macOS keychain item when Codex's config.toml
+	// keeps the sign-in there (#2367)
+	b, ok := provider.CodexSignIn(dir)
+	if !ok || json.Unmarshal(b, &a) != nil {
 		return false
 	}
 	return a.Tokens.Access != ""

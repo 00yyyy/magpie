@@ -79,6 +79,11 @@ func isolate(t *testing.T) {
 	forgetClaudeCredential()
 	forgetClaudeStatus()
 	forgetDevinStatus()
+	// nor Codex's keychain item (#2367): a test's has nothing in it,
+	// whatever the system
+	oldCodexKeychain, oldCodexHere := codexKeychain, codexKeychainHere
+	codexKeychain = &fakeKeychain{}
+	forgetCodexKeychain()
 	// nor an account's allowance another test read, which LoginUsage and
 	// the Usage page share
 	loginUsageCache.Lock()
@@ -95,6 +100,8 @@ func isolate(t *testing.T) {
 	t.Cleanup(func() {
 		claudeKeychain, claudeBase, claudeExecutable = oldKeychain, oldBase, oldExe
 		cursorKeychain, DevinExecutable = oldCursor, oldDevin
+		codexKeychain, codexKeychainHere = oldCodexKeychain, oldCodexHere
+		forgetCodexKeychain()
 		forgetClaudeCredential()
 		forgetClaudeStatus()
 		forgetDevinStatus()
