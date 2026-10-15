@@ -253,6 +253,13 @@ type Settings struct {
 	// one of UpdateEveries, 0 for every six hours.
 	NoAutoUpdate bool `json:"noAutoUpdate,omitempty"`
 	UpdateEvery  int  `json:"updateEvery,omitempty"`
+	// NoAutoDownload has a check, by the clock or Settings' Check, only
+	// say a newer version is out (with its notes and size) rather than
+	// download it (#2296): a metered network or a proxy billed by traffic
+	// downloads it only on a click (Download update, the header's Update,
+	// magpie update). Off, as by default, a newer version is downloaded
+	// as soon as it is found.
+	NoAutoDownload bool `json:"noAutoDownload,omitempty"`
 	// AutoRestart has the app restart into an update it downloaded by
 	// itself, once the gateway it serves has nothing in flight, rather than
 	// waiting for a click or for quitting (#2096). Off by default: a

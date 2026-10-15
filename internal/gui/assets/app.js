@@ -3983,7 +3983,7 @@ async function renderUpdateBadge() {
     delete b.dataset.pulling;
     b.classList.remove("busy");
   }
-  const on = pulling || (!!u && !updatePillOff(u.latest) && (u.state === "ready" || u.state === "available" || (u.state === "error" && u.retry)));
+  const on = pulling || (!!u && !updatePillOff(u.latest) && (u.state === "ready" || u.state === "available" || u.state === "found" || (u.state === "error" && u.retry)));
   if (b.hidden !== !on) b.hidden = !on;
   if (!on) return;
   const hide = $("#updateHide");
@@ -4042,6 +4042,7 @@ async function renderUpdateBadge() {
   label.textContent = u.state === "ready" && u.error ? t("Update failed") : t("Update");
   b.title = u.state === "ready" ? t("Restart to update to {v}", { v: u.latest })
     : u.state === "error" ? t("Couldn't download {v}", { v: u.latest }) + " · " + t("Click to try again")
+    : u.state === "found" ? t("{v} is out", { v: u.latest }) + (u.size ? " · " + t("{done} MB", { done: (u.size / 1e6).toFixed(1) }) : "") + " · " + t("Click to download and restart")
     : u.stuck ? updateStuck(u) + " " + t("Click to open the download page.")
     : t("{v} is out", { v: u.latest });
   if (u.error) b.title += "\n" + u.error;
@@ -4049,7 +4050,8 @@ async function renderUpdateBadge() {
     // what changed is shown first, and a click there restarts (#844); one
     // that failed restarts again at once
     if (u.state === "ready") return u.error ? restart() : confirmUpdate(u, restart);
-    if (u.state === "error") {
+    // found (#2296) or failed: a click downloads it, and restarts once it's in
+    if (u.state === "error" || u.state === "found") {
       b.dataset.pulling = "1";
       b.classList.add("busy");
       label.textContent = t("Downloading…");
@@ -4173,7 +4175,7 @@ async function openWhatsNew(u, b) {
   const w = await api(updatePath("whatsnew?all=1")).catch(() => null);
   if (b) { b.disabled = false; b.classList.remove("busy"); }
   const list = [...(w?.releases || [])];
-  if (u?.notes && u.latest && ["ready", "available", "downloading"].includes(u.state) && !list.some((r) => r.version === u.latest)) {
+  if (u?.notes && u.latest && ["ready", "available", "downloading", "found"].includes(u.state) && !list.some((r) => r.version === u.latest)) {
     list.unshift({ version: u.latest, notes: u.notes, url: u.url, pending: true });
   }
   const failed = !w || !!w.error;
@@ -18610,6 +18612,13 @@ function renderSettings() {
   row(t("Check every"), s.noAutoUpdate ? t("While automatic updates are on") : t("How often magpie looks for a newer version"), "",
     segs(UPDATE_EVERY.map((m) => [m, m < 60 ? t("{n} min", { n: m }) : t("{n} h", { n: m / 60 })]), s.updateEvery || 360,
       (updateEvery) => savePrefs({ ...keep, updateEvery }))).classList.add("update-every-row", ...(s.noAutoUpdate ? ["off"] : []));
+  // whether a newer version found is downloaded at once, or only said to
+  // be out and downloaded on a click (#2296): a metered network or a
+  // proxy billed by traffic. It holds for the version row's Check too.
+  row(t("Download updates automatically"), s.noAutoDownload
+    ? t("Off: a newer version is only shown, with its size; it downloads when you click Download update. For metered networks and proxies billed by traffic")
+    : t("Downloads a newer version as soon as it is found. Turn off on a metered network or a proxy billed by traffic"), "",
+    segs([["off", t("Off")], ["on", t("On")]], s.noAutoDownload ? "off" : "on", (v) => savePrefs({ ...keep, noAutoDownload: v === "off" }))).classList.add("update-download-row");
   // whether a downloaded update is restarted into by itself, once no agent
   // request is in flight (#2096); off, it waits for Restart or for quitting
   row(t("Restart automatically"), s.noAutoUpdate ? t("While automatic updates are on") : t("Once an update is downloaded, restarts into it when no agent request is in flight"), "",
@@ -21309,6 +21318,21 @@ async function renderUpdate(r, u) {
       if (u.error && u.url) btn(t("Download"), () => (web ? window.open(u.url, "_blank", "noopener") : api("open", { url: u.url })));
       break;
     }
+    case "found": {
+      // downloads wait for a click (Settings' Download updates
+      // automatically off, #2296): what is out, and how big it is
+      sub.textContent = t("{v} is out", { v: u.latest }) + (u.size ? " · " + t("{done} MB", { done: (u.size / 1e6).toFixed(1) }) : "");
+      const get = btn(t("Download update"), async () => {
+        if (updateBusy) return;
+        get.disabled = true;
+        get.classList.add("busy");
+        const a = await api(updatePath("update/install"), {}).catch((e) => ({ state: "error", error: e.message, current: u.current }));
+        if (r.isConnected) renderUpdate(r, a);
+      });
+      btn(t("Check"), check);
+      page();
+      break;
+    }
     case "available":
       sub.textContent = t("{v} is out", { v: u.latest });
       if (u.stuck) sub.textContent += " · " + updateStuck(u);
@@ -21474,7 +21498,7 @@ function prefsKeep(s) {
     claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "",
     codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, noStats: !!s.noStats, noUsageStats: !!s.noUsageStats,
     memberModel: !!s.memberModel, noLoopGuard: !!s.noLoopGuard, refusalRetries: s.refusalRetries ?? null,
-    noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360, autoRestart: !!s.autoRestart,
+    noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360, autoRestart: !!s.autoRestart, noAutoDownload: !!s.noAutoDownload,
     trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, trayPace: !!s.trayPace, trayNoCost: !!s.trayNoCost, vision: s.vision || "", visionEffort: s.visionEffort || "", searcherEffort: s.searcherEffort || "", imageGen: s.imageGen || "", searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",
     chineseUnits: !!s.chineseUnits, usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0, resetReminder: s.resetReminder || 0,
     turnDoneAlert: s.turnDoneAlert || 0 };
@@ -21763,7 +21787,11 @@ function standIn(h) {
   }
 }
 function hold(h) {
-  const a = h.chain.find(([n]) => atRest(n)) || (h.chain.some(([n]) => n.isConnected) ? null : standIn(h));
+  // held by what can be seen: an empty part (a row's value with nothing in it
+  // yet) has no height, so "moved by less than half its height" below never
+  // held, and Add to PATH on Settings' About slid the view 11px off its top
+  // once the page was a little taller than the window (#2296)
+  const a = h.chain.find(([n]) => atRest(n) && n.offsetHeight) || h.chain.find(([n]) => atRest(n)) || (h.chain.some(([n]) => n.isConnected) ? null : standIn(h));
   if (!a) return;
   const v = h.v, d = onScreen(a[0], v) - a[1];
   if (Math.abs(d) >= 1) {
