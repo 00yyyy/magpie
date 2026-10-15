@@ -9,6 +9,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/gwmw"
+	"github.com/yetone/magpie/internal/gwtool"
 	"github.com/yetone/magpie/internal/masking"
 	"github.com/yetone/magpie/internal/middleware"
 	"github.com/yetone/magpie/internal/provider"
@@ -24,6 +25,7 @@ func TestMain(m *testing.M) {
 	serveRotation()
 	groupsServed = provider.ServeGroups()
 	serveMiddleware()
+	searchOn = gwtool.Serve(gwtool.WebSearch)
 	code, err := isolatedTests(m)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -176,5 +178,21 @@ func withoutGroups(t *testing.T) {
 	t.Cleanup(func() {
 		stop()
 		groupsServed = provider.ServeGroups()
+	})
+}
+
+// searchOn is plugins/search on: the gateway's tests offer and answer
+// magpie's web search, as a user with it on has.
+var searchOn func()
+
+// withoutSearch is plugins/search off for t, in a process serving the
+// gateway (gwtool.Gate): magpie's web search is neither offered nor
+// answered.
+func withoutSearch(t *testing.T) {
+	searchOn()
+	stop := gwtool.Gate()
+	t.Cleanup(func() {
+		stop()
+		searchOn = gwtool.Serve(gwtool.WebSearch)
 	})
 }

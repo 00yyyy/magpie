@@ -162,6 +162,22 @@ func SearchAPIs() []SearchAPI {
 	return slices.DeleteFunc(slices.Clone(load().Searches), func(a SearchAPI) bool { return !a.Ready() })
 }
 
+// SearchAPIsSet counts the search APIs that can be asked; a
+// providers.json that can't be read is an error, not none.
+func SearchAPIsSet() (int, error) {
+	f, err := read()
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, a := range f.Searches {
+		if a.Ready() {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // StoredSearchAPIs are the search APIs as saved, keys and all.
 func StoredSearchAPIs() []SearchAPI { return load().Searches }
 

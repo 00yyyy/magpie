@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/gwtool"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -524,6 +525,9 @@ func (s *Server) webSearch(ctx context.Context, query string) (string, []Hit, er
 	// is set to (#1522: Codex asked while a "direct" provider served the
 	// turn dialed chatgpt.com directly)
 	ctx = netproxy.With(ctx, "")
+	if !searchServed() {
+		return "", nil, errSearchOff
+	}
 	if settings.Load().Searcher == "off" {
 		if len(provider.SearchAPIs()) == 0 {
 			return "", nil, errNoSearcher
@@ -566,6 +570,15 @@ func (s *Server) webSearch(ctx context.Context, query string) (string, []Hit, er
 }
 
 var errNoSearcher = errors.New("no provider that can search the web, nor a search API, is set up in magpie")
+
+// errSearchOff is a search asked of magpie while plugins/search is off.
+var errSearchOff = errors.New("magpie's web search is off: turn the Web search plugin on in magpie's Settings → Plugins")
+
+// searchServed is whether plugins/search serves magpie's web search here
+// (the gateway's tool point, gwtool): off, magpie neither offers its
+// web_search nor answers one, and a vendor that searches by itself still
+// does.
+func searchServed() bool { return gwtool.Served(gwtool.WebSearch) }
 
 // searchersInTurn is how many searchers a search is asked of, in turn,
 // before it goes to the search APIs.

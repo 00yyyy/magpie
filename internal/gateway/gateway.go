@@ -31,7 +31,7 @@ import (
 
 	"github.com/yetone/magpie/internal/awake"
 	"github.com/yetone/magpie/internal/gwmw"
-
+	"github.com/yetone/magpie/internal/gwtool"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/pluginrt"
 	"github.com/yetone/magpie/internal/provider"
@@ -487,6 +487,10 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		}
 	})
 	defer stopGroups()
+	// and magpie's own tools (its web search) are offered and answered
+	// while the plugin serving each is on (gwtool)
+	stopTools := gwtool.Gate()
+	defer stopTools()
 	// and a request masking is wanted for, with no masker served, turns
 	// plugins/redact on as it is sent rather than being refused until
 	// KeepFresh's next look (gwmw.Served)
