@@ -231,7 +231,7 @@ func listPlugins(ctx context.Context, asJSON bool) error {
 			if m.Error != "" {
 				fmt.Printf("  %s  %s\n", muted.Render("gateway middleware"), amber.Render("didn't load: "+m.Error))
 			} else {
-				fmt.Printf("  %s  %s\n", muted.Render("gateway middleware"), strings.Join(m.Hooks, ", "))
+				fmt.Printf("  %s  %s\n", muted.Render("gateway middleware"), mwPoints(m))
 			}
 		}
 		for _, p := range ps {
@@ -578,4 +578,21 @@ func askPrompt(q *plugin.Prompt) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(line), nil
+}
+
+// mwPoints is what a gateway module serves, as the Plugins page's mwLine
+// tells it: its hooks, the routings its strategies serve, and whether it
+// has onUsage.
+func mwPoints(m middleware.State) string {
+	var parts []string
+	if len(m.Hooks) > 0 {
+		parts = append(parts, strings.Join(m.Hooks, ", "))
+	}
+	if len(m.Strategies) > 0 {
+		parts = append(parts, "routings "+strings.Join(m.Strategies, ", "))
+	}
+	if m.Usage {
+		parts = append(parts, "onUsage")
+	}
+	return strings.Join(parts, " · ")
 }

@@ -1270,13 +1270,26 @@
       return d;
     }
     const lang = intlLang();
-    let s = t("Gateway middleware: {hooks}", { hooks: m.hooks.join(t(", ")) });
-    if (m.calls) s += " · " + t("{n} calls, {us} µs each", { n: m.calls.toLocaleString(lang), us: m.avgMicros < 10 ? m.avgMicros.toFixed(1) : Math.round(m.avgMicros).toLocaleString(lang) });
-    d.append(el("span", "", s));
+    // a gateway module's hooks, the routings it serves (strategies) and
+    // its usage observer (onUsage), each said when it has it
+    const parts = [];
+    if (m.hooks.length) {
+      let s = t("Gateway middleware: {hooks}", { hooks: m.hooks.join(t(", ")) });
+      if (m.calls) s += " · " + t("{n} calls, {us} µs each", { n: m.calls.toLocaleString(lang), us: m.avgMicros < 10 ? m.avgMicros.toFixed(1) : Math.round(m.avgMicros).toLocaleString(lang) });
+      parts.push(s);
+    }
+    if (m.strategies?.length) parts.push(t("Routings: {routings}", { routings: m.strategies.join(t(", ")) }) + (m.orders ? " · " + t("asked {n} times", { n: m.orders.toLocaleString(lang) }) : ""));
+    if (m.usage) parts.push(t("Usage observer: {n} rows", { n: (m.rows || 0).toLocaleString(lang) }));
+    d.append(el("span", "", parts.join(" · ")));
     if (m.events?.length) d.title = t("onEvent sees only {events} events", { events: m.events.join(t(", ")) });
     if (m.failures) {
       const f = el("span", "pm-mw-fail", t("{n} failed", { n: m.failures.toLocaleString(lang) }));
       f.title = t("A failed call leaves the request or reply as it was") + (m.lastError ? "\n" + t("Last: {error}", { error: m.lastError }) : "");
+      d.append(el("span", "sep", " · "), f);
+    }
+    if (m.dropped) {
+      const f = el("span", "pm-mw-fail", t("{n} rows dropped", { n: m.dropped.toLocaleString(lang) }));
+      f.title = t("Rows that came while onUsage was still busy are dropped: a request never waits for it");
       d.append(el("span", "sep", " · "), f);
     }
     return d;

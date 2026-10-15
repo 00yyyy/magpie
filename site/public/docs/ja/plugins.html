@@ -672,6 +672,38 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
     <h3>フックが失敗したとき</h3>
     <p>フックの持ち時間は、リクエストまたは応答全体で 250 ms、1 イベントで 50 ms、読み込みで 1 秒です。例外を投げたフック、時間切れになったフック、想定外の値を返したフックは、なかったものとして扱われます。つまりリクエストやイベントは元のまま送られます。設定 → プラグインには、ミドルウェアごとのフック、呼び出し回数、1 回あたりの平均時間、失敗回数と直近のエラーが表示されます。フックが見るのは、エージェントが送ったものと受け取るものそのものです。送信時は magpie のマスキングより前、受信時はマスク解除の後です。magpie 自身のリクエスト（スレッドのタイトル、ルーターの分類器）はミドルウェアを通りません。</p>
 
+    <h3 id="gateway-points"><a class="anchor" href="#gateway-points">ルーティングと使用量の行</a></h3>
+    <p>同じモジュールは <code>strategies</code> と <code>onUsage</code> もエクスポートできます。そのファイルは <code>*.gateway.js</code> と名付けてもよく、パッケージなら <code>"magpie": { "gateway": "./gw.js" }</code> と書けます。</p>
+    <ul>
+      <li><b>ルーティング。</b><code>strategies[name]</code> はそれぞれ <code>&lt;プラグイン&gt;/&lt;name&gt;</code> という名前のルーティングになり（パッケージの短い名前、または <code>.gateway.js</code> を除いたファイル名）、プラグインがオンの間、プロバイダ・プール・グループのルーティング選択に並びます。関数 <code>(pool, seats, options)</code> か <code>order</code> を持つオブジェクトで、席を試す順番をインデックスで返します。各席には <code>key</code>、<code>account</code>、<code>known</code>、<code>learns</code>、<code>used</code>、<code>soon</code>（枠が更新される時刻、ms）、<code>pace</code>、<code>weight</code>、<code>resting</code>、<code>tokens</code>（最近送った量）があります。持ち時間は 20 ms で、例外・時間切れ・それ以外の値のときは一覧の順に試します。オフにすると、それでルーティングするプロバイダやグループも一覧の順になります。</li>
+      <li><b>使用量。</b><code>onUsage(row, options)</code> は各リクエストの終了後に使用量の行を受け取ります：プロバイダ、アカウントとキー、モデル、トークン、<code>ms</code>、<code>ttftMs</code>、ステータス、エラーの種類、コスト。本文・プロンプト・エラーの文面は含みません。別に動くのでリクエストが待つことはなく、処理中にキューがあふれた行は破棄して数えます。持ち時間は 250 ms です。</li>
+    </ul>
+    <div class="code">
+      <span class="lang">spread.gateway.js</span>
+      <button class="copy" data-copy="gp-ex">コピー</button>
+      <pre id="gp-ex"><span class="c">// spread.gateway.js</span>
+<span class="k">export const</span> strategies = {
+  <span class="s">"fewest-tokens"</span>: (pool, seats) =&gt;
+    seats.map((_, i) =&gt; i).sort((a, b) =&gt;
+      (seats[a].resting - seats[b].resting) || (seats[a].tokens - seats[b].tokens)),
+}
+
+<span class="k">let</span> slow = 0
+
+<span class="k">export function</span> onUsage(row, options) {
+  <span class="k">if</span> (row.ms &gt; (options.slowMs ?? 30000)) {
+    slow++
+    console.log(`slow: ${row.provider} ${row.model} ${row.ms} ms (${slow} so far)`)
+  }
+}</pre>
+    </div>
+    <div class="code">
+      <span class="lang">shell</span>
+      <button class="copy" data-copy="gp-cli">コピー</button>
+      <pre id="gp-cli">magpie plugin add ./spread.gateway.js
+magpie group set fast routing=spread/fewest-tokens</pre>
+    </div>
+
     <h2 id="tools"><a class="anchor" href="#tools">すべてのエージェントのツール</a></h2>
     <p>プラグインは OpenCode の <code>tool</code> フックでツールを提供でき、magpie はそれを OpenCode だけでなくすべてのエージェントに提供します。ツールは magpie 自身の MCP サーバー <code>/mcp/magpie/tools</code>（Streamable HTTP）になります。MCP サーバーを使えるエージェントにこのアドレスを追加すると、そのモデルはオンのプラグインが提供するすべてのツールを呼び出せます。名前は <code>&lt;プラグイン&gt;_&lt;ツール&gt;</code> で、プラグインの短い名前が先頭に付きます（下の例では <code>weather-tools_now</code>）。</p>
     <div class="code">

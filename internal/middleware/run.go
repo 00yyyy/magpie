@@ -52,7 +52,7 @@ type Run struct {
 // Run does nothing.
 func Begin(info Info) *Run {
 	s := current()
-	if s == nil || len(s.list) == 0 {
+	if s == nil || !s.hooked {
 		return nil
 	}
 	b, _ := json.Marshal(info)

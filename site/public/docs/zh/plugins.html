@@ -672,6 +672,38 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
     <h3>钩子出错时</h3>
     <p>处理请求或完整回复时，钩子有 250 毫秒；处理一个事件时有 50 毫秒；加载有 1 秒。钩子抛出异常、超时或返回了别的东西，都当作它不存在：请求或事件按原样发送。设置 → 插件会显示每个中间件的钩子、调用次数、平均每次耗时和失败次数，以及最近一次错误。钩子看到的是 agent 发出和收到的原始内容：发出时在 magpie 脱敏之前，返回时在还原之后。magpie 自己的请求（会话标题、路由分类器）不经过中间件。</p>
 
+    <h3 id="gateway-points"><a class="anchor" href="#gateway-points">路由与用量记录</a></h3>
+    <p>同一个模块还可以导出 <code>strategies</code> 和 <code>onUsage</code>。这样的文件可以命名为 <code>*.gateway.js</code>，包里也可以写 <code>"magpie": { "gateway": "./gw.js" }</code>。</p>
+    <ul>
+      <li><b>路由。</b>每个 <code>strategies[name]</code> 是一个名为 <code>&lt;插件&gt;/&lt;name&gt;</code> 的路由（插件包的短名，或去掉 <code>.gateway.js</code> 的文件名），插件开着时，供应商、号池和分组的路由选择里都会列出它。它是函数 <code>(pool, seats, options)</code>，或带 <code>order</code> 的对象，返回尝试各个座位的顺序（下标）。每个座位有 <code>key</code>、<code>account</code>、<code>known</code>、<code>learns</code>、<code>used</code>、<code>soon</code>（额度窗口何时刷新，毫秒）、<code>pace</code>、<code>weight</code>、<code>resting</code> 和 <code>tokens</code>（最近发给它的量）。它有 20 ms；出错、超时或返回别的东西时，按列表顺序尝试。插件关掉后，用它的供应商或分组也按列表顺序。</li>
+      <li><b>用量。</b><code>onUsage(row, options)</code> 在每个请求结束后拿到它的用量记录：供应商、账号和密钥、模型、token、<code>ms</code>、<code>ttftMs</code>、状态、错误类型和费用，不含请求体、提示词或错误文本。它单独运行，请求从不等它；它忙到队列满时到来的记录会被丢弃并计数。它有 250 ms。</li>
+    </ul>
+    <div class="code">
+      <span class="lang">spread.gateway.js</span>
+      <button class="copy" data-copy="gp-ex">复制</button>
+      <pre id="gp-ex"><span class="c">// spread.gateway.js</span>
+<span class="k">export const</span> strategies = {
+  <span class="s">"fewest-tokens"</span>: (pool, seats) =&gt;
+    seats.map((_, i) =&gt; i).sort((a, b) =&gt;
+      (seats[a].resting - seats[b].resting) || (seats[a].tokens - seats[b].tokens)),
+}
+
+<span class="k">let</span> slow = 0
+
+<span class="k">export function</span> onUsage(row, options) {
+  <span class="k">if</span> (row.ms &gt; (options.slowMs ?? 30000)) {
+    slow++
+    console.log(`slow: ${row.provider} ${row.model} ${row.ms} ms (${slow} so far)`)
+  }
+}</pre>
+    </div>
+    <div class="code">
+      <span class="lang">shell</span>
+      <button class="copy" data-copy="gp-cli">复制</button>
+      <pre id="gp-cli">magpie plugin add ./spread.gateway.js
+magpie group set fast routing=spread/fewest-tokens</pre>
+    </div>
+
     <h2 id="tools"><a class="anchor" href="#tools">给每个智能体的工具</a></h2>
     <p>插件可以用 OpenCode 的 <code>tool</code> 钩子提供工具，magpie 把它们提供给每个智能体，不只是 OpenCode：它们组成 magpie 自己的一个 MCP 服务器，地址是 <code>/mcp/magpie/tools</code>（Streamable HTTP）。把这个地址加到任何支持 MCP 服务器的智能体里，它的模型就能调用你已开启的插件提供的每个工具。每个工具名为 <code>&lt;插件&gt;_&lt;工具&gt;</code>，插件的短名在前，例如下面的 <code>weather-tools_now</code>。</p>
     <div class="code">

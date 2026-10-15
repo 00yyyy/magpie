@@ -672,6 +672,38 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
     <h3>When a hook fails</h3>
     <p>A hook has 250 ms for a request or a whole reply and 50 ms for an event; loading has a second. A hook that throws, runs out of time or returns something else goes on as if it weren’t there: the request or the event is sent as it was. Settings → Plugins shows each middleware’s hooks, how many calls it had, the average time each took and how many failed, with the last error. The hooks see what the agent sent and gets back, before magpie’s redaction on the way out and after it on the way back. magpie’s own requests (thread titles, the router’s classifier) don’t go through middleware.</p>
 
+    <h3 id="gateway-points"><a class="anchor" href="#gateway-points">Routings and usage rows</a></h3>
+    <p>The same module can also export <code>strategies</code> and <code>onUsage</code>. Such a file can be named <code>*.gateway.js</code>, and a package can say <code>"magpie": { "gateway": "./gw.js" }</code>.</p>
+    <ul>
+      <li><b>Routings.</b> Each <code>strategies[name]</code> is a routing named <code>&lt;plugin&gt;/&lt;name&gt;</code> (the package’s short name, or the file’s name without <code>.gateway.js</code>), offered in every routing picker of a provider, a pool and a group while the plugin is on. It is a function <code>(pool, seats, options)</code>, or an object with <code>order</code>, and returns the order to try the seats in, as indexes. Each seat has <code>key</code>, <code>account</code>, <code>known</code>, <code>learns</code>, <code>used</code>, <code>soon</code> (when its windows renew, in ms), <code>pace</code>, <code>weight</code>, <code>resting</code> and <code>tokens</code> (what it was sent lately). It has 20 ms; if it throws, takes longer or returns something else, the seats are tried in their listed order. Off, a provider or group routed by it is too.</li>
+      <li><b>Usage.</b> <code>onUsage(row, options)</code> gets each request’s usage row after it ends: provider, account and key, model, tokens, <code>ms</code>, <code>ttftMs</code>, status, error type and cost, never a body, prompt or error text. It runs on its own, so a request never waits for it; rows that come while it is busy past a queue are dropped and counted. It has 250 ms.</li>
+    </ul>
+    <div class="code">
+      <span class="lang">spread.gateway.js</span>
+      <button class="copy" data-copy="gp-ex">Copy</button>
+      <pre id="gp-ex"><span class="c">// spread.gateway.js</span>
+<span class="k">export const</span> strategies = {
+  <span class="s">"fewest-tokens"</span>: (pool, seats) =&gt;
+    seats.map((_, i) =&gt; i).sort((a, b) =&gt;
+      (seats[a].resting - seats[b].resting) || (seats[a].tokens - seats[b].tokens)),
+}
+
+<span class="k">let</span> slow = 0
+
+<span class="k">export function</span> onUsage(row, options) {
+  <span class="k">if</span> (row.ms &gt; (options.slowMs ?? 30000)) {
+    slow++
+    console.log(`slow: ${row.provider} ${row.model} ${row.ms} ms (${slow} so far)`)
+  }
+}</pre>
+    </div>
+    <div class="code">
+      <span class="lang">shell</span>
+      <button class="copy" data-copy="gp-cli">Copy</button>
+      <pre id="gp-cli">magpie plugin add ./spread.gateway.js
+magpie group set fast routing=spread/fewest-tokens</pre>
+    </div>
+
     <h2 id="tools"><a class="anchor" href="#tools">Tools for every agent</a></h2>
     <p>A plugin can give tools, with OpenCode’s <code>tool</code> hook, and magpie offers them to every agent, not only OpenCode: they are an MCP server of magpie’s own at <code>/mcp/magpie/tools</code> (Streamable HTTP). Add that address to any agent that takes an MCP server, and its model can call every tool your plugins that are on give. Each is named <code>&lt;plugin&gt;_&lt;tool&gt;</code>, the plugin’s short name first: <code>weather-tools_now</code> below.</p>
     <div class="code">

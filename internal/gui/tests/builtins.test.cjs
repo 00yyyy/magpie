@@ -23,7 +23,7 @@ const PLUGINS = [
   { id: "gateway", name: "Gateway page", sub: "The gateway's state and keys, how to connect a client, its models and recent calls", one: "1 gateway key", many: "{n} gateway keys" },
   { id: "groups", name: "Routing groups", sub: "Several models agents pick as one: each request goes to the right one, and to the next when one fails", one: "1 group in use", many: "{n} groups in use" },
   { id: "library", name: "Library", sub: "Instructions, MCP servers, skills and hooks, kept once and given to every agent", one: "1 item given to agents", many: "{n} items given to agents" },
-  { id: "middleware", name: "Gateway middleware", sub: "Run the JavaScript middleware plugins on agents' requests and replies", one: "1 middleware on", many: "{n} middleware on" },
+  { id: "middleware", name: "JS gateway plugins", sub: "Run the JavaScript gateway plugins: middleware on agents' requests and replies, routings and usage observers", one: "1 gateway plugin on", many: "{n} gateway plugins on" },
   { id: "otel", name: "Observability", sub: "Send each request's traces and metrics to an OpenTelemetry collector, such as Langfuse", one: "Sending to a collector", many: "Sending to a collector" },
   { id: "redact", name: "Privacy masking", sub: "Secrets, personal data and your own words go to vendors as placeholders, and come back as they were", one: "Masking is on", many: "Masking is on" },
   { id: "rotation", name: "Routing strategies", sub: "The routings besides Smart: In order, In turn, Least used first, Weekly pace and By weight", one: "1 provider or group routed so", many: "{n} providers and groups routed so" },

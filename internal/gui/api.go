@@ -40,6 +40,7 @@ import (
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/mcpauth"
+	"github.com/yetone/magpie/internal/middleware"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/profile"
@@ -350,6 +351,9 @@ type settingsJSON struct {
 	// Builtins are the built-in plugins: each one's switch, whether it
 	// runs and what of it is in use (builtins.go)
 	Builtins []builtinJSON `json:"builtins"`
+	// JSRoutings are the routings JS gateway plugins serve now
+	// ("<plugin>/<name>"), for the routing pickers
+	JSRoutings []middleware.Routing `json:"jsRoutings"`
 	// PublicURL is MAGPIE_PUBLIC_URL while other machines are let in
 	// (shared, or MAGPIE_ADDR on the network): where they reach the
 	// gateway, shown beside the local address agents here are pointed at
@@ -581,6 +585,7 @@ func settingsState() settingsJSON {
 	s := settingsJSON{Settings: settings.Load(), Version: Version, Dir: tilde(settings.Dir()), Portable: settings.Portable() != "", Gateway: gateway.URL()}
 	s.AddrEnv = os.Getenv("MAGPIE_ADDR")
 	s.Builtins = builtinsState()
+	s.JSRoutings = middleware.Routings()
 	s.OnNetwork = gateway.OnNetwork()
 	if list, env := gateway.AllowIPs(); env {
 		s.AllowIPsEnv, s.AllowIPsFromEnv = os.Getenv(gateway.AllowIPsEnv), list

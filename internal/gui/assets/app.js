@@ -11025,14 +11025,28 @@ const ROUTINGS = [
 // (plugins/rotation): off, their options leave the page, as anything marked
 // data-feature does, and Smart is left — one in use keeps it on
 const ROTATION = new Set(["order", "rotate", "usage", "pace", "weight"]);
-// routingSegs: segs of routings, theirs marked as the plugin's
+// jsRoutings: the routings JS gateway plugins serve now ("<plugin>/<name>",
+// settings' jsRoutings, plugins/middleware's), and saved, a routing none
+// serves now, shown as it is: its pool is tried in its listed order
+function jsRoutings(saved) {
+  const out = (state.settings?.jsRoutings || []).map((r) => [r.id, r.id,
+    t("Routed by {name}, a routing of the gateway plugin {plugin}: it orders the accounts or keys for each request. If it fails or takes too long, they are tried in their listed order.", { name: r.name, plugin: r.plugin }), true]);
+  if (saved && !ROUTINGS.some(([id]) => id === saved) && !out.some(([id]) => id === saved))
+    out.push([saved, saved, t("No plugin serves this routing now, so requests go to the accounts or keys in their listed order. Turn on the gateway plugin that serves it on the Plugins page.")]);
+  return out;
+}
+// routingSegs: segs of routings, theirs marked as the plugin's: the
+// built-in rotation's, and the JS gateway plugins' (plugins/middleware)
 function routingSegs(items, current, onPick) {
   const box = segs(items, current, onPick);
-  [...box.querySelectorAll(".opt")].forEach((b, i) => { if (ROTATION.has(items[i][0])) b.dataset.feature = "rotation"; });
+  [...box.querySelectorAll(".opt")].forEach((b, i) => {
+    if (ROTATION.has(items[i][0])) b.dataset.feature = "rotation";
+    else if (items[i][3]) b.dataset.feature = "middleware";
+  });
   return box;
 }
 // weight is a key's share: offered for a provider with keys only
-const routingsOf = (p) => p.account ? ROUTINGS.filter(([id]) => id !== "weight") : ROUTINGS;
+const routingsOf = (p) => [...(p.account ? ROUTINGS.filter(([id]) => id !== "weight") : ROUTINGS), ...jsRoutings(p.routing || "")];
 // as on the Routing page's list of these (routing/client.js AFF_OPTS)
 const STAYS = [
   ["", "Auto", "A conversation stays with the account or key that answered it while what the vendor cached of it is worth keeping — within a turn always, across turns while it's fresh."],
@@ -11084,15 +11098,15 @@ function renderRouting(p) {
   };
   const rHint = el("div", "hint"), rUnsaved = unsaved();
   const drawRouting = () => {
-    const cur = ROUTINGS.find(([id]) => id === routingNow()) || ROUTINGS[0];
-    rHint.textContent = t(cur[2]) + own(cur[0]);
+    const cur = routingsOf(p).find(([id]) => id === routingNow()) || ROUTINGS[0];
+    rHint.textContent = (ROUTINGS.includes(cur) ? t(cur[2]) : cur[2]) + own(cur[0]);
     rUnsaved.hidden = routingNow() === (p.routing || "");
     // in turn and by weight go round already
     kLabel.hidden = kWrap.hidden = routingNow() === "rotate" || routingNow() === "weight";
     // each key's weight shows beside it while the routing is by weight
     for (const l of document.querySelectorAll(".accts.keys")) if (l.dataset.provider === p.id) l.classList.toggle("weighted", routingNow() === "weight");
   };
-  const rPick = routingSegs(routingsOf(p).map(([id, name]) => [id, t(name)]), routingNow(), (routing) => { draft.routing = routing; drawRouting(); });
+  const rPick = routingSegs(routingsOf(p).map(([id, name, , js]) => [id, ROUTINGS.some((r) => r[0] === id) ? t(name) : name, , js]), routingNow(), (routing) => { draft.routing = routing; drawRouting(); });
   const rRow = el("div", "route-pick");
   rRow.append(rPick, rUnsaved);
   const rWrap = el("div");

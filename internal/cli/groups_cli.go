@@ -147,7 +147,11 @@ var staysNames = []struct {
 }
 
 func parseRouting(v string) (string, error) {
-	v = strings.ToLower(strings.TrimSpace(v))
+	v = strings.TrimSpace(v)
+	if provider.PluginRouting(v) { // a gateway plugin's
+		return v, nil
+	}
+	v = strings.ToLower(v)
 	var names []string
 	for _, r := range routingNames {
 		if v == r.value || v == r.name || slices.Contains(r.also, v) {
@@ -155,7 +159,7 @@ func parseRouting(v string) (string, error) {
 		}
 		names = append(names, r.name)
 	}
-	return "", fmt.Errorf("routing %q is not one magpie has: %s", v, strings.Join(names, ", "))
+	return "", fmt.Errorf("routing %q is not one magpie has: %s, or <plugin>/<name> for a gateway plugin's", v, strings.Join(names, ", "))
 }
 
 func parseStays(v string) (string, error) {
@@ -170,13 +174,15 @@ func parseStays(v string) (string, error) {
 	return "", fmt.Errorf("stays %q is not one magpie has: %s", v, strings.Join(names, ", "))
 }
 
+// routingName is what the CLI calls routing v: a plugin's, or one it
+// doesn't know, as it is.
 func routingName(v string) string {
 	for _, r := range routingNames {
 		if r.value == v {
 			return r.name
 		}
 	}
-	return "smart"
+	return v
 }
 
 func staysName(v string) string {

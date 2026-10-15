@@ -425,6 +425,13 @@ function routingPage(part) {
     // language is already spoken
     weight: ["By weight", "Requests spread over the keys by the weight set beside each: a key weighing 3 takes three requests for every one a key weighing 1 takes, evenly over a few requests. One that fails is passed over while it rests, and the others share its requests; a conversation stays with its key as Stays says."],
   };
+  // modeOf: a routing's name and what it does, a JS gateway plugin's
+  // ("<plugin>/<name>", app.js jsRoutings) as it is named, served or not
+  const modeOf = (r) => MODES[r] || (r && jsRoutings(r).find(([id]) => id === r)?.slice(1, 3)) || MODES[""];
+  // withJS: routing options and the JS gateway plugins' after them, with
+  // saved when none serves it now; one of opts' own (a group's Manual) is
+  // not a plugin's
+  const withJS = (opts, saved) => [...opts, ...jsRoutings(saved || "").filter(([id]) => !opts.some(([o]) => o === id)).map(([id, n, , js]) => [id, n, js])];
   const GROUP_ORDER = "In order: member by member, the first model the group names until it can't answer, each over its own accounts or keys as its provider routes them.";
   // a group routed by weight (#1910): its members, not its keys
   const GROUP_WEIGHT = "By weight: each model takes its share of the requests by the weight set beside it — one weighing 3 three for every one a model weighing 1 takes, spread out rather than in bursts. One resting after a failure leaves the round and the others share its requests; the next model is the fallback when one fails.";
@@ -730,7 +737,7 @@ function routingPage(part) {
     if (f?.via?.length && r.group) {
       const names = f.via.map((id) => r.group.subs?.find((s) => s.id === id)?.name || id);
       const inner = r.group.subs?.find((s) => s.id === f.via[f.via.length - 1]);
-      out.push(t("{who} is one of {path}, a group in {name}; that group routes {mode}.", { who: who(f), path: names.join(" › "), name: r.group.name, mode: t((MODES[inner?.routing || ""] || MODES[""])[0]).toLowerCase() }));
+      out.push(t("{who} is one of {path}, a group in {name}; that group routes {mode}.", { who: who(f), path: names.join(" › "), name: r.group.name, mode: t(modeOf(inner?.routing || "")[0]).toLowerCase() }));
     }
     return out;
   }
@@ -1234,7 +1241,7 @@ function routingPage(part) {
     s.li.style.setProperty("--depth", d);
     s.name.textContent = info.name || info.id;
     s.id.textContent = "group/" + info.id;
-    s.mode.textContent = t((MODES[info.routing || ""] || MODES[""])[0]);
+    s.mode.textContent = t(modeOf(info.routing || "")[0]);
     s.rules = info.rules ? t(info.rules === 1 ? "1 rule" : "{n} rules", { n: info.rules }) : "";
     return s;
   }
@@ -1502,7 +1509,7 @@ function routingPage(part) {
     const f = r.order.find((x) => !x.fallback) || r.order[0];
     const g = r.group;
     const routing = g ? g.routing || "" : f?.routing || "";
-    const m = MODES[routing] || MODES[""];
+    const m = modeOf(routing);
     const on = r.order.filter((x) => !x.fallback).length;
     const pool = !g && f ? poolOf(f.provider) : null;
     const lone = !g && on <= 1 && !pool;
@@ -2542,7 +2549,7 @@ function routingPage(part) {
         // how it routes, only where it routes over several, and a way to
         // where that is set
         if (poolOf(prov)) {
-          const m = MODES[list.find((x) => x.w.provider === prov && !x.w.fallback)?.w.routing || ""] || MODES[""];
+          const m = modeOf(list.find((x) => x.w.provider === prov && !x.w.fallback)?.w.routing || "");
           const s = el("span", "", t(w.kind === "key" && !w.routing ? "Smart" : m[0]));
           goTo(s, "pool:" + prov, w.name || w.provider);
           h.append(s);
@@ -3926,7 +3933,7 @@ function routingPage(part) {
       line.title = t("{by} couldn't say which intent or effort a turn is the last time it was asked: {error}. Until it answers, no rule with an intent matches and turns reason as the agent asked. Each request's details say what it was asked.", { by: g.classifier || t("the classifier"), error: cf.error });
       main.append(line);
     }
-    const m = GROUP_ROUTE_OPTS.find(([id]) => id === (g.routing || "")) || ROUTE_OPTS[0];
+    const m = withJS(GROUP_ROUTE_OPTS, g.routing).find(([id]) => id === (g.routing || "")) || ROUTE_OPTS[0];
     const tags = el("span", "tags");
     tags.append(el("span", "tag", t(m[1])));
     if (g.affinity) tags.append(el("span", "tag", t(AFF_OPTS.find(([id]) => id === g.affinity)?.[1] || "")));
@@ -4470,9 +4477,10 @@ function routingPage(part) {
     listW.append(listPick, listHint);
     ed.append(el("label", "", t("Model lists")), listW);
 
-    const rHint = el("div", "hint", t(GROUP_HINT[d.routing] || GROUP_HINT[""]));
+    const gHint = (v) => GROUP_HINT[v] ? t(GROUP_HINT[v]) : MODES[v] || !v ? t(GROUP_HINT[""]) : modeOf(v)[1];
+    const rHint = el("div", "hint", gHint(d.routing));
     const rw = el("div");
-    rw.append(routingSegs(GROUP_ROUTE_OPTS.map(([id, n]) => [id, t(n)]), d.routing, (v) => { d.routing = v; rHint.textContent = t(GROUP_HINT[v] || GROUP_HINT[""]); draw(); drawRules(); drawSink(); }), rHint);
+    rw.append(routingSegs(withJS(GROUP_ROUTE_OPTS, d.routing).map(([id, n, js]) => [id, t(n), , js]), d.routing, (v) => { d.routing = v; rHint.textContent = gHint(v); draw(); drawRules(); drawSink(); }), rHint);
     rw.append(el("div", "hint", t(GROUP_NEST)));
     ed.append(el("label", "", t("Routing")), rw);
     // one rate limited with quota left: its place, or the back
@@ -5160,9 +5168,9 @@ function routingPage(part) {
       };
       const lab = (s, c) => { const w = el("span", "lab"); w.append(el("small", "", s), c); return w; };
       // by weight is a key's share (#841), set beside each key in the provider's editor
-      const opts = p.kind === "account" ? ROUTE_OPTS : [...ROUTE_OPTS, ["weight", "By weight"]];
+      const opts = withJS(p.kind === "account" ? ROUTE_OPTS : [...ROUTE_OPTS, ["weight", "By weight"]], p.routing);
       ctl.append(
-        lab(t("Routing"), routingSegs(opts.map(([id, n]) => [id, t(n)]), p.routing || "", (v) => set("route", { id: p.provider, routing: v }, t("{name}: {routing}", { name: p.name, routing: t(opts.find(([id]) => id === v)[1]) })))),
+        lab(t("Routing"), routingSegs(opts.map(([id, n, js]) => [id, t(n), , js]), p.routing || "", (v) => set("route", { id: p.provider, routing: v }, t("{name}: {routing}", { name: p.name, routing: t(opts.find(([id]) => id === v)[1]) })))),
         lab(t("Stays"), segs(AFF_OPTS.map(([id, n]) => [id, t(n)]), p.affinity || "", (v) => set("affinity", { id: p.provider, affinity: v }, t("{name}: {routing}", { name: p.name, routing: t(AFF_OPTS.find(([id]) => id === v)[1]) })))));
       if (sinkable(p.routing || "")) {
         const k = lab(t("Rate limited"), segs(SINK_OPTS.map(([id, n]) => [id, t(n)]), p.sink ? "sink" : "", (v) => set("sink", { id: p.provider, sink: v === "sink" }, t("{name}: {routing}", { name: p.name, routing: t(SINK_OPTS.find(([id]) => id === v)[1]) }))));
