@@ -1871,7 +1871,20 @@ func userMessage(text string) map[string]any {
 // and as plain text was summarised — and one it breaks off with that
 // refusal after the reply began, HTTP 200 and an error event (#1270). Any
 // other failure (401, 429, 500) goes back to Codex as it came.
+//
+// The summary is asked for whole (askWhole): a reply that breaks off, or
+// ends incomplete, is a failure the next account or member answers, as
+// one that fails before it begins, and is never taken for the summary;
+// when none is left Codex is told so. One conversation's compaction that
+// keeps failing stops being asked for a while (compactFails, #2274).
 func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byte) {
+	key, model := compactKey(body), modelOf(body)
+	if msg, held := s.compactFails.held(key, model); held {
+		log.Printf("codex compaction: %s", msg)
+		writeError(w, provider.Responses, http.StatusBadRequest, msg)
+		return
+	}
+	r = askWhole(r)
 	ask := func(b []byte) (*recorder, compactResult, error) {
 		rec := &recorder{header: http.Header{}, status: 200}
 		s.serve(rec, r, provider.Responses, b)
@@ -1879,6 +1892,11 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 			return rec, compactResult{}, nil
 		}
 		res, err := compactReply(rec.body.Bytes())
+		if t := bytes.TrimSpace(rec.body.Bytes()); err == nil && res.Status == "" && (len(t) == 0 || t[0] != '{') {
+			// a stream with no response.completed stopped before its end:
+			// what it had said is no summary (#2274)
+			err = errEndedShort
+		}
 		return rec, res, err
 	}
 	rec, res, err := ask(body)
@@ -1904,6 +1922,8 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		}
 	}
 	if rec.status >= 400 {
+		_, msg := compactFailure(body, rec)
+		s.compactFails.failed(key, rec.status, msg)
 		for k, vs := range rec.header {
 			w.Header()[k] = vs
 		}
@@ -1911,8 +1931,22 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		w.Write(rec.body.Bytes())
 		return
 	}
+	if err == nil && local == "" && res.Status == "incomplete" {
+		// cut short — its output limit — it's no summary (#2274)
+		why := "unknown"
+		var d struct {
+			Reason string `json:"reason"`
+		}
+		if json.Unmarshal(res.IncompleteDetails, &d) == nil && d.Reason != "" {
+			why = d.Reason
+		}
+		err = fmt.Errorf("%s (%s)", incompleteReply, why)
+	}
 	if err != nil {
-		writeError(w, provider.Responses, 502, "compaction: "+err.Error())
+		who, _ := compactFailure(body, rec)
+		msg := "compaction: " + who + ": " + err.Error() + ", so there is no summary"
+		s.compactFails.failed(key, http.StatusBadGateway, err.Error())
+		writeError(w, provider.Responses, 502, msg)
 		return
 	}
 	var sum strings.Builder
@@ -1929,9 +1963,11 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		}
 	}
 	if strings.TrimSpace(sum.String()) == "" {
+		s.compactFails.failed(key, http.StatusBadGateway, "the model wrote no summary")
 		writeError(w, provider.Responses, 502, "compaction: the model wrote no summary")
 		return
 	}
+	s.compactFails.done(key)
 	id := res.ID
 	if id == "" {
 		id = fmt.Sprintf("resp_magpie_%d", time.Now().UnixNano())

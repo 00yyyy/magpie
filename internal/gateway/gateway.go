@@ -363,6 +363,10 @@ type Server struct {
 	debug        bool
 	trace        trace // what routing did with each request, for the Gateway view
 	titlePrompts titlePrompts
+	// compactFails are the summaries each Codex conversation failed to
+	// get in a row, for a compaction that keeps failing to stop being
+	// asked (codex_compact_guard.go, #2274)
+	compactFails compactFails
 	// codexTurns is the model each Codex last had a turn of its own
 	// answered on, by caller (codexMemoryStandIn)
 	codexTurns sync.Map
@@ -2193,6 +2197,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// way to Codex, and who sealed it remembered once it has answered
 	// (#1099)
 	var sealedBy *candidate
+	wantWhole := wantsWhole(r.Context())
 	if from == provider.Responses && compactionTriggerIn(body) {
 		watch := &compactionWatch{w: w}
 		w = watch
@@ -2230,7 +2235,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// and once the agent has the stream's headers from an earlier try's
 		// keepalives, for a failure to be told as the stream's error
 		hw := newHoldWriter(w, !last || again < max(lastRetries, rateRetries) || other != nil || kept.sent || autoPicks(c) && repicked < 2 ||
-			patience > 0 && rounds < replanRounds && (waitFrom.IsZero() || time.Since(waitFrom) < patience))
+			patience > 0 && rounds < replanRounds && (waitFrom.IsZero() || time.Since(waitFrom) < patience) || wantWhole)
+		// a compaction's summary is held to its end, for a cut or an
+		// error halfway to go to the next candidate (#2274)
+		hw.wantWhole = wantWhole
 		// Claude's and GPT's reasoning is held for a refusal after it only
 		// while another candidate could answer instead: the last one's
 		// refusal isn't asked again, so holding it only kept a lone relay's
@@ -2954,6 +2962,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// one doesn't rest (ylorn on Discord: acct-1 had rested for it).
 			// The last one left is asked again after a moment, as for any
 			// 503, before the agent is told
+			if other == nil {
+				other = &Try{Status: call.Status, Error: call.Error}
+			}
+			try.Fail = failOther
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			skipped = append(skipped, c.label()+": "+call.Error)
+			continue
+		}
+		if !last && hw.failed() && hw.wantWhole && strings.HasPrefix(hw.failMsg, incompleteReply) {
+			// a summary the model cut short — its output limit reached —
+			// is the model's doing, not the account's: the next is asked,
+			// and nobody rests (#2274)
 			if other == nil {
 				other = &Try{Status: call.Status, Error: call.Error}
 			}

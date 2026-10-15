@@ -1442,6 +1442,15 @@ type holdWriter struct {
 	// reply is asked again instead of ended: the guard then reads the
 	// next try's afresh
 	reask func(loopTrip) bool
+
+	// wantWhole: a reply wanted only whole, a compaction's summary (#2274): its
+	// stream is held to its end, never let through at its first content,
+	// so an error or a cut anywhere in it is a failure the next candidate
+	// answers, and its account rests for, as one before any content is.
+	// Let through at its first content, Antigravity's "the reply ended
+	// before it was complete" and its 429 halfway went to the summary
+	// as the only answer, the next account never asked
+	wantWhole bool
 }
 
 // onLoop sets what is told of a loop before it ends the reply (reask),
@@ -1731,7 +1740,7 @@ func (h *holdWriter) scan() {
 			h.buffered = true
 			continue
 		case eventThinking:
-			if h.thinkingShown {
+			if h.thinkingShown && !h.wantWhole {
 				h.flow()
 				return
 			}
@@ -1747,7 +1756,17 @@ func (h *holdWriter) scan() {
 			h.failure, h.failMsg, h.refused = status, msg, true
 			return
 		}
+		if h.wantWhole {
+			if why, ok := endedIncomplete(rest[:end]); ok {
+				h.failure, h.failMsg = http.StatusBadGateway, why
+				return
+			}
+			continue // content, held with the rest (whole)
+		}
 		h.flow()
+		return
+	}
+	if h.wantWhole {
 		return
 	}
 	if h.alive.tooQuiet(0) {
@@ -1977,6 +1996,12 @@ func (h *holdWriter) settle() {
 		}
 		return
 	}
+	if h.wantWhole && h.stream && h.status < 400 && !h.ended && (h.ctx == nil || h.ctx.Err() == nil) {
+		// a reply wanted whole that stopped before its last event, with
+		// no error said (#2274)
+		h.failure, h.failMsg = http.StatusBadGateway, errEndedShort.Error()
+		return
+	}
 	if !h.whole {
 		return
 	}
@@ -2195,7 +2220,7 @@ func (h *holdWriter) keepQuiet() {
 	if !h.heard.IsZero() && time.Since(h.heard) >= keepaliveLongest {
 		return // a stream stuck this long is left for a timeout to end
 	}
-	if !h.passing && h.stream && h.failure == 0 && !h.whole && h.held.Len() > 0 && h.alive.tooQuiet(0) {
+	if !h.passing && h.stream && h.failure == 0 && !h.whole && !h.wantWhole && h.held.Len() > 0 && h.alive.tooQuiet(0) {
 		// a stream held while its vendor is quiet: Codex would hang up
 		// before the next event let it through (agentQuietMost)
 		h.flow()
@@ -2227,6 +2252,46 @@ func (h *holdWriter) keepQuiet() {
 func (h *holdWriter) started() bool {
 	return h.first.first != 0 || h.passing || h.ended || h.failure != 0 || h.whole || h.status >= 400
 }
+
+// endedIncomplete says a Responses event ends its reply cut short —
+// response.incomplete, or a completed one whose status says so — and why:
+// for a reply wanted whole (wantWhole), no answer (#2274). A filter's
+// reason is a refusal, read before this (streamEvent).
+func endedIncomplete(ev []byte) (string, bool) {
+	if !bytes.Contains(ev, []byte("incomplete")) {
+		return "", false
+	}
+	var data []byte
+	for _, ln := range bytes.Split(ev, []byte("\n")) {
+		if ln = bytes.TrimRight(ln, "\r"); bytes.HasPrefix(ln, []byte("data:")) {
+			data = append(data, bytes.TrimSpace(ln[5:])...)
+		}
+	}
+	var v struct {
+		Type     string `json:"type"`
+		Response struct {
+			Status            string `json:"status"`
+			IncompleteDetails *struct {
+				Reason string `json:"reason"`
+			} `json:"incomplete_details"`
+		} `json:"response"`
+	}
+	if json.Unmarshal(data, &v) != nil {
+		return "", false
+	}
+	if v.Type != "response.incomplete" && (v.Type != "response.completed" || v.Response.Status != "incomplete") {
+		return "", false
+	}
+	why := "unknown"
+	if d := v.Response.IncompleteDetails; d != nil && d.Reason != "" {
+		why = d.Reason
+	}
+	return incompleteReply + " (" + why + ")", true
+}
+
+// incompleteReply opens what a reply wanted whole that ended incomplete
+// failed with (endedIncomplete).
+const incompleteReply = "the reply ended incomplete"
 
 // eventEnd is where the first whole event in b ends, or -1.
 func eventEnd(b []byte) int {
