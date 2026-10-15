@@ -2638,7 +2638,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		if r.Context().Err() != nil && !hw.ended {
 			// the agent went away: nobody failed, and nobody else is asked
-			call.Status, call.Error = 499, "the agent canceled the request"
+			call.Status, call.Error = canceled(r.Context())
 			try.Status, try.Error, try.Fail = call.Status, call.Error, failCanceled
 			watched.attempt(call, try, c.p.ID, sent, hw, capture)
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
@@ -2949,7 +2949,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				i--
 				continue
 			case <-r.Context().Done():
-				call.Status, call.Error = 499, "the agent canceled the request"
+				call.Status, call.Error = canceled(r.Context())
 				try.Gone = true
 				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			}
@@ -3037,7 +3037,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					cands = append(cands[:i+1:i+1], next...)
 					continue
 				}
-				call.Status, call.Error = 499, "the agent canceled the request"
+				call.Status, call.Error = canceled(r.Context())
 				try.Gone = true
 				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 				break
@@ -3056,7 +3056,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				i--
 				continue
 			case <-r.Context().Done():
-				call.Status, call.Error = 499, "the agent canceled the request"
+				call.Status, call.Error = canceled(r.Context())
 				try.Gone = true
 				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			}
