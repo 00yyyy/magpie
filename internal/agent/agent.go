@@ -536,7 +536,8 @@ func ids(as []*Agent) []string {
 // in others, and either is taken in both. A value the picker offers as is
 // stays, and so does one it doesn't know (a model the agent reaches on its
 // own that isn't listed); a "magpie/…" value the catalog doesn't have is an
-// error rather than a model the agent would ask its own vendor for. The
+// error rather than a model the agent would ask its own vendor for, and so
+// is one of magpie's the agent isn't shown (notOffered). The
 // agent's suffix after the model (SplitSuffix) stays as typed, and so does
 // a list of models, the user's own.
 func (a *Agent) Spell(key, v string) (string, error) {
@@ -570,7 +571,45 @@ func (a *Agent) Spell(key, v string) (string, error) {
 	if prefixed {
 		return "", fmt.Errorf("%s isn't a model in magpie's catalog (magpie models lists them)", ref)
 	}
+	if err := a.notOffered(ref, opts); err != nil {
+		return "", err
+	}
 	return v, nil
+}
+
+// notOffered refuses a value that names one of magpie's models, or one of
+// its providers or routing groups, that the agent isn't shown: kept from
+// the agent (magpie visible, a model not ticked for it) or not on its
+// provider's list yet (a remote magpie's group added there since the list
+// was fetched). Taken as the agent's own, Pi read remote/group/smart as
+// its own provider "remote" and model "group/smart", and was taken out of
+// magpie for a provider it doesn't have (#2376). A provider id the agent's
+// own models go by too (openai/… in Pi) stays the agent's.
+func (a *Agent) notOffered(ref string, opts []Option) error {
+	pid, model, ok := strings.Cut(ref, "/")
+	if !ok || pid == "" || model == "" {
+		return nil
+	}
+	if slices.ContainsFunc(opts, func(o Option) bool { return Own(o) && strings.HasPrefix(o.Value, pid+"/") }) {
+		return nil
+	}
+	ids := []string{ref, provider.RenamedRef(ref)}
+	shown, _ := provider.CatalogFor(a.ListsFor())
+	if slices.ContainsFunc(shown, func(e provider.Entry) bool { return slices.Contains(ids, e.ID) }) {
+		return nil // shown the agent: a field may offer fewer (Claude Desktop's tiers)
+	}
+	for _, e := range provider.Catalog() {
+		if slices.Contains(ids, e.ID) {
+			return fmt.Errorf("%s is one of magpie's models, but %s isn't shown it: magpie models %s says why, and magpie visible %s all shows it every model", ref, a.Name, a.ID, a.ID)
+		}
+	}
+	if pid+"/" == provider.GroupPrefix {
+		return fmt.Errorf("magpie has no routing group %s (magpie models lists them)", ref)
+	}
+	if p, err := provider.Find(pid); err == nil && (p.ID == pid || slices.Contains(p.Was, pid)) {
+		return fmt.Errorf("%s's model list has no %s: magpie provider refresh %s fetches the list again (or add the model to it in its editor), and magpie models %s lists what %s is shown", p.ID, model, p.ID, a.ID, a.Name)
+	}
+	return nil
 }
 
 // split is v as the model the picker offers and the agent's suffix after
