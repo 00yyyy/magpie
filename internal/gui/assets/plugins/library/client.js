@@ -1696,7 +1696,11 @@ magpie.plugin("library", (ctx) => {
         continue;
       }
       const [text, tip] = healthWords(e.h, lib.servers.find((s) => s.name === b.dataset.server));
-      b.className = "lib-health " + (e.h.state === "ok" ? "ok" : e.h.state === "auth" ? "auth" : "err");
+      // a check magpie couldn't make for want of a variable only the
+      // agent's own launch sets says nothing of the server, so it isn't
+      // painted as broken (#2308, ASD-max: Codex's host-only codex_app,
+      // whose pipe Codex itself hands it)
+      b.className = "lib-health " + (e.h.state === "ok" ? "ok" : e.h.state === "auth" ? "auth" : e.h.why === "novar" ? "unknown" : "err");
       b.replaceChildren(el("span", "", text));
       if (toolList(b.dataset.server).length) {
         const open = toolsOpen.has(b.dataset.server);

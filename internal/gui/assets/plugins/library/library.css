@@ -485,6 +485,8 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-health.auth::before { background: var(--amber); }
 .lib-health.err { color: var(--red); }
 .lib-health.err::before { background: var(--red); }
+/* not checked here, nothing known against it: a ring, not a red dot (#2308) */
+.lib-health.unknown::before { background: transparent; box-shadow: inset 0 0 0 1.2px var(--faint); }
 /* a server that listed its tools: its status opens them, a chevron says so */
 .lib-health.has-list::after { content: ""; flex: none; width: 4px; height: 4px; margin: 0 1px 2px 1px; border: solid currentColor; border-width: 0 1.2px 1.2px 0; transform: rotate(45deg); opacity: .7; transition: transform .14s var(--ease); }
 .lib-health.has-list[aria-expanded="true"]::after { transform: rotate(-135deg); margin-bottom: -2px; }
