@@ -2047,11 +2047,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// the rule's member, the member's others behind it (#1946)
 		cands, pl = ruleOver(hit, ms, cands, pl, aff)
 	}
+	// the groups in the group as the rule's has them: a model it shares
+	// with a group ahead of it is its, for its rules (#2361)
+	ruled := ms
+	if hit != nil && strings.HasPrefix(hit.Use, provider.GroupPrefix) {
+		ruled = homed(ms, []string{hit.Use})
+	}
 	// the rules of the groups in the group, down the one that goes first
 	var nested []NestedRule
 	var nestedAt []string
 	if ruleReq != nil && !modelRuled(hit, ms, cands) {
-		nested, nestedAt, cands, pl = s.nestedRules(ruleAt, ruleReq, agent, ask, ms, cands, pl, aff)
+		nested, nestedAt, cands, pl = s.nestedRules(ruleAt, ruleReq, agent, ask, ruled, cands, pl, aff)
 	}
 	// the effort a group's decision model picked for the turn: the
 	// outermost group's that did

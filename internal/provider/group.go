@@ -263,6 +263,57 @@ type Member struct {
 	// Fast is set on a member the group sends in its vendor's fast mode
 	// (Group.Fast), where its model has one.
 	Fast bool
+	// At is where the walk down the group met it, counting every model of
+	// every group in it, the same model's later places too: a group's own
+	// models are met in its own order.
+	At int
+	// Also are the other places further down the walk that have the same
+	// model at the same effort, which the group asks once, where it was
+	// met first: a rule naming a later group in the group still has it,
+	// in that group's own order (#2361).
+	Also []Member
+}
+
+// In is the member as the group's member id has it: itself, where it was
+// met further down the walk (Also), or, for a model, where a group in the
+// group ahead of it has it too (#625). ok is false when id isn't one of
+// its places.
+func (m Member) In(id string) (Member, bool) {
+	if m.ID == id {
+		return m, true
+	}
+	for _, o := range m.Also {
+		if o.ID == id {
+			return o, true
+		}
+	}
+	if !strings.HasPrefix(id, GroupPrefix) && len(m.Path) > 1 && m.Path[len(m.Path)-1] == id {
+		return m, true
+	}
+	return Member{}, false
+}
+
+// Homed is the member as the place under the members path names (the
+// group's member ids from the top) has it, its others in Also; ok is
+// false when none of its places is there.
+func (m Member) Homed(path []string) (Member, bool) {
+	under := func(o Member) bool { return len(o.Path) > len(path) && slices.Equal(o.Path[:len(path)], path) }
+	if under(m) {
+		return m, true
+	}
+	for i, o := range m.Also {
+		if under(o) {
+			o.Also = append(append([]Member{m.only()}, m.Also[:i]...), m.Also[i+1:]...)
+			return o, true
+		}
+	}
+	return Member{}, false
+}
+
+// only is the member without its other places.
+func (m Member) only() Member {
+	m.Also = nil
+	return m
 }
 
 // Groups are the ids of the groups in the group the model is of, the
@@ -278,7 +329,14 @@ func (m Member) Groups() []string {
 // Below is the member as the group at depth (0 the group itself, 1 the
 // group in it Path[0] names, …) has it.
 func (m Member) Below(depth int) Member {
-	return Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort, Fast: m.Fast}
+	out := Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort, Fast: m.Fast, At: m.At}
+	// its other places in the same group at depth
+	for _, o := range m.Also {
+		if len(o.Path) > depth && slices.Equal(o.Path[:depth], m.Path[:depth]) {
+			out.Also = append(out.Also, o.Below(depth))
+		}
+	}
+	return out
 }
 
 // maxNest is how deep groups in groups may go.
@@ -711,30 +769,39 @@ func membersIn(entries []Entry, all []Group, g Group) []Member {
 // membersOff is membersIn less the models off reports.
 func membersOff(entries []Entry, all []Group, g Group, off func(pid, model string) bool) []Member {
 	var out []Member
-	seen := map[string]bool{}
+	seen := map[string]int{} // where in out
+	at := 0
 	var walk func(g Group, path []string, via []Group, in []string)
 	walk = func(g Group, path []string, via []Group, in []string) {
 		for _, id := range g.routes() {
-			at := append(slices.Clone(path), id)
+			here := append(slices.Clone(path), id)
 			if gid, ok := strings.CutPrefix(id, GroupPrefix); ok {
 				sub, ok := groupOf(all, gid)
 				if !ok || sub.Disabled || slices.Contains(in, gid) || len(via) >= maxNest {
 					continue // gone, switched off, a loop, or deeper than anyone nests
 				}
-				walk(sub, at, append(slices.Clone(via), sub.Live()), append(slices.Clone(in), gid))
+				walk(sub, here, append(slices.Clone(via), sub.Live()), append(slices.Clone(in), gid))
 				continue
 			}
 			model, effort := memberEffortIn(entries, id)
 			p, m, ok := resolveIn(entries, model)
 			key := WithMemberEffort(p.ID+"/"+m, effort)
-			if !ok || seen[key] {
+			if !ok {
+				continue
+			}
+			mem := Member{ID: here[0], Path: here, Via: via, Provider: p, Model: m, Effort: effort, Fast: g.IsFast(id), At: at}
+			at++
+			if i, ok := seen[key]; ok {
+				// asked once, where it was met first; a rule naming this
+				// group still finds it here (#2361)
+				out[i].Also = append(out[i].Also, mem)
 				continue
 			}
 			if off(p.ID, m) {
 				continue // the user turned it off (#1867): a group never reaches it
 			}
-			seen[key] = true
-			out = append(out, Member{ID: at[0], Path: at, Via: via, Provider: p, Model: m, Effort: effort, Fast: g.IsFast(id)})
+			seen[key] = len(out)
+			out = append(out, mem)
 		}
 	}
 	walk(g, nil, nil, []string{g.ID})

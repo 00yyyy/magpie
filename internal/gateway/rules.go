@@ -363,8 +363,11 @@ func memberContexts(ms []provider.Member) map[string]int {
 	for _, m := range ms {
 		for _, e := range cat {
 			if e.Group == "" && e.Provider.ID == m.Provider.ID && e.Model == m.Model {
-				if c, ok := out[m.ID]; !ok || e.Context > 0 && (c == 0 || e.Context < c) {
-					out[m.ID] = e.Context
+				// a later group in the group that has it too (#2361)
+				for _, id := range append([]string{m.ID}, alsoIDs(m)...) {
+					if c, ok := out[id]; !ok || e.Context > 0 && (c == 0 || e.Context < c) {
+						out[id] = e.Context
+					}
 				}
 				// a model the group names that a group in it has too (named)
 				if n := len(m.Path); n > 1 {
@@ -375,6 +378,15 @@ func memberContexts(ms []provider.Member) map[string]int {
 				break
 			}
 		}
+	}
+	return out
+}
+
+// alsoIDs are the group's member ids of m's other places (Also).
+func alsoIDs(m provider.Member) []string {
+	var out []string
+	for _, o := range m.Also {
+		out = append(out, o.ID)
 	}
 	return out
 }
@@ -461,6 +473,10 @@ func (s *Server) nestedRules(at string, req *Request, agent string, ask classifi
 			continue
 		}
 		cands, pl = ruleOver(h, subMs, cands, pl, aff)
+		if strings.HasPrefix(h.Use, provider.GroupPrefix) {
+			// further down, the way the group it chose has its models
+			ms = homed(ms, append(slices.Clone(lead.Path[:depth+1]), h.Use))
+		}
 	}
 	return out, keys, cands, pl
 }
@@ -469,9 +485,26 @@ func (s *Server) nestedRules(at string, req *Request, agent string, ask classifi
 // the models of the group in the group it is. A model the group names
 // itself that a group in it, ahead of it, names too is kept where it was
 // met first (provider's membersIn), in that group, and a rule naming it
-// is still its (#625).
+// is still its (#625); so is a model two groups in the group share, for a
+// rule naming the later one (#2361).
 func named(m provider.Member, id string) bool {
-	return m.ID == id || !strings.HasPrefix(id, provider.GroupPrefix) && len(m.Path) > 1 && m.Path[len(m.Path)-1] == id
+	_, ok := m.In(id)
+	return ok
+}
+
+// membersNamed are the models of the group's member id among ms, each as
+// that member has it and in its own order: a group in the group that
+// shares models with one ahead of it has them in its order, not the
+// other's (#2361).
+func membersNamed(id string, ms []provider.Member) []provider.Member {
+	var out []provider.Member
+	for _, m := range ms {
+		if o, ok := m.In(id); ok {
+			out = append(out, o)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b provider.Member) int { return a.At - b.At })
+	return out
 }
 
 // ruleMembers are the models of the member a rule names, among those
@@ -480,12 +513,22 @@ func ruleMembers(hit *RuleHit, ms []provider.Member) []provider.Member {
 	if hit == nil || hit.Use == "" {
 		return nil
 	}
-	var out []provider.Member
-	for _, m := range ms {
-		if named(m, hit.Use) {
-			out = append(out, m)
+	return membersNamed(hit.Use, ms)
+}
+
+// homed is ms with each model that has a place under path (the group's
+// member ids from the top) as that place has it, in the walk's order:
+// the groups in a group a rule chose decide among its models with their
+// own rules, its own order and the way down it has them (#2361).
+func homed(ms []provider.Member, path []string) []provider.Member {
+	out := make([]provider.Member, len(ms))
+	for i, m := range ms {
+		out[i] = m
+		if o, ok := m.Homed(path); ok {
+			out[i] = o
 		}
 	}
+	slices.SortStableFunc(out, func(a, b provider.Member) int { return a.At - b.At })
 	return out
 }
 
@@ -507,11 +550,7 @@ func ruleOrder(hit *RuleHit, ms []provider.Member) []provider.Member {
 		return out
 	}
 	for _, id := range hit.Then {
-		for _, m := range ms {
-			if named(m, id) {
-				out = append(out, m)
-			}
-		}
+		out = append(out, membersNamed(id, ms)...)
 	}
 	return out
 }
@@ -565,7 +604,8 @@ func ruleFirst(ms []provider.Member, cs []candidate, pl planned) (out []candidat
 // going outside it. One kept outside it, which took over when it failed,
 // isn't held there: the turn goes back to the rule's member once one of it
 // is ready again, its rest over.
-func ruleOver(hit *RuleHit, ms []provider.Member, cs []candidate, pl planned, aff *Affinity) ([]candidate, planned) {
+func ruleOver(hit *RuleHit, ms []provider.Member, cs []candidate, pl planned, aff *Affinity) (out []candidate, _ planned) {
+	defer func() { homeCands(out, ruleMembers(hit, ms)) }()
 	kept := aff != nil && aff.Kept
 	if hit.Held && kept && len(cs) > 1 {
 		ordered := ruleOrder(hit, ms)
@@ -613,6 +653,17 @@ func ruleOver(hit *RuleHit, ms []provider.Member, cs []candidate, pl planned, af
 		aff.Kept, aff.Why = false, "rule"
 	}
 	return cs, pl
+}
+
+// homeCands sends the keys or accounts of the rule's members as the
+// member the rule names has them: fast, and its first token's wait, where
+// a group ahead of it has the same model too (#2361).
+func homeCands(cs []candidate, ms []provider.Member) {
+	for i := range cs {
+		if j := slices.IndexFunc(ms, func(m provider.Member) bool { return ofMember(cs[i], m) }); j >= 0 {
+			cs[i].fast, cs[i].firstToken = ms[j].Fast, innerFirstToken(ms[j])
+		}
+	}
 }
 
 // applyRule puts a rule's members first (ruleOrder) and says in the hit
