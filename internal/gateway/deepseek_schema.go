@@ -165,3 +165,34 @@ func unicodeNullEscape(pattern string) string {
 	}
 	return out.String()
 }
+
+// deepseekTokenField names a chat request's reply length max_tokens, the
+// field DeepSeek's chat API reads: it has no max_completion_tokens and
+// ignores one, so a client that asks OpenAI's way (DSH's pi-ai with a
+// custom provider) got DeepSeek's default, 8K without thinking (#2355).
+// Only the key is renamed, in place, so the rest of the body keeps its
+// bytes. A request that names max_tokens too goes as it is, since
+// DeepSeek reads that one. Another vendor's chat API is left alone:
+// OpenAI's and Azure's want max_completion_tokens.
+func deepseekTokenField(p provider.Provider, to provider.Protocol, body []byte) []byte {
+	if to != provider.Chat || p.Preset != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" {
+		return body
+	}
+	if !bytes.Contains(body, []byte(`"max_completion_tokens"`)) || gjson.GetBytes(body, "max_tokens").Exists() {
+		return body
+	}
+	v := gjson.GetBytes(body, "max_completion_tokens")
+	if !v.Exists() || v.Index <= 0 {
+		return body
+	}
+	// the key is the last string before its value: only a colon and
+	// spaces lie between them
+	key := bytes.LastIndex(body[:v.Index], []byte(`"max_completion_tokens"`))
+	if key < 0 || strings.Trim(string(body[key+len(`"max_completion_tokens"`):v.Index]), " \t\r\n:") != "" {
+		return body
+	}
+	out := make([]byte, 0, len(body))
+	out = append(out, body[:key]...)
+	out = append(out, `"max_tokens"`...)
+	return append(out, body[key+len(`"max_completion_tokens"`):]...)
+}
