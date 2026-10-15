@@ -8448,11 +8448,9 @@ function drawEditor(p, presetID) {
     h.append(icon(p?.icon || (copyOf && draft.icon) || pr?.icon || "generic"), el("b", "", p ? p.name : copyOf ? t("Copy of {name}", { name: copyOf.name }) : pr ? pr.name : t("Custom provider")));
     if (pr?.kind === "partner") { if (partnerNote(pr)) h.append(el("span", "note", partnerNote(pr))); } else if (pr?.note) h.append(el("span", "note", t(pr.note)));
     h.append(el("span", "grow"));
-    // a plugin's provider has plugin://<id> for its base, and its id is no
-    // address to open: only a host with a dot or a port makes a link
     // a region with docs of its own (Tencent Cloud's plan and TokenHub) has
     // its page here, following the region picked below
-    const site = regionAt(pr, draft)?.website || pr?.website || p?.website || (/[.:]/.test(p?.host || "") ? "https://" + p.host : "");
+    const site = regionAt(pr, draft)?.website || pr?.website || p?.website || hostSite(p);
     if (site) {
       const b = el("button", "link site", hostOf(site) + " ↗");
       b.dataset.url = site;
@@ -14260,6 +14258,23 @@ function localAddress(s) {
     if ((u.protocol !== "http:" && u.protocol !== "https:") || !u.hostname) return null;
     return u.protocol + "//" + u.host;
   } catch { return null; }
+}
+// hostSite is the page the editor's head links to for a provider with no
+// website: the origin of the base its host is shown from, under that base's
+// own scheme, so a local server at http://127.0.0.1:7863/v1 opens over http
+// (#2377). https only when no base of its own spells the host (a moved
+// subscription shows the host it had). A plugin's provider has
+// plugin://<id> for its base, and its id is no address to open: only a host
+// with a dot or a port makes a link.
+function hostSite(p) {
+  const h = (p?.host || "").toLowerCase();
+  if (!/[.:]/.test(h)) return "";
+  for (const u of [p.chat, p.responses, p.anthropic, p.gemini, p.decide]) {
+    // the host as provider.HostOf reads it: past the scheme, up to the path
+    const m = /^(https?):\/\/([^/?#]*)/i.exec((u || "").trim());
+    if (m && m[2].toLowerCase() === h) return m[1].toLowerCase() + "://" + m[2];
+  }
+  return "https://" + p.host;
 }
 // originOf is the origin of the first of a provider's URLs that is set.
 function originOf(x) {
