@@ -126,13 +126,21 @@ node --test internal/gui/tests/agent-connect.test.cjs internal/gui/tests/agent-d
 
 ## Lody import handoff
 
-[`lody.go`](../../internal/agent/lody.go) detects Lody's standard data folders
-(`~/.lody`, `~/.lody-oss`, or the platform configuration folders for Lody,
-Lody OSS and Lody Nightly), or its macOS application bundle. Its row opens
+[`lody.go`](../../internal/agent/lody.go) detects Lody by its home folder
+(`~/.lody`, `~/.lody-oss`) only when it holds an entry Lody makes there
+(`workspace-catalog.json`, `loro-repo`, `agent-binaries` or
+`code-collab-v2`), so a bare folder of that name another tool made isn't
+Lody; by its Electron data folder under the OS's config folder (Lody, Lody
+OSS, Lody Nightly: `~/Library/Application Support`, `%APPDATA%`,
+`~/.config`); or by a macOS bundle whose id starts `ai.lody.` (the real app
+is `ai.lody.desktop`). A Windows or Linux install that has never been
+opened has no data folder yet and isn't shown. Its row opens
 `lody://provider/import?v=1&data=<base64url JSON>` with the Magpie envelope
 and seven runtime targets. Only loopback HTTP gateways are offered; the key
 is always the public attribution token `magpie-lody`, never a LAN secret.
-The OS chooses the installed Lody handler. A compatible Lody build must
+With `MAGPIE_ADDR` pinned beyond loopback there is no link: the row has no
+button, and `magpie lody add` says why and opens nothing
+(`TestLodyLinkCarriesNoSecret`). The OS chooses the installed Lody handler. A compatible Lody build must
 implement this import route.
 
 Lody asks which Providers to add, names them with `-magpie`, and writes only

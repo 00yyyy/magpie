@@ -3,11 +3,16 @@ package agent
 import (
 	"encoding/base64"
 	"encoding/json"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/gateway"
 )
 
 func TestLodyLink(t *testing.T) {
@@ -69,15 +74,46 @@ func TestLodyDetectionAndRegistration(t *testing.T) {
 	}
 	for _, name := range []string{".lody", ".lody-oss"} {
 		dir := filepath.Join(home, name)
+		// a bare folder of that name another tool made isn't Lody
+		if err := os.MkdirAll(filepath.Join(dir, "bin"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if a.Detected() {
+			t.Fatalf("a %s without Lody's own entries counted as Lody", name)
+		}
+		for _, m := range lodyMarks {
+			if err := os.WriteFile(filepath.Join(dir, m), nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if !a.Detected() {
+				t.Fatalf("missed %s with %s", name, m)
+			}
+			if err := os.Remove(filepath.Join(dir, m)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range lodyNames {
+		dir := filepath.Join(cfg, name)
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)
 		}
 		if !a.Detected() {
-			t.Fatalf("missed %s", name)
+			t.Fatalf("missed Lody's data folder %s", dir)
 		}
 		if err := os.Remove(dir); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if a.Detected() {
+		t.Fatal("still detected after its folders went")
 	}
 	if a.Added != nil || len(a.Fields) != 0 || a.Sync != nil || a.Unwire != nil {
 		t.Fatal("import adapter must not infer status or edit Lody settings")
@@ -91,4 +127,114 @@ func TestLodyDetectionAndRegistration(t *testing.T) {
 		}
 	}
 	t.Fatal("Lody missing from Agents")
+}
+
+// A Lody.app is Lody's only with its bundle id (ai.lody.desktop on the
+// real app) or a plist that says nothing; another vendor's Lody.app isn't.
+func TestLodyBundle(t *testing.T) {
+	plist := func(id string) string {
+		return `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>` + id + `</string></dict></plist>`
+	}
+	for _, c := range []struct {
+		name, plist string
+		want        bool
+	}{
+		{"Lody", plist("ai.lody.desktop"), true},
+		{"Lody Nightly", plist("ai.lody.desktop.nightly"), true},
+		{"Lody", "bplist00", true},
+		{"Lody", plist("com.example.lody"), false},
+		{"Lody", plist("ai.lodyx.desktop"), false},
+		{"Lodyssey", plist("ai.lody.desktop"), false},
+	} {
+		dir := t.TempDir()
+		contents := filepath.Join(dir, c.name+".app", "Contents")
+		if err := os.MkdirAll(contents, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(contents, "Info.plist"), []byte(c.plist), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if got := lodyBundle([]string{dir}); got != c.want {
+			t.Errorf("%s.app with %q: %v, want %v", c.name, c.plist, got, c.want)
+		}
+	}
+	if lodyBundle([]string{t.TempDir()}) {
+		t.Error("no bundle counted as Lody")
+	}
+}
+
+// Lody's link carries only the public magpie-lody token and a loopback
+// gateway, with LAN sharing on too; with MAGPIE_ADDR pinned beyond
+// loopback, where that token is turned away, there is no link at all
+// rather than one carrying the LAN key.
+func TestLodyLinkCarriesNoSecret(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("MAGPIE_ADDR", "")
+	if err := access.ConfigureLAN(true, false); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { access.ConfigureLAN(false, false) })
+	lan := access.LANSecret()
+	if !strings.HasPrefix(lan, access.Prefix) {
+		t.Fatalf("LAN key %q", lan)
+	}
+	link := LodyLink(gateway.URL())
+	if link == "" {
+		t.Fatalf("no link for the loopback gateway %s", gateway.URL())
+	}
+	u, err := url.Parse(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := base64.RawURLEncoding.DecodeString(u.Query().Get("data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(link, lan) || strings.Contains(string(data), lan) {
+		t.Fatalf("the LAN key went into Lody's link: %s", data)
+	}
+	var got struct {
+		Auth struct {
+			APIKey string `json:"apiKey"`
+		} `json:"auth"`
+		Endpoints []struct {
+			BaseURL   string `json:"baseUrl"`
+			ModelsURL string `json:"modelsUrl"`
+		} `json:"endpoints"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Auth.APIKey != gateway.TokenFor("lody") || got.Auth.APIKey != "magpie-lody" {
+		t.Fatalf("key %q, want magpie-lody", got.Auth.APIKey)
+	}
+	if len(got.Endpoints) == 0 {
+		t.Fatal("no endpoints")
+	}
+	for _, e := range got.Endpoints {
+		for _, s := range []string{e.BaseURL, e.ModelsURL} {
+			p, err := url.Parse(s)
+			if err != nil || p.Scheme != "http" || !loopbackHost(p.Hostname()) {
+				t.Fatalf("endpoint %q is not loopback", s)
+			}
+		}
+	}
+	for addr, want := range map[string]bool{"172.23.80.1:3425": false, "192.168.1.2:3425": false, "0.0.0.0:3425": true, "127.0.0.1:4567": true, "[::1]:4567": true} {
+		t.Setenv("MAGPIE_ADDR", addr)
+		gw := gateway.URL()
+		if got := LodyLink(gw) != ""; got != want {
+			t.Errorf("MAGPIE_ADDR %s (%s): link %v, want %v", addr, gw, got, want)
+		}
+	}
+}
+
+func loopbackHost(h string) bool {
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
 }

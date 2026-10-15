@@ -37,10 +37,22 @@ async function serve(route, lang, added) {
 const SAID = {
   en: [/^Not added · Cindy asks to add magpie/, /^Added · magpie is a provider in Cindy/],
   zh: [/^未添加 · /, /^已添加 · /],
+  "zh-TW": [/^未新增 · /, /^已新增 · /],
+  ja: [/^未追加 · /, /^追加済み · /],
+  de: [/^Nicht hinzugefügt · /, /^Hinzugefügt · /],
+};
+// Lody has no status magpie can read: its line asks to confirm in Lody, in
+// the reader's language, and never says added or not
+const UNKNOWN = {
+  en: "Opens Lody to add magpie as a provider — confirm it there",
+  zh: "打开 Lody 添加 magpie 供应商，在其中确认",
+  "zh-TW": "開啟 Lody 新增 magpie 供應商，在其中確認",
+  ja: "Lody を開いて magpie をプロバイダとして追加します。そちらで確認してください",
+  de: "Öffnet Lody, um magpie als Anbieter hinzuzufügen — dort bestätigen",
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const lang of ["en", "zh"]) {
+  for (const lang of Object.keys(SAID)) {
     for (const added of [false, true]) {
       test(`${engine} ${lang} ${added ? "added" : "not added"}: import rows show known or unknown status and open their app`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
@@ -63,8 +75,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await lody.scrollIntoViewIfNeeded();
         await lody.locator(".ag-st-t").waitFor();
         const hint = await lody.locator(".ag-st-t").innerText();
-        assert.match(hint, /Lody/);
-        assert.doesNotMatch(hint, /Not added|未添加|Added ·|已添加/);
+        assert.equal(hint, UNKNOWN[lang]);
+        for (const said of Object.values(SAID).flat()) assert.doesNotMatch(hint, said);
         assert.equal(await lody.locator(".ag-st").evaluate((e) => e.classList.contains("on")), false);
         const lodyOpened = page.waitForRequest((r) => r.url().includes("/api/open"));
         await lody.locator(".ag-start").click();
@@ -83,6 +95,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const who = await box('.row.agent[data-id="cindy"] > .who');
           assert(link.x >= who.right, `the button stays clear of the name at ${width}px`);
         }
+        // narrow: no page scroll sideways, and both import rows keep their
+        // line and button inside the window
+        await page.setViewportSize({ width: 420, height: 700 });
+        // the header's segments settle a moment after a resize, so wait for
+        // the state rather than reading it at once
+        await page.waitForFunction(() => document.documentElement.scrollWidth <= window.innerWidth, null, { timeout: 3000 }).catch(async () => {
+          assert.fail(`sideways scroll at 420px: ${await page.evaluate(() => document.documentElement.scrollWidth)}`);
+        });
+        for (const id of ["lody", "cindy"]) {
+          const r = page.locator(`.row.agent[data-id="${id}"]`);
+          for (const sel of [".ag-start", ".ag-st-t"]) {
+            const b = await r.locator(sel).evaluate((e) => { const x = e.getBoundingClientRect(); return { left: x.left, right: x.right, width: x.width }; });
+            assert(b.width > 0 && b.left >= 0 && b.right <= 420 + 0.5, `${id} ${sel} inside the window at 420px: ${JSON.stringify(b)}`);
+          }
+        }
+        await page.setViewportSize({ width: 960, height: 600 });
         // a click opens the app's link, the row's one control
         const opened = page.waitForRequest((r) => r.url().includes("/api/open"));
         await row.locator(".ag-start").click();

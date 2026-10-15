@@ -412,6 +412,10 @@ func run(args []string) error {
 		// `magpie cindy`: it takes magpie through its own link, confirmed there
 		if len(args) > 1 {
 			link := a.Import()
+			if link == "" {
+				// Lody takes only a gateway on this computer's loopback
+				return fmt.Errorf("%s takes magpie only at a loopback address, and the gateway is at %s: nothing was opened", a.Name, gateway.URL())
+			}
 			openInBrowser(link)
 			fmt.Println(green.Render("✓"), bold.Render(a.Name), muted.Render("opened to add magpie — confirm it there"))
 			fmt.Println(muted.Render("  " + link))
