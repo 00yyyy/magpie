@@ -6248,11 +6248,31 @@ func failTo(w http.ResponseWriter, a *keptAlive, proto provider.Protocol, status
 func streamError(w http.ResponseWriter, proto provider.Protocol, status int, msg string) {
 	sw := newSSEWriter(w)
 	sw.begun = true
-	ev := Event{Kind: KError, Text: msg, Status: status}
+	ev := Event{Kind: KError, Text: saysPassing(status, msg), Status: status}
 	if tooLong(status, msg) {
 		ev.Code = "context_length_exceeded"
 	}
 	makeEncoder(proto, sw, &Request{}).event(ev)
+}
+
+// passingSaid matches the words an agent that reads only an error's text
+// takes for a failure worth asking again (Pi's isRetryableError, #2372):
+// one of the usual statuses, a timeout, a rate limit, a busy or
+// unreachable server.
+var passingSaid = regexp.MustCompile(`(?i)\b(429|500|502|503|504)\b|timed? ?out|rate.?limit|too many requests|overloaded|service.?unavailable|server.?error|internal.?error|connection.?(error|refused|reset)|retry your request|try your request again`)
+
+// saysPassing is msg, an error sent in a stream whose status the agent
+// can no longer be told, with the status said in it when it is one a
+// moment may clear (408, 429, 5xx) and msg says so in no words an agent
+// knows: "Upstream service temporarily unavailable" and "no first token in
+// 30s" reached Pi, which judges by the text alone, as errors not worth
+// asking again, while Claude Code and Codex, told the same as a status,
+// asked again and were answered (#2372).
+func saysPassing(status int, msg string) string {
+	if status != http.StatusRequestTimeout && status != http.StatusTooManyRequests && status < 500 || passingSaid.MatchString(msg) {
+		return msg
+	}
+	return fmt.Sprintf("%s (%d: you can retry your request)", msg, status)
 }
 
 // writeError answers in the client's own error shape.
