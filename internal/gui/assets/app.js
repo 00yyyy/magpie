@@ -1145,12 +1145,14 @@ function connectSwitch(a) {
 // lists, what a new session starts on, the files magpie changed, and the
 // way back.
 
-// agents with no way onto magpie: no switch, the reason instead
+// agents with no way onto magpie: no switch, the reason instead, and that
+// it is why (@G_Z_Y on X read "Only Cursor's own models" beside "Can't
+// connect" as two things, and looked for Cursor CLI elsewhere)
 const NATIVE_ONLY = {
-  cursor: "Only Cursor's own models",
-  copilot: "Only GitHub Copilot's own models",
-  goose: "Only Goose's own providers",
-  devin: "Only Devin's own models",
+  cursor: "Uses only Cursor's own models, so magpie can't connect it",
+  copilot: "Uses only GitHub Copilot's own models, so magpie can't connect it",
+  goose: "Uses only Goose's own providers, so magpie can't connect it",
+  devin: "Uses only Devin's own models, so magpie can't connect it",
 };
 // agents that pick no model once started: the one they start on stays in
 // the row
@@ -1282,7 +1284,8 @@ function connectLine(a, kind) {
   const words = el("span", "ag-st-t");
   line.append(dot, words);
   const say = (s, cls) => { words.textContent = s; if (cls) line.classList.add(cls); };
-  if (kind === "no") { say(t(NATIVE_ONLY[a.id])); return line; }
+  // the reason wraps, never cut short: it is the row's only words
+  if (kind === "no") { say(t(NATIVE_ONLY[a.id]), NATIVE_ONLY[a.id] ? "why" : ""); return line; }
   if (kind === "link") {
     if (a.added == null) say(t("Opens {name} to add magpie as a provider — confirm it there", { name: a.name }));
     else if (a.added) say(t("Added · magpie is a provider in {agent}", { agent: a.name }), "on");

@@ -3909,6 +3909,9 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 .ag-st { flex: 0 0 100%; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 18px; color: var(--muted); }
 .ag-st .ag-st-t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ag-st .ag-st-t b { font-weight: 600; color: var(--fg-2); }
+.ag-st.why { align-items: flex-start; }
+.ag-st.why .ag-st-t { white-space: normal; overflow-wrap: anywhere; }
+.ag-st.why .ag-dot { margin-top: 6px; }
 .ag-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--faint); }
 .ag-st.on .ag-dot { background: var(--green); }
 .ag-st.wait .ag-dot, .ag-warn .ag-dot { background: var(--amber); }
