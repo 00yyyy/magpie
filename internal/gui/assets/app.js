@@ -3584,7 +3584,7 @@ function openRowMenu(anchor, acts) {
     // the click goes along, so an item that opens something below can
     // bring it into view (scrollOnPurpose)
     b.onclick = (e) => { e.stopPropagation(); closeAgentMenu(); o.run(e); };
-    b.onmouseenter = () => b.focus({ preventScroll: true });
+    hoverFocus(b);
     box.append(b);
     if (!o.off) items.push(b);
   }
@@ -14149,6 +14149,15 @@ function protoPicker(p, value, onChange) {
   return pill;
 }
 
+// hoverFocus: an item the pointer moves onto takes the focus. A list
+// redrawn under a still pointer (a search narrowing it) gets a mouseenter
+// too, which took the focus out of the search mid-word (#2439); one where
+// the last mousemove was is a redraw's (mouseenter comes before its move).
+let pointerAt = "";
+addEventListener("mousemove", (e) => { pointerAt = e.screenX + "," + e.screenY; }, true);
+function hoverFocus(b) {
+  b.onmouseenter = (e) => { if (e.screenX + "," + e.screenY !== pointerAt) b.focus({ preventScroll: true }); };
+}
 let protoMenu = null;
 function closeProtoMenu() {
   if (!protoMenu) return;
@@ -14247,7 +14256,7 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
         b.focus({ preventScroll: true });
       }
     };
-    b.onmouseenter = () => b.focus({ preventScroll: true });
+    hoverFocus(b);
     box.append(b);
     return b;
   });
@@ -18054,7 +18063,7 @@ function openSessCombo(anchor, all, opts, value, choose, head) {
     b.title = o.v;
     b.append(tick, words);
     b.onclick = (e) => { e.stopPropagation(); closeProtoMenu(); choose(o.v); };
-    b.onmouseenter = () => b.focus({ preventScroll: true });
+    hoverFocus(b);
     return b;
   };
   const draw = () => {
