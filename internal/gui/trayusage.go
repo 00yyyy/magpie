@@ -186,6 +186,7 @@ func trayUsageCards(ctx context.Context, ids []string) []provider.SubscriptionQu
 	}
 	var currency string
 	var rate float64
+	var noCost bool
 	for _, id := range ids {
 		p, ok := trayTotalPeriod(id)
 		if !ok {
@@ -193,8 +194,9 @@ func trayUsageCards(ctx context.Context, ids []string) []provider.SubscriptionQu
 		}
 		if currency == "" {
 			currency, rate = trayCurrency()
+			noCost = settings.Load().TrayNoCost
 		}
-		cards = append(cards, trayTotalCard(id, trayTotalSum(p), currency, rate))
+		cards = append(cards, trayTotalCard(id, trayMoney(trayTotalSum(p), noCost), currency, rate))
 	}
 	return trayPick(cards, ids, time.Now())
 }
@@ -255,6 +257,16 @@ func trayTotalCard(id string, t usage.Totals, currency string, rate float64) pro
 		tip += fmt.Sprintf(", %d with no known price", t.Unpriced)
 	}
 	return provider.SubscriptionQuota{Provider: id, Name: tip, Balance: strings.Join(rows, " · ")}
+}
+
+// trayMoney is a total as the menu bar says it: with its cost, or with no
+// cost and no count of calls with no known price when Settings › Menu bar
+// cost is off (settings.TrayNoCost, BussanQ on Discord), the tokens alone.
+func trayMoney(t usage.Totals, noCost bool) usage.Totals {
+	if noCost {
+		t.Cost, t.Unpriced = 0, 0
+	}
+	return t
 }
 
 // trayCurrency is the currency Settings shows costs in, and the yuan's

@@ -320,6 +320,11 @@ type Settings struct {
 	// menu bar ("42% +12%"), as the Usage page's cards have it (fflake33
 	// on Discord); off by default, as it widens every card.
 	TrayPace bool `json:"trayPace,omitempty"`
+	// TrayNoCost leaves money out of magpie's own totals in the menu bar:
+	// the today and last-7-days cards, their tooltips and the tooltip with
+	// no cards say the tokens alone (BussanQ on Discord); off by default,
+	// the cost shown.
+	TrayNoCost bool `json:"trayNoCost,omitempty"`
 	// Lightweight lets the webview of a window closed — the tray panel or
 	// the main window — go once it has stayed closed a while, and makes it
 	// again when it is opened (#580): less memory, a moment's wait. This
@@ -919,7 +924,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.UIFont, s.CodeFont = cur.UIFont, cur.CodeFont
 	s.Window, s.Proxy, s.Port, s.Dock, s.DockWindow, s.Lightweight = cur.Window, cur.Proxy, cur.Port, cur.Dock, cur.DockWindow, cur.Lightweight
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
-	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace
+	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost
 	s.GatewayMode = cur.GatewayMode
 	s.NoWSLAgents = cur.NoWSLAgents
 	s.QuotaReads = cur.QuotaReads
