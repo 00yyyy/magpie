@@ -1548,6 +1548,8 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .row.sess.sess-link { cursor: pointer; }
 .row.sess .sess-go { flex: none; display: inline-flex; color: var(--faint); }
 .row.sess.sess-link:hover .sess-go { color: var(--fg-2); }
+/* with the Sessions page off it unfolds in place instead (#2311) */
+.row.sess .sess-go.up svg { transform: rotate(180deg); }
 /* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
 .row.sess.sess-link:focus-visible .sess-go { color: var(--fg-2); }
 .sess-all { flex: none; white-space: nowrap; }

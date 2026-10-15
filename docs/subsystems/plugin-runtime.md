@@ -105,7 +105,9 @@ says one of its words, which goes back to i18n.js.
   code, so its part has no `html`. Its hooks: `open` and `relang` load it,
   and `reveal(s, e)` is the Usage page's way in (a session's row and All
   sessions, #752), called through `magpie.call("sessions", "reveal", …)`,
-  so with no Sessions plugin it does nothing. Still in app.js: the Usage
+  so with no Sessions plugin it does nothing. With Sessions switched off,
+  a row of Usage's list unfolds its details in place instead
+  (`sessionItem`, #2311). Still in app.js: the Usage
   page's Sessions tab (`/api/sessions`) and Settings' session terminal row
   (`data-feature="sessions"`).
 - **Library** (`plugins/library`, `Client: i18n.js, library.css,

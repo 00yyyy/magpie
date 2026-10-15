@@ -1714,6 +1714,7 @@ let sessOver = null;
 let sessOverAt = "";
 let sessOverLoading = "";
 let sessTopOpen = ""; // the top session opened to its details
+let sessListOpen = ""; // with the Sessions page switched off, the listed session opened here to its details (#2311)
 const sessFull = new Map(); // a top session's key → the session read whole, or "…" while it is read
 
 function renderUsageTab() {
@@ -2877,12 +2878,25 @@ function sessSpent(s) {
 // A row of the Usage page's list: what the session spent. It opens on the
 // Sessions page, where it is resumed, read in full and deleted (#752: the
 // two lists were one done twice, each lacking half).
+// A row opens its session on the Sessions page. With that page switched off
+// (Plugins › Built-in) there is nowhere to open it, so the row unfolds the
+// session's details in place, as a top session's do, instead of looking like
+// a link and doing nothing when clicked (#2311, betacatZ).
 function sessionItem(s) {
   const item = el("div", "sess-item");
+  item.sess = s;
   const r = el("div", "row sess sess-link");
+  const key = s.agent + ":" + s.id;
+  const here = featuresOff.has("sessions");
+  const unfolded = here && sessListOpen === key;
   r.tabIndex = 0;
-  r.setAttribute("role", "link");
-  r.title = t("Open in Sessions");
+  if (here) {
+    r.setAttribute("role", "button");
+    r.setAttribute("aria-expanded", String(unfolded));
+  } else {
+    r.setAttribute("role", "link");
+    r.title = t("Open in Sessions");
+  }
   r.append(icon(s.icon || "generic"));
   const who = el("div", "who");
   who.append(el("div", "name", s.title || t("(no prompt)")));
@@ -2892,16 +2906,27 @@ function sessionItem(s) {
   who.append(sub);
   r.append(who, ...sessSpent(s));
   const go = el("span", "sess-go");
-  go.append(svg(CHEV_R, 12, 1.6));
+  go.append(svg(here ? CHEV : CHEV_R, 12, 1.6));
+  if (unfolded) go.classList.add("up");
   r.append(go);
   const open = (e) => {
     if (window.getSelection()?.toString()) return;
-    if (featuresOff.has("sessions")) return; // Sessions is switched off: there is no page to open it on
-    magpie.call("sessions", "reveal", s, e);
+    if (!featuresOff.has("sessions")) return magpie.call("sessions", "reveal", s, e);
+    // Sessions is switched off: there is no page to open it on
+    sessListOpen = sessListOpen === key ? "" : key;
+    // one open at a time: the one that was folds
+    for (const o of item.parentElement?.querySelectorAll(":scope > .sess-item.open") || []) if (o !== item) o.replaceWith(sessionItem(o.sess));
+    const next = sessionItem(s);
+    item.replaceWith(next);
+    next.querySelector(".row.sess").focus({ preventScroll: true });
   };
   r.onclick = open;
   r.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(e); } };
   item.append(r);
+  if (unfolded) {
+    item.classList.add("open");
+    item.append(sessionDetail(s));
+  }
   return item;
 }
 
