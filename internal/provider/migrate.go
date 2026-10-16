@@ -379,10 +379,12 @@ func Moved(id string) bool {
 }
 
 // movedAgent is whether the logins.json agent's accounts are a moved
-// built-in's, its plugin's now.
+// built-in's, its plugin's now. Retired is not enough: a retired
+// built-in's own account, the agent's own sign-in, still has to be listed
+// for its mover to take it (MoveRetiring, MoveCandidates).
 func movedAgent(agent string) bool {
 	for id, mv := range movers {
-		if slices.Contains(mv.agents, agent) && PluginServes(id) {
+		if slices.Contains(mv.agents, agent) && Moved(id) {
 			return true
 		}
 	}
