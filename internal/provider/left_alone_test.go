@@ -48,7 +48,7 @@ func TestLeftAloneRunsNoCLI(t *testing.T) {
 			claudeStatusAt = time.Now().Add(-time.Hour)
 		}
 		claudeStatusMu.Unlock()
-		for _, c := range cliIdentities() {
+		for _, c := range []*cliIdentity{cursorStatus, devinStatus} {
 			c.Lock()
 			if !c.at.IsZero() {
 				c.at = time.Now().Add(-time.Hour)
@@ -102,8 +102,11 @@ func TestLeftAloneRunsNoCLI(t *testing.T) {
 		}
 	}
 	// what was asked behind the look has answered before the test ends
-	for _, c := range cliIdentities() {
-		if pending, done := c.asking(); pending {
+	for _, c := range []*cliIdentity{cursorStatus, devinStatus} {
+		c.Lock()
+		asking, done := c.refreshing, c.done
+		c.Unlock()
+		if asking {
 			<-done
 		}
 	}
