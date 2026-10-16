@@ -447,11 +447,6 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			}
 		}
 	}
-	if !moved("grok") && !hidden["grok"] {
-		if _, ok := grokAccount(); ok {
-			fetches = append(fetches, func() SubscriptionQuota { return keepReading(ctx, readNow(grokSubscriptionUsage(via("grok"))), "") })
-		}
-	}
 	if home, err := os.UserHomeDir(); err == nil {
 		if p, ok := codexAccount(home); ok && !hidden["codex"] {
 			if ls := accountsOf("codex"); len(ls) > 1 {

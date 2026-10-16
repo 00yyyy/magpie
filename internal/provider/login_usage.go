@@ -85,11 +85,6 @@ func loginUsageAt(ctx context.Context, agent string) (map[string]SubscriptionQuo
 		return out, asked
 	}
 	out := map[string]SubscriptionQuota{}
-	if agent == "grok" {
-		if _, ok := pluginOfAgent(agent); !ok {
-			return grokLoginUsage(ctx), asked
-		}
-	}
 	logins, ok := usageLogins(agent)
 	if !ok {
 		return out, asked

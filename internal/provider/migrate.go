@@ -274,6 +274,7 @@ var retiredBuiltins = map[string]bool{
 	MiMoID:        true,
 	"zcode":       true,
 	"factory":     true,
+	"grok":        true,
 }
 
 // PluginServes is whether the built-in id's subscription is its plugin's to

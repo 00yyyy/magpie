@@ -805,8 +805,6 @@ func Logins(agent string) []Login {
 	}
 	var side []Login
 	switch agent {
-	case "grok":
-		return grokLoginList()
 	case "copilot":
 		return copilotLoginList()
 	case "devin":
@@ -829,14 +827,16 @@ func Logins(agent string) []Login {
 			}
 		}
 		// a built-in moved onto its plugin lists its accounts there (an
-		// agent's own sign-in, which the built-in still finds, too)
+		// agent's own sign-in, which the built-in still finds, too); a
+		// retired one (no list) keeps its place, its plugin serving it
 		for _, b := range []struct {
 			id   string
 			list func() []Login
 		}{
-			{"grok", grokLoginList}, {"copilot", copilotLoginList},
-			{"devin", devinLoginList}, {CommandCodePlanID, cmdLoginList},
-			{ChatGPTAPIID, siwcLoginList}, {"gemini", func() []Login { return googleLoginList("gemini") }},
+			{"grok", nil}, {"copilot", copilotLoginList}, {"zcode", nil}, {"kiro", nil},
+			{"devin", devinLoginList}, {"workbuddy", nil}, {WorkBuddyAIID, nil}, {CommandCodePlanID, cmdLoginList},
+			{"qoder", nil}, {QoderCNID, nil}, {"zed", nil}, {"factory", nil},
+			{MiMoID, nil}, {ChatGPTAPIID, siwcLoginList}, {"gemini", func() []Login { return googleLoginList("gemini") }},
 			{"antigravity", func() []Login { return googleLoginList("antigravity") }},
 		} {
 			if !PluginServes(b.id) {
@@ -1030,8 +1030,6 @@ func switchLogin(agent, user string) error {
 		return switchPluginLogin(pp, user)
 	}
 	switch agent {
-	case "grok":
-		return switchGrokLogin(user)
 	case "copilot":
 		return switchCopilotLogin(user)
 	case "devin":
@@ -1210,8 +1208,6 @@ func ForgetLogin(agent, user string) error {
 		return forgetPluginLogin(pp, user)
 	}
 	switch agent {
-	case "grok":
-		return forgetGrokLogin(user)
 	case "copilot":
 		return forgetCopilotLogin(user)
 	case "devin":

@@ -35,8 +35,6 @@ func SetLoginOn(agent, user string, on bool) error {
 		return setPluginLoginOn(pp, user, on)
 	}
 	switch agent {
-	case "grok":
-		return setGrokLoginOn(user, on)
 	case "copilot":
 		return setCopilotLoginOn(user, on)
 	case "devin":
@@ -137,9 +135,6 @@ func (p Provider) AlsoOn() []Provider {
 func (p Provider) alsoOn() []Provider {
 	if p.IsPlugin() {
 		return pluginAlsoOn(*p.Account.plugin)
-	}
-	if p.Account != nil && p.Account.Agent == "grok" && p.Account.token == nil {
-		return grokAlsoOn(p)
 	}
 	if p.Account != nil && p.Account.Agent == "copilot" {
 		return copilotAlsoOn()

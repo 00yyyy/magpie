@@ -374,11 +374,6 @@ func (s *signInFlow) begin() error {
 		s.mu.Lock()
 		s.st.URL = siwcAuthorize(s.redirect, s.state, s.nonce, challenge, s.hostID)
 		s.mu.Unlock()
-	case "grok":
-		// so is Grok: its CLI signs in with a device code
-		if err := startGrokSignIn(s); err != nil {
-			return err
-		}
 	case "devin":
 		// `devin auth login` is a TUI over this same PKCE + localhost
 		// callback, so magpie runs the round itself

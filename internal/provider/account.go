@@ -853,9 +853,6 @@ func Accounts() []Provider {
 	if p, ok := copilotAccount(cfg); ok {
 		out = append(out, p)
 	}
-	if p, ok := grokAccount(); ok {
-		out = append(out, p)
-	}
 	if p, ok := devinAccount(); ok {
 		out = append(out, p)
 	}

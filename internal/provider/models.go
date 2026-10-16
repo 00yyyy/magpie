@@ -2169,9 +2169,9 @@ func byIDOrWas(id string) (Provider, bool) {
 var grokEffort = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/]*?)-(?:minimal|low|medium|high|xhigh|extra-high)$`)
 
 // grokWindow is a Grok id offered at a context window of its own
-// ("grok-4.7@500k", grokContextModels and the grok plugin's windowsOf): the
-// same model, asked for at a longer window. A window no multiple of 1000
-// the id names without the k (grokWindowLabel, grokWindowed).
+// ("grok-4.7@500k", the grok plugin's windowsOf): the same model, asked for
+// at a longer window. A window no multiple of 1000 the id names without the
+// k.
 var grokWindow = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/@]*)@[0-9]+k?$`)
 
 // pricedNames are the ids a model is priced by, in order: its own, then,
