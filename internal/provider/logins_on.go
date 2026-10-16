@@ -39,8 +39,6 @@ func SetLoginOn(agent, user string, on bool) error {
 		return setGrokLoginOn(user, on)
 	case "copilot":
 		return setCopilotLoginOn(user, on)
-	case "zcode":
-		return setZCodeLoginOn(user, on)
 	case "devin":
 		return setDevinLoginOn(user, on)
 	case CommandCodePlanID:
@@ -147,9 +145,6 @@ func (p Provider) alsoOn() []Provider {
 	}
 	if p.Account != nil && p.Account.Agent == "copilot" {
 		return copilotAlsoOn()
-	}
-	if p.Account != nil && p.Account.Agent == "zcode" {
-		return zcodeAlsoOn()
 	}
 	if p.Account != nil && p.Account.Agent == "devin" {
 		return devinAlsoOn()

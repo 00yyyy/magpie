@@ -272,6 +272,7 @@ var retiredBuiltins = map[string]bool{
 	"workbuddy":   true,
 	WorkBuddyAIID: true,
 	MiMoID:        true,
+	"zcode":       true,
 }
 
 // PluginServes is whether the built-in id's subscription is its plugin's to

@@ -412,11 +412,6 @@ func (s *signInFlow) begin() error {
 		if err := startFactorySignIn(s); err != nil {
 			return err
 		}
-	case "zcode":
-		// Z.ai's or BigModel's sign-in, as ZCode makes it
-		if err := startZCodeSignIn(s, s.site); err != nil {
-			return err
-		}
 	case "gemini", "antigravity":
 		// Google's sign-in, under the app's own OAuth client
 		app, _ := googleAppOf(agent)

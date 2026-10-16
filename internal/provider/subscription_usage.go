@@ -472,9 +472,6 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			fetches = append(fetches, perLogin(via("copilot"), ls, accountCard("copilot"))...)
 		}
 	}
-	if !moved("zcode") && !hidden["zcode"] {
-		fetches = append(fetches, perLogin(via("zcode"), zcodeLoginList(), accountCard("zcode"))...)
-	}
 	if !moved(CommandCodePlanID) && !hidden[CommandCodePlanID] {
 		fetches = append(fetches, perLogin(via(CommandCodePlanID), cmdLoginList(), accountCard(CommandCodePlanID))...)
 	}

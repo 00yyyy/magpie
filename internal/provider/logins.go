@@ -809,8 +809,6 @@ func Logins(agent string) []Login {
 		return grokLoginList()
 	case "copilot":
 		return copilotLoginList()
-	case "zcode":
-		return zcodeLoginList()
 	case "devin":
 		return devinLoginList()
 	case CommandCodePlanID:
@@ -838,7 +836,7 @@ func Logins(agent string) []Login {
 			id   string
 			list func() []Login
 		}{
-			{"grok", grokLoginList}, {"copilot", copilotLoginList}, {"zcode", zcodeLoginList},
+			{"grok", grokLoginList}, {"copilot", copilotLoginList},
 			{"devin", devinLoginList}, {CommandCodePlanID, cmdLoginList},
 			{"factory", factoryLoginList},
 			{ChatGPTAPIID, siwcLoginList}, {"gemini", func() []Login { return googleLoginList("gemini") }},
@@ -1039,8 +1037,6 @@ func switchLogin(agent, user string) error {
 		return switchGrokLogin(user)
 	case "copilot":
 		return switchCopilotLogin(user)
-	case "zcode":
-		return switchZCodeLogin(user)
 	case "devin":
 		return switchDevinLogin(user)
 	case CommandCodePlanID:
@@ -1223,8 +1219,6 @@ func ForgetLogin(agent, user string) error {
 		return forgetGrokLogin(user)
 	case "copilot":
 		return forgetCopilotLogin(user)
-	case "zcode":
-		return forgetZCodeLogin(user)
 	case "devin":
 		return forgetDevinLogin(user)
 	case CommandCodePlanID:
