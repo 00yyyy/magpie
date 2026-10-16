@@ -11653,8 +11653,8 @@ const subOf = (agent) => {
   const pl = pluginSubs().find((x) => x.agent === agent);
   if (own && pl && movedSub(agent)) {
     const { name, icon, plans, risk, riskNote, hint, sites, importable } = own;
-    // a Factory API key is kept by the built-in, which the plugin replaces
-    return { ...pl, name, icon, plans, risk, riskNote, hint, sites, importable: importable && agent !== "factory", moved: true };
+    // a moved Factory's imported API keys go to its plugin (factory_key.go)
+    return { ...pl, name, icon, plans, risk, riskNote, hint, sites, importable, moved: true };
   }
   return own || pl;
 };

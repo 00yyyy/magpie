@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -23,6 +24,22 @@ func init() {
 			var out []Moving
 			for _, l := range ls {
 				c := l.creds
+				if c.Key {
+					// an API key (fk-…) is the plugin's api account, as its
+					// own "Factory API key" sign-in saves one: an oauth one
+					// would be renewed with no refresh token and lapse
+					out = append(out, Moving{User: l.User, First: l.Active, On: l.On, Lapsed: l.Lapsed != "", Plan: l.Plan, Auth: map[string]any{
+						"type": "api",
+						"key":  c.Access,
+						"metadata": map[string]any{
+							"email":        c.Email,
+							"userId":       c.UserID,
+							"region":       c.Region,
+							"premBaseHost": c.Prem,
+						},
+					}})
+					continue
+				}
 				out = append(out, Moving{User: l.User, First: l.Active, On: l.On, Lapsed: l.Lapsed != "", Plan: l.Plan, Auth: map[string]any{
 					"type":                 "oauth",
 					"access":               c.Access,
@@ -40,6 +57,9 @@ func init() {
 			return out, nil
 		},
 		back: func(ls []savedLogin, user string, auth map[string]any) ([]savedLogin, string, error) {
+			if str(auth["type"]) == "api" {
+				return factoryKeyBack(ls, user, auth)
+			}
 			access := str(auth["access"])
 			if access == "" {
 				return ls, "", errors.New("Factory: an unreadable plugin sign-in")
@@ -64,4 +84,26 @@ func init() {
 			return ls, ls[i].User, nil
 		},
 	}
+}
+
+// factoryKeyBack keeps the plugin's api account (an fk- key) as the
+// built-in's key account (factory_key.go).
+func factoryKeyBack(ls []savedLogin, user string, auth map[string]any) ([]savedLogin, string, error) {
+	key := strings.TrimSpace(str(auth["key"]))
+	if !strings.HasPrefix(key, factoryKeyPrefix) {
+		return ls, "", errors.New("Factory: an unreadable plugin API key")
+	}
+	md, _ := auth["metadata"].(map[string]any)
+	if user == "" {
+		user = firstNonEmpty(str(md["email"]), str(md["userId"]), factoryKeyName(key))
+	}
+	i := backInto(&ls, "factory", user)
+	c := factoryCreds{Access: key, Key: true, Email: str(md["email"]), UserID: str(md["userId"]),
+		Region: str(md["region"]), Prem: str(md["premBaseHost"])}
+	b, err := json.Marshal(c)
+	if err != nil {
+		return ls, "", err
+	}
+	ls[i].Auth, ls[i].Lapsed, ls[i].Seen = b, "", time.Now().UTC().Truncate(time.Second)
+	return ls, ls[i].User, nil
 }
