@@ -12405,10 +12405,12 @@ function renderSigning(sub) {
   // a plugin's browser sign-in whose page can't reach magpie (Docker: the
   // Command Code plugin's Studio posts its key to 127.0.0.1) can be left
   // for the plugin's own API key way, without starting over; one that
-  // takes a pasted key in place already (#2468) needs no second way
+  // takes a pasted key in place already (#2468) needs no second way, and
+  // nor does a moved one whose key import goes to its plugin (Factory,
+  // factory_key.go): two "Use an API key instead" links read as one
   const keyWay = sub.plugin && signing.method != null && !signing.pasteCode && !signing.pasteKey && signing.state === "waiting"
     ? (sub.plugin.methods || []).findIndex((m) => m.type === "api") : -1;
-  if (keyWay >= 0 && keyWay !== signing.method) {
+  if (keyWay >= 0 && keyWay !== signing.method && !(sub.moved && sub.importable)) {
     const acts = tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
     const k = el("button", "link", t("Use an API key instead"));
     k.title = t("If the page can't reach magpie (it runs on a server or in Docker)");
