@@ -61,19 +61,6 @@ func TestCodexToolImageReachesAnthropicPlugin(t *testing.T) {
 	}
 }
 
-// Kiro's built-in sends the image with the message answering the call, as
-// #369 made it for Claude Code's.
-func TestCodexToolImageKiro(t *testing.T) {
-	b := buildKiroBody(t, codexViewImageRequest(t), false)
-	cur := b.ConversationState.CurrentMessage.UserInputMessage
-	if len(cur.Images) != 1 || cur.Images[0].Format != "png" || cur.Images[0].Source.Bytes != viewedPNG {
-		t.Fatalf("images = %+v", cur.Images)
-	}
-	if rs := cur.Context.ToolResults; len(rs) != 1 || rs[0].ToolUseID != "call_view1" {
-		t.Fatalf("results = %+v", rs)
-	}
-}
-
 // Cursor's built-in shows the model a tool's image in the user message
 // after the results, as magpie's Chat request gives it Cursor's plugin:
 // a result holds text alone, so it says the image follows.

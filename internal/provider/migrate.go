@@ -263,7 +263,10 @@ func Movable(id string) bool { return movers[id] != nil }
 func BuiltinRetired(id string) bool { return Movable(id) && retiredBuiltins[id] }
 
 // retiredBuiltins are the built-in subscriptions whose code is gone.
-var retiredBuiltins = map[string]bool{"zed": true}
+var retiredBuiltins = map[string]bool{
+	"zed":  true,
+	"kiro": true,
+}
 
 // PluginServes is whether the built-in id's subscription is its plugin's to
 // serve, and magpie's built-in code serves none of it: moved onto its plugin,

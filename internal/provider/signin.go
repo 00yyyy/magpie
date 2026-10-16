@@ -103,8 +103,7 @@ type signInFlow struct {
 	state    string
 	redirect string
 	srv      *http.Server
-	stop     func() // ends an agent's own login command, when that is the sign-in
-	kiro     *kiroFlow
+	stop     func()           // ends an agent's own login command, when that is the sign-in
 	site     string           // where to sign in, for an agent with more than one (ZCode: "zai" or "bigmodel")
 	plugin   string           // a plugin's sign-in session, finished with the code pasted back
 	claude   *claudeCLISignIn // Claude Code's own sign-in, run by magpie
@@ -403,11 +402,6 @@ func (s *signInFlow) begin() error {
 		s.mu.Lock()
 		s.st.URL = devinAuthorizeURL + "?" + q.Encode()
 		s.mu.Unlock()
-	case "kiro":
-		// Kiro's sign-in page, as the Kiro IDE opens it
-		if ln, err = startKiroSignIn(s, challenge); err != nil {
-			return err
-		}
 	case "copilot":
 		// GitHub's device code, as Copilot's editors sign in
 		if err := startCopilotSignIn(s); err != nil {
@@ -597,13 +591,6 @@ func (s *signInFlow) pastedCallback(raw string) error {
 	claimed := s.claimed
 	s.mu.Unlock()
 	if !claimed {
-		// Kiro's page sends an AWS sign-in on to AWS: the next page to open
-		if loc := rep.h.Get("Location"); rep.code/100 == 3 && strings.HasPrefix(loc, "https://") && s.kiro != nil {
-			s.mu.Lock()
-			s.st.URL = loc
-			s.mu.Unlock()
-			return nil
-		}
 		if st := s.status(); st.State == "failed" {
 			return errors.New(st.Error)
 		}
@@ -636,16 +623,6 @@ func (s *signInFlow) ownCallback(u *url.URL, redirect string) bool {
 		return false
 	}
 	q := u.Query()
-	switch {
-	case s.kiro != nil:
-		if u.Path != "/oauth/callback" && u.Path != "/signin/callback" {
-			return false
-		}
-		s.mu.Lock()
-		aws := s.kiro.state
-		s.mu.Unlock()
-		return q.Get("state") == s.state || (aws != "" && q.Get("state") == aws)
-	}
 	return u.Path == want.Path && q.Get("state") == s.state
 }
 
@@ -747,10 +724,6 @@ func (s *signInFlow) finish(out SignInState) bool {
 }
 
 func (s *signInFlow) callback(w http.ResponseWriter, r *http.Request) {
-	if s.kiro != nil {
-		s.kiroCallback(w, r)
-		return
-	}
 	switch r.URL.Path {
 	case "/callback", "/auth/callback", "/oauth2callback", "/oauth-callback":
 	case "/cancel":

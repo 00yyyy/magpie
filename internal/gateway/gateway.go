@@ -3485,12 +3485,6 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		call.To = from
 		return s.serveDevin(w, r, from, p.Account.Home, model, own, &call.Usage)
 	}
-	// Kiro's is served through its own API, with kiro-cli's or the Kiro
-	// IDE's sign-in, or a Kiro API key saved on the provider
-	if p.Account != nil && p.Account.Agent == "kiro" {
-		call.To = from
-		return s.serveKiro(w, r, from, p, model, own, &call.Usage)
-	}
 	// Qoder is served through the API the client talks to, signed with the
 	// COSY envelope, with the account magpie signed in to.
 	if p.Account != nil && (p.Account.Agent == "qoder" || p.Account.Agent == provider.QoderCNID) {

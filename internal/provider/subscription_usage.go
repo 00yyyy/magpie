@@ -477,12 +477,6 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			fetches = append(fetches, perLogin(via("copilot"), ls, accountCard("copilot"))...)
 		}
 	}
-	if moved("kiro") {
-	} else if key := kiroKey(); key != "" && !hidden["kiro"] {
-		fetches = append(fetches, func() SubscriptionQuota { return keepReading(ctx, readNow(kiroQuotaAt(via("kiro"), key, "")), "") })
-	} else if !hidden["kiro"] {
-		fetches = append(fetches, perLogin(via("kiro"), kiroLoginList(), accountCard("kiro"))...)
-	}
 	if !moved("zcode") && !hidden["zcode"] {
 		fetches = append(fetches, perLogin(via("zcode"), zcodeLoginList(), accountCard("zcode"))...)
 	}

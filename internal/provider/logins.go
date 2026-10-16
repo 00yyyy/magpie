@@ -811,8 +811,6 @@ func Logins(agent string) []Login {
 		return copilotLoginList()
 	case "zcode":
 		return zcodeLoginList()
-	case "kiro":
-		return kiroLoginList()
 	case "devin":
 		return devinLoginList()
 	case "workbuddy", WorkBuddyAIID:
@@ -846,7 +844,7 @@ func Logins(agent string) []Login {
 			id   string
 			list func() []Login
 		}{
-			{"grok", grokLoginList}, {"copilot", copilotLoginList}, {"zcode", zcodeLoginList}, {"kiro", kiroLoginList},
+			{"grok", grokLoginList}, {"copilot", copilotLoginList}, {"zcode", zcodeLoginList},
 			{"devin", devinLoginList}, {"workbuddy", func() []Login { return wbLoginList(wbCN) }},
 			{WorkBuddyAIID, func() []Login { return wbLoginList(wbAI) }}, {CommandCodePlanID, cmdLoginList},
 			{"qoder", func() []Login { return loginsOf(qoderLogins()) }},
@@ -1051,8 +1049,6 @@ func switchLogin(agent, user string) error {
 		return switchCopilotLogin(user)
 	case "zcode":
 		return switchZCodeLogin(user)
-	case "kiro":
-		return switchKiroLogin(user)
 	case "devin":
 		return switchDevinLogin(user)
 	case "workbuddy", WorkBuddyAIID:
@@ -1243,8 +1239,6 @@ func ForgetLogin(agent, user string) error {
 		return forgetCopilotLogin(user)
 	case "zcode":
 		return forgetZCodeLogin(user)
-	case "kiro":
-		return forgetKiroLogin(user)
 	case "devin":
 		return forgetDevinLogin(user)
 	case "workbuddy", WorkBuddyAIID:
