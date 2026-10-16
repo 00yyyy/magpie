@@ -429,12 +429,6 @@ func (s *signInFlow) begin() error {
 		if err := startQoderSignIn(s, qoderSiteOf(agent)); err != nil {
 			return err
 		}
-	case "zed":
-		// Zed's own sign-in: zed.dev sends the browser back to a port magpie
-		// listens on, with the account's token encrypted to magpie's key
-		if err := startZedSignIn(s); err != nil {
-			return err
-		}
 	case "factory":
 		// WorkOS's device code, as droid signs in to Factory
 		if err := startFactorySignIn(s); err != nil {
@@ -643,9 +637,6 @@ func (s *signInFlow) ownCallback(u *url.URL, redirect string) bool {
 	}
 	q := u.Query()
 	switch {
-	case s.st.Agent == "zed":
-		// no state: the token in it is encrypted to this sign-in's key
-		return q.Get("user_id") != "" && q.Get("access_token") != ""
 	case s.kiro != nil:
 		if u.Path != "/oauth/callback" && u.Path != "/signin/callback" {
 			return false

@@ -81,7 +81,8 @@ Two cases decide it:
 For a moved subscription, the plugin does everything: sign-in, refresh,
 models, requests, usage and errors. It runs in the plugin host
 (`internal/plugin`). The built-in's code in `internal/provider/<name>*.go`,
-`internal/gateway/<name>.go`, `internal/zed` and `internal/qoder` doesn't run
+`internal/gateway/<name>.go` and `internal/qoder` doesn't run (a retired
+built-in's is gone: Zed's)
 for it at all. The gateway sends its requests to the plugin's fetch, not to
 the built-in's translator.
 

@@ -886,9 +886,6 @@ func Accounts() []Provider {
 			out = append(out, p)
 		}
 	}
-	if p, ok := zedAccount(); ok {
-		out = append(out, p)
-	}
 	if p, ok := factoryAccount(); ok {
 		out = append(out, p)
 	}

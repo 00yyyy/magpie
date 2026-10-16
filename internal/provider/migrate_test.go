@@ -13,7 +13,6 @@ import (
 
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/testenv"
-	"github.com/yetone/magpie/internal/zed"
 )
 
 // fakeMover moves a made-up built-in, "fakeco", whose accounts keep a
@@ -340,35 +339,27 @@ func TestPutBackKeepsNewer(t *testing.T) {
 	}
 }
 
-// A built-in moved onto its plugin shows no card of its own, even with
-// an account of it still on this machine (the agent's own sign-in), and
-// signs in no more: an account signed in to there would be served by
-// nothing.
-func TestMovedBuiltinQuiet(t *testing.T) {
+// A retired built-in shows no card of its own, even with an account of it
+// still on this machine, unmoved, and signs in no more: an account signed
+// in to there would be served by nothing.
+func TestRetiredBuiltinQuiet(t *testing.T) {
 	claudeHome(t)
 	loginsMu.Lock()
 	_ = writeLogins([]savedLogin{{Agent: "zed", User: "left@example.com", On: true, First: true, Auth: []byte(`{"userId":"u1","accessToken":"a"}`)}})
 	loginsMu.Unlock()
-	zedCloud = "http://127.0.0.1:1" // no network: the card shows its error
-	t.Cleanup(func() { zedCloud = zed.CloudURL })
-	cards := func() int {
-		n := 0
-		for _, q := range fetchSubscriptionUsage(context.Background()) {
-			if q.Provider == "zed" {
-				n++
-			}
+	if !BuiltinRetired("zed") {
+		t.Fatal("zed isn't retired")
+	}
+	for _, q := range fetchSubscriptionUsage(context.Background()) {
+		if q.Provider == "zed" {
+			t.Fatalf("a card of the retired built-in: %+v", q)
 		}
-		return n
-	}
-	if cards() != 1 {
-		t.Fatal("the built-in's card isn't there to go")
-	}
-	_ = setMigration("zed", func(m *Migration) { *m = Migration{State: MovePlugin, At: time.Now()} })
-	if n := cards(); n != 0 {
-		t.Fatalf("%d cards of the moved built-in", n)
 	}
 	if _, err := StartSignIn("zed"); err == nil || !strings.Contains(err.Error(), "plugin") {
-		t.Fatalf("a sign-in to the moved built-in: %v", err)
+		t.Fatalf("a sign-in to the retired built-in: %v", err)
+	}
+	if c := MoveCandidates(); len(c) != 1 || c[0].ID != "zed" || c[0].Accounts != 1 {
+		t.Fatalf("the unmoved account isn't offered its move: %+v", c)
 	}
 }
 

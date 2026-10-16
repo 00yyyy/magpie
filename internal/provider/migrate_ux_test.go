@@ -11,7 +11,6 @@ import (
 
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/testenv"
-	"github.com/yetone/magpie/internal/zed"
 )
 
 // fakePlugin readies the test plugin's host for a move of fakeco, with
@@ -235,8 +234,8 @@ func TestZedMoveCarriesItsModels(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, _ := zedSaved(ls[0])
-	if ms, err := zed.ParseModels(c.Models); err != nil || len(ms) != 1 || ms[0].ID != "claude-sonnet-4-5" {
-		t.Fatalf("back without its list: %s %v", c.Models, err)
+	if string(c.Models) != list {
+		t.Fatalf("back without its list: %s", c.Models)
 	}
 }
 

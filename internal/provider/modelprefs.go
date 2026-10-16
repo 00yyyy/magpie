@@ -1265,7 +1265,7 @@ func (p Provider) asksOwnBackend() bool {
 		return false
 	}
 	switch p.Account.Agent {
-	case "claude", "cursor", "devin", "kiro", "zed", CommandCodePlanID:
+	case "claude", "cursor", "devin", "kiro", CommandCodePlanID:
 		return true
 	}
 	// Qoder is one backend however many sites it is signed in to, and the

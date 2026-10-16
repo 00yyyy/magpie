@@ -3497,12 +3497,6 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		call.To = from
 		return s.serveQoder(w, r, from, p, model, own, &call.Usage)
 	}
-	// Zed's through cloud.zed.dev, written in the API of the model's own
-	// provider, with the account magpie signed in to
-	if p.Account != nil && p.Account.Agent == "zed" {
-		call.To = from
-		return s.serveZed(w, r, from, p, model, own, &call.Usage)
-	}
 	// Command Code's Go plan has no Provider API: it is asked where the
 	// CLI asks, in the CLI's own format; its other plans go on as keys do
 	if p.Account != nil && p.Account.Agent == provider.CommandCodePlanID {

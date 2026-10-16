@@ -178,7 +178,7 @@ func TestPastedAddressAndCallbackFinishOnce(t *testing.T) {
 func TestLoopbackSignInsTakePastedAddress(t *testing.T) {
 	claudeHome(t)
 	fakeCodexTokens(t, nil)
-	for _, agent := range []string{"codex", "gemini", "antigravity", "kiro", "zed"} {
+	for _, agent := range []string{"codex", "gemini", "antigravity", "kiro"} {
 		st, err := StartSignIn(agent)
 		if err != nil {
 			t.Fatalf("%s: %v", agent, err)

@@ -278,8 +278,6 @@ func builtinLogins(agent string) (logins []Login, ok bool) {
 		logins = cmdLoginList()
 	case "qoder", QoderCNID:
 		logins = loginsOf(qoderLoginsOf(agent))
-	case "zed":
-		logins = zedLoginList()
 	case "devin":
 		logins = devinLoginList()
 	case "factory":
@@ -317,9 +315,6 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	if l.Agent == "qoder" || l.Agent == QoderCNID {
 		return qoderLoginQuota(ctx, l)
-	}
-	if l.Agent == "zed" {
-		return zedLoginQuota(ctx, l)
 	}
 	if l.Agent == "devin" {
 		return devinLoginQuota(ctx, l)
