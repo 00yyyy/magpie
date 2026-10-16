@@ -2016,14 +2016,25 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if strictHeld != nil {
 			held = strictHeld
 		}
-		msg, back := cappedError(call.Model, held, time.Now())
-		if strictHeld != nil {
-			msg += ". The conversation stays strictly on that account (Stays: Strict), so magpie doesn't move it to another"
+		var msg, record string
+		var back time.Time
+		if sealer := checkpointHeld(checkpoint, held, pl); sealer != nil {
+			// only the account that sealed the conversation's native
+			// compaction was a candidate, and it is held: the others
+			// weren't tried for that, not for being held too (#2517)
+			msg, back = checkpointCappedError(call.Model, *checkpoint, sealer, time.Now())
+			record = checkpointCappedRecord(sealer)
+		} else {
+			msg, back = cappedError(call.Model, held, time.Now())
+			if strictHeld != nil {
+				msg += ". The conversation stays strictly on that account (Stays: Strict), so magpie doesn't move it to another"
+			}
+			record = cappedRecord(held)
 		}
 		if d := time.Until(back); d > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(int(d.Seconds())+1))
 		}
-		call.Status, call.Error = 429, cappedRecord(held)
+		call.Status, call.Error = 429, record
 		writeError(w, from, 429, msg)
 		turnedAway()
 		return
