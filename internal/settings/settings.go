@@ -559,6 +559,10 @@ type Settings struct {
 	// switched by the model in the agent's picker, as a routing group's
 	// member is (Group.Fast), without making a group of it.
 	FastPicks map[string][]string `json:"fastPicks,omitempty"`
+	// UltraPicks are the fast picks an agent's requests for are sent as
+	// Ultrafast instead (#1954), by agent id: each is in FastPicks too. An
+	// account that doesn't offer Ultrafast on the model is sent priority.
+	UltraPicks map[string][]string `json:"ultraPicks,omitempty"`
 
 	// The three maps below, and every one added beside them, are the
 	// per-model ones: a field named Model* whose type is a map[string]X,

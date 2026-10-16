@@ -2061,6 +2061,10 @@ body.window .foot { padding-left: 18px; }
 .field .fast-tag { display: inline-flex; flex: none; color: var(--accent); }
 .field .fast-tag path { fill: currentColor; }
 .ag-open .field .fast-tag { order: 1; }
+/* Ultrafast (#1954): two bolts, overlapped to fit the bolt's place */
+.bolts { display: inline-flex; align-items: center; }
+.bolts svg + svg { margin-left: -8px; }
+.field .fast-tag .bolts svg + svg { margin-left: -6px; }
 .pop.explained li { height: auto; padding: 7px 8px; white-space: normal; align-items: flex-start; }
 .pop.explained li .option-words { flex-direction: column; align-items: flex-start; gap: 2px; }
 .pop.explained li .n { flex: none; overflow: visible; line-height: 1.4; }

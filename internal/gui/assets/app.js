@@ -441,7 +441,7 @@ function renderAgents() {
       const shown = f.menu ? f.summary : effort ? effortName(opt || { value: f.value }) : (opt?.label || f.value || t(FOLLOWS_MODEL.includes(f.label) ? "same as model" : "default"));
       if (f.menu) b.title = f.options.map((o) => `${o.label}: ${o.note}`).join("\n");
       b.append(el("span", "v" + (f.value || f.custom ? "" : " empty"), shown));
-      if (f.value && opt?.fast) b.append(fastTag());
+      if (f.value && opt?.fast) b.append(fastTag(opt.ultra));
       const c = el("span", "chev");
       c.append(svg(CHEV, 11, 1.7));
       b.append(c);
@@ -5067,10 +5067,12 @@ function renderList() {
 // fastToggle: a model with a fast mode (a ChatGPT account's GPT, Cursor's
 // -fast, …) is sent in it, or not, for the agent the picker is of (#954),
 // switched by the model as a routing group's member is; the pick itself
-// stays as it is
+// stays as it is. Where an account offers it Ultrafast too (ultraOk,
+// #1954), a click steps usual → Fast → Ultrafast → usual, as a camera's
+// flash button steps its modes
 const BOLT = "M9.25 1.75 3.75 9h4l-1 5.25L12.25 7h-4z";
 function fastToggle(o) {
-  const b = el("button", "fast" + (o.fast ? " on" : ""));
+  const b = el("button", "fast" + (o.fast ? " on" : "") + (o.fast && o.ultra ? " ultra" : ""));
   const name = o.label || o.value;
   const agent = pick.agent.name || o.fastFor;
   // on a provider the user added (ownFast, #1615) fast is only asked for:
@@ -5078,45 +5080,57 @@ function fastToggle(o) {
   b.title = o.ownFast
     ? (o.fast ? t("{model} is asked for OpenAI's fast mode for {agent}, where your provider serves it. Click to send it as {agent} asks", { model: name, agent })
       : t("Ask your provider for OpenAI's fast mode (service_tier \"priority\") on {model} for {agent}: quicker, at a higher price, where it serves it", { model: name, agent }))
+    : o.fast && o.ultra ? t("{model} is sent Ultrafast for {agent} where the account offers it, and fast where it doesn't. Click to send it at the usual speed", { model: name, agent })
+    : o.fast && o.ultraOk ? t("{model} is sent fast for {agent}: quicker, at a higher price. Click to send it Ultrafast, where the account offers it", { model: name, agent })
     : o.fast ? t("{model} is sent fast for {agent}: quicker, at a higher price. Click to send it at the usual speed", { model: name, agent })
     : t("Send {model} fast for {agent}: quicker, at a higher price", { model: name, agent });
   b.setAttribute("aria-pressed", String(!!o.fast));
-  b.setAttribute("aria-label", t("Fast"));
-  b.append(svg(BOLT, 14, 1.4));
+  b.setAttribute("aria-label", t(o.fast && o.ultra ? "Ultrafast" : "Fast"));
+  b.append(boltIcon(o.fast && o.ultra, 14));
   b.onclick = async (ev) => {
     ev.stopPropagation();
-    const fast = !o.fast;
-    setFast(o, fast);
+    const was = { fast: !!o.fast, ultra: !!(o.fast && o.ultra) };
+    const next = !was.fast ? { fast: true, ultra: false } : o.ultraOk && !was.ultra ? { fast: true, ultra: true } : { fast: false, ultra: false };
+    setFast(o, next.fast, next.ultra);
     try {
-      await api("agent-fast", { for: o.fastFor, ref: o.ref, fast });
-      status(t(fast ? "{model} is sent fast for {agent}" : "{model} is sent at the usual speed for {agent}", { model: name, agent }), "ok");
+      await api("agent-fast", { for: o.fastFor, ref: o.ref, fast: next.fast, ...(next.ultra ? { ultra: true } : {}) });
+      status(t(next.ultra ? "{model} is sent Ultrafast for {agent}" : next.fast ? "{model} is sent fast for {agent}" : "{model} is sent at the usual speed for {agent}", { model: name, agent }), "ok");
     } catch (e) {
-      setFast(o, !fast);
+      setFast(o, was.fast, was.ultra);
       status(e.message, "err");
     }
   };
   return b;
 }
+// boltIcon: Fast's bolt, or Ultrafast's two
+function boltIcon(ultra, size) {
+  if (!ultra) return svg(BOLT, size, 1.4);
+  const s = el("span", "bolts");
+  s.append(svg(BOLT, size, 1.4), svg(BOLT, size, 1.4));
+  return s;
+}
 // setFast marks the model fast or not in every list it is in for the agent:
 // the open picker's, and the agent's fields (its tiers pick the same model)
-function setFast(o, fast) {
+function setFast(o, fast, ultra = false) {
   const same = (x) => x.ref === o.ref && x.fastFor === o.fastFor;
-  for (const a of state.agents) for (const f of a.fields) for (const x of f.options || []) if (same(x)) x.fast = fast;
-  for (const x of [...(pick?.options || []), ...(pick?.items || [])]) if (same(x)) x.fast = fast;
+  for (const a of state.agents) for (const f of a.fields) for (const x of f.options || []) if (same(x)) { x.fast = fast; x.ultra = ultra; }
+  for (const x of [...(pick?.options || []), ...(pick?.items || [])]) if (same(x)) { x.fast = fast; x.ultra = ultra; }
   o.fast = fast;
+  o.ultra = ultra;
   // the field's button says it of the model it has
   const anchor = pick?.anchor;
   if (anchor?.classList.contains("field") && optionFor(pick.field, pick.field.value)?.ref === o.ref) {
     anchor.querySelector(".fast-tag")?.remove();
-    if (fast) anchor.querySelector(".v")?.after(fastTag());
+    if (fast) anchor.querySelector(".v")?.after(fastTag(ultra));
   }
   if (pick) renderList();
 }
-// fastTag: the bolt after a field's model that is sent fast
-function fastTag() {
-  const s = el("span", "fast-tag");
-  s.title = t("Fast");
-  s.append(svg(BOLT, 11, 1.4));
+// fastTag: the bolt after a field's model that is sent fast, two for
+// Ultrafast
+function fastTag(ultra) {
+  const s = el("span", "fast-tag" + (ultra ? " ultra" : ""));
+  s.title = t(ultra ? "Ultrafast" : "Fast");
+  s.append(boltIcon(ultra, 11));
   return s;
 }
 

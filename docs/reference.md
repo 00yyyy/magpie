@@ -322,7 +322,8 @@ handed on, and isn't counted as a request. The CSV's last columns are
 `tries` (on the final row, when the request took more than one),
 `handed_on`, then `tier_asked`, `tier_sent` and `tier_served`: the
 service tier the client asked for (Claude's fast speed reads `fast`), the
-one that try went out at (a fast pick sends `priority`; Ultrafast becomes
+one that try went out at (a fast pick sends `priority`, or `ultrafast`
+where the pick is set to Ultrafast; Ultrafast becomes
 `priority` on an account whose plan doesn't offer it), and the one the
 vendor's reply said it ran at, empty when the reply doesn't say. The JSON
 log keeps them as `tier_asked`, `tier_sent` and `tier_served`, and each

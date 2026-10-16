@@ -1185,6 +1185,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.PickedModels = cur.PickedModels       // "only models I pick" (#1337)
 		in.OwnModelsHidden = cur.OwnModelsHidden // an agent's own models left out (#1642)
 		in.FastPicks = cur.FastPicks             // switched in the agents' pickers (#954)
+		in.UltraPicks = cur.UltraPicks           // and sent Ultrafast (#1954)
 		in.AgentEfforts = cur.AgentEfforts       // picked in an agent's row (#1003)
 		in.PluginCheckins = cur.PluginCheckins   // set on its own (plugin-checkin below)
 		in.PluginOptions = cur.PluginOptions     // set on its own (plugin-option below)

@@ -1939,7 +1939,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// the agent's pick of it is sent in its vendor's fast mode
 			// (#954), as a group's member may be; its fallbacks, other
 			// models, go as they are
-			fastPick(cands, pl, p.ID, model)
+			fastPick(cands, pl, p.ID, model, provider.IsUltraPick(agent, p.ID+"/"+model))
 		}
 	}
 	agentPick := provider.AgentEffort(agent)
@@ -2447,6 +2447,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// forwardTranslated)
 			attemptBody = withFast(from, attemptBody)
 		}
+		// a pick sent Ultrafast (#1954) asks for it in OpenAI's words; in
+		// Claude's, which have none, the try carries it (withUltra)
+		ultra := fast && c.ultra && !ownFast
+		if ultra && (from == provider.Chat || from == provider.Responses) {
+			attemptBody = withFields(attemptBody, map[string]any{"service_tier": "ultrafast"})
+		}
 		// a member known not to think is sent no reasoning ask (#950): the
 		// group reasons for the members that do, and asking one that can't
 		// is what some vendors turn away with a 400. Every other field goes
@@ -2480,8 +2486,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		// Ultrafast goes first to an account whose plan offers it, and an
 		// account whose own list doesn't is asked for priority (Fast)
-		// instead, which every plan with Fast takes (yxinyu715 on X)
-		if from == provider.Responses && askedTier(attemptBody) == "ultrafast" && !takesTier(c, "ultrafast") {
+		// instead, which every plan with Fast takes (yxinyu715 on X): asked
+		// by the client in either of OpenAI's APIs, or by a pick (#1954)
+		openAI := from == provider.Chat || from == provider.Responses
+		if (openAI && askedTier(attemptBody) == "ultrafast" || ultra && from == provider.Anthropic) && !takesTier(c, "ultrafast") {
 			if j := tierMate(cands[i+1:], c, "ultrafast"); j >= 0 {
 				j += i + 1
 				cs := slices.Clone(cands)
@@ -2489,7 +2497,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				i--
 				continue
 			}
-			attemptBody = withFields(attemptBody, map[string]any{"service_tier": "priority"})
+			if openAI {
+				attemptBody = withFields(attemptBody, map[string]any{"service_tier": "priority"})
+			}
+			ultra = false
 		}
 		// an effort changed mid-thread goes as an update in the history,
 		// which keeps the prompt the upstream cached (#617)
@@ -2536,6 +2547,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 			if ownFast {
 				ctx = withOwnFast(ctx)
+			}
+			if ultra && from == provider.Anthropic {
+				ctx = withUltra(ctx)
 			}
 			hw.stop = stop
 			if autoPicks(c) {
@@ -4825,6 +4839,13 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		if req.OwnTier && req.Tier == "" && isOwnFast(ctx) && (to == provider.Chat || to == provider.Responses) {
 			r := *req
 			r.Tier, req = "priority", &r
+		}
+		// a pick sent Ultrafast from an agent on Claude's API, whose words
+		// for it are speed "fast" (#1954): on the ChatGPT backend alone
+		// (buildResponses)
+		if req.Fast && !req.Ultrafast && isUltra(ctx) && to == provider.Responses {
+			r := *req
+			r.Ultrafast, req = true, &r
 		}
 		// Anthropic's API needs a reply limit: one the client didn't name
 		// is the model's own, not a flat 16384 (#1792, askedOutput)

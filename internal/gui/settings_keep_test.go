@@ -117,6 +117,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		OwnModelsHidden:      []string{"dsh"},
 		OrderedModels:        map[string][]string{"codex": {"group/g", "p/n"}},
 		FastPicks:            map[string][]string{"codex": {"p/n"}},
+		UltraPicks:           map[string][]string{"codex": {"p/n"}},
 		AgentEfforts:         map[string]string{"cursor-local": "high"},
 		PluginCheckins:       map[string]bool{"fakeco": true},
 		PluginOptions:        map[string]map[string]bool{"fakeco": {"auto": true}},

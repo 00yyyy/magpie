@@ -44,8 +44,8 @@ type candidate struct {
 	// ("provider/model:low"); "" for one that follows the agent or the group
 	effort string
 	// fast is set on a member the group sends in its vendor's fast mode
-	// (Group.Fast)
-	fast bool
+	// (Group.Fast); ultra on an agent's fast pick sent Ultrafast (#1954)
+	fast, ultra bool
 	// rank is its place in its provider's own list of accounts or keys,
 	// the order the provider's page shows and a drag sets (#217)
 	rank int
