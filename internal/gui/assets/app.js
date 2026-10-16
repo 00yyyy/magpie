@@ -8803,6 +8803,9 @@ function drawEditor(p, presetID) {
   };
   if (p && !p.account && !custom) idField();
   let fillEndpoints = () => {};
+  // what a pasted curl command fills beyond the key (curlOf): a custom
+  // provider's Base URL and its API, and a new one's models
+  let curlBase = null, curlModel = null;
   // a URL typed and not saved that a protocol switch carried to another
   // protocol: the protocol it was typed for, and the URL as typed
   let carried = null;
@@ -8893,6 +8896,12 @@ function drawEditor(p, presetID) {
       const v = draft[apiField[draft.api]] ? draft.api : ["openai", "responses", "anthropic", "gemini", "decide"].find((a) => draft[apiField[a]]);
       showApi(v || draft.api);
       draft.onModelPrefs?.(); // the APIs a model can be given follow the URLs
+    };
+    curlBase = (api, base) => {
+      carried = null;
+      draft[apiField[api]] = base;
+      showApi(api);
+      draft.onModelPrefs?.();
     };
     // Detect asks OpenAI's, Anthropic's and Gemini's APIs (#1346)
     urlWrap.append(detectAPIs(p, () => url.value, useDetected));
@@ -9061,7 +9070,29 @@ function drawEditor(p, presetID) {
     keyCount.title = n > 1 ? t("The first is tried first; the other {n} are added to its accounts", { n: n - 1 }) : "";
   };
   key.oninput = () => { draft.key = key.value; countKeys(); };
+  // a curl command from a vendor's docs pasted into the key or the Base URL
+  // fills the form (@mark_li21 on X), saying what it took; a key it only
+  // stands for is left out, and the key's box is where to paste one
+  const fromCurl = (e) => {
+    const c = curlOf(e.clipboardData?.getData("text") || "");
+    if (!c) return false;
+    e.preventDefault();
+    const took = [], notes = [];
+    if (curlBase && c.api) { curlBase(c.api, c.base); took.push(t("Base URL") + " (" + t(API_NAMES[c.api]) + ")"); }
+    if (c.key) { key.value = draft.key = c.key; countKeys(); took.push(t("API key")); }
+    if (curlModel && c.model) { curlModel(c.model); took.push(t("model {model}", { model: c.model })); }
+    if (took.length) notes.push(t("Filled in from the curl command: {what}.", { what: took.join(" · ") }));
+    if (curlBase && !c.api) notes.push(t("Its URL isn't an address ending in /chat/completions, /messages or /responses: type the base URL."));
+    if (curlBase && c.urlHole) notes.push(t("Replace {part} in the base URL.", { part: c.urlHole }));
+    if (c.placeholder) notes.push(t("Its key, {key}, only stands for one: paste your own API key.", { key: c.placeholder }));
+    if (!c.key) shown(key)?.focus({ preventScroll: true });
+    editorError(notes.join(" "), "note");
+    return true;
+  };
+  // not fromCurl itself: an on-handler giving back false cancels the paste
+  if (url) url.onpaste = (e) => { fromCurl(e); };
   key.onpaste = (e) => {
+    if (fromCurl(e)) return;
     const keys = splitKeys(e.clipboardData?.getData("text") || "");
     if (keys.length < 2) return;
     e.preventDefault();
@@ -9393,6 +9424,11 @@ function drawEditor(p, presetID) {
     const ex = input(draft.extra.join(", "), t("model ids, comma separated · e.g. gpt-5.5, claude-sonnet-5"));
     const pick = addFormModels(ex);
     ex.oninput = () => { draft.extra = typedIds(ex.value); pick.draw(); };
+    curlModel = (id) => {
+      if (!draft.extra.includes(id)) draft.extra = [...draft.extra, id];
+      ex.value = draft.extra.join(", ");
+      pick.draw();
+    };
     ed.append(...field(t("Models"), pick.box, t("Optional: Fetch models to pick from the vendor's list, or type ids; none picked, magpie asks for the list after saving.")));
   }
 
@@ -14400,6 +14436,87 @@ function respellURL(u, api) {
   if (api === "decide") u = u.replace(/\/systemone$/, "");
   if (api === "gemini") return /^https?:\/\/[^/]+\/v1$/.test(u) ? u + "beta" : /^https?:\/\/[^/]+$/.test(u) ? u + "/v1beta" : u;
   return /\/v\d+[a-z]*$/.test(u) || !/^https?:\/\/[^/]+$/.test(u) ? u : u + "/v1";
+}
+
+// curlOf reads a curl command pasted whole, as a vendor's docs show it
+// (@mark_li21 on X: 能支持通过curl例子直接导入provider不？), into what a
+// provider's editor takes: the API its URL's endpoint names (…/chat/
+// completions OpenAI's chat, …/messages Anthropic's, …/responses OpenAI's
+// Responses) and the base URL that API is asked at (respellURL), the key
+// from Authorization: Bearer, x-api-key or api-key, and the model of its
+// JSON body. Lines may be joined by \ (sh), ^ (cmd) or ` (PowerShell). A
+// key that stands for one ($OPENAI_API_KEY, %KEY%, <API_KEY>, YOUR_API_KEY)
+// is no key: it is given back as placeholder. null for text that isn't a
+// curl command.
+function curlOf(text) {
+  let s = String(text || "").trim();
+  const head = /^curl(?:\.exe)?(?=\s)/i.exec(s);
+  if (!head) return null;
+  const cmd = /\^[ \t]*\r?\n/.test(s), ps = /`[ \t]*\r?\n/.test(s) || /^curl\.exe/i.test(s);
+  s = s.slice(head[0].length).replace(/(?:\\|\^|`)[ \t]*\r?\n/g, " ");
+  // the words as the shell hands them to curl: quotes taken off, escapes read
+  const words = [];
+  let w = null;
+  for (let i = 0; i < s.length;) {
+    const c = s[i];
+    if (/\s/.test(c)) { if (w !== null) words.push(w); w = null; i++; continue; }
+    w ??= "";
+    if (c === "'") {
+      // PowerShell doubles a quote inside single quotes
+      let j = i + 1;
+      for (;;) {
+        const k = s.indexOf("'", j);
+        if (k < 0) { w += s.slice(j); i = s.length; break; }
+        if (ps && s[k + 1] === "'") { w += s.slice(j, k) + "'"; j = k + 2; continue; }
+        w += s.slice(j, k); i = k + 1; break;
+      }
+    } else if (c === '"') {
+      for (i++; i < s.length && s[i] !== '"'; i++) {
+        const esc = (s[i] === "\\" && /["\\$`]/.test(s[i + 1] || "")) || (ps && s[i] === "`");
+        if (esc) i++;
+        w += s[i] ?? "";
+      }
+      i++;
+    } else if ((c === "\\" && !cmd && !ps) || (c === "^" && cmd)) { w += s[i + 1] ?? ""; i += 2; }
+    else { w += c; i++; }
+  }
+  if (w !== null) words.push(w);
+  // the options curl reads a value after; the others stand alone
+  const valued = /^(-[HdXuoAeFbcmT]|--(header|data|data-raw|data-binary|data-ascii|data-urlencode|json|request|url|user|output|user-agent|referer|form|cookie|max-time|connect-timeout|proxy|upload-file|retry|cert|key|cacert))$/;
+  let url = "", body = "";
+  const headers = [];
+  for (let i = 0; i < words.length; i++) {
+    const x = words[i];
+    let opt = x, val = null;
+    if (/^-[Hd]./.test(x)) { opt = x.slice(0, 2); val = x.slice(2); }
+    else if (valued.test(x)) val = words[++i] ?? "";
+    else if (x.startsWith("-")) continue;
+    else { if (!url) url = x; continue; }
+    if (opt === "-H" || opt === "--header") headers.push(val);
+    else if (opt === "--url") url = val;
+    else if (/^(-d|--data(-raw|-binary|-ascii)?|--json)$/.test(opt) && !val.startsWith("@")) body = val;
+  }
+  const out = { url, api: "", base: "", urlHole: "", key: "", placeholder: "", model: "" };
+  const at = /^(https?:\/\/[^?#]*?)\/*(\/chat\/completions|\/messages|\/responses)\/*(?:[?#].*)?$/i.exec(url);
+  if (at) {
+    out.api = { "/chat/completions": "openai", "/messages": "anthropic", "/responses": "responses" }[at[2].toLowerCase()];
+    out.base = respellURL(at[1], out.api);
+    out.urlHole = (/\{[^}]*\}|<[^>]*>|\$\{?\w+\}?|%\w+%/.exec(out.base) || [""])[0];
+  }
+  for (const h of headers) {
+    const m = /^\s*(authorization|x-api-key|api-key)\s*:\s*(.*?)\s*$/i.exec(h);
+    if (!m) continue;
+    const v = m[1].toLowerCase() === "authorization" ? m[2].replace(/^bearer\s+/i, "") : m[2];
+    if (!v) continue;
+    if (/^\$|^%\w+%$|^<.*>$|^\{\{.*\}\}$|^\[.*\]$|your[_-]?|api[_-]?key|x{6,}|\.\.\.|…/i.test(v)) out.placeholder = v;
+    else out.key = v;
+    break;
+  }
+  // a body for PowerShell 5 often escapes its quotes for curl.exe: '{\"model\": …}'
+  for (const b of [body, body.replace(/\\"/g, '"')]) {
+    try { const j = JSON.parse(b); if (typeof j?.model === "string") out.model = j.model.trim(); break; } catch {}
+  }
+  return out;
 }
 
 // renderMove: a built-in subscription a community plugin can run — which
