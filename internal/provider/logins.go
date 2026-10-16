@@ -817,8 +817,6 @@ func Logins(agent string) []Login {
 		return cmdLoginList()
 	case "factory":
 		return factoryLoginList()
-	case MiMoID:
-		return mimoLoginList()
 	case ChatGPTAPIID:
 		return siwcLoginList()
 	case "gemini", "antigravity":
@@ -843,7 +841,7 @@ func Logins(agent string) []Login {
 			{"grok", grokLoginList}, {"copilot", copilotLoginList}, {"zcode", zcodeLoginList},
 			{"devin", devinLoginList}, {CommandCodePlanID, cmdLoginList},
 			{"factory", factoryLoginList},
-			{MiMoID, mimoLoginList}, {ChatGPTAPIID, siwcLoginList}, {"gemini", func() []Login { return googleLoginList("gemini") }},
+			{ChatGPTAPIID, siwcLoginList}, {"gemini", func() []Login { return googleLoginList("gemini") }},
 			{"antigravity", func() []Login { return googleLoginList("antigravity") }},
 		} {
 			if !PluginServes(b.id) {
@@ -1049,8 +1047,6 @@ func switchLogin(agent, user string) error {
 		return switchCommandCodeLogin(user)
 	case "factory":
 		return switchFactoryLogin(user)
-	case MiMoID:
-		return switchMiMoLogin(user)
 	case ChatGPTAPIID:
 		return switchSIWCLogin(user)
 	case "gemini", "antigravity":
@@ -1235,8 +1231,6 @@ func ForgetLogin(agent, user string) error {
 		return forgetCommandCodeLogin(user)
 	case "factory":
 		return forgetFactoryLogin(user)
-	case MiMoID:
-		return forgetMiMoLogin(user)
 	case ChatGPTAPIID:
 		return forgetSIWCLogin(user)
 	case "gemini", "antigravity":

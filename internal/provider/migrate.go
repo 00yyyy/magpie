@@ -271,6 +271,7 @@ var retiredBuiltins = map[string]bool{
 	QoderCNID:     true,
 	"workbuddy":   true,
 	WorkBuddyAIID: true,
+	MiMoID:        true,
 }
 
 // PluginServes is whether the built-in id's subscription is its plugin's to
