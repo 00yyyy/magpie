@@ -23354,8 +23354,10 @@ window.noteAccounts = noteAccounts;
   let masked = false, chosen = null;
   try { chosen = localStorage.getItem("magpie.maskEmails"); masked = chosen === "1"; } catch {}
   // the pages it hides on: Routing's and Usage's, each with its button; in
-  // the tray panel, the whole of it, as the window's setting says
-  const targets = mode === "panel" ? [["#view-agents", null]] : [["#view-routing", "#rtMask"], ["#view-usage", "#usageMask"]];
+  // the tray panel, the whole of it, as the window's setting says: its
+  // model picker, menus and dialogs too, which sit outside its view (PaulT
+  // on Discord: a Codex account's address in the picker stayed in sight)
+  const targets = mode === "panel" ? [["body", null]] : [["#view-routing", "#rtMask"], ["#view-usage", "#usageMask"]];
   const pages = targets.map(([v, b]) => {
     const view = $(v), btn = b && $(b);
     if (!view) return () => {};
