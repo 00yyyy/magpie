@@ -217,7 +217,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
       <li><b>Updates.</b>
         <ul>
           <li>The community’s packages (<code>@magpie-community/*</code>) update by themselves a little after magpie starts, then every hour.</li>
-          <li>Any other package with a newer version shows a dot on <span class="ui">Plugins</span>, and the user updates it with a click or <code>magpie plugin update</code>.</li>
+          <li>Any other package with a newer version shows a dot on <span class="ui">Plugins</span>, and in the sidebar <span class="ui">Installed</span> reads “1 update”. Plugins then opens on Installed, which names the plugins with a newer version at the top beside <span class="ui">Update all</span>; the user updates them with a click or <code>magpie plugin update</code>.</li>
           <li>A spec pinned to a version (<code>name@1.2.3</code>) stays on it until the user updates it: <span class="ui">Update to …</span>, <span class="ui">Update all</span> and <code>magpie plugin update</code> install the newest version and unpin it.</li>
           <li>A git repository has no version to compare. It shows an update when its branch or tag (the default branch without <code>#ref</code>) is at another commit than the one Bun installed: GitHub is asked through its API, any other host with <code>git ls-remote</code>, at most every ten minutes, and the hourly check asks again. A spec pinned to a commit never has one. The row shows the commit installed.</li>
         </ul></li>

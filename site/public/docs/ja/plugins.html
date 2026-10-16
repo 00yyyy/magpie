@@ -217,7 +217,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
       <li><b>更新。</b>
         <ul>
           <li>コミュニティのパッケージ（<code>@magpie-community/*</code>）は、magpie の起動から少し後に自動で更新され、その後は 1 時間ごとに更新されます。</li>
-          <li>そのほかのパッケージは、新しいバージョンがあると <span class="ui">プラグイン</span> にドットが表示され、ユーザーがクリックか <code>magpie plugin update</code> で更新します。</li>
+          <li>そのほかのパッケージは、新しいバージョンがあると <span class="ui">プラグイン</span> にドットが表示され、サイドバーの <span class="ui">インストール済み</span> に「1 件のアップデート」と出ます。このときプラグインを開くとインストール済みが開き、新しいバージョンのあるプラグインが上部に <span class="ui">すべてアップデート</span> と並んで表示されます。ユーザーはクリックか <code>magpie plugin update</code> で更新します。</li>
           <li>バージョンを固定した指定（<code>name@1.2.3</code>）は、ユーザーが更新するまでそのバージョンのままです。<span class="ui">… にアップデート</span>、<span class="ui">すべてアップデート</span>、<code>magpie plugin update</code> は最新版をインストールし、固定を外します。</li>
           <li>git リポジトリには比べるバージョンがありません。ブランチやタグ（<code>#ref</code> がなければデフォルトブランチ）が Bun のインストールしたコミットと違うときだけ、アップデートが表示されます。GitHub のものは GitHub の API に、ほかのホストは <code>git ls-remote</code> で、最大 10 分に 1 回問い合わせ、1 時間ごとのチェックでも問い合わせます。コミットに固定した指定にはアップデートはありません。行にはインストールしたコミットが表示されます。</li>
         </ul></li>

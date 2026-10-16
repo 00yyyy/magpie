@@ -233,6 +233,9 @@
     askGit();
   }
   window.loadPlugins = load;
+  // the sidebar's dot, followed: Plugins opens on Installed, where the
+  // plugins with an update are named at the top
+  window.pluginTabTo = (id) => { tab = id; };
   // pluginQuery: Discover, looking for q (the add sheet found nothing by it)
   window.pluginQuery = (q) => {
     if (q === query && !q) return;
@@ -765,6 +768,7 @@
       drawBody();
     });
     tabs.classList.add("lib-tabs");
+    tabs.querySelectorAll(".opt")[2].dataset.sub = "installed";
     q.placeholder = t("Search plugins and npm…");
     if (q.value !== query) q.value = query;
     q.setAttribute("aria-label", t("Search plugins"));
@@ -1025,6 +1029,22 @@
       body.append(none);
       return;
     }
+    // what the sidebar's dot is about, said where it's acted on: which
+    // plugins have a newer version, and one press to update them all
+    const outdated = es.filter((e) => (e.latest && e.version && newer(e.latest, e.version)) || (gitBehind(e) && !e.off));
+    if (outdated.length) {
+      const bar = el("div", "pm-updates");
+      const names = outdated.map(shownName).join(t(", "));
+      bar.append(el("span", "pm-dot"), el("span", "grow", outdated.length === 1
+        ? t("A newer version of {name} is out", { name: names })
+        : t("Newer versions of {n} plugins are out: {names}", { n: outdated.length, names })));
+      const up = el("button", "pm-act pm-up", busy.has("*") ? t("Updating…") : t("Update all ({n})", { n: outdated.length }));
+      up.type = "button";
+      up.disabled = busy.size > 0 || checking;
+      up.onclick = () => act("*", "update", {}, () => status(t("Plugins updated"), "ok"));
+      bar.append(up);
+      body.append(bar);
+    }
     // by name, in the order the reader picked (#481), not the order they
     // were installed in
     const list = el("div", "list pm-list");
@@ -1037,7 +1057,6 @@
     fill();
     body.append(list);
     const foot = el("div", "pm-foot");
-    const outdated = es.filter((e) => (e.latest && e.version && newer(e.latest, e.version)) || (gitBehind(e) && !e.off));
     foot.append(el("span", "", mine.bun ? t("Plugins run on Bun {v}", { v: mine.bunVersion }) : ""), el("span", "grow"));
     // npm has versions to ask for, and a git one's repository commits; a
     // folder has none
@@ -1049,13 +1068,6 @@
       c.disabled = checking || busy.size > 0;
       c.onclick = () => checkUpdates();
       foot.append(c);
-    }
-    if (outdated.length) {
-      const up = el("button", "pm-act pm-up", busy.has("*") ? t("Updating…") : t("Update all ({n})", { n: outdated.length }));
-      up.type = "button";
-      up.disabled = busy.size > 0 || checking;
-      up.onclick = () => act("*", "update", {}, () => status(t("Plugins updated"), "ok"));
-      foot.append(up);
     }
     body.append(foot);
   }

@@ -217,7 +217,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
       <li><b>更新。</b>
         <ul>
           <li>社区的包（<code>@magpie-community/*</code>）在 magpie 启动后不久自动更新，之后每小时一次。</li>
-          <li>其他包有新版本时，<span class="ui">插件</span>上会出现一个小圆点，用户点一下或运行 <code>magpie plugin update</code> 更新。</li>
+          <li>其他包有新版本时，<span class="ui">插件</span>上会出现一个小圆点，侧栏里的<span class="ui">已安装</span>显示“1 个更新”。这时打开插件会直接到已安装，顶部列出有新版本的插件和<span class="ui">全部更新</span>；用户点一下或运行 <code>magpie plugin update</code> 更新。</li>
           <li>固定了版本的写法（<code>name@1.2.3</code>）会停在那个版本，直到用户自己更新：<span class="ui">更新到 …</span>、<span class="ui">全部更新</span>和 <code>magpie plugin update</code> 会装上最新版并取消固定。</li>
           <li>git 仓库没有版本号可比。它的分支或标签（不写 <code>#ref</code> 时是默认分支）指向的提交和 Bun 装的那个不一样时，才显示有更新：GitHub 上的通过 GitHub API 查询，其他主机用 <code>git ls-remote</code>，最多每十分钟问一次，每小时的检查也会再问。固定到某个提交的写法不会有更新。这一行会显示已安装的提交。</li>
         </ul></li>

@@ -22571,6 +22571,7 @@ async function show(v) {
   // and one a built-in plugin switched off has, Agents
   if (featureHides($(`#nav button[data-view="${v}"]`))) v = gatewayMode ? "providers" : "agents";
   if (v !== view) {
+    if (v === "plugins" && pluginUpdates) window.pluginTabTo?.("installed");
     if (view === "providers" && (editing !== null || importing || importingApps)) {
       if (!await cancelEdit(true)) return false;
     } else if (!$("#modal").hidden && !$("#modal").classList.contains("out")) {
@@ -23137,7 +23138,7 @@ function navSubs() {
   const side = sideNav();
   const items = side ? navSubItems(view) : [];
   const at = view === "settings" ? $("#prefs") : nav.querySelector(`button[data-view="${view}"]`);
-  const sig = [side, view, locale, ...items.map((b) => b.textContent.trim() + (b.classList.contains("on") ? "*" : ""))].join("|");
+  const sig = [side, view, locale, pluginUpdates, ...items.map((b) => b.textContent.trim() + (b.classList.contains("on") ? "*" : ""))].join("|");
   if (sig === navSubsAt) return;
   navSubsAt = sig;
   let box = document.querySelector(".nav-sub:not(.leaving)");
@@ -23173,7 +23174,11 @@ function navSubs() {
       s.setAttribute("aria-selected", String(cur));
       s.tabIndex = cur ? 0 : -1;
       s.append(el("span", "", name));
-      if (n) s.append(el("em", "", n));
+      if (b.dataset.sub === "installed" && pluginUpdates) {
+        const up = el("em", "up", t(pluginUpdates === 1 ? "1 update" : "{n} updates", { n: pluginUpdates }));
+        s.title = t("Newer versions of your plugins are out: update them under Installed");
+        s.append(up);
+      } else if (n) s.append(el("em", "", n));
       // the selection goes as the finger comes down, as iOS's does, not once
       // the page has drawn the tab; let go off the row, it goes back
       s.onpointerdown = (e) => { if (e.button === 0) navSubGlide(box, s); };
@@ -23436,9 +23441,13 @@ async function renderPluginDot() {
   const u = await api("plugins/updates").catch(() => null);
   const n = u?.waiting?.length || 0;
   b.classList.toggle("has-dot", n > 0);
+  // the dot says itself where the reader acts on it: Installed, under
+  // Plugins in the sidebar, reads "1 update" in its count's place
+  if (pluginUpdates !== n) { pluginUpdates = n; navSubs(); }
   if (n) b.title = t(n === 1 ? "An update for {name} is out" : "Updates for {n} plugins are out", { n, name: u.waiting[0].package });
   else b.removeAttribute("title");
 }
+var pluginUpdates = 0;
 window.renderPluginDot = renderPluginDot;
 renderPluginDot();
 window.addEventListener("focus", renderPluginDot);
