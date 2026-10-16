@@ -1261,7 +1261,7 @@ func codexIn(at place) *Agent {
 				if err != nil {
 					return err.Error()
 				}
-				if t["base_url"] != at.v1() || t["experimental_bearer_token"] != at.gwKey() || t["wire_api"] != "responses" {
+				if t["base_url"] != at.v1() || !keyHolds(t["experimental_bearer_token"], at.gwKey()) || t["wire_api"] != "responses" {
 					return "Codex's [model_providers.magpie] no longer points at magpie's gateway (" + at.v1() + ")"
 				}
 				if c := get("model_catalog_json"); !ownCatalog(c) {
