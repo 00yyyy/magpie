@@ -94,7 +94,7 @@ func factoryAddKey(ctx context.Context, key string) ImportedAccount {
 	if user == "" {
 		return ImportedAccount{User: factoryKeyName(key), Status: "failed", Error: "Factory took the key but didn't say whose account it is"}
 	}
-	if Moved("factory") {
+	if PluginServes("factory") {
 		return factoryKeyToPlugin(wctx, user, c)
 	}
 	status := "added"

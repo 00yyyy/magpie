@@ -856,7 +856,7 @@ func Logins(agent string) []Login {
 			{MiMoID, mimoLoginList}, {ChatGPTAPIID, siwcLoginList}, {"gemini", func() []Login { return googleLoginList("gemini") }},
 			{"antigravity", func() []Login { return googleLoginList("antigravity") }},
 		} {
-			if !Moved(b.id) {
+			if !PluginServes(b.id) {
 				side = append(side, b.list()...)
 				continue
 			}

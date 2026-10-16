@@ -416,7 +416,7 @@ func HasWorkBuddy() bool { return len(wbCheckinAccounts()) > 0 }
 // moved back), whose cards had their credits by day but no check-in
 // (#694, Dazzle-sys on 0.1.774: 没看到).
 func wbCheckinAccounts() []wbAccount {
-	if Moved(wbCN.id) {
+	if PluginServes(wbCN.id) {
 		pp, ok := PluginOf(wbCN.id)
 		if !ok || pluginChecksIn(pp) {
 			return nil

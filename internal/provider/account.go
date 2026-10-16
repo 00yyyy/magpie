@@ -904,7 +904,7 @@ func Accounts() []Provider {
 		}
 	}
 	// a built-in moved onto its plugin is the plugin's now (migrate.go)
-	out = slices.DeleteFunc(out, func(p Provider) bool { return Moved(p.ID) })
+	out = slices.DeleteFunc(out, func(p Provider) bool { return PluginServes(p.ID) })
 	return placeMoved(out, pluginAccounts())
 }
 
@@ -923,7 +923,7 @@ func placeMoved(out, plugins []Provider) []Provider {
 	}
 	var rest []Provider
 	for _, p := range plugins {
-		if !Moved(p.ID) || !slices.Contains(builtinOrder, p.ID) {
+		if !PluginServes(p.ID) || !slices.Contains(builtinOrder, p.ID) {
 			rest = append(rest, p)
 			continue
 		}

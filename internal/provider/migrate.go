@@ -14,12 +14,13 @@ package provider
 //     one that fails otherwise goes along untried, since the built-in is
 //     retired and the plugin is where the account is fixed now;
 //  4. the id changes hands: the built-in's saved accounts go out of
-//     logins.json into migrations.json, kept for going back.
+//     logins.json into migrations.json.
 //
 // A failure on the way (the install, the plugin not serving the id, a
-// sign-in it won't import) puts everything back as it was — the plugin's
-// newer tokens included, since a refresh token used once is spent — and
-// the built-in carries on. MoveBack undoes a move the same way.
+// sign-in it won't import) puts the built-in's saved accounts back as they
+// were — the plugin's newer tokens included, since a refresh token used
+// once is spent — for the next try. The built-in serves nothing either
+// way (Retired): MoveCandidates lists the accounts still to move, and why.
 
 import (
 	"context"
@@ -143,6 +144,13 @@ func installFailed(pkg string, err error) error {
 
 // nameOf is the built-in id's name, as the providers list shows it.
 func nameOf(id string) string {
+	// a retired built-in is listed no more: the name it had
+	if c, ok := movedCards[id]; ok {
+		return c.name
+	}
+	if id == QoderCNID {
+		return "Qoder CN"
+	}
 	for _, p := range All() {
 		if p.ID == id && !p.IsPlugin() && p.Name != "" {
 			return p.Name
@@ -246,6 +254,22 @@ var errStays = errors.New("stays with the plugin")
 // Movable is whether the built-in id has a plugin it can move to.
 func Movable(id string) bool { return movers[id] != nil }
 
+// BuiltinRetired is whether magpie's built-in id is retired: its plugin serves
+// it, and the built-in serves nothing, moved or not. One whose accounts
+// haven't moved yet (a failed install, an account the plugin turned away)
+// is listed by MoveCandidates with why, until it moves. The built-ins are
+// retired one by one, each with its code (the owner, 10-16: 陆续把内置
+// Provider下线掉), so this is the set retired so far.
+func BuiltinRetired(id string) bool { return Movable(id) && retiredBuiltins[id] }
+
+// retiredBuiltins are the built-in subscriptions whose code is gone.
+var retiredBuiltins = map[string]bool{}
+
+// PluginServes is whether the built-in id's subscription is its plugin's to
+// serve, and magpie's built-in code serves none of it: moved onto its plugin,
+// or retired.
+func PluginServes(id string) bool { return Moved(id) || BuiltinRetired(id) }
+
 // MovableIDs are the built-ins that have a plugin to move to, by id: the
 // page marks them deprecated, moved or not.
 func MovableIDs() []string {
@@ -263,6 +287,9 @@ type MoveCandidate struct {
 	Name     string `json:"name"`
 	Package  string `json:"package"`
 	Accounts int    `json:"accounts"`
+	// Error and Why are the last try's failure, when one failed
+	Error string   `json:"error,omitempty"`
+	Why   *MoveWhy `json:"why,omitempty"`
 }
 
 // MoveCandidates are the built-ins not on their plugins that have accounts
@@ -277,7 +304,11 @@ func MoveCandidates() []MoveCandidate {
 			continue
 		}
 		if accts, err := mv.out(); err == nil && len(accts) > 0 {
-			out = append(out, MoveCandidate{ID: id, Name: nameOf(id), Package: mv.pkg, Accounts: len(accts)})
+			c := MoveCandidate{ID: id, Name: nameOf(id), Package: mv.pkg, Accounts: len(accts)}
+			if m, ok := MigrationOf(id); ok && m.State == MoveFailed {
+				c.Error, c.Why = m.Err, m.Why
+			}
+			out = append(out, c)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -342,7 +373,7 @@ func Moved(id string) bool {
 // built-in's, its plugin's now.
 func movedAgent(agent string) bool {
 	for id, mv := range movers {
-		if slices.Contains(mv.agents, agent) && Moved(id) {
+		if slices.Contains(mv.agents, agent) && PluginServes(id) {
 			return true
 		}
 	}
@@ -1040,7 +1071,7 @@ func KeepRetiringMoved(ctx context.Context) {
 		maps.Copy(moves, HandOver(ctx, true))
 		for id, err := range moves {
 			if err != nil {
-				log.Printf("moving %s to its plugin: %s (it stays built-in)", id, err)
+				log.Printf("moving %s to its plugin: %s (nothing serves it until it moves)", id, err)
 			} else {
 				log.Printf("moved %s to its plugin, %s", id, MovePackage(id))
 			}

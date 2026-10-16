@@ -19,6 +19,8 @@ The `movers` map assembled in `internal/provider/migrate*.go` is the authoritati
 
 `provider.Moved(id)` identifies a subscription whose migration state in `migrations.json` is `plugin`. In `/api/providers`, its row exposes `move.state == "plugin"`; the GUI also receives its id in `onPlugins`.
 
+A retired built-in (`retiredBuiltins` in [`migrate.go`](../../internal/provider/migrate.go), `provider.BuiltinRetired(id)`) has no built-in code left: the plugin serves it whether or not a move has run, and its row's `move.state` is `plugin`. Gates that once asked `Moved(id)` ask `provider.PluginServes(id)`, which is moved or retired. Built-in accounts of a retired subscription that haven't moved yet are served by nothing; `/api/providers` lists them in `unmoved` (each a `MoveCandidate`, with the failed move's `error` and `why`), and the GUI shows a line over the Providers list with a Move button (`unmovedLine` in `app.js`). Built-ins are retired one at a time, each in the commit that removes its code.
+
 | Operation | Built-in owns the subscription | Plugin owns the subscription |
 | --- | --- | --- |
 | Sign-in, refresh, and models | Built-in provider implementation | Community plugin through magpie's plugin integration |

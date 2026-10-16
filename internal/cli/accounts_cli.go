@@ -438,7 +438,7 @@ func addAccount(agentID string) error {
 			return fmt.Errorf("sign-in canceled")
 		}
 	}
-	if _, plug := provider.PluginOf(agentID); plug || provider.Moved(agentID) {
+	if _, plug := provider.PluginOf(agentID); plug || provider.PluginServes(agentID) {
 		return pluginLogin(context.Background(), agentID, "")
 	}
 	if p, _ := claudeCode.downloaded(); agentID == "claude" && runtime.GOOS != "windows" && claudeCode.own() == "" && p == "" {
@@ -557,7 +557,7 @@ func importAccounts(args []string) error {
 		id = "antigravity"
 	case "factory", "droid":
 		id = "factory"
-		if provider.Moved(id) {
+		if provider.PluginServes(id) {
 			return fmt.Errorf("Factory runs on its plugin now: add the key with magpie accounts add factory")
 		}
 	default:

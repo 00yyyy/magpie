@@ -69,6 +69,14 @@ Two cases decide it:
   installing it again gives the subscription back.
 - **Not moved:** the user is still signed in through the built-in: the
   move hasn't run yet, or it failed (tried again after six hours).
+- **Retired:** the built-in's code is gone (`retiredBuiltins` in
+  `internal/provider/migrate.go`; `provider.BuiltinRetired(id)`). The
+  plugin serves it, moved or not. Accounts not moved yet are served by
+  nothing; a line over the Providers list says so, with why and a Move
+  (`providers.unmoved`, `unmovedLine` in app.js). With no row of its own,
+  the Add sheet leaves it to the Plugins page (`unusedSub`). The
+  built-ins are retired one at a time, each with its code; gates ask
+  `provider.PluginServes(id)` (moved or retired).
 
 For a moved subscription, the plugin does everything: sign-in, refresh,
 models, requests, usage and errors. It runs in the plugin host
