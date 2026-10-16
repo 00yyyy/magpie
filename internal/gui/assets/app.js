@@ -9734,6 +9734,8 @@ function drawEditor(p, presetID) {
   };
   saveBtn.onclick = save;
   bar.append(cancel, saveBtn);
+  // a plugin's panels for a provider (magpie.panels' provider), told which
+  if (p) { const slot = magpie.slot?.("provider", { provider: { id: p.id, name: p.name || p.id } }); if (slot) ed.append(slot); }
   ed.append(bar);
   setTimeout(() => (isNew ? (custom || another ? name : endpoint || vertexProject || key) : null)?.focus(), 0);
   return ed;
@@ -18787,7 +18789,7 @@ function tabKeys(tabs, sel) {
 // tab. A click on a tab, like every click, leaves the page where it is: the
 // tabs at the top stay where they were and the part comes in under them.
 // Picked in the sidebar, a part opens at its top (navSubs).
-const SET_TABS = ["general", "usage", "network", "models", "privacy", "otel", "sync", "about"];
+const SET_TABS = ["general", "usage", "network", "models", "privacy", "otel", "sync", "plugins", "about"];
 let setTab = "general";
 try { const k = localStorage.getItem("magpie.settingsTab"); if (SET_TABS.includes(k)) setTab = k; } catch {}
 let setShown = setTab; // the part shown: the one picked, or the first there
@@ -18807,7 +18809,9 @@ function setSetTab(tab, remember) {
     setTab = tab;
     try { localStorage.setItem("magpie.settingsTab", tab); } catch {}
   }
-  for (const id of SET_TABS) $("#setTab-" + id).hidden = featureHides($("#setTab-" + id)) || !partShows($("#setPage-" + id));
+  // Plugins is there while a plugin's panel is (magpie.panels' settings)
+  for (const id of SET_TABS) $("#setTab-" + id).hidden = featureHides($("#setTab-" + id)) || !partShows($("#setPage-" + id))
+    || (id === "plugins" && !$("#setPage-plugins .plugin-panel"));
   if (!SET_TABS.includes(tab) || $("#setTab-" + tab).hidden) tab = SET_TABS.find((id) => !$("#setTab-" + id).hidden) || "general";
   for (const id of SET_TABS) {
     const b = $("#setTab-" + id), on = id === tab;
@@ -22560,6 +22564,8 @@ for (const v of document.querySelectorAll(".view")) {
 }
 
 async function show(v) {
+  // a built-in page a plugin's page replaces (magpie.page.replaces) opens that
+  v = magpie.replacing?.(v) || v;
   // a page gateway mode leaves out (a link to it, an address kept) opens Providers
   if (gatewayMode && GATEWAY_HIDES.includes(v)) v = "providers";
   // and one a built-in plugin switched off has, Agents
@@ -23125,7 +23131,7 @@ function navSubs() {
   // a group none of whose pages shows (gateway mode's) leaves out its name
   for (const gl of nav.querySelectorAll(".nav-gl")) {
     let any = false;
-    for (let n = gl.nextElementSibling; n && !n.matches(".nav-gl"); n = n.nextElementSibling) if (n.dataset.view && !n.hidden) any = true;
+    for (let n = gl.nextElementSibling; n && !n.matches(".nav-gl"); n = n.nextElementSibling) if (n.dataset.view && !n.hidden && !n.dataset.replaced) any = true;
     gl.hidden = !any;
   }
   const side = sideNav();

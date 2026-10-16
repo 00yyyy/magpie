@@ -117,13 +117,15 @@
   // an agent ("ag") is one magpie has no wiring of its own for, which it
   // then connects as it does its own; tools ("tl") are given to every
   // agent through magpie's plugin tools MCP server; a page ("pg") is a
-  // page of its own in the window's sidebar (pluginpages.js)
+  // page of its own in the window's sidebar (pluginpages.js); panels
+  // ("pn") are its parts in magpie's own pages
   const KINDS = {
     pv: [PLUG, "Provider", "Signs in to a subscription and serves its models"],
     mw: [PIPE, "Middleware", "Runs in magpie's gateway on the requests your agents send and on the replies"],
     ag: [TERM, "Agent", "Adds an agent magpie has no setup of its own for: pick its model on the Agents page and it goes through magpie"],
     tl: [TOOL, "Tools", "Gives every agent tools of its own, through magpie's MCP server"],
     pg: [PAGE, "Page", "Adds a page of its own to the sidebar. It runs shut off from the rest of magpie and can read only what its row lists"],
+    pn: [PAGE, "Panels", "Adds panels to magpie's own pages. They run shut off from the rest of magpie and can read only what its row lists"],
   };
   const kindOf = (l) => ({ middleware: "mw", agent: "ag", tools: "tl", page: "pg" })[l.kind] || "pv";
   function kindChip(kind) {
@@ -1131,6 +1133,7 @@
     const toolsOnly = !!e.tools?.length && !e.providers?.length;
     if (e.tools?.length) nm.append(kindChip("tl"));
     if (e.page) nm.append(kindChip("pg"));
+    if (e.panels?.length) nm.append(kindChip("pn"));
     if (e.providers?.length || !(e.gatewayOnly || e.middlewareOnly || e.inMagpieOnly || toolsOnly || (mw && !e.isMiddleware) || (ag && !e.isAgent))) nm.append(kindChip("pv"));
     who.append(nm);
     const subs = subsOf(pkg);
@@ -1162,8 +1165,8 @@
         else if (!x.signedIn && subs.some((y) => y.signedIn)) s.title = t("{name} is a subscription of its own; {other} works without it", { name: x.name, other: subs.find((y) => y.signedIn).name });
         sub.append(s);
       }
-    } else if ((mw || ag || gw || e.isGateway || toolsOnly || e.page && e.inMagpieOnly) && !e.providers.length) {
-      // only middleware, a request hook, an agent, tools or a page: its own line says what it does
+    } else if ((mw || ag || gw || e.isGateway || toolsOnly || (e.page || e.panels?.length) && e.inMagpieOnly) && !e.providers.length) {
+      // only middleware, a request hook, an agent, tools, a page or panels: its own line says what it does
     } else if (clashes.length && !e.providers.length) {
       // its own line below says whose it is
     } else if (e.providers.length) sub.textContent = t("Signs in to {names}", { names: e.providers.join(t(", ")) });
@@ -1180,10 +1183,11 @@
     if (e.tools?.length && !e.off && !ask) who.append(toolsLine(e.tools));
     // off too: what its page may read is said before it is turned on
     if (e.page && !ask) who.append(pageLine(e.page));
+    if (e.panels?.length && !ask) who.append(panelsLine(e.panels, e.panelReads));
     if ((mw || e.isGateway) && !e.off && !ask && editing?.pkg === pkg) who.append(optionsEditor(e));
     // the plugin's own picture (package.json's magpie.icon) before its
     // first provider's, which a plugin of several gives each its own (#1775)
-    r.append(logo(l?.icon || l?.npm?.icon || e.icon || subs[0]?.icon || ag?.icon, false, e.middlewareOnly ? "mw" : e.inMagpieOnly && e.isAgent && !e.isMiddleware ? "ag" : e.inMagpieOnly && e.page && !e.isAgent && !e.isMiddleware ? "pg" : toolsOnly && !e.page && !mw && !ag ? "tl" : ""), who);
+    r.append(logo(l?.icon || l?.npm?.icon || e.icon || subs[0]?.icon || ag?.icon, false, e.middlewareOnly ? "mw" : e.inMagpieOnly && e.isAgent && !e.isMiddleware ? "ag" : e.inMagpieOnly && (e.page || e.panels?.length) && !e.isAgent && !e.isMiddleware ? "pg" : toolsOnly && !e.page && !mw && !ag ? "tl" : ""), who);
     const val = el("div", "val");
     const b = busy.get(pkg) || busy.get(e.spec);
     // npm's newer version, or a git one's repository at a newer commit
@@ -1360,12 +1364,32 @@
   // what a plugin's page may read of magpie's: what its package.json's
   // magpie.permissions declares, each a read with no secret in it
   const READS = { "usage:summary": "your usage totals, by model", "providers:list": "your providers' names" };
+  const PAGES = { sessions: "Sessions", library: "Library", routing: "Routing", usage: "Usage" };
   function pageLine(p) {
     const d = el("div", "sub pm-mw pm-page");
     const reads = (p.reads || []).map((r) => t(READS[r] || r));
-    d.textContent = d.title = reads.length
-      ? t("Adds a page to the sidebar, which can read {reads}", { reads: reads.join(t(", ")) })
-      : t("Adds a page to the sidebar, which reads nothing of magpie's");
+    const page = p.replaces && t(PAGES[p.replaces] || p.replaces);
+    d.textContent = d.title = page
+      ? reads.length
+        ? t("Takes the place of the {page} page, and can read {reads}", { page, reads: reads.join(t(", ")) })
+        : t("Takes the place of the {page} page, and reads nothing of magpie's", { page })
+      : reads.length
+        ? t("Adds a page to the sidebar, which can read {reads}", { reads: reads.join(t(", ")) })
+        : t("Adds a page to the sidebar, which reads nothing of magpie's");
+    return d;
+  }
+
+  // where a plugin's panels go in magpie's own pages (magpie.panels), and
+  // what they may read
+  const SLOTS = { agents: "the Agents page", usage: "the Usage page", settings: "Settings", provider: "each provider's editor" };
+  function panelsLine(panels, panelReads) {
+    const d = el("div", "sub pm-mw pm-page");
+    const where = [...new Set(panels.map((x) => x.slot))].map((s) => t(SLOTS[s] || s)).join(t(", "));
+    const reads = (panelReads || []).map((r) => t(READS[r] || r));
+    d.textContent = reads.length
+      ? t("Adds panels to {where}, which can read {reads}", { where, reads: reads.join(t(", ")) })
+      : t("Adds panels to {where}, which read nothing of magpie's", { where });
+    d.title = panels.map((x) => x.title).filter(Boolean).join("\n") || d.textContent;
     return d;
   }
 
