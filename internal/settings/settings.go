@@ -117,6 +117,14 @@ type Settings struct {
 	// its place (gateway.AllowIPs). This computer's own (KeepOwn), as LAN
 	// is: the addresses are of the network this computer is on.
 	AllowIPs []string `json:"allowIPs,omitempty"`
+	// FetchPrivate are the private hosts and ranges (a name, name:port, an
+	// IP or a CIDR range) magpie may download a URL from that it didn't
+	// choose itself: an image or video a request names or a vendor answers
+	// with, or a page web_fetch reads. None by default: such a URL is
+	// downloaded from public addresses only, whoever sent the request and
+	// from wherever (gateway.publicClient). In settings.json only; it names
+	// this computer's own network, so it isn't synced (KeepOwn).
+	FetchPrivate []string `json:"fetchPrivate,omitempty"`
 	// Port is the gateway's port on this computer, 0 for DefaultPort.
 	// MAGPIE_ADDR, where it is set, comes first (GatewayAddr).
 	Port int `json:"port,omitempty"`
@@ -943,6 +951,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.QuotaReads = cur.QuotaReads
 	s.NoAccountDiscovery = cur.NoAccountDiscovery
 	s.LAN, s.AllowIPs = cur.LAN, cur.AllowIPs
+	s.FetchPrivate = cur.FetchPrivate
 	s.SessionTerminal = cur.SessionTerminal
 }
 
