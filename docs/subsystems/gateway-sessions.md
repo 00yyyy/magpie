@@ -31,6 +31,14 @@ the native WorkBuddy session reader already knows; old requests without a
 recorded session remain unnamed. See `TestWorkBuddySessionHeader`,
 `TestWorkBuddySessionThroughGateway` and `TestRemoteMagpieKeepsTheSession`.
 
+DSH names its session in `x-deepseek-harness-session-id`, read the same way
+after the others, and marks a request that compacts its context with
+`x-deepseek-harness-compact` (#2505). `callKind` records such a call as
+`compact`, the Requests list's Compaction; a value of `0`, `false`, `no` or
+`off` is no mark, and a request without one is never taken for a compaction
+by its prompt. `passOnCaller` sends the mark on to a remote magpie beside
+the session, and no vendor is sent either (`TestDshMarksSessionAndCompaction`).
+
 When the same identity is present in a native session, the native session wins
 and the gateway projection is omitted. Gateway projections have no path,
 resume command or terminal action: the agent's own files of them are not on
