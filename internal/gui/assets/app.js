@@ -15397,7 +15397,7 @@ function keyCards(list) {
       || (!p.user && of.length === 1 && list.filter((x) => x.provider === p.provider && plan(x)).length === 1 ? of[0] : null);
     if (!b || b.error || b.asOf || gone.has(b)) continue;
     gone.add(b);
-    merged.set(p, { ...p, balance: b.balance, balanceParts: b.balanceParts, balanceTrend: b.balanceTrend, balanceCard: trayCardID(b) });
+    merged.set(p, { ...p, balance: b.balance, balanceParts: b.balanceParts, balanceSplit: b.balanceSplit, balanceTrend: b.balanceTrend, balanceCard: trayCardID(b) });
   }
   return gone.size ? list.filter((q) => !gone.has(q)).map((q) => merged.get(q) || q) : list;
 }
@@ -16660,8 +16660,9 @@ function panelBalances(bals) {
     who.append(quotaRefresh(q), icon(q.icon || "generic"), el("span", "", q.name));
     card.append(who);
     // a balance field with several amounts: the first as the figure,
-    // the others each a quiet line, a percent a meter (#420)
-    const parts = q.balanceParts?.length ? q.balanceParts : [{ text: q.balance }];
+    // the others each a quiet line, a percent a meter (#420); what the
+    // vendor says it is made of, those lines too
+    const parts = balanceShown(q) || [{ text: q.balance }];
     for (const [i, p] of parts.entries()) {
       let amount;
       if (!i && !p.label) card.append(amount = el("b", "pq-amt", p.text));
@@ -17471,7 +17472,7 @@ function fitQuota(g) {
 // panel's rings) (#420). Under it, when it was read, unless the card
 // says that under its windows (when false).
 function balanceRow(sub, why, when = true) {
-  const parts = sub.balanceParts;
+  const parts = balanceShown(sub);
   const b = el("div", "quota-balance" + (parts?.length ? " parts" : ""));
   b.title = t(why);
   if (!parts?.length) b.append(el("span", "", t("Balance")), el("b", "", sub.balance));
@@ -17486,6 +17487,16 @@ function balanceRow(sub, why, when = true) {
   const read = when && readWhen(sub, when === "refresh");
   if (read) b.append(read);
   return b;
+}
+
+// balanceShown: a balance's amounts each on a line, when it has several:
+// a balance field's own, or the figure and what the vendor says it is
+// made of (DeepSeek's granted credit and the money topped up, wwcraft_ on
+// Discord), those labels in the user's language. null for one figure.
+function balanceShown(q) {
+  if (q.balanceParts?.length) return q.balanceParts;
+  if (!q.balanceSplit?.length) return null;
+  return [{ text: q.balance }, ...q.balanceSplit.map((p) => ({ ...p, label: t(p.label) }))];
 }
 
 // balanceMeter: a balance field's percent, as a meter.
