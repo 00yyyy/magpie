@@ -32,8 +32,7 @@ func TestMoveBackKeepsLapse(t *testing.T) {
 	if _, err := plugin.Providers(ctx); err != nil {
 		t.Fatal(err)
 	}
-	inUse := []string{"fake-1"}
-	fakeMover(t, &inUse)
+	fakeMover(t)
 	mv := movers["fakeco"]
 	mv.pkg = abs
 	back := mv.back
@@ -87,8 +86,7 @@ func TestMoveRefusedWhileListing(t *testing.T) {
 	if _, err := plugin.Providers(ctx); err != nil {
 		t.Fatal(err)
 	}
-	inUse := []string{"fake-1"}
-	fakeMover(t, &inUse)
+	fakeMover(t)
 	movers["fakeco"].pkg = abs
 	loginsMu.Lock()
 	if err := writeLogins([]savedLogin{fakeLogin("a@fake", "r-a", true, true), fakeLogin("g@fake", "r-models-gone", false, true)}); err != nil {
@@ -131,8 +129,7 @@ func TestMoveExpiredInWords(t *testing.T) {
 	if _, err := plugin.Providers(ctx); err != nil {
 		t.Fatal(err)
 	}
-	inUse := []string{"fake-1"}
-	fakeMover(t, &inUse)
+	fakeMover(t)
 	movers["fakeco"].pkg = abs
 	loginsMu.Lock()
 	if err := writeLogins([]savedLogin{fakeLogin("a@fake", "r-a", true, true), fakeLogin("x@fake", "r-models-expired", false, true)}); err != nil {

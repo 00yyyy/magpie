@@ -14,8 +14,7 @@ import (
 // signed in to under its own id already stays as it is, as does one the
 // user moved back, and nothing happens while the plugin isn't installed.
 func TestHandOver(t *testing.T) {
-	inUse := []string{"fake-1"}
-	ctx, abs, installs := fakePlugin(t, &inUse)
+	ctx, abs, installs := fakePlugin(t)
 	reset := func(ls ...savedLogin) {
 		t.Helper()
 		_ = plugin.SignOut(ctx, "fakeco", "")
