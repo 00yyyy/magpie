@@ -18,7 +18,6 @@ func init() {
 		agents: []string{"factory"},
 		out: func() ([]Moving, error) {
 			ls := factoryLogins()
-			// no refresh of the built-in's runs while the pairs are read
 			factoryMu.Lock()
 			defer factoryMu.Unlock()
 			var out []Moving

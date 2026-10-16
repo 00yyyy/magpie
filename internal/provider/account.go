@@ -862,9 +862,6 @@ func Accounts() []Provider {
 	if p, ok := commandCodeAccount(); ok {
 		out = append(out, p)
 	}
-	if p, ok := factoryAccount(); ok {
-		out = append(out, p)
-	}
 	if p, ok := siwcAccount(); ok {
 		out = append(out, p)
 	}

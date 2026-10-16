@@ -478,9 +478,6 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 	if !moved("devin") && !hidden["devin"] {
 		fetches = append(fetches, perLogin(via("devin"), devinLoginList(), accountCard("devin"))...)
 	}
-	if !moved("factory") && !hidden["factory"] {
-		fetches = append(fetches, perLogin(via("factory"), factoryLoginList(), accountCard("factory"))...)
-	}
 	for _, agent := range []string{"gemini", "antigravity"} {
 		if hidden[agent] {
 			continue

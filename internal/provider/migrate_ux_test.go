@@ -243,9 +243,13 @@ func TestZedMoveCarriesItsModels(t *testing.T) {
 // not plugin://<id>'s: "" for one that had none, as Zed's.
 func TestMovedShowsBuiltinHost(t *testing.T) {
 	claudeHome(t)
-	pp := plugin.Provider{ID: "factory", Models: []plugin.Model{{ID: "m"}}}
-	if h := pluginProvider(pp, pluginLogin{}).Host(); h != "factory" {
+	if h := pluginProvider(plugin.Provider{ID: "fakeco", Models: []plugin.Model{{ID: "m"}}}, pluginLogin{}).Host(); h != "fakeco" {
 		t.Fatalf("a plugin's own provider: %q", h)
+	}
+	// Factory is retired: its plugin is it, moved or not
+	pp := plugin.Provider{ID: "factory", Models: []plugin.Model{{ID: "m"}}}
+	if h := pluginProvider(pp, pluginLogin{}).Host(); h != HostOf(factoryAPI) {
+		t.Fatalf("retired, not moved: %q", h)
 	}
 	// the host the move kept, else (moved before it kept one) the built-in's
 	for host, want := range map[string]string{"llm.factory.test": "llm.factory.test", "": HostOf(factoryAPI)} {

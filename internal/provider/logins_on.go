@@ -43,8 +43,6 @@ func SetLoginOn(agent, user string, on bool) error {
 		return setDevinLoginOn(user, on)
 	case CommandCodePlanID:
 		return setCommandCodeLoginOn(user, on)
-	case "factory":
-		return setFactoryLoginOn(user, on)
 	case ChatGPTAPIID:
 		return setSIWCLoginOn(user, on)
 	case "gemini", "antigravity":
@@ -151,9 +149,6 @@ func (p Provider) alsoOn() []Provider {
 	}
 	if p.Account != nil && p.Account.Agent == CommandCodePlanID {
 		return commandCodeAlsoOn()
-	}
-	if p.Account != nil && p.Account.Agent == "factory" {
-		return factoryAlsoOn()
 	}
 	if p.Account != nil && p.Account.Agent == ChatGPTAPIID {
 		return siwcAlsoOn()

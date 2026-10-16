@@ -407,11 +407,6 @@ func (s *signInFlow) begin() error {
 		if err := startCommandCodeSignIn(s); err != nil {
 			return err
 		}
-	case "factory":
-		// WorkOS's device code, as droid signs in to Factory
-		if err := startFactorySignIn(s); err != nil {
-			return err
-		}
 	case "gemini", "antigravity":
 		// Google's sign-in, under the app's own OAuth client
 		app, _ := googleAppOf(agent)

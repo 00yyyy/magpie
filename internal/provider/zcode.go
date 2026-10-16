@@ -417,21 +417,3 @@ func zcodeGet(ctx context.Context, u, key string, dst any) error {
 }
 
 // ---- signing in ---------------------------------------------------------------
-
-// zcodeDecode reads JSON keeping its numbers as they are written.
-func zcodeDecode(raw []byte, v any) error {
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.UseNumber()
-	return d.Decode(v)
-}
-
-// zcodeEncode writes JSON leaving <, > and & as they are.
-func zcodeEncode(v any) ([]byte, error) {
-	var b bytes.Buffer
-	e := json.NewEncoder(&b)
-	e.SetEscapeHTML(false)
-	if err := e.Encode(v); err != nil {
-		return nil, err
-	}
-	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
-}

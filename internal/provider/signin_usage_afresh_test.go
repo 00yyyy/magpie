@@ -71,42 +71,6 @@ func TestCodexSignInAgainReadsUsageAfresh(t *testing.T) {
 	}
 }
 
-// Factory, its key added again (addSideLogin, as every other built-in's
-// sign-in keeps its account).
-func TestFactoryKeyAgainReadsUsageAfresh(t *testing.T) {
-	signIn(t)
-	resetLoginUsage(t)
-	const old, renewed = "fk-old_0123456789abcdef", "fk-new_0123456789abcdef"
-	factorySite(t, func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		switch r.URL.Path {
-		case "/api/cli/whoami":
-			factoryJSON(w, 200, map[string]any{"userId": "user_k", "orgId": "fac_K", "email": "key@example.com"})
-		case "/api/billing/limits":
-			if auth != "Bearer "+renewed {
-				factoryJSON(w, 401, map[string]any{"detail": "Invalid API key"})
-				return
-			}
-			io.WriteString(w, `{"limits":{"standard":{"fiveHour":{"usedPercent":7}}}}`)
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-			w.WriteHeader(404)
-		}
-	})
-	if _, err := ImportFactoryKeys(context.Background(), []string{old}); err != nil {
-		t.Fatal(err)
-	}
-	if q := LoginUsage(context.Background(), "factory")["key@example.com"]; q.Error == "" {
-		t.Fatalf("the vendor's 401 read clean: %+v", q)
-	}
-	if res, err := ImportFactoryKeys(context.Background(), []string{renewed}); err != nil || len(res) != 1 || res[0].Status != "updated" {
-		t.Fatalf("again: %+v %v", res, err)
-	}
-	if q := LoginUsage(context.Background(), "factory")["key@example.com"]; q.Error != "" || len(q.Windows) == 0 {
-		t.Fatalf("signed in again, but the usage is the old sign-in's: %+v", q)
-	}
-}
-
 func resetLoginUsage(t *testing.T) {
 	clear := func() {
 		loginUsageCache.Lock()

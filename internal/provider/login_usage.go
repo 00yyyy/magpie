@@ -272,8 +272,6 @@ func builtinLogins(agent string) (logins []Login, ok bool) {
 		logins = cmdLoginList()
 	case "devin":
 		logins = devinLoginList()
-	case "factory":
-		logins = factoryLoginList()
 	case ChatGPTAPIID:
 		logins = siwcLoginList()
 	case "gemini", "antigravity":
@@ -301,9 +299,6 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	if l.Agent == "devin" {
 		return devinLoginQuota(ctx, l)
-	}
-	if l.Agent == "factory" {
-		return factoryLoginQuota(ctx, l)
 	}
 	if l.Agent == "gemini" || l.Agent == "antigravity" {
 		return googleLoginQuota(ctx, l)
