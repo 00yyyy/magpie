@@ -1011,6 +1011,42 @@ func TestGitHubSource(t *testing.T) {
 	}
 }
 
+// A skills CLI command pasted whole installs from its source
+// (RockyShowlle on X: the npx line a skill's page gives), whatever runs
+// it and wherever its flags are; anything else is left as it is.
+func TestSkillsCommand(t *testing.T) {
+	for in, want := range map[string]string{
+		"npx skills add vercel-labs/agent-skills":                     "vercel-labs/agent-skills",
+		"  npx -y skills@latest add owner/repo --skill pdf ":          "owner/repo",
+		"npx skills add --skill pdf -a claude-code owner/repo":        "owner/repo",
+		"bunx skills add https://github.com/o/r/tree/main/skills/pdf": "https://github.com/o/r/tree/main/skills/pdf",
+		"pnpm dlx skills add o/r":                                     "o/r",
+		"bun x skills add o/r -y":                                     "o/r",
+		"owner/repo":                                                  "owner/repo",
+		"npx skills find pdf":                                         "npx skills find pdf",
+		"npx other add o/r":                                           "npx other add o/r",
+		"npx skills add --skill pdf":                                  "npx skills add --skill pdf",
+		"~/skills/pdf":                                                "~/skills/pdf",
+	} {
+		if got := skillsCommand(in); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+	sandbox(t)
+	newFakeGitHub(t)
+	p, err := ProbeSkills("npx skills add someone/cli --skill pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != "github" || p.Source != "someone/cli" || len(p.Candidates) != 1 || p.Candidates[0].Name != "pdf" {
+		t.Fatalf("probe: %+v", p)
+	}
+	ok(t)(InstallSkills("npx skills add someone/cli --skill pdf", []string{p.Candidates[0].Path}, nil))
+	if l := mustLoad(t); l.skill("pdf") == nil || l.skill("pdf").Source.Repo != "someone/cli" {
+		t.Fatalf("installed: %+v", l.skill("pdf"))
+	}
+}
+
 // A server or skill on no agent is listed with none, not null: the page
 // looks in the list, and a null blanked the whole Library.
 func TestReadNoAgents(t *testing.T) {

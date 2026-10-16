@@ -960,10 +960,44 @@ func unhiddenFirst[T any](list []T, path func(T) string, same func(a, b T) bool)
 	return out
 }
 
+// skillsCommand is the source a skills CLI command copied from a page
+// installs from (RockyShowlle on X): "npx skills add owner/repo --skill
+// x", run through npx, bunx, pnpm dlx and the like. Anything else is
+// given back as it is.
+func skillsCommand(input string) string {
+	f := strings.Fields(strings.TrimSpace(input))
+	i := 0
+	switch {
+	case len(f) > 1 && (f[0] == "npx" || f[0] == "bunx" || f[0] == "pnpx"):
+		i = 1
+	case len(f) > 2 && ((f[0] == "pnpm" || f[0] == "yarn") && f[1] == "dlx" || f[0] == "bun" && f[1] == "x"):
+		i = 2
+	default:
+		return input
+	}
+	for i < len(f) && strings.HasPrefix(f[i], "-") { // npx -y
+		i++
+	}
+	if i+1 >= len(f) || (f[i] != "skills" && !strings.HasPrefix(f[i], "skills@")) || f[i+1] != "add" {
+		return input
+	}
+	for i += 2; i < len(f); i++ {
+		switch a := f[i]; {
+		case a == "--skill" || a == "-s" || a == "--agent" || a == "-a":
+			i++ // and its value
+		case strings.HasPrefix(a, "-"):
+		default:
+			return a
+		}
+	}
+	return input
+}
+
 // ProbeSkills looks for skills at what the user typed: a GitHub repository
-// (or a folder in one), or a folder on this machine.
+// (or a folder in one), a folder on this machine, or a skills CLI command
+// for either.
 func ProbeSkills(input string) (*Probe, error) {
-	input = strings.TrimSpace(input)
+	input = strings.TrimSpace(skillsCommand(input))
 	if input == "" {
 		return nil, fmt.Errorf("paste a GitHub link or a folder's path")
 	}
@@ -1007,7 +1041,7 @@ func ProbeSkills(input string) (*Probe, error) {
 
 func cachedProbe(input string) (*Probe, error) {
 	probes.Lock()
-	e := probes.m[strings.TrimSpace(input)]
+	e := probes.m[strings.TrimSpace(skillsCommand(input))]
 	probes.Unlock()
 	if e != nil {
 		if _, err := os.Stat(e.tmp); err == nil {
