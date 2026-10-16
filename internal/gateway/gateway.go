@@ -1255,7 +1255,6 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 		// ZCode itself never counts, and zcode.z.ai answers count_tokens
 		// with an error every time: one more request its firewall weighs
 		p.Account.Agent == "zcode") ||
-		ok && p.Account != nil && p.Account.Agent == provider.CommandCodePlanID && cmdGoing(r.Context(), p) ||
 		ok && p.IsPlugin() && (slices.Contains(estimatedMoved, p.ID) || slices.Contains(estimatedMoved, p.PluginProvider())) {
 		req, err := parseAnthropic(body)
 		if err != nil {
@@ -3465,22 +3464,6 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if p.Account != nil && p.Account.Agent == "claude" {
 		call.To = provider.Anthropic
 		return s.serveClaudeSubscription(w, r, from, p, model, body, &call.Usage)
-	}
-	// the subscriptions below are asked through their own clients' APIs,
-	// never Anthropic's: Claude Code's billing line, which changes every
-	// turn, would be the first words of their prompt and its cache missed
-	// from there on (#1600, billing_line.go)
-	own := body
-	if from == provider.Anthropic {
-		own = withoutBillingLine(body)
-	}
-	// Command Code's Go plan has no Provider API: it is asked where the
-	// CLI asks, in the CLI's own format; its other plans go on as keys do
-	if p.Account != nil && p.Account.Agent == provider.CommandCodePlanID {
-		if api, key, ok := cmdGenerate(r.Context(), p); ok {
-			call.To = from
-			return s.serveCommandCode(w, r, from, p, api, key, model, own, &call.Usage)
-		}
 	}
 	// Copilot's Auto (all a Student plan may pick) is asked which model it
 	// picks, as Copilot's clients do, and the request goes to that model on

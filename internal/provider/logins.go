@@ -807,8 +807,6 @@ func Logins(agent string) []Login {
 	switch agent {
 	case "copilot":
 		return copilotLoginList()
-	case CommandCodePlanID:
-		return cmdLoginList()
 	case ChatGPTAPIID:
 		return siwcLoginList()
 	case "gemini", "antigravity":
@@ -832,7 +830,7 @@ func Logins(agent string) []Login {
 			list func() []Login
 		}{
 			{"grok", nil}, {"copilot", copilotLoginList}, {"zcode", nil}, {"kiro", nil},
-			{"devin", nil}, {"workbuddy", nil}, {WorkBuddyAIID, nil}, {CommandCodePlanID, cmdLoginList},
+			{"devin", nil}, {"workbuddy", nil}, {WorkBuddyAIID, nil}, {CommandCodePlanID, nil},
 			{"qoder", nil}, {QoderCNID, nil}, {"zed", nil}, {"factory", nil},
 			{MiMoID, nil}, {ChatGPTAPIID, siwcLoginList}, {"gemini", func() []Login { return googleLoginList("gemini") }},
 			{"antigravity", func() []Login { return googleLoginList("antigravity") }},
@@ -1030,8 +1028,6 @@ func switchLogin(agent, user string) error {
 	switch agent {
 	case "copilot":
 		return switchCopilotLogin(user)
-	case CommandCodePlanID:
-		return switchCommandCodeLogin(user)
 	case ChatGPTAPIID:
 		return switchSIWCLogin(user)
 	case "gemini", "antigravity":
@@ -1206,8 +1202,6 @@ func ForgetLogin(agent, user string) error {
 	switch agent {
 	case "copilot":
 		return forgetCopilotLogin(user)
-	case CommandCodePlanID:
-		return forgetCommandCodeLogin(user)
 	case ChatGPTAPIID:
 		return forgetSIWCLogin(user)
 	case "gemini", "antigravity":

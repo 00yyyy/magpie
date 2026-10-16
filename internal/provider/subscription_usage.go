@@ -447,6 +447,10 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			}
 		}
 	}
+	// each retired built-in is served by its plugin, whose cards stand
+	// where the built-in's stood
+	moved("cursor")
+	moved("grok")
 	if home, err := os.UserHomeDir(); err == nil {
 		if p, ok := codexAccount(home); ok && !hidden["codex"] {
 			if ls := accountsOf("codex"); len(ls) > 1 {
@@ -467,8 +471,8 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			fetches = append(fetches, perLogin(via("copilot"), ls, accountCard("copilot"))...)
 		}
 	}
-	if !moved(CommandCodePlanID) && !hidden[CommandCodePlanID] {
-		fetches = append(fetches, perLogin(via(CommandCodePlanID), cmdLoginList(), accountCard(CommandCodePlanID))...)
+	for _, id := range []string{"kiro", "zcode", wbCN.id, wbAI.id, CommandCodePlanID, "qoder", QoderCNID, "zed", "devin", "factory", MiMoID} {
+		moved(id)
 	}
 	for _, agent := range []string{"gemini", "antigravity"} {
 		if hidden[agent] {

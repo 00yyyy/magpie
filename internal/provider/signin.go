@@ -379,11 +379,6 @@ func (s *signInFlow) begin() error {
 		if err := startCopilotSignIn(s); err != nil {
 			return err
 		}
-	case CommandCodePlanID:
-		// Command Code's browser sign-in, as its CLI makes it
-		if err := startCommandCodeSignIn(s); err != nil {
-			return err
-		}
 	case "gemini", "antigravity":
 		// Google's sign-in, under the app's own OAuth client
 		app, _ := googleAppOf(agent)
@@ -494,9 +489,6 @@ func SubmitSignInCallback(id, raw string) error {
 	}
 	if s.claude != nil {
 		return s.claudePaste(raw)
-	}
-	if s.status().Agent == CommandCodePlanID {
-		return s.commandCodeKey(raw)
 	}
 	return s.pastedCallback(raw)
 }

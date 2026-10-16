@@ -263,8 +263,6 @@ func builtinLogins(agent string) (logins []Login, ok bool) {
 		logins = Logins(agent)
 	case "copilot":
 		logins = copilotLoginList()
-	case CommandCodePlanID:
-		logins = cmdLoginList()
 	case ChatGPTAPIID:
 		logins = siwcLoginList()
 	case "gemini", "antigravity":
@@ -292,9 +290,6 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	if l.Agent == "gemini" || l.Agent == "antigravity" {
 		return googleLoginQuota(ctx, l)
-	}
-	if l.Agent == CommandCodePlanID {
-		return cmdLoginQuota(ctx, l)
 	}
 	if l.Agent == "copilot" {
 		for _, c := range copilotLogins(copilotConfigDir()) {
