@@ -3474,11 +3474,6 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if from == provider.Anthropic {
 		own = withoutBillingLine(body)
 	}
-	// Cursor's through the API its CLI talks to, with the CLI's sign-in
-	if p.Account != nil && p.Account.Agent == "cursor" {
-		call.To = from
-		return s.serveCursor(w, r, from, model, own, &call.Usage)
-	}
 	// Devin's through the API its CLI talks to, with the CLI's sign-in or
 	// one magpie keeps beside it
 	if p.Account != nil && p.Account.Agent == "devin" {

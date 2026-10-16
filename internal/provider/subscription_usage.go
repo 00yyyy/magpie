@@ -447,11 +447,6 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			}
 		}
 	}
-	if !moved("cursor") && !hidden["cursor"] {
-		if user, plan, ok := cursorIdentity(); ok {
-			fetches = append(fetches, withUser(ctx, user, func() SubscriptionQuota { return cursorSubscriptionUsage(viaLogin("cursor", user), plan) }))
-		}
-	}
 	if !moved("grok") && !hidden["grok"] {
 		if _, ok := grokAccount(); ok {
 			fetches = append(fetches, func() SubscriptionQuota { return keepReading(ctx, readNow(grokSubscriptionUsage(via("grok"))), "") })

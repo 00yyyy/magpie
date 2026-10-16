@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -120,20 +119,8 @@ func TestResponsesSplitParallelCallsKeepTheirResults(t *testing.T) {
 	}
 }
 
-// Cursor's built-in answers a reply's calls at the next assistant message,
-// as Chat did.
-func TestCursorSplitParallelCallsKeepTheirResults(t *testing.T) {
-	r := parseSplit(t, splitCalls)
-	b := bytes.Join(cursorMessages(r, bridgeTools(r)), []byte("\n"))
-	if bytes.Contains(b, []byte(devinNoResult)) {
-		t.Fatalf("a call answered as interrupted:\n%s", b)
-	}
-	if !bytes.Contains(b, []byte(`"result":"A!"`)) || !bytes.Contains(b, []byte(`"result":"B!"`)) {
-		t.Fatalf("results lost:\n%s", b)
-	}
-}
-
-// So did Devin's.
+// Devin's answers a reply's calls at the next assistant message, as
+// Chat did.
 func TestDevinSplitParallelCallsKeepTheirResults(t *testing.T) {
 	d := decodeDevinRequest(t, buildDevin(parseSplit(t, splitCalls), "swe-2-high", "k"))
 	var got []string

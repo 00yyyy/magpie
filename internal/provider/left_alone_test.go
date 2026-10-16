@@ -17,7 +17,7 @@ import (
 // signed in, its allowance isn't read, its sign-in isn't renewed or
 // switched, its list isn't fetched (Riko on Discord: with Claude switched
 // off, Surge showed `claude auth status --json` every minute). Fake
-// claude, cursor-agent and devin CLIs on PATH log every run, and what the
+// claude and devin CLIs on PATH log every run, and what the
 // gateway's loops and the window's pages do is run with each of them
 // stale, as minutes passing leave them.
 func TestLeftAloneRunsNoCLI(t *testing.T) {
@@ -28,7 +28,7 @@ func TestLeftAloneRunsNoCLI(t *testing.T) {
 	writeFile(t, filepath.Join(home, ".claude.json"), map[string]any{"oauthAccount": map[string]any{"emailAddress": "me@example.com"}})
 
 	bin, log := t.TempDir(), filepath.Join(t.TempDir(), "runs")
-	for _, name := range []string{"claude", "cursor-agent", "devin"} {
+	for _, name := range []string{"claude", "devin"} {
 		testenv.Program(t, filepath.Join(bin, name), "#!/bin/sh\necho \""+name+" $*\" >> "+log+"\n"+
 			"echo '{\"loggedIn\":true,\"email\":\"me@example.com\",\"subscriptionType\":\"max\"}'\n")
 	}
@@ -36,9 +36,8 @@ func TestLeftAloneRunsNoCLI(t *testing.T) {
 	// the real lookups, which find them on PATH
 	claudeExecutable, DevinExecutable = claudecode.Find, findDevin
 	forgetClaudeStatus()
-	forgetCursorStatus()
 	forgetDevinStatus()
-	t.Cleanup(func() { forgetClaudeStatus(); forgetCursorStatus(); forgetDevinStatus() })
+	t.Cleanup(func() { forgetClaudeStatus(); forgetDevinStatus() })
 
 	runs := func() []string {
 		b, _ := os.ReadFile(log)
@@ -69,7 +68,7 @@ func TestLeftAloneRunsNoCLI(t *testing.T) {
 			All()
 			Hidden()
 			fetchSubscriptionUsage(ctx)
-			for _, agent := range []string{"claude", "cursor", "devin"} {
+			for _, agent := range []string{"claude", "devin"} {
 				LoginUsage(ctx, agent)
 			}
 			RenewLogins(ctx, 0)
@@ -80,7 +79,7 @@ func TestLeftAloneRunsNoCLI(t *testing.T) {
 
 	save := func(off, hidden bool) {
 		writeFile(t, Path(), map[string]any{"providers": []map[string]any{
-			{"id": "claude", "off": off}, {"id": "cursor", "off": off}, {"id": "devin", "hidden": hidden},
+			{"id": "claude", "off": off}, {"id": "devin", "hidden": hidden},
 		}})
 	}
 	save(true, true)
@@ -97,7 +96,7 @@ func TestLeftAloneRunsNoCLI(t *testing.T) {
 	save(false, false)
 	loop()
 	got := strings.Join(runs(), " ")
-	for _, want := range []string{"claude_auth_status_--json", "cursor-agent_", "devin_auth_status"} {
+	for _, want := range []string{"claude_auth_status_--json", "devin_auth_status"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("switched on, no %s among %s", want, got)
 		}

@@ -374,11 +374,6 @@ func (s *signInFlow) begin() error {
 		s.mu.Lock()
 		s.st.URL = siwcAuthorize(s.redirect, s.state, s.nonce, challenge, s.hostID)
 		s.mu.Unlock()
-	case "cursor":
-		// Cursor has no sign-in of its own to borrow: its CLI signs in
-		if err := startCursorSignIn(s); err != nil {
-			return err
-		}
 	case "grok":
 		// so is Grok: its CLI signs in with a device code
 		if err := startGrokSignIn(s); err != nil {

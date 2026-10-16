@@ -286,10 +286,6 @@ func builtinLogins(agent string) (logins []Login, ok bool) {
 		logins = siwcLoginList()
 	case "gemini", "antigravity":
 		logins = googleLoginList(agent)
-	case "cursor": // one account, the one cursor-agent is signed in to
-		if user, plan, ok := cursorIdentity(); ok {
-			logins = []Login{{Agent: agent, User: user, Plan: plan, Active: true, On: true}}
-		}
 	default:
 		return nil, false
 	}
@@ -322,9 +318,6 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	if l.Agent == MiMoID {
 		return mimoLoginQuota(ctx, l)
-	}
-	if l.Agent == "cursor" {
-		return cursorSubscriptionUsage(ctx, l.Plan)
 	}
 	if l.Agent == "gemini" || l.Agent == "antigravity" {
 		return googleLoginQuota(ctx, l)
