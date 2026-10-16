@@ -190,9 +190,12 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodPost && rest == "/responses" {
 		withGatewaySession(w, r)
-		var recorded func()
+		var recorded, hooked func()
 		w, recorded = recordConversation(w, r, provider.Responses, body)
 		defer recorded()
+		// Codex's own sign-in: the request hooks, not the middleware
+		w, body, hooked = gatewayHooks(w, r, provider.Responses, body)
+		defer hooked()
 	}
 	s.codexUpstream(w, r, rest, body)
 }
