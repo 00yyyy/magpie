@@ -25,7 +25,10 @@ const GATEWAY_HIDES = ["agents", "library"];
 // (navHides), a link to the page opens Agents (show), and Settings and its
 // search pass over its rows. boot.js says which before the first paint,
 // each read of the settings after (applyFeatures). The gateway is the
-// same either way.
+// same either way. Whatever is marked data-feature-off="<id>" is the
+// other way round, there only while its feature is off: where a page
+// says what went and turns it back on (bigbenniu on X: with routing
+// groups off, the Routing page had no New group and said nothing of why).
 let featuresOff = new Set(window.bootPrefs?.featuresOff || []);
 const featureSel = () => [...featuresOff].map((id) => `[data-feature~="${id}"]`).join(",");
 const featureHides = (n) => { const sel = featureSel(); return !!sel && !!n?.closest(sel); };
@@ -36,8 +39,9 @@ function featureStyle() {
     st.id = "featureStyle";
     document.head.append(st);
   }
-  const sel = featureSel();
-  st.textContent = sel ? sel + "{display:none!important}" : "";
+  const sel = featureSel(), off = [...featuresOff].map((id) => `[data-feature-off~="${id}"]`).join(",");
+  st.textContent = (sel ? sel + "{display:none!important}" : "") +
+    (off ? `[data-feature-off]:not(${off})` : "[data-feature-off]") + "{display:none!important}";
 }
 featureStyle();
 // a page a plugin adds (kernel.js) that draws from /api/providers, as the

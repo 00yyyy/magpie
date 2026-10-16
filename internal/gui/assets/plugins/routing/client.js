@@ -3486,7 +3486,32 @@ function routingPage(part) {
   const gNames = el("div", "rt-gnames");
   // the groups go with the routing groups built-in plugin; the pools stay
   for (const n of [gHead, gFound, gNames, gList]) n.dataset.feature = "groups";
-  gsec.append(gHead, gFound, gNames, gList, pHead, pList);
+  // and off (a new install's Essentials leaves it off), where they were
+  // the page says so and turns it on (bigbenniu on X: past the requests
+  // there was nothing, and no word of where New group had gone). The
+  // groups magpie finds route all the same.
+  const gOff = el("div", "rt-goff");
+  gOff.dataset.featureOff = "groups";
+  const gOn = el("button", "text rt-goffon", t("Turn on routing groups"));
+  gOn.type = "button";
+  gOn.onclick = async () => {
+    gOn.disabled = true;
+    try {
+      const next = await api("plugins/builtin", { id: "groups", on: true });
+      if (state.settings) state.settings.builtins = next;
+      applyFeatures(next);
+      status(t("Routing groups are on"), "ok", 1500);
+      loadGroups();
+    } catch (err) {
+      status(t(err.message), "err");
+    } finally {
+      gOn.disabled = false;
+    }
+  };
+  const gOffBox = el("div", "list rt-goffbox");
+  gOffBox.append(el("div", "rt-goffwhy", t("Routing groups are off in Plugins › Built-in: the groups magpie finds, one model several providers serve, still route, but your own can't be made or changed here.")), gOn);
+  gOff.append(el("div", "row-head", el("span", "label", t("Routing groups"))), gOffBox);
+  gsec.append(gHead, gFound, gNames, gList, gOff, pHead, pList);
   // after the requests: a request picked in the list plays on the stage,
   // so the list sits right under it
   more.append(gsec);
