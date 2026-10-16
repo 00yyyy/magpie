@@ -877,8 +877,8 @@ func untar(r io.Reader, dst string) error {
 // looked for a few folders deep, and not inside another skill. A hidden
 // folder is an agent's own (.claude, .agents) and is looked in only for its
 // skills folder: some repositories keep their skill only in
-// .claude/skills (#1964, UFO404). A skill found there that the repository
-// also has outside a hidden folder is that one, listed once.
+// .claude/skills (#1964, UFO404). A skill the repository holds twice, in a
+// hidden folder or a plugin's, is listed once (unhiddenFirst).
 func candidates(root, sub string) []Candidate {
 	base := filepath.Join(root, filepath.FromSlash(sub))
 	var out []Candidate
@@ -926,17 +926,36 @@ func inHidden(path string) bool {
 	return slices.ContainsFunc(strings.Split(path, "/"), func(p string) bool { return strings.HasPrefix(p, ".") })
 }
 
-// unhiddenFirst drops a skill in a hidden folder that is the same skill as
-// one outside every hidden folder, or as a hidden one listed before it: an
-// agent's folder often holds a copy of the repository's own skills.
+// unhiddenFirst lists each skill once: of copies of the same skill it keeps
+// the one outside every hidden folder, then the one fewest folders deep,
+// then the first. An agent's folder often holds a copy of the repository's
+// own skills, and a repository that is also a plugin often holds another
+// under its plugin's folder: tw93/waza has skills/check and
+// plugins/waza/skills/check, and every skill was listed twice (碳碳双键 on
+// Discord).
 func unhiddenFirst[T any](list []T, path func(T) string, same func(a, b T) bool) []T {
+	depth := func(c T) int { return strings.Count(path(c), "/") }
+	before := func(o T, j int, c T, i int) bool {
+		if ho, hc := inHidden(path(o)), inHidden(path(c)); ho != hc {
+			return !ho
+		}
+		if do, dc := depth(o), depth(c); do != dc {
+			return do < dc
+		}
+		return j < i
+	}
 	out := make([]T, 0, len(list))
 	for i, c := range list {
-		if inHidden(path(c)) && (slices.ContainsFunc(list, func(o T) bool { return !inHidden(path(o)) && same(o, c) }) ||
-			slices.ContainsFunc(list[:i], func(o T) bool { return inHidden(path(o)) && same(o, c) })) {
-			continue
+		dup := false
+		for j, o := range list {
+			if j != i && same(o, c) && before(o, j, c, i) {
+				dup = true
+				break
+			}
 		}
-		out = append(out, c)
+		if !dup {
+			out = append(out, c)
+		}
 	}
 	return out
 }
