@@ -2815,6 +2815,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .plugin-option .segs { flex: none; }
 .editor .acct-proxy .who { font-size: 12px; font-weight: 500; color: var(--fg-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor .acct-proxies > .hint { margin-top: 0; }
+/* past eight keys their lines fold behind All N keys, opened with a filter */
+.editor .acct-proxy-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.editor .acct-proxy-tools .acct-proxy-filter { flex: 1 1 auto; min-width: 0; }
+.editor .acct-proxy-tools .text { flex: none; }
+.editor .acct-proxies > .acct-proxy-more { justify-self: start; }
 /* what a balance token's URL wants instead, and a balance checked in the form */
 .editor .bal-fix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .editor .bal-fix:empty { display: none; }

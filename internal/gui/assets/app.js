@@ -7806,36 +7806,85 @@ function accountProxyPicker(a) {
 // Accounts list names it. null for a provider with one key.
 const KEY_PROXY_HINT = "Each key can go through a proxy of its own; Provider's proxy is the one above";
 function keyProxyPicker(p) {
-  return proxyLines((p?.keyList || []).map((k) => ({ k: k.id, name: k.name || k.masked, key: k.id })), KEY_PROXY_HINT);
+  return proxyLines((p?.keyList || []).map((k) => ({ k: k.id, name: k.name || k.masked, key: k.id, info: k })), KEY_PROXY_HINT, true);
 }
-function proxyLines(items, hint) {
+// proxyLines: a line for each account or key. A provider's keys fold as
+// its Accounts list folds them (keyFold): past KEYS_FOLD, the first
+// KEYS_FIRST and those with a proxy of their own, or, opened, those the
+// filter matches, KEYS_PAGE at most. A line for each of a thousand keys
+// took the editor a minute to open, five thousand three (@NetRozee on X).
+// A key not drawn keeps the proxy it has: only a line picked in changes it.
+function proxyLines(items, hint, foldKeys) {
   if (items.length < 2) return null;
   draft.accountProxies = draft.accountProxies || {};
   const box = el("div", "acct-proxies");
-  for (const it of items) {
-    const k = it.k;
-    const cur = draft.accountProxies[k] || { mode: "", url: "" };
-    const line = el("div", "acct-proxy");
-    if (it.user) line.dataset.user = it.user;
-    if (it.key) line.dataset.key = it.key;
-    const who = el("span", "who", it.name);
-    who.title = it.name;
-    const addr = input(cur.url || "", "http://127.0.0.1:7890");
-    addr.className = "proxy-url";
-    addr.classList.toggle("off", cur.mode !== "custom");
-    addr.oninput = () => { draft.accountProxies[k] = { ...(draft.accountProxies[k] || { mode: "custom" }), url: addr.value }; };
-    const seg = segs([["", t("Provider's proxy")], ["direct", t("Direct")], ["custom", t("Custom")]], cur.mode || "", (v) => {
-      draft.accountProxies[k] = { ...(draft.accountProxies[k] || {}), mode: v };
-      addr.classList.toggle("off", v !== "custom");
-    });
-    seg.classList.add("proxy-mode");
-    const row = el("div", "proxy-row");
-    row.append(seg, addr);
-    line.append(who, row);
-    box.append(line);
+  const tail = el("div", "hint", t(hint));
+  if (!foldKeys || items.length <= KEYS_FOLD) {
+    for (const it of items) box.append(proxyLine(it));
+    box.append(tail);
+    return box;
   }
-  box.append(el("div", "hint", t(hint)));
+  let q = null; // the filter's text while the whole list is open
+  let tools = null;
+  const draw = () => {
+    for (const n of [...box.childNodes]) if (n !== tools && n !== tail) n.remove();
+    const add = (n) => box.insertBefore(n, tail);
+    if (q === null) {
+      const own = (it) => !!draft.accountProxies[it.k]?.mode;
+      for (const it of items.filter((it, i) => i < KEYS_FIRST || own(it)).slice(0, KEYS_PAGE)) add(proxyLine(it));
+      const more = el("button", "text acct-proxy-more", t("All {n} keys", { n: items.length }));
+      more.type = "button";
+      more.onclick = () => { q = ""; openTools(); draw(); tools.querySelector("input").focus({ preventScroll: true }); };
+      add(more);
+      return;
+    }
+    const matched = items.filter((it) => keyMatches(it.info, q));
+    for (const it of matched.slice(0, KEYS_PAGE)) add(proxyLine(it));
+    if (!matched.length) add(el("div", "hint acct-proxy-none", t("No key matches")));
+    else if (matched.length > KEYS_PAGE) add(el("div", "hint acct-proxy-rest", t("{n} more — type to narrow them down", { n: matched.length - KEYS_PAGE })));
+  };
+  const close = () => { q = null; tools?.remove(); tools = null; draw(); };
+  const openTools = () => {
+    tools = el("div", "acct-proxy-tools");
+    const f = input("", t("Filter {n} keys — name, key, off, resting…", { n: items.length }));
+    f.className = "acct-proxy-filter";
+    f.setAttribute("aria-label", f.placeholder);
+    // only the lines are drawn again: the filter stays in the page, so an
+    // IME's text never lands twice (#1055)
+    f.oninput = () => { q = f.value; draw(); };
+    f.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") { if (f.value) { f.value = ""; f.oninput(); } else close(); } };
+    const fewer = el("button", "text", t("Show fewer"));
+    fewer.type = "button";
+    fewer.onclick = close;
+    tools.append(f, fewer);
+    box.prepend(tools);
+  };
+  box.append(tail);
+  draw();
   return box;
+}
+// proxyLine: one account's or key's line of proxyLines
+function proxyLine(it) {
+  const k = it.k;
+  const cur = draft.accountProxies[k] || { mode: "", url: "" };
+  const line = el("div", "acct-proxy");
+  if (it.user) line.dataset.user = it.user;
+  if (it.key) line.dataset.key = it.key;
+  const who = el("span", "who", it.name);
+  who.title = it.name;
+  const addr = input(cur.url || "", "http://127.0.0.1:7890");
+  addr.className = "proxy-url";
+  addr.classList.toggle("off", cur.mode !== "custom");
+  addr.oninput = () => { draft.accountProxies[k] = { ...(draft.accountProxies[k] || { mode: "custom" }), url: addr.value }; };
+  const seg = segs([["", t("Provider's proxy")], ["direct", t("Direct")], ["custom", t("Custom")]], cur.mode || "", (v) => {
+    draft.accountProxies[k] = { ...(draft.accountProxies[k] || {}), mode: v };
+    addr.classList.toggle("off", v !== "custom");
+  });
+  seg.classList.add("proxy-mode");
+  const row = el("div", "proxy-row");
+  row.append(seg, addr);
+  line.append(who, row);
+  return line;
 }
 // accountProxiesOfDraft is each account's own proxy as it is saved — the
 // accounts that follow the provider's left out — or { missing: user } when
