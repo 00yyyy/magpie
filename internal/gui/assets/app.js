@@ -28,7 +28,8 @@ const GATEWAY_HIDES = ["agents", "library"];
 // same either way. Whatever is marked data-feature-off="<id>" is the
 // other way round, there only while its feature is off: where a page
 // says what went and turns it back on (bigbenniu on X: with routing
-// groups off, the Routing page had no New group and said nothing of why).
+// groups off, the Routing page offered no new group and said nothing of
+// why).
 let featuresOff = new Set(window.bootPrefs?.featuresOff || []);
 const featureSel = () => [...featuresOff].map((id) => `[data-feature~="${id}"]`).join(",");
 const featureHides = (n) => { const sel = featureSel(); return !!sel && !!n?.closest(sel); };
