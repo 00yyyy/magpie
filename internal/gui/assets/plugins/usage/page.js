@@ -965,8 +965,10 @@ function ledContentBox(c) {
 // the window's chart can also say how fast the replies came (#860)
 const LED_TREND = [...LED_METRICS, ["speed", "Speed"]];
 // "modelAt" is a model at the provider it went to, so one model's speed at
-// each provider is ranked side by side (inaction on Discord)
-const LED_SPLITS = [["model", "Model"], ["modelAt", "Model · provider"], ["provider", "Provider"], ["agent", "Agent"]];
+// each provider is ranked side by side (inaction on Discord); "callerKey"
+// the gateway key that made it, "none" for calls with none, offered while
+// the period has a key's calls (#2521)
+const LED_SPLITS = [["model", "Model"], ["modelAt", "Model · provider"], ["provider", "Provider"], ["agent", "Agent"], ["callerKey", "Gateway key"]];
 // cacheTTLs: a call's cache writes split by how long they are kept, where
 // some were for an hour (Anthropic bills those at 2× input, 5 minutes'
 // at 1.25×); nothing when none were
@@ -1086,7 +1088,9 @@ function drawLedTrend() {
     slide(host, key);
   };
   pill($("#ledMetric"), "ledMetric", LED_TREND, ledMetric, (id) => { ledMetric = id; try { localStorage.setItem("magpie.ledMetric", id); } catch {} drawLedTrend(); });
-  pill($("#ledSplit"), "ledSplit", LED_SPLITS, ledSplit, (id) => { ledSplit = id; drawLedTrend(); });
+  const keyed = (l.callerKeys || []).length > 0;
+  if (ledSplit === "callerKey" && !keyed) ledSplit = "model";
+  pill($("#ledSplit"), "ledSplit", LED_SPLITS.filter(([id]) => id !== "callerKey" || keyed), ledSplit, (id) => { ledSplit = id; drawLedTrend(); });
   const chart = $("#ledChart"), rank = $("#ledRank");
   drawLedColumns(chart, l, ledSplit, ledMetric, false, (day) => {
     ledDay = ledDay === day ? "" : day;
@@ -1095,7 +1099,7 @@ function drawLedTrend() {
   });
   rank.chart = chart;
   if (!rank.rail) ledRail($("#ledRail"), rank);
-  const picked = ledSplit === "provider" ? ledProvider : ledSplit === "agent" ? ledAgent
+  const picked = ledSplit === "provider" ? ledProvider : ledSplit === "agent" ? ledAgent : ledSplit === "callerKey" ? ledCallerKey
     : ledSplit === "modelAt" ? (ledProvider && ledModel ? ledProvider + "/" + ledModel : "") : ledModel;
   drawLedRank(rank, l, ledSplit, ledMetric, picked, (x) => {
     // a click lists only that one's requests; on the one listed, all again
@@ -1107,6 +1111,7 @@ function drawLedTrend() {
       ledQuery = ledModel; q.value = ledQuery;
     } else if (ledSplit === "provider") ledProvider = ledProvider === x.id ? "" : x.id;
     else if (ledSplit === "agent") ledAgent = ledAgent === x.id ? "" : x.id;
+    else if (ledSplit === "callerKey") ledCallerKey = ledCallerKey === x.id ? "" : x.id;
     else { const q = $("#ledQ"); ledModel = ledModel === x.id ? "" : x.id; ledQuery = ledModel; q.value = ledQuery; }
     ledOffset = 0;
     loadLedger().catch((e) => status(e.message, "err"));
@@ -1432,7 +1437,10 @@ function renderLedger() {
   const missingProvider = ledProvider && !providers.some((p) => p.id === ledProvider);
   const accounts = l.accounts || [];
   const missingAccount = ledAccount && !accounts.some((a) => a.id === ledAccount);
-  const missingCaller = ledCallerKey && !callers.some((k) => k.id === ledCallerKey);
+  // "none": the calls no gateway key made, a choice beside the keys when
+  // there are such calls, so one key's are told from the rest (#2521)
+  const noKey = callers.length > 0 && (ledCallerKey === "none" || (l.by?.callerKey || []).some((s) => s.id === "none"));
+  const missingCaller = ledCallerKey && ledCallerKey !== "none" && !callers.some((k) => k.id === ledCallerKey);
   const computers = computerOpts(l.computers);
   const missingComputer = ledComputer && !computers.some((c) => c.v === ledComputer);
   if (missingAgent || missingProvider || missingAccount || missingCaller || missingComputer) {
@@ -1463,7 +1471,7 @@ function renderLedger() {
   sessPick($("#ledAccount"), "All accounts", ledAccount, accounts.map((a) => ({ v: a.id, name: a.id, note: (a.providers || []).map((p) => t(p)).join(" · ") })), "Account", (v) => { ledAccount = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   sessPick($("#ledKey"), "All gateway keys", ledCallerKey, callers.map((k) => ({
     v: k.id, name: k.name, note: "",
-  })), "Gateway keys", (v) => { ledCallerKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
+  })).concat(noKey ? [{ v: "none", name: t("No gateway key"), note: "" }] : []), "Gateway keys", (v) => { ledCallerKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   const seg = $("#ledStatus");
   seg.replaceChildren();
   // every request, those the agent got an error for, and those answered
