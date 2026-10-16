@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/settings"
@@ -641,6 +642,9 @@ func changed() {
 }
 
 func changedNow() {
+	// the sign-ins are read again, even by a request holding the files it
+	// read (filememo.Hold): a sign-in just saved is in what comes next
+	filememo.Look(AuthPath())
 	onChangeMu.Lock()
 	fs := append([]func(){}, onChangeNow...)
 	onChangeMu.Unlock()

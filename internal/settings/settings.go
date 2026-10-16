@@ -1039,6 +1039,14 @@ func loadChecked() (Settings, error) {
 	}
 	// parsed on every call: a caller that asks many times in one look holds
 	// what it read (provider.Hold's heldSettings) rather than asking again
+	return parse(b)
+}
+
+// parse is settings.json's contents b read as Settings, from its last good
+// generation when b doesn't parse.
+func parse(b []byte) (Settings, error) {
+	var s Settings
+	var err error
 	parses.Add(1)
 	if perr := json.Unmarshal(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")), &s); perr != nil {
 		// one left all zero by a crash (#1505) is its last good generation
