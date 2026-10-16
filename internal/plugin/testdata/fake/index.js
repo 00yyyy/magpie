@@ -274,6 +274,12 @@ export const FakePlugin = async ({ client }) => ({
         p.models["fake-opus@300k"] = { ...sized("fake-opus@300k", "Fake Opus @ 300k"), fast: true }
         p.models["fake-opus@1m"] = sized("fake-opus@1m", "Fake Opus @ 1m")
       }
+      // $FAKE_TIERS: fake-1 and fake-resp say the service tiers their vendor
+      // serves them at (#2514), one as an object as Codex's catalog writes it
+      if (process.env.FAKE_TIERS) {
+        p.models["fake-1"] = { ...p.models["fake-1"], serviceTiers: ["priority", { id: "ultrafast" }, "", 7, "priority"] }
+        if (p.models["fake-resp"]) p.models["fake-resp"] = { ...p.models["fake-resp"], serviceTiers: ["ultrafast"] }
+      }
       // $FAKE_MODELS: the vendor's list, whose answer names one more model
       if (process.env.FAKE_MODELS && auth) {
         const r = await fetch(process.env.FAKE_MODELS).then((r) => r.text()).catch((e) => {

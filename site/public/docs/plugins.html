@@ -348,6 +348,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
           <li><code>rateWas</code>: the rate before a discount that is running now.</li>
         </ul>
         Model pickers show them.</li>
+      <li><code>serviceTiers</code>, on a model the <code>models</code> hook gives: the service tiers its vendor serves it at, as ids, such as <code>["priority", "ultrafast"]</code>. Codex is offered them in its model list (<code>priority</code> as Fast), and a Chat or Responses request that asks for one of them reaches your <code>fetch</code> with its <code>service_tier</code>. A tier the model doesn’t list isn’t sent where magpie translates the request.</li>
       <li>The keys of <code>variants</code> become the model’s reasoning levels when it reasons.</li>
     </ul>
     <h3>When the vendor can’t be reached</h3>

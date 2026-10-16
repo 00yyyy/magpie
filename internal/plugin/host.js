@@ -1655,6 +1655,19 @@ function rateOf(v) {
   return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0
 }
 
+// tiersOf reads the service tiers a plugin says a model serves
+// (m.serviceTiers): ids ("priority", "ultrafast"), or objects with an id as
+// Codex's catalog writes them; anything else is dropped
+function tiersOf(v) {
+  if (!Array.isArray(v)) return []
+  const out = []
+  for (const t of v) {
+    const id = typeof t === "string" ? t.trim() : typeof t?.id === "string" ? t.id.trim() : ""
+    if (id && !out.includes(id)) out.push(id)
+  }
+  return out
+}
+
 // providers lists each provider and its accounts' models, each asked
 // through its proxy (proxies[provider][key], "" the provider's own), as a
 // built-in fetches each account's list through the account's.
@@ -1729,6 +1742,9 @@ async function providers({ proxies } = {}) {
           rateWas: rateOf(m.rateWas),
           // run fast when the request's service_tier is priority (Cursor's)
           fast: m.fast === true,
+          // the service tiers the vendor serves it at (service_tier
+          // "priority", "ultrafast"), which Codex then offers (#2514)
+          serviceTiers: tiersOf(m.serviceTiers),
           // a decision model (System One's), hidden from agents and
           // offered as a routing group's classifier
           decides: m.decides === true,

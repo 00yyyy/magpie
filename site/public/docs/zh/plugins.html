@@ -348,6 +348,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
           <li><code>rateWas</code>：当前优惠之前的倍率。</li>
         </ul>
         模型选择器会显示它们。</li>
+      <li><code>serviceTiers</code>（在 <code>models</code> 钩子返回的模型上）：厂商为该模型提供的服务档位，写成 id，例如 <code>["priority", "ultrafast"]</code>。magpie 会把它们写进 Codex 的模型列表（<code>priority</code> 显示为 Fast）；Chat 或 Responses 请求选了其中一档时，会带着 <code>service_tier</code> 到达你的 <code>fetch</code>。在 magpie 转换协议的请求里，模型没列出的档位不会发出。</li>
       <li>模型支持推理时，<code>variants</code> 的键会成为它的推理档位。</li>
     </ul>
     <h3>连不上厂商时</h3>

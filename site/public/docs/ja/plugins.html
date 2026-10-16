@@ -348,6 +348,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
           <li><code>rateWas</code>：現在実施中の割引の前の倍率。</li>
         </ul>
         モデル選択画面に表示されます。</li>
+      <li><code>serviceTiers</code>（<code>models</code> フックが返すモデルに）：ベンダーがそのモデルを提供するサービス階層を id で、たとえば <code>["priority", "ultrafast"]</code>。Codex のモデル一覧に載り（<code>priority</code> は Fast）、そのどれかを指定した Chat または Responses のリクエストは <code>service_tier</code> 付きで <code>fetch</code> に届きます。magpie がプロトコルを変換するリクエストでは、モデルが挙げていない階層は送られません。</li>
       <li>モデルが推論する場合、<code>variants</code> のキーがそのモデルの推論レベルになります。</li>
     </ul>
     <h3>ベンダーに接続できないとき</h3>

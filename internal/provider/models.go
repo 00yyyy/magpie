@@ -2290,7 +2290,8 @@ type Entry struct {
 	// tasks a magpie-served lead writes as text.
 	AgentsV2 bool `json:"-"`
 	// Tiers are the service tiers its list offers Codex on the model:
-	// another magpie's, those it offers its own Codex (#1234)
+	// another magpie's, those it offers its own Codex (#1234); a provider
+	// plugin's, those it says its vendor serves the model at (#2514)
 	Tiers []string `json:"-"`
 	// Released is the model's release day (YYYY-MM-DD) as its list or
 	// models.dev says it, "" when neither does: what a group's template

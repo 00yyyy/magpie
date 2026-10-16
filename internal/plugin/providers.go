@@ -91,6 +91,11 @@ type Model struct {
 	// mode when the request says service_tier "priority" (m.fast: Cursor's
 	// plugin from 0.2.2, for a model Cursor has a fast variant of)
 	Fast bool `json:"fast"`
+	// ServiceTiers are the service tiers the plugin says its vendor serves
+	// the model at (m.serviceTiers: "priority", "ultrafast"): Codex is
+	// offered them, and a request asking for one reaches the plugin's
+	// fetch with its service_tier (#2514)
+	ServiceTiers []string `json:"serviceTiers,omitempty"`
 	// Decides is set by the plugin on a model that answers System One's
 	// questions rather than a conversation (m.decides: a decision model
 	// not named jev-…, Clef or a vendor's own). It counts only where the
