@@ -65,8 +65,7 @@ func TestMoveEveryAccountLapsed(t *testing.T) {
 
 // A move that installed the plugin and then failed takes it away again,
 // leaving no plugin provider saying it's signed out; one that got through
-// keeps it, and going back takes it away when it serves nothing else. A
-// plugin the user had installed stays either way.
+// keeps it. A plugin the user had installed stays either way.
 func TestMoveTidiesItsPlugin(t *testing.T) {
 	ctx, abs, _ := fakePlugin(t)
 	setFakeLogins(t, fakeLogin("a@fake", "r-a", true, true), fakeLogin("n@fake", "r-noimport", false, true))
@@ -87,17 +86,13 @@ func TestMoveTidiesItsPlugin(t *testing.T) {
 	if m, _ := MigrationOf("fakeco"); !m.Installed || !pluginListed(abs) {
 		t.Fatalf("after moving: installed %v, listed %v", m.Installed, pluginListed(abs))
 	}
-	if err := MoveBack(ctx, "fakeco"); err != nil {
+	if err := RemovePlugin(ctx, abs); err != nil {
 		t.Fatal(err)
 	}
-	if pluginListed(abs) {
-		t.Fatal("moving back left the plugin the move installed")
-	}
-	if s := fakeSaved(t); len(s) != 1 || !strings.HasPrefix(fakeToken(s["a@fake"]), "r-a") {
-		t.Fatalf("the built-in's account moved back: %+v", s)
-	}
+	_ = plugin.SignOut(ctx, "fakeco", "")
+	os.Remove(migrationsPath())
 
-	// the user's own plugin: a failed move leaves it, as does going back
+	// the user's own plugin: a failed move leaves it
 	if _, err := plugin.Add(ctx, abs); err != nil {
 		t.Fatal(err)
 	}
@@ -110,9 +105,78 @@ func TestMoveTidiesItsPlugin(t *testing.T) {
 	if err := Move(ctx, "fakeco"); err != nil {
 		t.Fatal(err)
 	}
-	if err := MoveBack(ctx, "fakeco"); err != nil || !pluginListed(abs) {
-		t.Fatalf("moving back off the user's plugin: %v, listed %v", err, pluginListed(abs))
+	if m, _ := MigrationOf("fakeco"); m.Installed || !pluginListed(abs) {
+		t.Fatalf("moved onto the user's plugin: installed %v, listed %v", m.Installed, pluginListed(abs))
 	}
+}
+
+// There is no way back to a built-in, as each is going. One an older
+// magpie moved back is moved again by itself. The plugin turned off keeps
+// it moved, off with it; the plugin removed leaves its accounts with the
+// plugin's sign-ins, nothing moving or installing it again, and the plugin
+// installed again (or the editor's Move) has it at once, accounts and all.
+func TestNoWayBack(t *testing.T) {
+	ctx, abs, installs := fakePlugin(t)
+	retiring = func() []string { return []string{"fakeco"} }
+	t.Cleanup(func() { retiring = MovableIDs })
+	setFakeLogins(t, fakeLogin("a@fake", "r-a", true, true))
+	_ = setMigration("fakeco", func(m *Migration) { *m = Migration{State: MovedBack, Package: abs} })
+	if errs := MoveRetiring(ctx); errs["fakeco"] != nil || !Moved("fakeco") {
+		t.Fatalf("one moved back by an older magpie: %v, moved %v", errs, Moved("fakeco"))
+	}
+	signedIn := func(when string) {
+		t.Helper()
+		if len(fakeSaved(t)) != 0 || len(plugin.Auths("fakeco")) != 1 {
+			t.Fatalf("%s: built-in's %+v, plugin's %v", when, fakeSaved(t), plugin.Auths("fakeco"))
+		}
+	}
+
+	if err := SetPluginOff(ctx, abs, true); err != nil {
+		t.Fatal(err)
+	}
+	if !Moved("fakeco") {
+		t.Fatal("turning the plugin off moved it back")
+	}
+	signedIn("plugin off")
+	if err := SetPluginOff(ctx, abs, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RemovePlugin(ctx, abs); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ := MigrationOf("fakeco"); m.State != MoveRemoved || Moved("fakeco") || pluginListed(abs) || len(m.Accounts) != 1 {
+		t.Fatalf("plugin removed: %+v, listed %v", m, pluginListed(abs))
+	}
+	signedIn("plugin removed")
+	was := *installs
+	keepMovedCurrent(ctx)
+	if errs := MoveRetiring(ctx); len(errs) != 0 || *installs != was || pluginListed(abs) {
+		t.Fatalf("magpie put back a plugin the user removed: %v, %d installs", errs, *installs-was)
+	}
+
+	if _, err := plugin.Add(ctx, abs); err != nil {
+		t.Fatal(err)
+	}
+	if out := HandOver(ctx, false); out["fakeco"] != nil || !Moved("fakeco") {
+		t.Fatalf("installed again: %v, moved %v", out, Moved("fakeco"))
+	}
+	if m, _ := MigrationOf("fakeco"); len(m.Accounts) != 1 || m.Installed {
+		t.Fatalf("installed again by the user: %+v", m)
+	}
+	signedIn("installed again")
+
+	// removed again, then the editor's Move: Adopt, the accounts kept
+	if err := RemovePlugin(ctx, abs); err != nil {
+		t.Fatal(err)
+	}
+	if err := Adopt(ctx, "fakeco"); err != nil || !Moved("fakeco") || !pluginListed(abs) {
+		t.Fatalf("adopted after removing: %v, moved %v", err, Moved("fakeco"))
+	}
+	if m, _ := MigrationOf("fakeco"); len(m.Accounts) != 1 || !m.Installed {
+		t.Fatalf("adopted after removing: %+v", m)
+	}
+	signedIn("adopted")
 }
 
 // The move tries each account through the vendor, and none holds it
@@ -204,8 +268,7 @@ func TestMovedShowsBuiltinHost(t *testing.T) {
 
 // A built-in with no account signed in goes onto its plugin as it is: the
 // plugin installed and the subscription its from then on, so the first
-// sign-in is the plugin's. Going back takes the plugin it installed away.
-// One with an account is moved.
+// sign-in is the plugin's. One with an account is moved.
 func TestAdoptBeforeSigningIn(t *testing.T) {
 	ctx, abs, installs := fakePlugin(t)
 	if err := Adopt(ctx, "fakeco"); err != nil {
@@ -220,13 +283,7 @@ func TestAdoptBeforeSigningIn(t *testing.T) {
 	if err := Adopt(ctx, "fakeco"); err != nil || *installs != 1 {
 		t.Fatalf("adopting again: %v, %d installs", err, *installs)
 	}
-	if err := MoveBack(ctx, "fakeco"); err != nil {
-		t.Fatal(err)
-	}
-	if Moved("fakeco") || pluginListed(abs) {
-		t.Fatalf("back: moved %v, listed %v", Moved("fakeco"), pluginListed(abs))
-	}
-
+	os.Remove(migrationsPath())
 	setFakeLogins(t, fakeLogin("a@fake", "r-a", true, true))
 	if err := Adopt(ctx, "fakeco"); err != nil {
 		t.Fatal(err)

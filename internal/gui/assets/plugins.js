@@ -1103,8 +1103,9 @@
       c.title = (isGit(e.spec) ? t("{head} is the newest commit of {repo}", { head: ck.head || e.head || "", repo: e.spec }) : t("v{v} is the newest on npm", { v: e.version })) + "\n" + t("Last checked {time}", { time: checkedAt() });
       nm.append(c);
     }
-    // the built-in subscriptions moved onto it: taking it away moves them
-    // back, so the row says it carries them
+    // the built-in subscriptions moved onto it: taking it away or off
+    // stops them, as there is no built-in to go back to, so the row says
+    // it carries them
     const moved = (e.moved || []).map((id) => SUBS.find((x) => x.agent === id)?.name || id);
     const names = moved.join(t(", "));
     if (moved.length && !e.off) {
@@ -1145,7 +1146,7 @@
       sub.textContent = t("{names} can run on it again, with the same accounts.", { names: cands.map((c) => c.name).join(t(", ")) });
       sub.classList.add("ask");
     } else if (ask) {
-      sub.textContent = t(ask === "remove" ? "{names} goes back to the built-in, with its accounts, before the plugin is removed." : "{names} goes back to the built-in, with its accounts, before the plugin is switched off.", { names });
+      sub.textContent = t(ask === "remove" ? "{names} stops working until the plugin is installed again. Its accounts are kept." : "{names} stops working while the plugin is off. Its accounts are kept.", { names });
       sub.classList.add("ask");
     } else if (e.off) sub.textContent = t("Off");
     else if (e.error) { sub.textContent = t("Didn't load: {error}", { error: e.error }); sub.classList.add("bad"); sub.title = e.error; }
@@ -1213,12 +1214,11 @@
       s.onclick = () => pluginSignIn(out.id);
       val.append(s);
     }
-    const back = () => { if (moved.length) status(t("{names} is back on the built-in", { names }), "ok"); };
-    // switched on again: the built-ins that went back when it went off
-    // are offered its way again, in the row
+    // switched on again: a built-in it can carry is offered its way, in
+    // the row
     const again = () => { if (movableOf(pkg).length) { asking = { pkg, op: "move" }; draw(); } };
-    const off = () => act(pkg, "off", { spec: e.spec, off: !e.off }, e.off ? again : back);
-    const remove = () => act(pkg, "remove", { spec: e.spec }, () => { status(t("{name} removed", { name: l?.name || pkg }), "ok"); back(); });
+    const off = () => act(pkg, "off", { spec: e.spec, off: !e.off }, e.off ? again : null);
+    const remove = () => act(pkg, "remove", { spec: e.spec }, () => status(t("{name} removed", { name: l?.name || pkg }), "ok"));
     if (ask) {
       // asked in the row, not a dialog: the user sees which go back
       const yes = el("button", "text primary", t(ask === "move" ? "Move" : ask === "remove" ? "Remove" : "Switch off"));
@@ -1241,11 +1241,11 @@
       };
       val.append(o);
     }
-    const onoff = el("button", "text", b === "off" && !e.off && moved.length ? t("Moving back…") : t(e.off ? "Switch on" : "Switch off"));
+    const onoff = el("button", "text", t(e.off ? "Switch on" : "Switch off"));
     onoff.disabled = !!b;
     onoff.onclick = () => { if (!e.off && moved.length) { asking = { pkg, op: "off" }; draw(); } else off(); };
-    const rm = el("button", "text quiet", b === "remove" ? t(moved.length ? "Moving back…" : "Removing…") : t("Remove"));
-    rm.title = moved.length ? t("{names} goes back to the built-in first, then the plugin is removed", { names }) : t("Removes the plugin and what it installed; its sign-ins are kept until you sign out");
+    const rm = el("button", "text quiet", b === "remove" ? t("Removing…") : t("Remove"));
+    rm.title = moved.length ? t("{names} runs on this plugin: removed, it stops working until the plugin is installed again", { names }) : t("Removes the plugin and what it installed; its sign-ins are kept until you sign out");
     rm.disabled = busy.size > 0;
     rm.onclick = async () => {
       if (moved.length) {

@@ -67,14 +67,14 @@ func pluginCmd(args []string) error {
 			return errors.New(pluginUsage)
 		}
 		rest[0] = installedName(rest[0])
-		back := provider.MovedOnto(rest[0])
+		moved := provider.MovedOnto(rest[0])
 		if err := provider.RemovePlugin(ctx, rest[0]); err != nil {
 			return err
 		}
-		for _, id := range back {
-			fmt.Println(green.Render("✓"), id, "is back on its built-in")
-		}
 		fmt.Println(green.Render("✓"), "removed", rest[0])
+		for _, id := range moved {
+			fmt.Println(faint.Render("  " + id + " is off until the plugin is added again; its accounts are kept"))
+		}
 		return nil
 	case "update", "upgrade":
 		if err := plugin.Update(ctx); err != nil {
@@ -88,17 +88,15 @@ func pluginCmd(args []string) error {
 			return errors.New(pluginUsage)
 		}
 		rest[0] = installedName(rest[0])
-		var back []string
-		if sub == "off" {
-			back = provider.MovedOnto(rest[0])
-		}
 		if err := provider.SetPluginOff(ctx, rest[0], sub == "off"); err != nil {
 			return err
 		}
-		for _, id := range back {
-			fmt.Println(green.Render("✓"), id, "is back on its built-in")
-		}
 		fmt.Println(green.Render("✓"), rest[0], "is", sub)
+		if sub == "off" {
+			for _, id := range provider.MovedOnto(rest[0]) {
+				fmt.Println(faint.Render("  " + id + " is off with it; its accounts are kept"))
+			}
+		}
 		return nil
 	case "options", "config":
 		if len(rest) < 1 || len(rest) > 2 {

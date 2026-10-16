@@ -13,10 +13,10 @@ import (
 	"github.com/yetone/magpie/internal/update"
 )
 
-// moveAndBack does what Move and MoveBack do with a mover's accounts, but
-// for the plugin in between: the accounts go out, the built-in's saved ones
-// go aside, extra (sign-ins made through the plugin since) join them, and
-// every one comes back. It gives the accounts that went out and the saved
+// moveAndBack does what Move, and putBack after a failed one, do with a
+// mover's accounts, but for the plugin in between: the accounts go out,
+// the built-in's saved ones go aside, extra (sign-ins made through the
+// plugin since) join them, and every one comes back. It gives the accounts that went out and the saved
 // accounts before and after.
 func moveAndBack(t *testing.T, id string, extra ...map[string]any) (out []Moving, before, after []savedLogin) {
 	t.Helper()
