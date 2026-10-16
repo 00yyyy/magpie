@@ -232,6 +232,7 @@ func perKeyBarred(p provider.Provider, model string, from provider.Protocol) (ou
 		return out, nil, left, barred
 	}
 	keys := p.KeysOn()
+	serves := p.Serving(model) // the lists read once, not once a key (@NetRozee on X)
 	var unlisted []candidate
 	var noURL provider.Protocol
 	for i, k := range keys {
@@ -250,7 +251,7 @@ func perKeyBarred(p provider.Provider, model string, from provider.Protocol) (ou
 			barred = append(barred, candidate{p: q, model: model, rest: rest, rank: i})
 			continue
 		}
-		if !p.Serves(k, model) {
+		if !serves(k) {
 			// the vendor lists the model to another key only
 			unlisted = append(unlisted, candidate{p: q, model: model, rest: rest, rank: i})
 			continue

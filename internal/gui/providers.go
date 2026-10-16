@@ -624,12 +624,14 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		out.KeyList = []provider.KeyInfo{}
 	}
 	// a key the gateway passes over after a failure says so on its row
+	restKey := p.RestKeys()
 	for i, k := range out.KeyList {
 		if !k.On {
 			continue
 		}
-		if r, ok := keyRestOf(p.RestKey(k)); ok {
-			out.KeyList[i].Rest = &provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: p.RestKey(k)}
+		key := restKey(k)
+		if r, ok := keyRestOf(key); ok {
+			out.KeyList[i].Rest = &provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: key}
 		}
 	}
 	if !out.Key.Set && p.Ready() {

@@ -678,10 +678,12 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 	}
 	got := make([]*SubscriptionQuota, len(jobs))
 	var wg sync.WaitGroup
+	var slots keySlots
 	for i, j := range jobs {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer slots.take(ctx, j.p.ID)()
 			q := SubscriptionQuota{Provider: j.p.ID, Name: j.p.Name, Icon: j.p.Icon, User: j.user, Windows: []QuotaWindow{}}
 			plan, ws, team, err := planKeyWindows(j.p.Via(ctx), j.p, j.src, j.key)
 			// a vendor failing a while (Command Code answers billing/credits
