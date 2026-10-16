@@ -140,6 +140,7 @@ line; agents connected to magpie lose it when it quits.
 | WorkBuddy AI | `~/.workbuddy-ai/models.json` (the international build) | provider (magpie's models in WorkBuddy AI's picker) |
 | CodeBuddy Code | `~/.codebuddy/models.json` (`$CODEBUDDY_CONFIG_DIR`), `settings.json` | model (magpie's models in its list; the session model) |
 | Raycast      | `~/.config/raycast/ai/providers.yaml` in the user's folder, on Mac and Windows | provider (a `magpie` entry in Raycast AI's Custom Providers, magpie's models in its model picker; Raycast Pro; the user's providers, `tools` and comments kept) |
+| OpenPencil   | `openpencil/settings.json` in the config folder: `~/Library/Application Support` (macOS), `$XDG_CONFIG_HOME` or `~/.config` (Linux), `%APPDATA%` (Windows) | provider (a `magpie` entry in its `builtin_agents`, magpie's models in its chat's model picker; the user's entries and settings kept; refused while OpenPencil runs, as it writes the file back when it quits) |
 | T3 Code      | `~/.t3/userdata/settings.json` (`$T3CODE_HOME/userdata`) | provider (a `magpie` provider instance on Claude Code, magpie's models as its custom models) |
 | OpenHanako   | `~/.hanako/provider-catalog.json` + `agents/<id>/config.yaml` (`$HANA_HOME`; its local API while it runs) | model (the primary agent's; magpie's models as a provider) |
 | AtomCode     | `~/.atomcode/config.toml` (`$ATOMCODE_HOME`) | model, effort (a `magpie` provider account, one model table per catalog model as its own sign-in writes) |
