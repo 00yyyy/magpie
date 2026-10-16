@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/yetone/magpie/internal/qoder"
 )
 
 // An account signed in again is read afresh: the usage reading kept from
@@ -110,8 +108,8 @@ func TestFactoryKeyAgainReadsUsageAfresh(t *testing.T) {
 	}
 }
 
-// WorkBuddy and Qoder keep a sign-in their own way (wbKeepSignIn,
-// qoderSave): the account's kept reading goes there too.
+// WorkBuddy keeps a sign-in its own way (wbKeepSignIn): the account's kept
+// reading goes there too.
 func TestOwnStoreSignInAgainDropsTheReading(t *testing.T) {
 	signIn(t)
 	for _, c := range []struct {
@@ -121,9 +119,6 @@ func TestOwnStoreSignInAgainDropsTheReading(t *testing.T) {
 		{"workbuddy", "wb", func() error {
 			_, _, _, err := wbKeepSignIn(wbSiteOf("workbuddy"), wbCreds{UID: "u-1", Access: "a", Refresh: "r"}, "wb")
 			return err
-		}},
-		{"qoder", "q@example.com", func() error {
-			return qoderSave(qoder.Credential{UID: "q-1", Token: "t", Email: "q@example.com"})
 		}},
 	} {
 		t.Run(c.agent, func(t *testing.T) {

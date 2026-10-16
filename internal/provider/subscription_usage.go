@@ -483,12 +483,6 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 	if !moved(CommandCodePlanID) && !hidden[CommandCodePlanID] {
 		fetches = append(fetches, perLogin(via(CommandCodePlanID), cmdLoginList(), accountCard(CommandCodePlanID))...)
 	}
-	if !moved("qoder") && !hidden["qoder"] {
-		fetches = append(fetches, perLogin(via("qoder"), loginsOf(qoderLogins()), accountCard("qoder"))...)
-	}
-	if !moved(QoderCNID) && !hidden[QoderCNID] {
-		fetches = append(fetches, perLogin(via(QoderCNID), loginsOf(qoderLoginsOf(QoderCNID)), accountCard(QoderCNID))...)
-	}
 	if !moved("devin") && !hidden["devin"] {
 		fetches = append(fetches, perLogin(via("devin"), devinLoginList(), accountCard("devin"))...)
 	}

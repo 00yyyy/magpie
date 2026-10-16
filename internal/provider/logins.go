@@ -817,8 +817,6 @@ func Logins(agent string) []Login {
 		return wbLoginList(wbSiteOf(agent))
 	case CommandCodePlanID:
 		return cmdLoginList()
-	case "qoder", QoderCNID:
-		return loginsOf(qoderLoginsOf(agent))
 	case "factory":
 		return factoryLoginList()
 	case MiMoID:
@@ -847,8 +845,7 @@ func Logins(agent string) []Login {
 			{"grok", grokLoginList}, {"copilot", copilotLoginList}, {"zcode", zcodeLoginList},
 			{"devin", devinLoginList}, {"workbuddy", func() []Login { return wbLoginList(wbCN) }},
 			{WorkBuddyAIID, func() []Login { return wbLoginList(wbAI) }}, {CommandCodePlanID, cmdLoginList},
-			{"qoder", func() []Login { return loginsOf(qoderLogins()) }},
-			{QoderCNID, func() []Login { return loginsOf(qoderLoginsOf(QoderCNID)) }}, {"factory", factoryLoginList},
+			{"factory", factoryLoginList},
 			{MiMoID, mimoLoginList}, {ChatGPTAPIID, siwcLoginList}, {"gemini", func() []Login { return googleLoginList("gemini") }},
 			{"antigravity", func() []Login { return googleLoginList("antigravity") }},
 		} {
@@ -1055,8 +1052,6 @@ func switchLogin(agent, user string) error {
 		return switchWorkBuddyLogin(wbSiteOf(agent), user)
 	case CommandCodePlanID:
 		return switchCommandCodeLogin(user)
-	case "qoder", QoderCNID:
-		return switchSideLogin(agent, user, qoderLoginsOf(agent))
 	case "factory":
 		return switchFactoryLogin(user)
 	case MiMoID:
@@ -1245,8 +1240,6 @@ func ForgetLogin(agent, user string) error {
 		return forgetWorkBuddyLogin(wbSiteOf(agent), user)
 	case CommandCodePlanID:
 		return forgetCommandCodeLogin(user)
-	case "qoder", QoderCNID:
-		return forgetQoderLogin(agent, user)
 	case "factory":
 		return forgetFactoryLogin(user)
 	case MiMoID:
