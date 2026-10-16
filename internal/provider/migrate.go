@@ -51,13 +51,14 @@ import (
 const (
 	MoveMoving = "moving" // under way, or cut short (put back at the next try)
 	MovePlugin = "plugin" // the plugin has the id
-	MovedBack  = "back"   // the user moved it back: it stays built-in
+	MovedBack  = "back"   // moved back to the built-in: moved again by itself, unless Left
 	MoveFailed = "failed" // the last try failed: the built-in carries on
 )
 
-// Retiring are the built-ins magpie moves onto their plugins by itself,
-// at start-up; the rest move only when the user asks.
-var Retiring = []string{}
+// retiring are the built-ins magpie moves onto their plugins by itself:
+// every one with a mover, since each built-in is being retired (the owner,
+// 10-16: 陆续把内置Provider下线掉). A tests' list stands in for it.
+var retiring = MovableIDs
 
 // moveRetry is how long a failed move waits before it is tried again.
 const moveRetry = 6 * time.Hour
@@ -77,6 +78,9 @@ type Migration struct {
 	// Installed is whether the move installed the plugin: going back takes
 	// it away again when it serves nothing else.
 	Installed bool `json:"installed,omitempty"`
+	// Left is a move back made by removing the plugin or turning it off:
+	// the user's own choice, which no move undoes by itself.
+	Left bool `json:"left,omitempty"`
 	// Host is the built-in's API host, which the plugin's provider shows.
 	Host string `json:"host,omitempty"`
 	// Why is a failed move's reason, for the page to say in the user's
@@ -1090,7 +1094,7 @@ func moveBack(ctx context.Context, id string, tidy bool) error {
 		}
 	}
 	if err := setMigration(id, func(m *Migration) {
-		*m = Migration{State: MovedBack, Package: mv.pkg, At: time.Now().UTC().Truncate(time.Second)}
+		*m = Migration{State: MovedBack, Package: mv.pkg, At: time.Now().UTC().Truncate(time.Second), Left: !tidy}
 	}); err != nil {
 		return err
 	}
@@ -1139,20 +1143,21 @@ func pluginOn(id string) map[string]bool {
 }
 
 // MoveRetiring moves the built-ins being retired that have accounts, at
-// start-up: once, or again moveRetry after one failed. One the user moved
-// back stays.
+// start-up: once, or again moveRetry after one failed. One moved back is
+// moved again (the way back is gone from the editor and the command line),
+// except one moved back by the user taking its plugin away or off.
 func MoveRetiring(ctx context.Context) map[string]error {
 	if settings.AccountDiscoveryOff() {
 		return nil
 	}
 	out := map[string]error{}
-	for _, id := range Retiring {
+	for _, id := range retiring() {
 		m, ok := MigrationOf(id)
 		switch {
 		case ok && m.State == MovePlugin:
 			tidyMoved(id)
 			continue
-		case ok && m.State == MovedBack:
+		case ok && m.State == MovedBack && m.Left:
 			continue
 		case ok && m.State == MoveFailed && time.Since(m.At) < moveRetry:
 			continue

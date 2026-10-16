@@ -268,11 +268,11 @@ func TestMoveToPlugin(t *testing.T) {
 		}
 	}
 	loginsMu.Unlock()
-	// the user moved it back: it isn't moved again by itself
-	Retiring = []string{"fakeco"}
-	t.Cleanup(func() { Retiring = nil })
-	if errs := MoveRetiring(ctx); len(errs) != 0 || Moved("fakeco") {
-		t.Fatalf("MoveRetiring moved one moved back: %v", errs)
+	// the built-in is retired: one moved back is moved again by itself
+	retiring = func() []string { return []string{"fakeco"} }
+	t.Cleanup(func() { retiring = MovableIDs })
+	if errs := MoveRetiring(ctx); errs["fakeco"] != nil || !Moved("fakeco") {
+		t.Fatalf("MoveRetiring left one moved back built-in: %v", errs)
 	}
 }
 
@@ -295,8 +295,8 @@ func TestMoveCutShort(t *testing.T) {
 	inUse := []string{"fake-1"}
 	fakeMover(t, &inUse)
 	movers["fakeco"].pkg = abs
-	Retiring = []string{"fakeco"}
-	t.Cleanup(func() { Retiring = nil })
+	retiring = func() []string { return []string{"fakeco"} }
+	t.Cleanup(func() { retiring = MovableIDs })
 	loginsMu.Lock()
 	_ = writeLogins([]savedLogin{fakeLogin("a@fake", "rot-a", false, true)})
 	loginsMu.Unlock()
@@ -599,6 +599,12 @@ func TestReleasePlugin(t *testing.T) {
 			}
 			if op == "remove" && len(plugin.Load().Plugins) != 0 {
 				t.Fatalf("not removed: %+v", plugin.Load().Plugins)
+			}
+			// the user took the plugin away: no move undoes that by itself
+			retiring = func() []string { return []string{"fakeco"} }
+			t.Cleanup(func() { retiring = MovableIDs })
+			if errs := MoveRetiring(ctx); len(errs) != 0 || Moved("fakeco") {
+				t.Fatalf("moved again onto a plugin the user took %s: %v", op, errs)
 			}
 		})
 	}

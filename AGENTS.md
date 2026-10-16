@@ -61,7 +61,14 @@ Two cases decide it:
   gateway's hourly loop (`KeepRetiringMoved`) when it has, unless they moved
   back or the plugin is signed in under its own `-plugin` id already. Until
   then the Add sheet shows the plugin's tile only (`replacedSub` in app.js).
-- **Not moved:** the user is still signed in through the built-in.
+  Since 10-16 the built-ins are being retired: the hourly loop's
+  `MoveRetiring` moves every subscription with a mover that still has
+  built-in accounts, a user who moved back included, and there is no way
+  back from the GUI or CLI. Only removing or turning off the plugin puts the
+  built-in back (`Left`), and that is left alone.
+- **Not moved:** the user is still signed in through the built-in: the
+  move hasn't run yet, it failed (tried again after six hours), or they
+  removed the plugin.
 
 For a moved subscription, the plugin does everything: sign-in, refresh,
 models, requests, usage and errors. It runs in the plugin host

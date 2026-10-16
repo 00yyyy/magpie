@@ -29,7 +29,6 @@ const pluginUsage = `usage: magpie plugin [list] [--json]
        magpie plugin login <provider> [<method>]   sign in to a provider a plugin adds
        magpie plugin logout <provider>             forget the sign-in
        magpie plugin move|migrate <subscription>   run a built-in subscription's accounts on its community plugin
-       magpie plugin move-back|unmigrate <subscription>   go back to the built-in, with its accounts
        magpie plugin builtin [on|off <id>]         list magpie's built-in plugins (Sessions, Library, routing groups…), or turn one on or off
        magpie plugin preset essentials|all         start the built-in plugins from the Essentials preset, or from all of them
        magpie plugin dump [--json]                 what plugins.yml comes to: each built-in plugin, its config, and the layer each value is from`
@@ -151,20 +150,11 @@ func pluginCmd(args []string) error {
 		if err := provider.Move(ctx, rest[0]); err != nil {
 			return fmt.Errorf("%s stays built-in: %w", rest[0], err)
 		}
-		fmt.Println(green.Render("✓"), rest[0], "runs on", provider.MovePackage(rest[0]), muted.Render("(magpie plugin move-back "+rest[0]+" to undo)"))
+		fmt.Println(green.Render("✓"), rest[0], "runs on", provider.MovePackage(rest[0]))
 		return nil
 	case "move-back", "moveback", "unmigrate":
-		if len(rest) != 1 {
-			return errors.New(pluginUsage)
-		}
-		if !provider.Moved(rest[0]) {
-			return fmt.Errorf("%s isn't on its plugin", rest[0])
-		}
-		if err := provider.MoveBack(ctx, rest[0]); err != nil {
-			return err
-		}
-		fmt.Println(green.Render("✓"), rest[0], "is built-in again")
-		return nil
+		// the built-ins are retired: there is no going back to one
+		return errors.New("magpie's built-in subscriptions are retired: their community plugins run them")
 	case "builtin", "builtins", "built-in":
 		return builtinCmd(rest)
 	case "preset":

@@ -122,16 +122,16 @@ Migration records use four states:
 | --- | --- |
 | `moving` | Migration is in progress or was interrupted. An explicit retry first rolls back the interrupted move. |
 | `plugin` | The plugin owns the built-in provider id. This is the only state recognized by `Moved`. |
-| `back` | Ownership returned to the built-in. Automatic handover leaves it there. |
+| `back` | Ownership returned to the built-in. `MoveRetiring` moves it again, unless `Left` says the user removed or turned off the plugin. |
 | `failed` | Migration failed and the built-in continues serving. Automatic retry waits six hours. |
 
 The editor's "Move to plugin" action calls `provider.Adopt`. With accounts, adoption delegates to `Move`, which imports and validates accounts and model coverage before committing plugin ownership. With no accounts, adoption verifies the package and the provider it serves, then records plugin ownership without account checks.
 
 Installing the plugin independently can also hand over ownership through `provider.HandOver`. The package must be enabled, meet the mover's minimum version, and serve the expected provider. After add, update, or upgrade, the GUI calls `HandOver(ctx, false)`, which can adopt a built-in with no accounts. Existing built-in accounts wait for `HandOver(ctx, true)` in gateway maintenance.
 
-`KeepRetiringMoved` first runs after 20 seconds, then hourly. Each cycle maintains moved plugin versions, calls `MoveRetiring`, then performs automatic handover. `MoveRetiring` moves subscriptions listed in `provider.Retiring` that have built-in accounts, preserving move-back choices and waiting six hours after a failed attempt. That list is currently empty. Handover preserves a plugin already signed in under its separate `-plugin` id and skips existing migration records except a `failed` record old enough to retry.
+`KeepRetiringMoved` first runs after 20 seconds, then hourly. Each cycle maintains moved plugin versions, calls `MoveRetiring`, then performs automatic handover. `MoveRetiring` moves every subscription with a mover (`retiring`, which is `MovableIDs`) that has built-in accounts, waiting six hours after a failed attempt. The built-ins are being retired (the owner, 10-16: 陆续把内置Provider下线掉), so a `back` record is moved again too; only one with `Left` set, a move back made by removing or turning off the plugin, is left. Handover preserves a plugin already signed in under its separate `-plugin` id and skips existing migration records except a `failed` record old enough to retry.
 
-`MoveBack` restores built-in ownership and records `back`. Compatible accounts added through the plugin can return too; incompatible accounts can remain with the plugin under its separate id. Removing or disabling a plugin first moves affected built-ins back and stops if that fails. A package installed by the user remains after moving back; a migration-installed package is removed only when no remaining signed-in or moved provider needs it.
+There is no move back from the GUI or the CLI: `provider/moveback` and `magpie plugins move-back` answer that the built-ins are retired. `MoveBack` remains for removing or turning off a plugin. It restores built-in ownership and records `back` (with `Left`). Compatible accounts added through the plugin can return too; incompatible accounts can remain with the plugin under its separate id. Removing or disabling a plugin first moves affected built-ins back and stops if that fails. A package installed by the user remains after moving back; a migration-installed package is removed only when no remaining signed-in or moved provider needs it.
 
 Removing a plugin also sets aside the model picks its providers left in `providers.json` (#2057, `plugin_left.go`). Before, nothing listed those records and `magpie provider rm` couldn't find them, so sync and backup asked for a sign-in to them on every run (`NotSignedIn`).
 
