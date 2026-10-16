@@ -234,11 +234,22 @@ func dataURL(p Part) string {
 // built-in's, for show, which Cursor's is none, and its fast mode was lost
 // on every request magpie translated (#1360).
 func buildHost(p provider.Provider) string {
-	if p.IsPlugin() && p.PluginProvider() == "cursor" {
-		return "cursor"
+	if p.IsPlugin() {
+		switch id := p.PluginProvider(); id {
+		case "cursor", provider.CommandCodePlanID, "devin", "qoder", "qoder-cn":
+			// the plugin's own id, never the built-in's API host a moved
+			// account shows (api.commandcode.ai), which lost a moved Command
+			// Code Go conversation its reasoning
+			return id
+		}
 	}
 	return p.Host()
 }
+
+// failedAsText are the plugins whose vendor has no failed mark on a tool
+// result: the built-in said it in the text, "Error: " first (devin.go,
+// qoder.go), and so the chat request to the plugin says it there too.
+var failedAsText = map[string]bool{"devin": true, "qoder": true, "qoder-cn": true}
 
 // chatReplaysReasoning is whether a Chat upstream wants a turn's reasoning
 // back in reasoning_content: DeepSeek's models wherever they are served
@@ -418,7 +429,16 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 					}
 					out += note
 				}
-				tools = append(tools, map[string]any{"role": "tool", "tool_call_id": p.CallID, "content": out})
+				if p.IsError && failedAsText[host] {
+					out = "Error: " + out
+				}
+				tool := map[string]any{"role": "tool", "tool_call_id": p.CallID, "content": out}
+				if p.IsError && host == "cursor" {
+					// Cursor's plugin reads it, as the built-in told Cursor
+					// isError; another chat upstream has no such field
+					tool["is_error"] = true
+				}
+				tools = append(tools, tool)
 				seeLater(p)
 			}
 		}
