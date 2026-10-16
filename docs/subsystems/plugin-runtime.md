@@ -13,7 +13,7 @@ Sessions, Library, Routing and Usage), and P3 (the gateway's
 extension points: the observer, with OTel export as its first plugin; the
 router strategy, with the routings besides Smart and the user's groups; and
 the middleware point, with the JS gateway middleware and privacy masking;
-the tool point, with web search; and the budget point, with key limits), P4 (community plugins at each of those points) and P5 (community panels in magpie's own pages, and a plugin's page in a built-in's place). OpenCode plugins (npm packages in
+the tool point, with web search; and the budget point, with key limits), P4 (community plugins at each of those points) P5 (community panels in magpie's own pages, and a plugin's page in a built-in's place) and P6 (a plugin's items in a provider's and an agent's row menu). OpenCode plugins (npm packages in
 the plugin host) are a different thing; see
 [provider and plugin ownership](provider-plugins.md) and
 [gateway middleware](gateway-middleware.md).
@@ -330,6 +330,43 @@ Tests: `TestWindowPanels`, `TestPluginPanelsServedShutIn`,
 `TestPluginPanelsReadWhatTheyDeclared`, `TestPluginPageReplacesFirstWins`,
 `plugin-panels.test.cjs`. Example: `internal/gui/testdata/panel-plugin`.
 
+## P6: actions in magpie's menus
+
+P6 lets a plugin's page add items to the row menus magpie draws: a
+provider row's (right-click) and an agent row's (its handle, or
+right-click). An item opens the plugin's page and tells it what was picked;
+the page does the work. Read by `plugin.Window` with the rest of the window
+manifest ([`page.go`](../../internal/plugin/page.go)); no Bun host.
+
+- **The manifest.** `magpie.actions: [{id, menu, title, titles}]`. `menu`
+  is one of `plugin.ActionMenus` (`provider`, `agent`); a session's menu is
+  left out, since a session's title is the user's content. `id` matches
+  `actionID` (`^[a-z0-9][a-z0-9-]{0,39}$`), an id given twice is the
+  first's, and a plugin has 8 at most (`maxActions`). A plugin with no page
+  has no actions: an action is a way into its page. A missing title is the
+  page's, in each language (`windowParts` in
+  [`pluginpage.go`](../../internal/gui/pluginpage.go)); `/api/plugin-pages`
+  carries them on the page.
+- **The menus.** `magpie.actions(menu, context)`
+  ([`pluginpages.js`](../../internal/gui/assets/pluginpages.js)) gives the
+  items, after magpie's own and a separator, named by `titled` and drawn
+  as the plugin wrote them (`literal` in `openRowMenu`, not through `t()`).
+  `openProviderMenu` passes `{provider: {id, name}}`, `openAgentMenu`
+  `{agent: {id, name}}`, and nothing else of the row.
+- **Picking one** runs `show(key)` (an unsaved edit the reader keeps
+  stops it there), waits for the page's hello, and posts `{event:
+  "action", data: {id, ...context}}` to that frame only. The bridge
+  ([`pagebridge.js`](../../internal/gui/pagebridge.js)) hands it to
+  `magpie.onAction(fn)`; an action that came before `fn` was given waits
+  for it, and a throw in `fn` is the page's error ("stopped working").
+- **The Plugins page** says on the row which menus a plugin adds to
+  (`actionsLine` in [`plugins.js`](../../internal/gui/assets/plugins.js)),
+  from the row's `actions` ([`plugins.go`](../../internal/gui/plugins.go)),
+  said of a plugin switched off too.
+
+Tests: `TestWindowActions`, `TestPluginPageActions`,
+`plugin-actions.test.cjs`.
+
 ## Source of truth and composing
 
 What a plugin runs with is composed field by field (`Compose`), each value
@@ -447,5 +484,10 @@ remembering its layer (`Source`):
   the size watch's loop notice, a replaced Library, the Settings tab
   coming and going) in Chromium and WebKit, every language, 1100 and 420
   points (the Plugins page's rows at 980 and 420).
+- P6: `go test ./internal/plugin/ -run TestWindowActions`,
+  `go test ./internal/gui/ -run TestPluginPageActions` and
+  `plugin-actions.test.cjs` (both menus, a page that gives its handler
+  late, no plugin adding nothing, the Plugins row) in Chromium and WebKit,
+  every language, 1100 and 420 points.
 - By hand, under a sandbox HOME: `magpie plugin builtin`, `magpie plugin
   builtin on groups`, `magpie plugin dump`, and a plugins.yml broken by hand.

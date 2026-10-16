@@ -5,17 +5,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
 
 // WindowSpec is what a plugin adds to magpie's window: its page
 // (package.json's magpie.page), its panels in magpie's own pages
-// (magpie.panels), and the reads magpie.permissions asks for, which its
-// page and its panels share.
+// (magpie.panels), the items it adds to magpie's menus (magpie.actions),
+// and the reads magpie.permissions asks for, which its page and its
+// panels share.
 type WindowSpec struct {
 	Page   *PageSpec // nil when it adds no page of its own
 	Panels []PanelSpec
+	// Actions are its items in magpie's menus, each opening its page;
+	// none without a page
+	Actions []ActionSpec
 	// Reads are the reads it asked for that magpie has (PageReads), in
 	// the order asked.
 	Reads []string
@@ -44,6 +49,28 @@ type PanelSpec struct {
 	File   string // the panel's HTML, inside the plugin's folder
 	Dir    string // the folder the panel's files are served from: File's
 }
+
+// ActionSpec is an item a plugin adds to one of magpie's menus
+// (ActionMenus). Picking it opens the plugin's page, which is told the
+// action's id and the row it was picked on (magpie.onAction).
+type ActionSpec struct {
+	ID     string // its id among the plugin's actions: actionID
+	Menu   string // one of ActionMenus
+	Title  string // "" when it names none: the page's title then
+	Titles map[string]string
+}
+
+// ActionMenus are the menus a plugin's action can be in: a provider
+// row's (the page is told the provider's id and name) and an agent row's
+// (the agent's id and name). Nothing else of the row is told.
+var ActionMenus = []string{"provider", "agent"}
+
+// actionID is what an action's id is: short, of lower-case letters,
+// digits and dashes, so the page can switch on it
+var actionID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
+
+// maxActions is how many actions one plugin adds, at most.
+const maxActions = 8
 
 // PageReads are the reads a plugin's page can be granted, each in
 // magpie.permissions. None of them carries a secret.
@@ -88,7 +115,8 @@ const maxPanels = 8
 
 // Window is what a plugin at target adds to magpie's window, or nil when
 // it adds nothing: package.json's magpie.page {title, file, icon,
-// replaces} and magpie.panels [{slot, file, title}]. A file outside the
+// replaces}, magpie.panels [{slot, file, title}] and magpie.actions [{id,
+// menu, title}]. A file outside the
 // plugin's folder, or not .html, is no page or panel; a panel in a slot
 // magpie doesn't have is left out, and so is a replaces of a page that
 // can't be replaced. only is whether it is nothing else: no OpenCode
@@ -109,6 +137,8 @@ func Window(target string) (w *WindowSpec, only bool) {
 		Icon     string          `json:"icon"`
 		Slot     string          `json:"slot"`
 		Replaces string          `json:"replaces"`
+		ID       string          `json:"id"`
+		Menu     string          `json:"menu"`
 	}
 	var pkg struct {
 		Main    string          `json:"main"`
@@ -116,6 +146,7 @@ func Window(target string) (w *WindowSpec, only bool) {
 		Magpie  struct {
 			Page        *part    `json:"page"`
 			Panels      []part   `json:"panels"`
+			Actions     []part   `json:"actions"`
 			Permissions []string `json:"permissions"`
 		} `json:"magpie"`
 	}
@@ -148,6 +179,18 @@ func Window(target string) (w *WindowSpec, only bool) {
 			continue
 		}
 		w.Panels = append(w.Panels, PanelSpec{Slot: slot, Title: strings.TrimSpace(pn.Title), Titles: titles(pn.Titles), File: file, Dir: filepath.Dir(file)})
+	}
+	// an action opens the plugin's page, so a plugin with none has no
+	// action; an id given twice is the first's
+	for _, a := range pkg.Magpie.Actions {
+		if w.Page == nil || len(w.Actions) == maxActions {
+			break
+		}
+		id, menu := strings.TrimSpace(a.ID), strings.TrimSpace(a.Menu)
+		if !actionID.MatchString(id) || !slices.Contains(ActionMenus, menu) || slices.ContainsFunc(w.Actions, func(x ActionSpec) bool { return x.ID == id }) {
+			continue
+		}
+		w.Actions = append(w.Actions, ActionSpec{ID: id, Menu: menu, Title: strings.TrimSpace(a.Title), Titles: titles(a.Titles)})
 	}
 	if w.Page == nil && len(w.Panels) == 0 {
 		return nil, false

@@ -885,6 +885,24 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
       <button class="copy" data-copy="pg-replaces">コピー</button>
       <pre id="pg-replaces"><span class="s">"page"</span>: { <span class="s">"title"</span>: <span class="s">"My library"</span>, <span class="s">"file"</span>: <span class="s">"page/index.html"</span>, <span class="s">"replaces"</span>: <span class="s">"library"</span> }</pre>
     </div>
+    <h3 id="actions"><a class="anchor" href="#actions">magpie のメニューに入る項目</a></h3>
+    <p>ページを持つプラグインは、magpie の行のメニューに項目を加えられます。プロバイダの行（右クリック）とエージェントの行（ハンドル、または右クリック）です。項目は magpie 自身の項目のあとに並び、ページのタイトルと同じくウィンドウの言語で表示されます。項目を選ぶとプラグインのページが開き、どの項目か、その行の id と名前だけが伝えられます。ページは <code>magpie.onAction</code> で受け取ります。ハンドラーを渡す前に選ばれた項目は、渡されるまで待ちます。</p>
+    <div class="code">
+      <span class="lang">package.json</span>
+      <button class="copy" data-copy="pg-actions">コピー</button>
+      <pre id="pg-actions"><span class="s">"page"</span>: { <span class="s">"title"</span>: <span class="s">"Balance"</span>, <span class="s">"file"</span>: <span class="s">"page/index.html"</span> },
+<span class="s">"actions"</span>: [
+  { <span class="s">"id"</span>: <span class="s">"check"</span>, <span class="s">"menu"</span>: <span class="s">"provider"</span>, <span class="s">"title"</span>: <span class="s">"Check balance"</span>, <span class="s">"titles"</span>: { <span class="s">"zh"</span>: <span class="s">"查余额"</span> } }
+]</pre>
+    </div>
+    <div class="code">
+      <span class="lang">page/app.js</span>
+      <button class="copy" data-copy="pg-onaction">コピー</button>
+      <pre id="pg-onaction">magpie.onAction(({ id, provider }) =&gt; {
+  <span class="c">// id: "check"; provider: { id, name }</span>
+});</pre>
+    </div>
+    <p><code>menu</code> は <code>provider</code> か <code>agent</code> です。<code>id</code> は小文字、数字、ハイフンで、40 文字まで。項目はプラグインごとに最大 8 個で、<code>title</code> のない項目はページのタイトルを使います。ページのないプラグインは項目を加えません。「プラグイン」ページには、プラグインがどのメニューに項目を加えるかが表示されます。</p>
     <h2 id="pi"><a class="anchor" href="#pi">pi パッケージ</a></h2>
     <p>magpie は <a href="https://github.com/earendil-works/pi">pi</a> のパッケージも動かします。<code>pi.registerProvider</code> でプロバイダを登録する pi 拡張は、何も変えずに pi と同じように magpie で動き、ほかのプラグインと同じ方法で追加できます（<code>magpie plugin add pi-antigravity</code>）。</p>
     <ul>

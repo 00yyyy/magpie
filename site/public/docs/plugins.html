@@ -885,6 +885,24 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
       <button class="copy" data-copy="pg-replaces">Copy</button>
       <pre id="pg-replaces"><span class="s">"page"</span>: { <span class="s">"title"</span>: <span class="s">"My library"</span>, <span class="s">"file"</span>: <span class="s">"page/index.html"</span>, <span class="s">"replaces"</span>: <span class="s">"library"</span> }</pre>
     </div>
+    <h3 id="actions"><a class="anchor" href="#actions">Items in magpie’s menus</a></h3>
+    <p>A plugin with a page can add items to the menus of magpie’s rows: a provider’s (right-click it) and an agent’s (its handle, or right-click). They come after magpie’s own, named in the window’s language like a page’s title. Picking one opens the plugin’s page and tells it which item, and the row’s id and name, nothing else of it. The page handles it with <code>magpie.onAction</code>; an item picked before the page gave its handler waits for it.</p>
+    <div class="code">
+      <span class="lang">package.json</span>
+      <button class="copy" data-copy="pg-actions">Copy</button>
+      <pre id="pg-actions"><span class="s">"page"</span>: { <span class="s">"title"</span>: <span class="s">"Balance"</span>, <span class="s">"file"</span>: <span class="s">"page/index.html"</span> },
+<span class="s">"actions"</span>: [
+  { <span class="s">"id"</span>: <span class="s">"check"</span>, <span class="s">"menu"</span>: <span class="s">"provider"</span>, <span class="s">"title"</span>: <span class="s">"Check balance"</span>, <span class="s">"titles"</span>: { <span class="s">"zh"</span>: <span class="s">"查余额"</span> } }
+]</pre>
+    </div>
+    <div class="code">
+      <span class="lang">page/app.js</span>
+      <button class="copy" data-copy="pg-onaction">Copy</button>
+      <pre id="pg-onaction">magpie.onAction(({ id, provider }) =&gt; {
+  <span class="c">// id: "check"; provider: { id, name }</span>
+});</pre>
+    </div>
+    <p><code>menu</code> is <code>provider</code> or <code>agent</code>. An <code>id</code> is lower-case letters, digits and dashes, up to 40. A plugin has at most 8 items, and an item with no <code>title</code> takes its page’s. A plugin without a page adds no items. The Plugins page says which menus a plugin adds to.</p>
     <h2 id="pi"><a class="anchor" href="#pi">pi packages</a></h2>
     <p>magpie also runs <a href="https://github.com/earendil-works/pi">pi</a>’s packages. A pi extension that registers a provider with <code>pi.registerProvider</code> works in magpie as it does in pi, with nothing to change, and is added like any plugin (<code>magpie plugin add pi-antigravity</code>).</p>
     <ul>

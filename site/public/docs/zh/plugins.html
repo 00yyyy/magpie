@@ -885,6 +885,24 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
       <button class="copy" data-copy="pg-replaces">复制</button>
       <pre id="pg-replaces"><span class="s">"page"</span>: { <span class="s">"title"</span>: <span class="s">"My library"</span>, <span class="s">"file"</span>: <span class="s">"page/index.html"</span>, <span class="s">"replaces"</span>: <span class="s">"library"</span> }</pre>
     </div>
+    <h3 id="actions"><a class="anchor" href="#actions">magpie 菜单里的菜单项</a></h3>
+    <p>有页面的插件可以往 magpie 行的菜单里加菜单项：供应商的（右键点它）和 Agent 的（点它的拖动柄，或右键）。它们排在 magpie 自己的菜单项之后，跟页面标题一样按窗口的语言显示。点一个菜单项会打开插件的页面，并告诉它点的是哪一项，以及那一行的 id 和名字，别的都不给。页面用 <code>magpie.onAction</code> 处理；页面还没注册处理函数时点的菜单项会等它注册后再送到。</p>
+    <div class="code">
+      <span class="lang">package.json</span>
+      <button class="copy" data-copy="pg-actions">复制</button>
+      <pre id="pg-actions"><span class="s">"page"</span>: { <span class="s">"title"</span>: <span class="s">"Balance"</span>, <span class="s">"file"</span>: <span class="s">"page/index.html"</span> },
+<span class="s">"actions"</span>: [
+  { <span class="s">"id"</span>: <span class="s">"check"</span>, <span class="s">"menu"</span>: <span class="s">"provider"</span>, <span class="s">"title"</span>: <span class="s">"Check balance"</span>, <span class="s">"titles"</span>: { <span class="s">"zh"</span>: <span class="s">"查余额"</span> } }
+]</pre>
+    </div>
+    <div class="code">
+      <span class="lang">page/app.js</span>
+      <button class="copy" data-copy="pg-onaction">复制</button>
+      <pre id="pg-onaction">magpie.onAction(({ id, provider }) =&gt; {
+  <span class="c">// id: "check"; provider: { id, name }</span>
+});</pre>
+    </div>
+    <p><code>menu</code> 是 <code>provider</code> 或 <code>agent</code>。<code>id</code> 由小写字母、数字和短横线组成，最长 40 个字符。一个插件最多 8 个菜单项，没写 <code>title</code> 的用它页面的标题。没有页面的插件不加菜单项。「插件」页面会写出插件往哪些菜单里加了菜单项。</p>
     <h2 id="pi"><a class="anchor" href="#pi">pi 扩展包</a></h2>
     <p>magpie 也运行 <a href="https://github.com/earendil-works/pi">pi</a> 的扩展包。用 <code>pi.registerProvider</code> 注册了供应商的 pi 扩展，在 magpie 里和在 pi 里一样工作，不用改任何东西，添加方式和其他插件相同（<code>magpie plugin add pi-antigravity</code>）。</p>
     <ul>

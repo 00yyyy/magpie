@@ -146,6 +146,9 @@ type pluginEntryJSON struct {
 	// they may read of magpie's
 	Panels     []pluginPanelInfoJSON `json:"panels,omitempty"`
 	PanelReads []string              `json:"panelReads,omitempty"`
+	// Actions are the items its page adds to magpie's menus
+	// (magpie.actions), said of one switched off too
+	Actions []pluginActionInfoJSON `json:"actions,omitempty"`
 	// Clashes are the providers it signs in to that another plugin signs
 	// in to as well (a plugin of the user's own beside a third party's):
 	// the host runs one plugin for each, and the row says which, with a
@@ -174,6 +177,13 @@ type pluginPageInfoJSON struct {
 // pluginPanelInfoJSON is a panel a plugin adds, as its row says it.
 type pluginPanelInfoJSON struct {
 	Slot  string `json:"slot"`
+	Title string `json:"title,omitempty"`
+}
+
+// pluginActionInfoJSON is a menu item a plugin's page adds, as its row
+// says it.
+type pluginActionInfoJSON struct {
+	Menu  string `json:"menu"`
 	Title string `json:"title,omitempty"`
 }
 
@@ -318,6 +328,9 @@ func pluginsState(ctx context.Context, w Windows) pluginsJSON {
 			}
 			if len(w.Panels) > 0 {
 				j.PanelReads = reads
+			}
+			for _, a := range w.Actions {
+				j.Actions = append(j.Actions, pluginActionInfoJSON{Menu: a.Menu, Title: a.Title})
 			}
 			j.InMagpieOnly = plugin.InMagpieOnly(plugin.Target(e.Spec))
 		}

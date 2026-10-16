@@ -10,17 +10,11 @@
 // A page that throws, or never says hello, shows the kernel's "This
 // page stopped working" with its Try again.
 //
-// A plugin's panels (magpie.panels, P5) are parts of magpie's own pages,
-// each in a frame shut in the same way, answered the same way: a slot is
-// a <div class="plugin-slot" data-slot="…"> in a page's markup, or one
-// app.js draws through magpie.slot(name, context) (a provider's editor,
-// which tells its panels the provider). A panel is as tall as what it
-// draws (its "size"), and one that breaks says so in its own place, with
-// Try again, and nothing else on the page goes.
-//
-// A page that replaces a built-in page (magpie.page.replaces) takes its
-// tab's place in the sidebar, and a way to the built-in page (a link, an
-// address kept, show) opens the plugin's instead.
+// Panels (magpie.panels, P5) are framed the same way in a page's
+// .plugin-slot, as tall as they draw, and one that breaks says so in its
+// place. A page may take a built-in one's place (magpie.page.replaces),
+// and its actions (magpie.actions, P6) are row menu items that open it:
+// plugin-runtime.md says the rest.
 (() => {
   if (mode !== "window") return;
   // how long a page has to say hello before it is taken as broken
@@ -252,6 +246,30 @@
     }
   }
   let opened = false;
+
+  // ---- actions ----
+
+  // the row menu's items for menu ("provider", "agent"), each told
+  // context: { provider: { id, name } } or { agent: { id, name } }
+  magpie.actions = (menu, context) => {
+    const items = [];
+    for (const [key, p] of pages) {
+      if (p.gone) continue;
+      for (const a of p.entry.actions || []) {
+        if (a.menu !== menu) continue;
+        items.push({ name: titled(a), literal: true, icon: PUZZLE, sep: !items.length, run: () => act(key, a.id, context) });
+      }
+    }
+    return items;
+  };
+
+  async function act(key, id, context) {
+    // a reader who keeps an unsaved edit where they are stays there
+    if (await show(key) === false) return;
+    const p = pages.get(key);
+    try { await open(key); } catch { return; } // its page says it broke
+    post(p?.frame?.contentWindow, { event: "action", data: { id, ...context } });
+  }
 
   // ---- panels ----
 

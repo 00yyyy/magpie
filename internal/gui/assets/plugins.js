@@ -1196,6 +1196,7 @@
     // off too: what its page may read is said before it is turned on
     if (e.page && !ask) who.append(pageLine(e.page));
     if (e.panels?.length && !ask) who.append(panelsLine(e.panels, e.panelReads));
+    if (e.actions?.length && !ask) who.append(actionsLine(e.actions));
     if ((mw || e.isGateway) && !e.off && !ask && editing?.pkg === pkg) who.append(optionsEditor(e));
     // the plugin's own picture (package.json's magpie.icon) before its
     // first provider's, which a plugin of several gives each its own (#1775)
@@ -1392,17 +1393,24 @@
   }
 
   // where a plugin's panels go in magpie's own pages (magpie.panels), and
-  // what they may read
+  // the row menus its page adds items to (magpie.actions), titled with
+  // their titles; picking an item tells the page the row's name only
   const SLOTS = { agents: "the Agents page", usage: "the Usage page", settings: "Settings", provider: "each provider's editor" };
-  function panelsLine(panels, panelReads) {
+  const MENUS = { provider: "providers' menus", agent: "agents' menus" };
+  function whereLine(xs, key, names, text) {
     const d = el("div", "sub pm-mw pm-page");
-    const where = [...new Set(panels.map((x) => x.slot))].map((s) => t(SLOTS[s] || s)).join(t(", "));
-    const reads = (panelReads || []).map((r) => t(READS[r] || r));
-    d.textContent = reads.length
-      ? t("Adds panels to {where}, which can read {reads}", { where, reads: reads.join(t(", ")) })
-      : t("Adds panels to {where}, which read nothing of magpie's", { where });
-    d.title = panels.map((x) => x.title).filter(Boolean).join("\n") || d.textContent;
+    d.textContent = text([...new Set(xs.map((x) => x[key]))].map((s) => t(names[s] || s)).join(t(", ")));
+    d.title = xs.map((x) => x.title).filter(Boolean).join("\n") || d.textContent;
     return d;
+  }
+  function panelsLine(panels, panelReads) {
+    const reads = (panelReads || []).map((r) => t(READS[r] || r)).join(t(", "));
+    return whereLine(panels, "slot", SLOTS, (where) => reads
+      ? t("Adds panels to {where}, which can read {reads}", { where, reads })
+      : t("Adds panels to {where}, which read nothing of magpie's", { where }));
+  }
+  function actionsLine(actions) {
+    return whereLine(actions, "menu", MENUS, (where) => t("Adds items to {where}, which open its page", { where }));
   }
 
   function mwLine(m) {

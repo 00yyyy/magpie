@@ -3566,6 +3566,7 @@ function openAgentMenu(anchor, a, inFold) {
         // everything magpie wrote comes out, what the user had goes back (Fate on Discord)
         ...(a.wired ? [{ name: "Disconnect from magpie", icon: UNPLUG, sep: !reapply, tip: t(DISCONNECT_TIP, { agent: a.name }), run: () => askDisconnect(a) }] : []),
         { name: "Hide", icon: EYE_OFF, sep: true, run: () => setAgentHidden(a, true) },
+        ...magpie.actions?.("agent", { agent: { id: a.id, name: a.name } }) || [],
       ];
   openRowMenu(anchor, acts);
 }
@@ -3581,7 +3582,8 @@ function openRowMenu(anchor, acts) {
     b.type = "button";
     b.setAttribute("role", "menuitem");
     b.disabled = !!o.off;
-    b.append(svg(o.icon, 13, 1.5), el("span", "rm-name", t(o.name)));
+    // a plugin's item (magpie.actions) is named in its own words
+    b.append(svg(o.icon, 13, 1.5), el("span", "rm-name", o.literal ? o.name : t(o.name)));
     if (o.key) b.append(el("span", "rm-key", o.key));
     if (o.tip) b.title = o.tip;
     // an item that is off can say why, under its name and as its title
@@ -5833,6 +5835,7 @@ function openProviderMenu(anchor, p) {
     { name: "Move up", icon: MOVE_UP, key: ALT + "↑", off: k <= 0, run: () => stepProvider(p.id, -1) },
     { name: "Move down", icon: MOVE_DOWN, key: ALT + "↓", off: k < 0 || k >= shown.length - 1, run: () => stepProvider(p.id, 1) },
     { name: "Move to bottom", icon: MOVE_BOTTOM, key: ALT + SHIFT + "↓", off: i === on.length - 1, run: () => arrangeProvider(p.id, on.length - 1) },
+    ...magpie.actions?.("provider", { provider: { id: p.id, name: p.name } }) || [],
   ]);
 }
 

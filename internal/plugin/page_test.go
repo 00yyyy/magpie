@@ -173,3 +173,61 @@ func TestWindowTitles(t *testing.T) {
 		}
 	}
 }
+
+// A plugin's actions (magpie.actions) are items in a provider's or an
+// agent's row menu that open its page: a plugin with no page has none,
+// an action in a menu magpie hasn't, or with an id the page couldn't
+// switch on, is dropped, an id given twice is the first's, and there are
+// eight at most.
+func TestWindowActions(t *testing.T) {
+	root := t.TempDir()
+	mk := func(name, magpie string) string {
+		t.Helper()
+		d := filepath.Join(root, name)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "index.html"), []byte("<p>hi</p>"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "package.json"), []byte(`{"name":"`+name+`","magpie":`+magpie+`}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	w, _ := Window(mk("acts", `{"page":{"file":"index.html"},"actions":[
+		{"id":"check","menu":"provider","title":"Check balance","titles":{"zh":"查余额"}},
+		{"id":"check","menu":"agent","title":"Twice"},
+		{"id":"logs","menu":"agent"},
+		{"id":"Bad Id","menu":"provider","title":"x"},
+		{"id":"session","menu":"session","title":"x"},
+		{"id":"","menu":"provider","title":"x"}]}`))
+	if w == nil {
+		t.Fatal("no window")
+	}
+	want := []ActionSpec{
+		{ID: "check", Menu: "provider", Title: "Check balance", Titles: map[string]string{"zh": "查余额"}},
+		{ID: "logs", Menu: "agent"},
+	}
+	if len(w.Actions) != len(want) {
+		t.Fatalf("actions %+v, want %+v", w.Actions, want)
+	}
+	for i, a := range w.Actions {
+		if a.ID != want[i].ID || a.Menu != want[i].Menu || a.Title != want[i].Title || a.Titles["zh"] != want[i].Titles["zh"] {
+			t.Errorf("action %d: %+v, want %+v", i, a, want[i])
+		}
+	}
+	if w, _ := Window(mk("nopage", `{"panels":[{"slot":"agents","file":"index.html"}],"actions":[{"id":"a","menu":"agent"}]}`)); w == nil || len(w.Actions) != 0 {
+		t.Errorf("a plugin with no page: %+v, want panels and no actions", w)
+	}
+	many := `{"page":{"file":"index.html"},"actions":[`
+	for i := range 12 {
+		if i > 0 {
+			many += ","
+		}
+		many += `{"id":"a` + string(rune('a'+i)) + `","menu":"agent"}`
+	}
+	if w, _ := Window(mk("many", many+`]}`)); w == nil || len(w.Actions) != maxActions {
+		t.Errorf("12 actions: %+v, want %d", w, maxActions)
+	}
+}

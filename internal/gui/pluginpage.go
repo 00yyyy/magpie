@@ -76,8 +76,19 @@ type pluginPage struct {
 	// plugin's in plugins.json's order to ask for it
 	Replaces string   `json:"replaces,omitempty"`
 	Reads    []string `json:"reads"` // what it may read, of plugin.PageReads
-	token    string
-	dir      string
+	// Actions are its items in magpie's menus (plugin.ActionSpec); each
+	// opens this page
+	Actions []pluginAction `json:"actions,omitempty"`
+	token   string
+	dir     string
+}
+
+// pluginAction is an item a plugin's page adds to one of magpie's menus.
+type pluginAction struct {
+	ID     string            `json:"id"`
+	Menu   string            `json:"menu"`  // of plugin.ActionMenus
+	Title  string            `json:"title"` // its own, or its page's
+	Titles map[string]string `json:"titles,omitempty"`
 }
 
 // pluginPanel is a panel a plugin that is on adds to one of magpie's own
@@ -142,6 +153,14 @@ func windowParts() (pages []pluginPage, panels []pluginPanel) {
 			if r := spec.Replaces; r != "" && !replaced[r] {
 				replaced[r] = true
 				p.Replaces = r
+			}
+			for _, a := range w.Actions {
+				act := pluginAction{ID: a.ID, Menu: a.Menu, Title: a.Title, Titles: a.Titles}
+				// one that names no title is the page's own, in each language
+				if act.Title == "" {
+					act.Title, act.Titles = p.Title, p.Titles
+				}
+				p.Actions = append(p.Actions, act)
 			}
 			pages = append(pages, p)
 		}

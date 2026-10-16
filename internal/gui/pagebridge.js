@@ -13,6 +13,10 @@
 //   magpie.context                where a panel is (P5): { provider: {
 //                                 id, name } } in a provider's editor,
 //                                 else {}; set once magpie.ready is
+//   magpie.onAction(fn)           fn({ id, provider | agent: { id, name } })
+//                                 when one of its magpie.actions is picked
+//                                 in a row's menu (P6); one picked before
+//                                 fn was given waits for it
 //
 // A panel (magpie.panels) is as tall as what it draws: the window is told
 // its height as it changes.
@@ -30,6 +34,8 @@
   const waiting = new Map();
   let next = 0;
   const themed = [];
+  let acting = null;
+  const acted = [];
   function call(method, params) {
     const id = ++next;
     return new Promise((resolve, reject) => {
@@ -55,6 +61,10 @@
       for (const fn of themed) { try { fn(m.data); } catch (err) { report(err); } }
       return;
     }
+    if (m.event === "action") {
+      if (acting) act(m.data); else acted.push(m.data);
+      return;
+    }
     const w = waiting.get(m.id);
     if (!w) return;
     waiting.delete(m.id);
@@ -78,10 +88,17 @@
     report(e.error || (e.message === "Script error." ? "" : e.message));
   });
   addEventListener("unhandledrejection", (e) => report(e.reason));
+  function act(data) {
+    try { Promise.resolve(acting(data)).catch(report); } catch (err) { report(err); }
+  }
   const api = {
     theme: null,
     context: {},
     onTheme(fn) { themed.push(fn); },
+    onAction(fn) {
+      acting = fn;
+      for (const d of acted.splice(0)) act(d);
+    },
     options: {
       get: () => call("options.get"),
       set: (options) => call("options.set", { options }),
