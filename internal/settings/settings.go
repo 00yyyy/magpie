@@ -229,6 +229,13 @@ type Settings struct {
 	// is stuck in a loop of the same few lines (#1359). Off, as by
 	// default, the gateway ends such a reply with an error.
 	NoLoopGuard bool `json:"noLoopGuard,omitempty"`
+	// ClaudeLeanPrompt starts a Claude subscription's Claude Code run with
+	// the caller's own instructions as its system prompt
+	// (--system-prompt-file), in place of Claude Code's (about 1.1K tokens
+	// a request on Sonnet 5.5), and not in its first message. Still the
+	// real Claude Code, its billing line and identity line kept; off, as by
+	// default, the run is the shape every Claude Code run has.
+	ClaudeLeanPrompt bool `json:"claudeLeanPrompt,omitempty"`
 	// RefusalRetries is how many more times a request the vendor's safety
 	// filter refused, with nothing said, is asked of another account or
 	// routing group member (#248), unset for every one left. 0 hands the

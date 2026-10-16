@@ -130,6 +130,40 @@ and sends keepalives without the dropped-mark header. Later fallback can
 also change the selected run after headers have been sent. Reporting never
 fails the request or delays an ordinary request's keepalives.
 
+## The caller's instructions as the system prompt (`claudeLeanPrompt`)
+
+Every run is the real Claude Code. By default it keeps Claude Code's own
+system prompt, and the caller's instructions go in the run's first user
+message inside `<external_system_instructions>`. Settings › Models ›
+Replies › Short Claude system prompt (`claudeLeanPrompt`, off by default)
+starts a run with `--system-prompt-file` instead. The file is `system.md`
+in the run's temp folder, under the distro's mount in WSL (`claudeCLI.file`).
+It holds `leanSystem`: the caller's instructions without a client Claude
+Code's billing line, plus the tool-choice line. The first message then holds
+the conversation alone. Claude Code still sends its billing block and its
+identity line, so requests come from the real binary. They no longer carry
+Claude Code's prompt, and that is the ban risk the setting names.
+
+A request with client cache marks (#1717) is never lean: its system marks
+are placed in the first message. The mode is part of the run's identity
+(`cacheIdentity`, and the tool-results check in `serveSubscription`), so a
+run started in one mode never takes a turn of the other. After the setting
+changes, the next turn starts a run with the rendered history.
+
+Measured on 2026-10-16 with a real Claude subscription on Sonnet 5.5,
+Claude Code 2.1.301:
+
+| Client | Off | On |
+| --- | --- | --- |
+| Chat client, ~600-token prompt, 2 tools, 3 turns | 10,048 input tokens | 6,580 (−35%) |
+| `claude -p` as the client, Read and Bash, 4 requests | 85,453 / 85,471 | 81,948 / 81,977 (−4%) |
+
+The saving is a fixed ~0.9–1.2K tokens a request. It is large for light
+clients and small for clients with Claude Code-sized prompts. Without any
+tool, Claude Code's built-in tools are already off (`--tools ""`). A run
+told the whole conversation again costs far more, because it writes the
+history to the 1h cache at 2×.
+
 ## Runtime path for a new turn
 
 `serveClaudeSubscription`'s `start` tries, in order:
@@ -478,6 +512,7 @@ carries none.
 
 ```sh
 go test -tags nogui ./internal/gateway/ -run '^TestClaudeClientCache' -count=1
+go test -tags nogui ./internal/gateway/ -run '^TestClaudeLeanPrompt' -count=1
 go test -tags nogui ./internal/claudecode/ -count=1
 go test -tags nogui ./internal/gateway/ -run 'ClaudeSubscriptionRunsTheDownloaded|ClaudeSubscriptionWithoutClaudeCode|ClaudeRewritten|LostMedia|ImagesTakenOut|RunLetGoWhenTheClientRewrote|ClaudeSessionTempFiles|ClaudeLetGo|ClaudeSessionFiles|ClaudeOldSessions|ClaudeSubscriptionReplySaysTheAllowance|ClaudeAllowanceHeaders|ClaudeForksAnsweringTheLeadsCalls|ClaudeTurnGivenUpOn|ClaudeToolResultsGivenUpOn|ClaudePromptMarksEarlierTurns|ClaudeHistoryCachedAcrossNewRuns|ClaudeUnloadableSession|ClaudeEndedRunSaysWhy|ClaudeIdle|ClaudeSideQuestion|ClaudeNoRunSaysWhy|ClaudeToolResultsNoRunSaysWhy|ClaudePromptToldUserText|ClaudePromptKeepsInstructions|ClaudeToolResultsGoOnWithTheUsersWords|ClaudeToolResultsKeepInstructions|ToolResultKeepsUserTextSentMidTurn' -count=1
 ```
