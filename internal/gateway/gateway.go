@@ -835,8 +835,15 @@ func modelObject(e provider.Entry) map[string]any {
 	for _, effort := range e.Efforts {
 		levels = append(levels, reasoningLevel{Effort: effort})
 	}
+	// the same levels as plain names, [] when there are none: clients of
+	// the Catwalk schema (Crush and kin) read this flat array to know which
+	// reasoning efforts a model takes, and drop the effort from requests to
+	// a model that names none (#2576). The objects stay for the readers the
+	// list already has (catalog.levelsOf reads either)
+	flat := append(make([]string, 0, len(e.Efforts)), e.Efforts...)
 	m := map[string]any{"id": e.ID, "object": "model", "type": "model", "created": 0, "created_at": "2025-01-01T00:00:00Z",
-		"owned_by": e.Provider.ID, "display_name": e.PlainName(), "reasoning": e.Thinks(), "supported_reasoning_levels": levels}
+		"owned_by": e.Provider.ID, "display_name": e.PlainName(), "reasoning": e.Thinks(), "supported_reasoning_levels": levels,
+		"reasoning_levels": flat}
 	// the window, as the names clients read it by: a group's context
 	// (magpie group set … context=) included
 	if e.Context > 0 {

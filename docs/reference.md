@@ -1690,7 +1690,9 @@ It exposes:
 | `/v1/codex/models`       | the catalog as Codex's `model_catalog_url` reads it ([Codex on another computer](#providers-and-the-gateway)) |
 
 Each `/v1/models` entry includes `reasoning` and `supported_reasoning_levels`
-(`[{"effort":"low"}, ...]`). A routing group is marked `reasoning` when any
+(`[{"effort":"low"}, ...]`), and the same levels as plain names in
+`reasoning_levels` (`["low", ...]`, `[]` when there are none), which
+clients of the Catwalk schema (Crush and kin) read (#2576). A routing group is marked `reasoning` when any
 member thinks; `supported_reasoning_levels` lists the levels the members
 that think have in common. A member known not to think doesn't take them
 away (#2127), nor does one whose levels nothing knows (#597). A member magpie
