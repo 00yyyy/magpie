@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -86,29 +85,6 @@ func (s *wbSearchSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
-}
-
-// askClaudeCodeWebSearch sends model what Claude Code's WebSearch tool
-// sends (2.1.285): the server tool alone, under its own system prompt.
-func askClaudeCodeWebSearch(t *testing.T, model string) string {
-	t.Helper()
-	body, _ := json.Marshal(map[string]any{
-		"model": model, "max_tokens": 32000, "stream": true,
-		"system":   []map[string]any{{"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}, {"type": "text", "text": "You are an assistant for performing a web search tool use"}},
-		"metadata": map[string]any{"user_id": `{"device_id":"d1","account_uuid":"","session_id":"s1"}`},
-		"messages": []map[string]any{{"role": "user", "content": "Perform a web search for the query: Go 1.26 release notes"}},
-		"tools":    []map[string]any{{"type": "web_search_20250305", "name": "web_search", "max_uses": 8}},
-	})
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/messages?beta=true", strings.NewReader(string(body)))
-	req.Header.Set("User-Agent", "claude-cli/2.1.285 (external, cli)")
-	req.Header.Set("X-App", "cli")
-	req.Header.Set("Anthropic-Beta", "claude-code-20250219")
-	New().Handler().ServeHTTP(rec, req)
-	if rec.Code != 200 {
-		t.Fatalf("%d %s", rec.Code, rec.Body.String())
-	}
-	return rec.Body.String()
 }
 
 // WorkBuddy searches for its models with its own search service, as

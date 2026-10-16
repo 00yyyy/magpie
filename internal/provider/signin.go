@@ -37,7 +37,6 @@ import (
 // The vendors' sign-in pages; vars so tests can point them elsewhere.
 var (
 	codexAuthorizeURL = "https://auth.openai.com/oauth/authorize"
-	devinAuthorizeURL = "https://app.devin.ai/auth/cli/continue"
 	// codexCallbackAddr is fixed: OpenAI only sends Codex's client back to
 	// port 1455.
 	codexCallbackAddr = "127.0.0.1:1455"
