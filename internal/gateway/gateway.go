@@ -937,14 +937,19 @@ func nativeEndpoints(e provider.Entry) []string {
 // drawerObjects are the image models magpie draws with, as another magpie
 // asks for them in its list (provider.DrawersHeader): "kind": "image",
 // which an agent's list never has, so it takes none for a model to chat
-// with.
-func drawerObjects() []map[string]any {
+// with. A gateway key held to some models is told of those alone, as its
+// chat list is.
+func drawerObjects(r *http.Request) []map[string]any {
+	who, held := keyHolds(r)
 	var out []map[string]any
 	for _, p := range provider.All() {
 		if !p.On() || p.DecideOnly() {
 			continue
 		}
 		for _, m := range Drawers(p) {
+			if held && !modelAllowed(who, p, m.ID) {
+				continue
+			}
 			name := cmp.Or(m.Name, m.ID)
 			o := map[string]any{"id": p.ID + "/" + m.ID, "object": "model", "type": "model", "kind": "image", "created": 0,
 				"owned_by": p.ID, "display_name": name, "magpie_label": name + " · " + p.Name,
@@ -960,13 +965,18 @@ func drawerObjects() []map[string]any {
 
 // videomakerObjects are the video models magpie makes videos with, as
 // another magpie asks for them (provider.VideomakersHeader): "kind": "video".
-func videomakerObjects() []map[string]any {
+// A gateway key held to some models is told of those alone.
+func videomakerObjects(r *http.Request) []map[string]any {
+	who, held := keyHolds(r)
 	var out []map[string]any
 	for _, p := range provider.All() {
 		if !p.On() || p.DecideOnly() {
 			continue
 		}
 		for _, m := range Videomakers(p) {
+			if held && !modelAllowed(who, p, m.ID) {
+				continue
+			}
 			name := cmp.Or(m.Name, m.ID)
 			out = append(out, map[string]any{"id": p.ID + "/" + m.ID, "object": "model", "type": "model", "kind": "video", "created": 0,
 				"owned_by": p.ID, "display_name": name, "magpie_label": name + " · " + p.Name,
@@ -1053,10 +1063,10 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.Header.Get(provider.DrawersHeader) != "" {
-		data = append(data, drawerObjects()...)
+		data = append(data, drawerObjects(r)...)
 	}
 	if r.Header.Get(provider.VideomakersHeader) != "" {
-		data = append(data, videomakerObjects()...)
+		data = append(data, videomakerObjects(r)...)
 	}
 	if r.Header.Get(provider.DecidersHeader) != "" {
 		deciders := keyAllowed(r, provider.Deciders())
