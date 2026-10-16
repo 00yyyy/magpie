@@ -475,11 +475,6 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 	if !moved("zcode") && !hidden["zcode"] {
 		fetches = append(fetches, perLogin(via("zcode"), zcodeLoginList(), accountCard("zcode"))...)
 	}
-	for _, w := range []*wbSite{wbCN, wbAI} {
-		if !moved(w.id) && !hidden[w.id] {
-			fetches = append(fetches, perLogin(via(w.id), wbLoginList(w), accountCard(w.id))...)
-		}
-	}
 	if !moved(CommandCodePlanID) && !hidden[CommandCodePlanID] {
 		fetches = append(fetches, perLogin(via(CommandCodePlanID), cmdLoginList(), accountCard(CommandCodePlanID))...)
 	}

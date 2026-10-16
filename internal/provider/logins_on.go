@@ -43,8 +43,6 @@ func SetLoginOn(agent, user string, on bool) error {
 		return setZCodeLoginOn(user, on)
 	case "devin":
 		return setDevinLoginOn(user, on)
-	case "workbuddy", WorkBuddyAIID:
-		return setWorkBuddyLoginOn(wbSiteOf(agent), user, on)
 	case CommandCodePlanID:
 		return setCommandCodeLoginOn(user, on)
 	case "factory":
@@ -157,9 +155,6 @@ func (p Provider) alsoOn() []Provider {
 	}
 	if p.Account != nil && p.Account.Agent == "devin" {
 		return devinAlsoOn()
-	}
-	if p.Account != nil && wbSiteOf(p.Account.Agent) != nil {
-		return workBuddyAlsoOn(wbSiteOf(p.Account.Agent))
 	}
 	if p.Account != nil && p.Account.Agent == CommandCodePlanID {
 		return commandCodeAlsoOn()

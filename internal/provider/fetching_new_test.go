@@ -35,9 +35,6 @@ func TestFetchingNewOnceStarted(t *testing.T) {
 		newFetches.m = map[string]time.Time{}
 		newFetches.Unlock()
 		newSoonAt.Store(0)
-		wbTokens.Lock()
-		wbTokens.m = map[string]wbCreds{}
-		wbTokens.Unlock()
 		forgetAccountCaches()
 	}
 	reset()
@@ -45,7 +42,7 @@ func TestFetchingNewOnceStarted(t *testing.T) {
 	// the vendor answers once the test lets it
 	release := make(chan struct{}, 8)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v3/config" {
+		if r.URL.Path != "/backend-api/codex/models" {
 			w.WriteHeader(404)
 			return
 		}
@@ -53,25 +50,16 @@ func TestFetchingNewOnceStarted(t *testing.T) {
 		case <-release:
 		case <-time.After(5 * time.Second):
 		}
-		w.Write([]byte(`{"code":0,"data":{"agents":[{"name":"cli","models":["hy4-preview"]}],
-			"models":[{"id":"hy4-preview","name":"Hy4 preview"}]}}`))
+		w.Write(codexListOf("gpt-6-luna"))
 	}))
-	old := wbEndpoint
-	wbEndpoint = srv.URL
+	codexListedAt(t, srv.URL)
 	t.Cleanup(func() {
 		close(release)
 		waitFetchingNew(t)
 		srv.Close()
-		wbEndpoint = old
 		reset()
 	})
-	future := time.Now().Add(24 * time.Hour).UnixMilli()
-	writeFile(t, wbAuthFile(home), map[string]any{
-		"account": map[string]any{"uid": "u1", "nickname": "旅行者"},
-		"auth": map[string]any{"accessToken": "a", "refreshToken": "r",
-			"expiresAt": future, "refreshExpiresAt": future, "domain": "www.codebuddy.cn"},
-	})
-	forgetAccountCaches()
+	codexSignedIn(t, home)
 	All()
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
 
@@ -91,7 +79,7 @@ func TestFetchingNewOnceStarted(t *testing.T) {
 	waitFetchingNew(t)
 
 	// the panel, with the list due again
-	if err := catalog.SaveLive("workbuddy", "", nil); err != nil {
+	if err := catalog.SaveLive("codex", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	newFetches.Lock()
@@ -121,7 +109,7 @@ func TestFetchingNewOnceStarted(t *testing.T) {
 	// a second page asks while the first's fetch still picks the accounts
 	// due (held on reading them): it starts nothing, and is told lists are
 	// on their way (tsuixl on #1147)
-	if err := catalog.SaveLive("workbuddy", "", nil); err != nil {
+	if err := catalog.SaveLive("codex", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	newFetches.Lock()

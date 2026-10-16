@@ -6,6 +6,7 @@ import (
 	"github.com/yetone/magpie/internal/update"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -155,7 +156,10 @@ func TestWorkBuddyMover(t *testing.T) {
 	wbTokens.Unlock()
 	wbWriteOwn(t, home, "own-access")
 	two := wbCreds{UID: "u2", Access: "a2", Refresh: "r2", ExpiresAt: 1_900_000_000_000, RefreshExpiresAt: 1_950_000_000_000, Domain: "www.codebuddy.cn", TokenType: "Bearer"}
-	saveLogins(t, savedLogin{Agent: "workbuddy", User: "Two", On: true, Auth: json.RawMessage(jsonText(two))})
+	// the desktop's row is the one the built-in wrote while it ran: retired,
+	// nothing writes it anew
+	saveLogins(t, savedLogin{Agent: "workbuddy", User: "Me", On: true},
+		savedLogin{Agent: "workbuddy", User: "Two", On: true, Auth: json.RawMessage(jsonText(two))})
 
 	ms := movingOf(t, "workbuddy")
 	own := ms["Me"]
@@ -187,6 +191,28 @@ func TestWorkBuddyMover(t *testing.T) {
 	if ls2, user, err := movers["workbuddy"].back(ls, "Me", own.Auth); err != nil || user != "Me" || len(ls2) != len(ls) {
 		t.Fatalf("desktop's back: %v %q %+v", err, user, ls2)
 	}
+}
+
+// wbWriteOwn signs WorkBuddy desktop in under home, as its app does.
+func wbWriteOwn(t *testing.T, home string, access any) {
+	t.Helper()
+	writeFile(t, wbAuthFile(home), map[string]any{
+		"account": map[string]any{"uid": "u1", "nickname": "Me"},
+		"auth": map[string]any{"accessToken": access, "refreshToken": "r",
+			"expiresAt": time.Now().Add(24 * time.Hour).UnixMilli(), "domain": "www.codebuddy.cn"},
+	})
+}
+
+// wbAuthFile is where WorkBuddy desktop keeps its sign-in under home.
+func wbAuthFile(home string) string {
+	base := filepath.Join(home, ".local", "share")
+	switch runtime.GOOS {
+	case "darwin":
+		base = filepath.Join(home, "Library", "Application Support")
+	case "windows":
+		base = filepath.Join(home, "AppData", "Local")
+	}
+	return filepath.Join(base, "CodeBuddyExtension", "Data", "Public", "auth", "workbuddy-desktop.info")
 }
 
 // ZCode's accounts go as the plugin's sign-in keeps them and come back as

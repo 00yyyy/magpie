@@ -402,11 +402,6 @@ func (s *signInFlow) begin() error {
 		if err := startCopilotSignIn(s); err != nil {
 			return err
 		}
-	case "workbuddy", WorkBuddyAIID:
-		// Tencent's sign-in, as WorkBuddy (CodeBuddy) or WorkBuddy AI makes it
-		if err := startWorkBuddySignIn(s, wbSiteOf(agent)); err != nil {
-			return err
-		}
 	case CommandCodePlanID:
 		// Command Code's browser sign-in, as its CLI makes it
 		if err := startCommandCodeSignIn(s); err != nil {

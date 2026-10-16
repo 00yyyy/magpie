@@ -264,11 +264,13 @@ func BuiltinRetired(id string) bool { return Movable(id) && retiredBuiltins[id] 
 
 // retiredBuiltins are the built-in subscriptions whose code is gone.
 var retiredBuiltins = map[string]bool{
-	"zed":     true,
-	"kiro":    true,
-	"cursor":  true,
-	"qoder":   true,
-	QoderCNID: true,
+	"zed":         true,
+	"kiro":        true,
+	"cursor":      true,
+	"qoder":       true,
+	QoderCNID:     true,
+	"workbuddy":   true,
+	WorkBuddyAIID: true,
 }
 
 // PluginServes is whether the built-in id's subscription is its plugin's to

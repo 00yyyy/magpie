@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -105,41 +104,6 @@ func TestFactoryKeyAgainReadsUsageAfresh(t *testing.T) {
 	}
 	if q := LoginUsage(context.Background(), "factory")["key@example.com"]; q.Error != "" || len(q.Windows) == 0 {
 		t.Fatalf("signed in again, but the usage is the old sign-in's: %+v", q)
-	}
-}
-
-// WorkBuddy keeps a sign-in its own way (wbKeepSignIn): the account's kept
-// reading goes there too.
-func TestOwnStoreSignInAgainDropsTheReading(t *testing.T) {
-	signIn(t)
-	for _, c := range []struct {
-		agent, user string
-		keep        func() error
-	}{
-		{"workbuddy", "wb", func() error {
-			_, _, _, err := wbKeepSignIn(wbSiteOf("workbuddy"), wbCreds{UID: "u-1", Access: "a", Refresh: "r"}, "wb")
-			return err
-		}},
-	} {
-		t.Run(c.agent, func(t *testing.T) {
-			resetLoginUsage(t)
-			if err := c.keep(); err != nil {
-				t.Fatal(err)
-			}
-			key := c.agent + "/" + strings.ToLower(c.user)
-			loginUsageCache.Lock()
-			loginUsageCache.m = map[string]loginUsageEntry{key: {at: time.Now(), q: SubscriptionQuota{Error: "refused"}}}
-			loginUsageCache.Unlock()
-			if err := c.keep(); err != nil { // signed in again
-				t.Fatal(err)
-			}
-			loginUsageCache.Lock()
-			_, kept := loginUsageCache.m[key]
-			loginUsageCache.Unlock()
-			if kept {
-				t.Fatalf("%s signed in again, but its reading from before still answers", key)
-			}
-		})
 	}
 }
 

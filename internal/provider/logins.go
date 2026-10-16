@@ -813,8 +813,6 @@ func Logins(agent string) []Login {
 		return zcodeLoginList()
 	case "devin":
 		return devinLoginList()
-	case "workbuddy", WorkBuddyAIID:
-		return wbLoginList(wbSiteOf(agent))
 	case CommandCodePlanID:
 		return cmdLoginList()
 	case "factory":
@@ -843,8 +841,7 @@ func Logins(agent string) []Login {
 			list func() []Login
 		}{
 			{"grok", grokLoginList}, {"copilot", copilotLoginList}, {"zcode", zcodeLoginList},
-			{"devin", devinLoginList}, {"workbuddy", func() []Login { return wbLoginList(wbCN) }},
-			{WorkBuddyAIID, func() []Login { return wbLoginList(wbAI) }}, {CommandCodePlanID, cmdLoginList},
+			{"devin", devinLoginList}, {CommandCodePlanID, cmdLoginList},
 			{"factory", factoryLoginList},
 			{MiMoID, mimoLoginList}, {ChatGPTAPIID, siwcLoginList}, {"gemini", func() []Login { return googleLoginList("gemini") }},
 			{"antigravity", func() []Login { return googleLoginList("antigravity") }},
@@ -1048,8 +1045,6 @@ func switchLogin(agent, user string) error {
 		return switchZCodeLogin(user)
 	case "devin":
 		return switchDevinLogin(user)
-	case "workbuddy", WorkBuddyAIID:
-		return switchWorkBuddyLogin(wbSiteOf(agent), user)
 	case CommandCodePlanID:
 		return switchCommandCodeLogin(user)
 	case "factory":
@@ -1236,8 +1231,6 @@ func ForgetLogin(agent, user string) error {
 		return forgetZCodeLogin(user)
 	case "devin":
 		return forgetDevinLogin(user)
-	case "workbuddy", WorkBuddyAIID:
-		return forgetWorkBuddyLogin(wbSiteOf(agent), user)
 	case CommandCodePlanID:
 		return forgetCommandCodeLogin(user)
 	case "factory":

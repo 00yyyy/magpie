@@ -270,8 +270,6 @@ func builtinLogins(agent string) (logins []Login, ok bool) {
 		logins = copilotLoginList()
 	case "zcode":
 		logins = zcodeLoginList()
-	case "workbuddy", WorkBuddyAIID:
-		logins = wbLoginList(wbSiteOf(agent))
 	case CommandCodePlanID:
 		logins = cmdLoginList()
 	case "devin":
@@ -319,9 +317,6 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	if l.Agent == "zcode" {
 		return zcodeLoginQuota(ctx, l)
-	}
-	if w := wbSiteOf(l.Agent); w != nil {
-		return wbLoginQuota(ctx, w, l)
 	}
 	if l.Agent == CommandCodePlanID {
 		return cmdLoginQuota(ctx, l)
