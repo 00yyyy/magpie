@@ -17794,6 +17794,15 @@ function computerOpts(cs) {
     ...others.map((c) => ({ v: c.id, name: c.name || c.id, note: "" }))];
 }
 const ledNum = (n) => (n || 0).toLocaleString(intlLang());
+// what x's credited requests cost in their plan's credits, as the replies
+// said (WorkBuddy's usage.credit, #2512): nothing when none said
+function ledCredits(x) {
+  if (!x?.credited) return null;
+  const n = x.credits || 0;
+  const s = el("span", "rk-credits", t("{n} credits", { n: n > 0 && n < 0.01 ? "<0.01" : (+n.toFixed(2)).toLocaleString(intlLang()) }));
+  s.title = t("What {n} of these requests cost in their plan's credits, as the replies said", { n: ledNum(x.credited) });
+  return s;
+}
 // an average first token is a fraction of a millisecond: whole ones under a
 // second, rounded first so 999.6 reads 1.0 s rather than 1000 ms
 const ledTook = (ms = 0) => (ms = Math.round(ms) || 0) < 1000 ? t("{n} ms", { n: ms }) : t("{n} s", { n: (ms / 1000).toFixed(ms < 10e3 ? 1 : 0) });
@@ -18142,6 +18151,7 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
     if (metric !== "calls") more.push(t(x.calls === 1 ? "{n} request" : "{n} requests", { n: ledNum(x.calls) }));
     if (metric !== "tokens") more.push(t("{n} tokens", { n: fmtN(allTokens(x)) }));
     if (metric !== "cost" && x.cost) more.push("≈" + fmtCost(x));
+    if (x.credited) more.push(ledCredits(x));
     // how fast its replies came, beside what they cost (#860)
     if (metric !== "speed" && gs) more.push(Object.assign(el("span", "rk-speed", gs.text), { title: gs.title }));
     if (ledTTFT(x)) more.push(t("TTFT {ms}", { ms: ledTook(ledTTFT(x)) }));
@@ -18163,7 +18173,7 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
   for (const x of top) box.append(one(x, x.color));
   if (rest.length) {
     const tot = rest.reduce((acc, x) => {
-      for (const k of ["calls", "errors", "loops", "input", "output", "cache_read", "cache_write", "cost", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n", "floor_out", "floor_ms", "floor_n"]) acc[k] = (acc[k] || 0) + (x[k] || 0);
+      for (const k of ["calls", "errors", "loops", "input", "output", "cache_read", "cache_write", "cost", "credits", "credited", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n", "floor_out", "floor_ms", "floor_n"]) acc[k] = (acc[k] || 0) + (x[k] || 0);
       return acc;
     }, { id: "\0other", name: t("Other ({n})", { n: rest.length }) });
     box.append(one(tot, "var(--faint)", true));
@@ -18343,7 +18353,7 @@ function sessUsageDetail(d, s, line) {
     }
     d.append(m);
   }
-  (s.via || []).forEach((v, i) => line(i ? "" : t("Routed"), viaText(v) + " · " + t("{n} tokens", { n: fmtN(v.tokens) })));
+  (s.via || []).forEach((v, i) => line(i ? "" : t("Routed"), viaText(v) + " · " + t("{n} tokens", { n: fmtN(v.tokens) }) + (v.credited ? " · " + ledCredits(v).textContent : "")));
 }
 
 // one place a session's calls went through magpie, in words

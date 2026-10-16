@@ -796,6 +796,8 @@ type cUsage struct {
 	CachedTokens             int `json:"cached_tokens"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	// Credit is what WorkBuddy says the request cost in its plan's credits
+	Credit *float64 `json:"credit"`
 	// what a plugin's step collected of its conversation's earlier steps,
 	// which their own replies couldn't count (the Cursor plugin's usage
 	// events that showed late, yetone/magpie#1053): billed with the step,
@@ -831,6 +833,9 @@ func (u cUsage) usage() Usage {
 	}
 	if u.CompletionTokensDetails != nil {
 		out.Reasoning = u.CompletionTokensDetails.ReasoningTokens
+	}
+	if c := u.Credit; c != nil && *c >= 0 {
+		out.Credits = c
 	}
 	if d := u.MagpieDeferred; d != nil && d.PromptTokens+d.CompletionTokens > 0 {
 		out.Deferred = &Usage{Input: max(d.PromptTokens-d.CachedTokens-d.CacheWriteTokens, 0), Output: d.CompletionTokens,
@@ -1083,7 +1088,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 			emit(Event{Kind: KStop, Stop: stopFromChat(c.FinishReason)})
 		}
 	}
-	if ch.Usage != nil && (ch.Usage.PromptTokens > 0 || ch.Usage.CompletionTokens > 0 || ch.Usage.MagpieDeferred != nil) {
+	if ch.Usage != nil && (ch.Usage.PromptTokens > 0 || ch.Usage.CompletionTokens > 0 || ch.Usage.MagpieDeferred != nil || ch.Usage.Credit != nil) {
 		emit(Event{Kind: KUsage, Usage: ch.Usage.usage()})
 	}
 	return nil

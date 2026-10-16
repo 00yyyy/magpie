@@ -364,6 +364,10 @@ type Usage struct {
 	// conversation, which their own replies couldn't (cUsage's
 	// MagpieDeferred): billed with this one, never told as its prompt
 	Deferred *Usage `json:"deferred,omitempty"`
+	// Credits is what the reply said the request cost in its plan's own
+	// credits, nil when it said none: WorkBuddy's usage.credit, the
+	// figure its app shows on each reply as "Credits Consumed" (#2512)
+	Credits *float64 `json:"credits,omitempty"`
 }
 
 // billed is what the request is billed for: its own count, and what it
@@ -431,6 +435,9 @@ func (u *Usage) add(v Usage) {
 	}
 	if v.Deferred != nil {
 		u.Deferred = v.Deferred
+	}
+	if v.Credits != nil {
+		u.Credits = v.Credits
 	}
 }
 
