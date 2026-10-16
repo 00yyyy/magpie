@@ -15093,6 +15093,7 @@ function renderQuotas() {
   renderPanelQuota();
   const subscriptions = $("#subscriptionUsage");
   const restoreFlash = keepQuotaFlash(subscriptions);
+  const restoreRefresh = keepQuotaRefresh(subscriptions);
   subscriptions.replaceChildren();
   // the allowances' own heading, apart from the period's cost: used or
   // left turns their meters, and is only there when some card has one (a
@@ -15119,9 +15120,10 @@ function renderQuotas() {
       subscriptions.append(card);
     }
     packUsageNow(subscriptions);
+    restoreRefresh();
     return;
   }
-  if (usageArranging) { usageRenderPending = true; return; }
+  if (usageArranging) { usageRenderPending = true; restoreRefresh(); return; }
   subscriptions.hidden = !quotas.length;
   // an agent with several accounts is one card, a section per account
   const groups = [];
@@ -15240,6 +15242,7 @@ function renderQuotas() {
   markUpstream();
   packUsageNow(subscriptions);
   restoreFlash();
+  restoreRefresh();
   requestAnimationFrame(focusQuotaCard);
 }
 
@@ -17554,20 +17557,43 @@ setInterval(() => {
 // as they were read (Hu9956, #840: 单独刷新某个套餐，而不用刷新全部). A
 // Claude account's is read by running Claude Code's own /usage, as the
 // page's Refresh does.
-const quotaRefreshing = new Set();
+const quotaRefreshing = new Map();
+let keptQuotaRefresh = null;
+// a redraw reuses the controls, so no reading restarts their motion
+function keepQuotaRefresh(box) {
+  const buttons = [...box.querySelectorAll(".quota-refresh")];
+  const focused = buttons.find(b => b === document.activeElement);
+  keptQuotaRefresh = new Map(buttons.map(b => [b.dataset.key, b]));
+  const shown = buttons.filter(b => b.getBoundingClientRect().width > 0);
+  for (const b of shown) b.classList.add("kept");
+  return () => {
+    keptQuotaRefresh = null;
+    if (focused?.isConnected) focused.focus({ preventScroll: true });
+    // a frame for the new hover state, so the reading doesn't slide
+    requestAnimationFrame(() => { for (const b of shown) b.classList.remove("kept"); });
+  };
+}
 function quotaRefresh(q) {
   const key = usageAcctKey(q);
-  const b = el("button", "quota-refresh" + (quotaRefreshing.has(key) ? " busy" : ""));
+  // only one its redraw took out: the panel and Usage page each draw it
+  const kept = [quotaRefreshing.get(key)?.button, keptQuotaRefresh?.get(key)].find((k) => k && !k.isConnected);
+  const b = kept || el("button", "quota-refresh");
+  if (quotaRefreshing.has(key) && b !== quotaRefreshing.get(key).button) b.classList.add("busy", "spun");
+  b.dataset.key = key;
   b.type = "button";
   b.title = t(q.provider === "claude" ? "Read this card again, by running Claude Code's own /usage" : "Read this card again");
   b.setAttribute("aria-label", t("Refresh this card"));
-  b.innerHTML = '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg>';
+  if (!kept) b.innerHTML = '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg>';
   b.onclick = async (e) => {
     e.stopPropagation();
     if (quotaRefreshing.has(key)) return;
-    quotaRefreshing.add(key);
     for (const k of quotaCycleHolds.keys()) if (k.startsWith(key + "\0")) quotaCycleHolds.delete(k);
     b.classList.add("busy");
+    const animation = !calm() && b.querySelector("path").animate([
+      { transform: "rotate(0deg)" }, { transform: "rotate(360deg)" },
+    ], { duration: 800, iterations: Infinity });
+    const refreshing = { button: b, animation };
+    quotaRefreshing.set(key, refreshing);
     const began = quotaRefreshVersion;
     try {
       const qs = await api("usage/quotas/refresh?provider=" + encodeURIComponent(q.provider) + (q.user ? "&user=" + encodeURIComponent(q.user) : ""), {});
@@ -17599,8 +17625,20 @@ function quotaRefresh(q) {
     } catch (err) {
       status(err.message, "err");
     } finally {
-      quotaRefreshing.delete(key);
+      // the reading now; the icon ends its turn (at least one)
       renderQuotas();
+      const done = () => {
+        if (quotaRefreshing.get(key) !== refreshing) return;
+        quotaRefreshing.delete(key);
+        b.classList.remove("busy");
+        for (const o of document.querySelectorAll(".quota-refresh.spun")) if (o.dataset.key === key) o.classList.remove("busy", "spun");
+        if (animation) animation.cancel();
+      };
+      if (animation && !calm()) {
+        const duration = animation.effect.getTiming().duration;
+        animation.effect.updateTiming({ iterations: Math.max(1, Math.ceil((animation.currentTime || 0) / duration)) });
+        animation.finished.then(done, done);
+      } else done();
     }
   };
   return b;

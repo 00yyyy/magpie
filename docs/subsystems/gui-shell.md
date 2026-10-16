@@ -60,6 +60,9 @@ That line names the deadline ("Resets 14:26"), so no bare `↻` stands for
 it; `renderPanelQuota` puts the focus back on the button after the redraw.
 `panel-quota-refresh.test.cjs` covers it in both engines, all five
 languages, at 440 and 360px.
+Redrawing the cards preserves their refresh controls and any running turn.
+The reply updates the reading immediately; the icon then finishes its
+current full turn before stopping (no rotation under reduced motion).
 
 ### Streamed output speed
 
