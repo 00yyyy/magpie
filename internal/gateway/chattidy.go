@@ -424,6 +424,37 @@ func withReasoningOnToolTurns(body []byte) []byte {
 	})
 }
 
+// silentAssistantsOut is withoutSilentAssistants for a Chat request
+// relayed as the client sent it (#2599): an agent that speaks Chat keeps
+// the turn it cut off as {"role":"assistant","content":""} (or null, with
+// reasoning_content alone) and sends it again on every later turn. A body
+// without such a turn comes back byte for byte.
+func silentAssistantsOut(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"assistant"`)) {
+		return body
+	}
+	var q map[string]json.RawMessage
+	if decodeJSON(body, &q) != nil {
+		return body
+	}
+	dec := json.NewDecoder(bytes.NewReader(q["messages"]))
+	dec.UseNumber()
+	var msgs []map[string]any
+	if dec.Decode(&msgs) != nil {
+		return body
+	}
+	msgs, changed := withoutSilentAssistants(msgs)
+	if !changed {
+		return body
+	}
+	q["messages"], _ = marshalPlain(msgs)
+	nb, err := marshalPlain(q)
+	if err != nil {
+		return body
+	}
+	return nb
+}
+
 // reasoningDetailsAsContent leaves reasoning_details out of every message
 // of a Chat request, its thinking kept in reasoning_content when the
 // message has none: Kimi's API turns reasoning_details away in whatever
