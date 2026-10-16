@@ -1374,6 +1374,9 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 			// own: in the request's tools for every route, the relay's
 			// and every check that reads them (#2322)
 			body = liftMessageTools(body)
+			// a tool in MCP's, Anthropic's or Responses' shape, which
+			// no Chat API takes, in the Chat shape for every route (#2622)
+			body = shapeChatTools(body)
 		}
 		// Claude Code's headers, for a test asked as Claude Code to ask
 		// with (provider.TestAs), whatever serves this model: a
