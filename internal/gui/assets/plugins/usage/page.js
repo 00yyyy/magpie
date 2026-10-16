@@ -1330,10 +1330,11 @@ new ResizeObserver(() => {
 }).observe($("#ledChart"));
 
 // the third: a column a narrow window leaves out, its value in the row's
-// details (#860)
+// details (#860), 2 for one left out only when that isn't enough; the
+// fourth, the header's tooltip
 const LED_COLS = [
   ["Time"], ["Agent"], ["Requested"], ["Provider · account"], ["Sent", "", true], ["Served"], ["Effort", "", true],
-  ["In", "n"], ["Out", "n"], ["Cache write", "n", true], ["Cache read", "n", true], ["Cost", "n"], ["Duration", "n"], ["Speed", "n"], ["Status"],
+  ["In", "n"], ["Out", "n"], ["Cache write", "n", true], ["Cache read", "n", true], ["Cost", "n"], ["TTFT", "n", 2, "Time to first token"], ["Duration", "n"], ["Speed", "n"], ["Status"],
 ];
 
 // the tokens a reply was seen to write and the ms it took, as
@@ -1403,20 +1404,23 @@ function ledFit() {
   const wrap = $("#ledWrap"), table = wrap.querySelector("table.led");
   let hint = $("#ledTight");
   if (!table) { if (hint) hint.hidden = true; return; }
-  table.classList.remove("tight", "tighter");
+  table.classList.remove("tight", "tight2", "tighter");
   const over = () => wrap.scrollWidth > wrap.clientWidth + 1;
   const tight = over();
   table.classList.toggle("tight", tight);
   // still too wide (#860: a Windows window at 175%, its wider fonts): the
   // price reference line goes too, in the cost's tooltip and the details
   // as well, and names are cut shorter, whole in their tooltips
+  // still too wide: the first token's column goes (#2522), and only
+  // then what follows
+  if (tight && over()) table.classList.add("tight2");
   if (tight && over()) table.classList.add("tighter");
   if (!hint) {
     hint = el("span", "led-tight");
     hint.id = "ledTight";
     $("#ledSum").after(hint);
   }
-  hint.textContent = hint.title = t("Sent, Effort and the cache are in each row's details");
+  hint.textContent = hint.title = table.classList.contains("tight2") ? t("Sent, Effort, the first token and the cache are in each row's details") : t("Sent, Effort and the cache are in each row's details");
   hint.hidden = !tight;
 }
 
@@ -1574,7 +1578,12 @@ function renderLedger() {
   wrap.classList.remove("none");
   const table = el("table", "led");
   const head = el("tr");
-  for (const [name, cls, opt] of LED_COLS) head.append(el("th", (cls || "") + (opt ? " lc-opt" : ""), t(name)));
+  const optCls = (opt) => opt === 2 ? " lc-opt2" : opt ? " lc-opt" : "";
+  for (const [name, cls, opt, tip] of LED_COLS) {
+    const th = el("th", (cls || "") + optCls(opt), t(name));
+    if (tip) th.title = t(tip);
+    head.append(th);
+  }
   table.append(el("thead"), el("tbody"));
   table.tHead.append(head);
   for (const r of l.rows) {
@@ -1584,7 +1593,7 @@ function renderLedger() {
     tr.tabIndex = 0;
     tr.setAttribute("aria-expanded", ledOpen.has(key) ? "true" : "false");
     const td = (child, cls, title) => {
-      const c = el("td", (cls || "") + (LED_COLS[tr.childElementCount]?.[2] ? " lc-opt" : ""));
+      const c = el("td", (cls || "") + optCls(LED_COLS[tr.childElementCount]?.[2]));
       if (typeof child === "string") c.textContent = child; else c.append(child);
       if (title) c.title = title;
       tr.append(c);
@@ -1669,6 +1678,11 @@ function renderLedger() {
     // asked for it to its last; some have none, and are dashes, not 0 ms
     const timed = r.source === "log";
     const untimed = !Number.isFinite(r.ms) || r.ms <= 0;
+    // the wait for its first token, in a column of its own to compare down
+    // the list: the duration holds it and the writing after it (#2522).
+    // One not streamed, or that failed before any, has none
+    td(r.ttft_ms > 0 ? (timed ? "≈" : "") + ledTook(r.ttft_ms) : "—", "n ttft" + (r.ttft_ms > 0 ? "" : " faint"),
+      r.ttft_ms > 0 ? [t("{n} ms", { n: ledNum(r.ttft_ms) }), timed ? t("About: told from the session file's times, a little more or less than it took") : ""].filter(Boolean).join(" · ") : "");
     const durationBand = untimed ? "" : r.ms <= 10000 ? "fast" : r.ms <= 30000 ? "slow" : "long";
     td(untimed ? "—" : (timed ? "≈" : "") + ledTook(r.ms), "n duration " + (untimed ? "faint" : "duration-" + durationBand),
       [!untimed ? t("{n} ms", { n: ledNum(r.ms) }) : "", !untimed ? t("Duration colors: ≤10 s green · 10–30 s amber · >30 s red") : "", timed && !untimed ? t("About: told from the session file's times, a little more or less than it took") : "", r.ttft_ms ? t("TTFT {ms}", { ms: ledTook(r.ttft_ms) }) : ""].filter(Boolean).join(" · "));
