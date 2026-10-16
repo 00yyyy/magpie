@@ -3591,6 +3591,7 @@ function routingPage(part) {
     try { next = groupsFrom(await api("groups")); } catch { return; }
     if (quiet === true && groups && JSON.stringify(next) === JSON.stringify(groups)) return;
     groups = next;
+    if (pBox) renderPanel();
     if (headOf) header(...headOf);
     if (!gEdit && !gsec.contains(document.activeElement)) renderGroups(); // not under someone's hands
   }
@@ -5461,7 +5462,13 @@ function routingPage(part) {
     try { today = await api("usage?period=today"); } catch { return; }
     renderPanel();
   }
-  window.panelRoutingShown = () => { if (pShown() && performance.now() - todayAt > 5e3) loadToday(); pDraw(); };
+  window.panelRoutingShown = () => {
+    if (pShown() && performance.now() - todayAt > 5e3) loadToday();
+    // a group switched on the Routing page or by `magpie group pick`
+    // since: the tab shows the model it goes to now
+    if (pShown()) loadGroups(true);
+    pDraw();
+  };
 
   // ---- the stage: agents → magpie → providers ----
   // Three a side at most, each kept where it is while it stays: one that
@@ -5692,6 +5699,8 @@ function routingPage(part) {
     open.onclick = (e) => { api("window/main?view=routing", {}); e.currentTarget.blur(); };
     head.append(el("span", "rt-livedot"), sum, el("span", "grow"), open);
     const out = [head];
+    const picks = panelPicks();
+    if (picks) out.push(picks);
     const rs = [...routes.values()].sort((a, b) => b.id - a.id).slice(0, P_ROWS);
     if (!offMsg && loaded && rs.length) out.push(pStage);
     if (offMsg) out.push(el("p", "pr-none", t(offMsg)));
@@ -5710,6 +5719,47 @@ function routingPage(part) {
     pDraw();
     pWake();
     fit();
+  }
+  // a Manual group's model, switched here as its card's radios do (#2489,
+  // Jerell.OvO on Discord): CC Switch's one provider on at a time, from
+  // the tray. A row a group of two or more that is on, its picked
+  // member a button that opens the members as a menu.
+  function panelPicks() {
+    const gs = (groups?.groups || []).filter((g) => g.routing === "manual" && !g.hidden && !g.disabled && g.members.length > 1);
+    if (!gs.length) return null;
+    const box = el("div", "pr-picks");
+    for (const g of gs) {
+      const picked = g.picked || (g.members.includes(g.pick) ? g.pick : g.members[0]);
+      const row = el("div", "pr-pick");
+      row.dataset.id = g.id;
+      const b = el("button", "sess-pick set");
+      b.type = "button";
+      b.setAttribute("aria-haspopup", "menu");
+      b.setAttribute("aria-expanded", "false");
+      b.setAttribute("aria-label", t("Model every request goes to") + " · " + g.name);
+      b.title = t("Every request goes to {name}", { name: memberLabel(g, picked) });
+      b.append(el("span", "", memberName(picked)), svg(CHEV, 10, 1.6));
+      b.onclick = (e) => {
+        e.stopPropagation();
+        if (b.classList.contains("open")) return closeProtoMenu();
+        openProtoMenu(b, g.members.map((id) => {
+          const info = g.memberInfo?.find((x) => x.id === id);
+          const note = [memberNote(id), fastIn(g, id) && t("fast"), info && !info.ready && t("no provider serves it now")].filter(Boolean).join(" · ");
+          return { v: id, name: memberName(id), literalName: true, note, title: memberLabel(g, id) };
+        }), picked, async (id) => {
+          closeProtoMenu();
+          if (id === picked) return;
+          try {
+            groups = groupsFrom(await api("groups/pick", { id: g.id, pick: id }));
+            renderPanel();
+            load(); // the gateway's model list, the agents' pickers
+          } catch (err) { status(err.message, "err"); }
+        }, "Model every request goes to", "", "right");
+      };
+      row.append(el("span", "pr-gname", g.name), b);
+      box.append(row);
+    }
+    return box;
   }
   function panelRow(r) {
     const [, how, tr] = outcome(r);
