@@ -1017,6 +1017,11 @@ type UsageResets struct {
 	ByWindow bool   `json:"byWindow"`
 	FiveHour int    `json:"fiveHour"`
 	Weekly   int    `json:"weekly"`
+	Team     bool   `json:"team"` // a team plan's, not the person's own
+	Each     []struct {
+		Until  string `json:"until"` // RFC 3339, "": it never runs out
+		Window string `json:"window"`
+	} `json:"each"`
 }
 
 type UsageWindow struct {

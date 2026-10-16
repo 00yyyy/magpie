@@ -196,7 +196,7 @@ export const FakePlugin = async ({ client }) => ({
         user: full ? "Full@Fake.example" : undefined,
         until: "2030-01-02T03:04:05Z",
         renew: "auto",
-        resets: full ? { count: 3, byWindow: true, fiveHour: 2, weekly: 1 } : undefined,
+        resets: full ? { count: 3, byWindow: true, fiveHour: 2, weekly: 1, team: true, each: [{ window: "weekly" }, { until: "2031-01-02T00:00:00Z", window: "fiveHour" }, { until: 1924992000, window: "fiveHour" }] } : undefined,
         windows: [
           { name: "5 hours", used: full ? 100 : 25, resetsAt: born + 3600e3, span: 5 * 3600, models: ["fake-claude"] },
           // 80 of its credits are lost in two days, after it resets (#2265)

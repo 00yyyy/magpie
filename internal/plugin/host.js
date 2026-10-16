@@ -1999,8 +1999,11 @@ async function load({ provider, account, proxy }) {
 //   auth.usage(getAuth, provider) → {
 //     plan?, user? (the account as the service names it), until?,
 //     renew?: "auto" | "off", balance?, error?,
-//     resets?: { count, until?, byWindow?, fiveHour?, weekly? } (the
-//       rate-limit resets the account may spend),
+//     resets?: { count, until?, byWindow?, fiveHour?, weekly?, team?
+//       (a team plan's, not the person's own), each?: [{ until? (ISO or
+//       ms; none: it never runs out), window? ("fiveHour", "weekly") }]
+//       (every reset still to be used) } (the rate-limit resets the
+//       account may spend),
 //     windows?: [{ name, used (percent, 0–100), resetsAt? (ISO or ms),
 //       resetSecs?, display?, amount? / limit? / unit? (the window's own
 //       count, when it counts in amounts: amount of limit used, in unit,
@@ -2047,7 +2050,13 @@ async function usageOf(provider, account) {
     signIn: ["expired", "kept", "renewed"].includes(u.signIn) ? u.signIn : "",
     resets:
       u.resets && typeof u.resets === "object"
-        ? { count: num(u.resets.count), until: when(u.resets.until), byWindow: !!u.resets.byWindow, fiveHour: num(u.resets.fiveHour), weekly: num(u.resets.weekly) }
+        ? {
+            count: num(u.resets.count), until: when(u.resets.until), byWindow: !!u.resets.byWindow,
+            fiveHour: num(u.resets.fiveHour), weekly: num(u.resets.weekly), team: !!u.resets.team,
+            each: (Array.isArray(u.resets.each) ? u.resets.each : [])
+              .filter((r) => r && typeof r === "object")
+              .map((r) => ({ until: when(r.until), window: r.window === "fiveHour" || r.window === "weekly" ? r.window : "" })),
+          }
         : null,
     windows: (Array.isArray(u.windows) ? u.windows : []).map((w) => ({
       name: text(w?.name),
