@@ -78,7 +78,7 @@ func isolate(t *testing.T) {
 	DevinExecutable = func() string { return "" }
 	forgetClaudeCredential()
 	forgetClaudeStatus()
-	forgetDevinStatus()
+	devinStatus.forget()
 	// nor Codex's keychain item (#2367): a test's has nothing in it,
 	// whatever the system
 	oldCodexKeychain, oldCodexHere := codexKeychain, codexKeychainHere
@@ -109,7 +109,7 @@ func isolate(t *testing.T) {
 		resetCodexKeychain()
 		forgetClaudeCredential()
 		forgetClaudeStatus()
-		forgetDevinStatus()
+		devinStatus.forget()
 	})
 }
 

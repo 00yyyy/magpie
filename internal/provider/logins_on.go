@@ -37,8 +37,6 @@ func SetLoginOn(agent, user string, on bool) error {
 	switch agent {
 	case "copilot":
 		return setCopilotLoginOn(user, on)
-	case "devin":
-		return setDevinLoginOn(user, on)
 	case CommandCodePlanID:
 		return setCommandCodeLoginOn(user, on)
 	case ChatGPTAPIID:
@@ -138,9 +136,6 @@ func (p Provider) alsoOn() []Provider {
 	}
 	if p.Account != nil && p.Account.Agent == "copilot" {
 		return copilotAlsoOn()
-	}
-	if p.Account != nil && p.Account.Agent == "devin" {
-		return devinAlsoOn()
 	}
 	if p.Account != nil && p.Account.Agent == CommandCodePlanID {
 		return commandCodeAlsoOn()

@@ -265,8 +265,6 @@ func builtinLogins(agent string) (logins []Login, ok bool) {
 		logins = copilotLoginList()
 	case CommandCodePlanID:
 		logins = cmdLoginList()
-	case "devin":
-		logins = devinLoginList()
 	case ChatGPTAPIID:
 		logins = siwcLoginList()
 	case "gemini", "antigravity":
@@ -291,9 +289,6 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	ctx = ViaLogin(ctx, loginProvider(l), l.User) // asked through the account's own proxy
 	if strings.HasPrefix(l.Agent, "plugin:") {
 		return pluginLoginQuota(ctx, l)
-	}
-	if l.Agent == "devin" {
-		return devinLoginQuota(ctx, l)
 	}
 	if l.Agent == "gemini" || l.Agent == "antigravity" {
 		return googleLoginQuota(ctx, l)

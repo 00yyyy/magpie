@@ -374,24 +374,6 @@ func (s *signInFlow) begin() error {
 		s.mu.Lock()
 		s.st.URL = siwcAuthorize(s.redirect, s.state, s.nonce, challenge, s.hostID)
 		s.mu.Unlock()
-	case "devin":
-		// `devin auth login` is a TUI over this same PKCE + localhost
-		// callback, so magpie runs the round itself
-		if ln, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
-			return err
-		}
-		s.redirect = fmt.Sprintf("http://127.0.0.1:%d/callback", ln.Addr().(*net.TCPAddr).Port)
-		q.Set("redirect_uri", s.redirect)
-		q.Set("state", s.state)
-		q.Set("prompt", "select_account")
-		q.Set("code_challenge", challenge)
-		q.Set("code_challenge_method", "S256")
-		q.Set("cli_pkce_marker", "1")
-		// set with the lock: the window follows a sign-in that installed
-		// devin first while this runs
-		s.mu.Lock()
-		s.st.URL = devinAuthorizeURL + "?" + q.Encode()
-		s.mu.Unlock()
 	case "copilot":
 		// GitHub's device code, as Copilot's editors sign in
 		if err := startCopilotSignIn(s); err != nil {
@@ -733,18 +715,6 @@ func (s *signInFlow) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l, err := s.exchange(ctx, q.Get("code"))
-	if err == nil && s.st.Agent == "devin" {
-		// the exchange kept it already: the CLI's own, or one beside it
-		using := false
-		for _, d := range devinLogins() {
-			if strings.EqualFold(d.User, l.User) {
-				using = d.Active
-			}
-		}
-		s.finish(SignInState{State: "done", User: l.User, Plan: l.Plan, Using: using})
-		signInPage(w, true, "You're signed in", fmt.Sprintf("%s is added to magpie. You can close this tab.", l.User))
-		return
-	}
 	if err == nil {
 		var using bool
 		if err = keepLogin(ctx, func() (err error) { using, err = addLogin(l); return err }); err == nil {
@@ -779,11 +749,7 @@ func (s *signInFlow) googleDone(ctx context.Context, w http.ResponseWriter, app 
 
 // exchange trades the code for tokens and makes them into a login.
 func (s *signInFlow) exchange(ctx context.Context, code string) (savedLogin, error) {
-	switch s.st.Agent {
-	case "codex":
-		return codexExchange(ctx, code, s.verifier, s.redirect)
-	}
-	return devinExchange(ctx, code, s.verifier, s.redirect)
+	return codexExchange(ctx, code, s.verifier, s.redirect)
 }
 
 func postToken(ctx context.Context, tokenURL, ctype string, body []byte, out any) error {

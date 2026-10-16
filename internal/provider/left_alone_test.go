@@ -36,8 +36,7 @@ func TestLeftAloneRunsNoCLI(t *testing.T) {
 	// the real lookups, which find them on PATH
 	claudeExecutable, DevinExecutable = claudecode.Find, findDevin
 	forgetClaudeStatus()
-	forgetDevinStatus()
-	t.Cleanup(func() { forgetClaudeStatus(); forgetDevinStatus() })
+	t.Cleanup(forgetClaudeStatus)
 
 	runs := func() []string {
 		b, _ := os.ReadFile(log)
@@ -92,11 +91,12 @@ func TestLeftAloneRunsNoCLI(t *testing.T) {
 		t.Fatalf("claude switched off: %+v %v", p, ok)
 	}
 
-	// switched on, the same loop asks them: the fakes are the ones found
+	// switched on, the same loop asks them: the fakes are the ones found.
+	// Devin's built-in is retired, so nothing here asks its CLI either way.
 	save(false, false)
 	loop()
 	got := strings.Join(runs(), " ")
-	for _, want := range []string{"claude_auth_status_--json", "devin_auth_status"} {
+	for _, want := range []string{"claude_auth_status_--json"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("switched on, no %s among %s", want, got)
 		}

@@ -3474,12 +3474,6 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if from == provider.Anthropic {
 		own = withoutBillingLine(body)
 	}
-	// Devin's through the API its CLI talks to, with the CLI's sign-in or
-	// one magpie keeps beside it
-	if p.Account != nil && p.Account.Agent == "devin" {
-		call.To = from
-		return s.serveDevin(w, r, from, p.Account.Home, model, own, &call.Usage)
-	}
 	// Command Code's Go plan has no Provider API: it is asked where the
 	// CLI asks, in the CLI's own format; its other plans go on as keys do
 	if p.Account != nil && p.Account.Agent == provider.CommandCodePlanID {

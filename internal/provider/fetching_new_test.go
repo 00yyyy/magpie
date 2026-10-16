@@ -166,18 +166,18 @@ func TestFetchingNewOnceStarted(t *testing.T) {
 	// waiting on it, which the page doesn't (#541); the fetch lists them
 	// and waits behind the page, which is told lists are on their way until
 	// it has (yetone on #1147, #1789)
-	wasDevin, wasFirst := devinStatus, firstAsk
-	defer func() { devinStatus, firstAsk = wasDevin, wasFirst }()
+	wasCursor, wasFirst := cursorStatus, firstAsk
+	defer func() { cursorStatus, firstAsk = wasCursor, wasFirst }()
 	firstAsk = 5 * time.Second // long, to tell a look's wait from none
 	for _, asked := range []bool{false, true} {
 		answer := make(chan struct{})
-		devinStatus = &cliIdentity{name: "devin-test", exe: func() string { return "" }, read: true,
+		cursorStatus = &cliIdentity{name: "cursor-test", exe: func() string { return "" }, read: true,
 			ask: func() (string, string, bool, error) { <-answer; return "", "", false, nil }}
 		if asked {
-			devinStatus.Lock()
-			devinStatus.waited = true // its look gave up already
-			devinStatus.refresh()
-			devinStatus.Unlock()
+			cursorStatus.Lock()
+			cursorStatus.waited = true // its look gave up already
+			cursorStatus.refresh()
+			cursorStatus.Unlock()
 		}
 		start = time.Now()
 		FetchNewBehind(5 * time.Second)
@@ -199,7 +199,7 @@ func TestFetchingNewOnceStarted(t *testing.T) {
 // way, not that none is due. The forget is that listing's own, and the CLI
 // answers only once the page was told: a read another test left running
 // (a usage refresh reads Grok's account, then Cursor's) took the first
-// GrokExecutable call, forgot Cursor before the listing read it, and
+// GrokExecutable call (the hook is Kiro's kiro-cli lookup now), forgot Cursor before the listing read it, and
 // Cursor answered nobody at once, so nothing was left to wait on and
 // nothing was due (#2390, red on ubuntu CI).
 func TestFetchingNewForgottenWhileListed(t *testing.T) {
@@ -216,11 +216,11 @@ func TestFetchingNewForgottenWhileListed(t *testing.T) {
 	ForgetAccounts()
 	answer := make(chan struct{})
 	answered := sync.OnceFunc(func() { close(answer) })
-	wasCursor, wasDevin, wasGrok := cursorStatus, devinStatus, GrokExecutable
+	wasCursor, wasDB := cursorStatus, kiroCLIDB
 	t.Cleanup(func() {
 		answered()
 		waitFetchingNew(t)
-		cursorStatus, devinStatus, GrokExecutable = wasCursor, wasDevin, wasGrok
+		cursorStatus, kiroCLIDB = wasCursor, wasDB
 		ForgetAccounts()
 	})
 	nobody := func() (string, string, bool, error) { return "", "", false, nil }
@@ -229,16 +229,15 @@ func TestFetchingNewForgottenWhileListed(t *testing.T) {
 	cursor := &cliIdentity{name: "cursor-test", exe: func() string { return "" }, read: true, at: now,
 		ask: func() (string, string, bool, error) { <-answer; return nobody() }}
 	cursorStatus = cursor
-	devinStatus = &cliIdentity{name: "devin-test", exe: func() string { return "" }, read: true, at: now, ask: nobody}
-	// Grok's account is read after Cursor's: the sign-in lands there, in
+	// Kiro's account is read after Cursor's: the sign-in lands there, in
 	// the page's own listing, not in anything else reading the accounts
 	var once sync.Once
-	GrokExecutable = func() string {
+	kiroCLIDB = func() string {
 		b := make([]byte, 64<<10)
 		if strings.Contains(string(b[:runtime.Stack(b, false)]), "provider.FetchNewBehind(") {
 			once.Do(cursor.forget)
 		}
-		return ""
+		return wasDB()
 	}
 
 	FetchNewBehind(5 * time.Second)

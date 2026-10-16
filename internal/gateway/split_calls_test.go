@@ -118,22 +118,3 @@ func TestResponsesSplitParallelCallsKeepTheirResults(t *testing.T) {
 		t.Fatalf("input = %s\nwant    %s", strings.Join(got, " "), want)
 	}
 }
-
-// Devin's answers a reply's calls at the next assistant message, as
-// Chat did.
-func TestDevinSplitParallelCallsKeepTheirResults(t *testing.T) {
-	d := decodeDevinRequest(t, buildDevin(parseSplit(t, splitCalls), "swe-2-high", "k"))
-	var got []string
-	for _, m := range d.msgs {
-		got = append(got, devinSummary(m))
-	}
-	want := []string{
-		"1:read a and b",
-		`2: call toolu_a/read {"path":"a"} call toolu_b/read {"path":"b"}`,
-		"4:A! for toolu_a",
-		"4:B! for toolu_b",
-	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-}

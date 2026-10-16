@@ -181,8 +181,12 @@ func (c *cliIdentity) refresh() chan struct{} {
 	return done
 }
 
-// cliIdentities are the CLIs asked who is signed in.
-func cliIdentities() []*cliIdentity { return []*cliIdentity{cursorStatus, devinStatus} }
+// cliIdentities are the CLIs a look at the accounts asks who is signed in.
+// Devin's (devinStatus) isn't: its built-in is retired, and only the move
+// onto its plugin asks it, waiting itself. Listed here, never asked by a
+// look, it stayed unsettled, and every page was told lists were on their
+// way.
+func cliIdentities() []*cliIdentity { return []*cliIdentity{cursorStatus} }
 
 // awaitIdentities waits, at most timeout, for each CLI being asked who is
 // signed in for the first time: waited, if one was, and unknown, if one

@@ -1265,7 +1265,7 @@ func (p Provider) asksOwnBackend() bool {
 		return false
 	}
 	switch p.Account.Agent {
-	case "claude", "devin", CommandCodePlanID:
+	case "claude", CommandCodePlanID:
 		return true
 	}
 	return false

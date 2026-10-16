@@ -275,6 +275,7 @@ var retiredBuiltins = map[string]bool{
 	"zcode":       true,
 	"factory":     true,
 	"grok":        true,
+	"devin":       true,
 }
 
 // PluginServes is whether the built-in id's subscription is its plugin's to
