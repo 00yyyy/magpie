@@ -3407,6 +3407,12 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		body = orphanedToolOutputs(body)
 		body = pairToolItems(body)
 	}
+	if from == provider.Chat {
+		// a call kept with an empty id, which a strict upstream turns
+		// the whole request away for (#2611); before the relay, the
+		// translation and a plugin's fetch alike
+		body = chatCallIDs(body)
+	}
 	// every request to the provider goes through its own proxy, if it has
 	// one (#237)
 	r = r.WithContext(p.Via(r.Context()))
