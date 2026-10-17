@@ -2251,10 +2251,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	}
 	gaveWay := map[string]bool{} // keys and accounts that gave way, full, to one free (laneMate)
 	// a group's members that failed in a way that passes are asked again,
-	// once each has been, for up to its Patience (#1418)
-	var patience time.Duration
+	// once each has been, for up to its Patience (#1418): a member of a
+	// group in the group uses the innermost that sets Patience (#2410)
+	var patience, patienceFallback time.Duration
 	if isGroup {
-		patience = g.Waits()
+		patienceFallback = g.Waits()
+		patience = maxWaits(cands, patienceFallback)
 	}
 	var busyNow []busyTry  // the members of this round that failed so
 	rounds := 0            // the rounds they were asked again in
@@ -3133,32 +3135,38 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			try.Fail, try.Rest = rest.Why, &rest
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			skipped = append(skipped, c.label()+": "+call.Error)
-			if patience > 0 && !hw.turnedAway && busy(hw.code(), hw.errBody()) {
+			if waitsOf(c.patience, patienceFallback) > 0 && !hw.turnedAway && busy(hw.code(), hw.errBody()) {
 				busyNow = noteBusy(busyNow, c, hw.header)
 			}
 			continue
 		}
 		if _, same := passing(hw.code(), hw.header, hw.errBody(), again); last && patience > 0 && !protected && !hw.turnedAway && !hw.refused && hw.failed() && busy(hw.code(), hw.errBody()) &&
-			(len(busyNow) > 0 || !same) {
+			(len(busyNow) > 0 || waitsOf(c.patience, patienceFallback) > 0 && !same) {
 			// every member has failed, each in a way that passes — busy,
 			// overloaded, rate limited for a moment — with nothing of a
 			// reply sent: after a pause, longer each round and no shorter
 			// than a Retry-After, those back by then are asked again in
-			// turn, while the group's Patience for the request lasts
+			// turn, while each member's Patience for the request lasts
 			// (#1418: Codex's turn ended on server_is_overloaded, to be
-			// told "continue" by hand). Another member busy too, this one
-			// isn't asked again alone first, as the last one left is: they
-			// take turns. The patience is counted from the first time
-			// every member had failed, when the agent would have had the
-			// error
+			// told "continue" by hand; #2410: a nested group's own).
+			// Another member busy too, this one isn't asked again alone
+			// first, as the last one left is: they take turns. The
+			// patience is counted from the first time every member had
+			// failed, when the agent would have had the error
 			if waitFrom.IsZero() {
 				waitFrom = time.Now()
 			}
-			busyNow = noteBusy(busyNow, c, hw.header)
+			if waitsOf(c.patience, patienceFallback) > 0 {
+				busyNow = noteBusy(busyNow, c, hw.header)
+			}
 			// nor once Codex would hang up in the pause, for want of an
 			// event (agentQuietMost): it has the error instead
-			if next, wait, ok := replan(busyNow, rounds, waitFrom.Add(patience)); ok && !kept.tooQuiet(wait) {
-				try.Fail, try.Again, try.Replan, try.Patience = failureOf(c, hw.code(), hw.errBody()), wait.Milliseconds(), len(next), int(patience/time.Second)
+			memberWait := waitsOf(c.patience, patienceFallback)
+			if memberWait == 0 {
+				memberWait = patience
+			}
+			if next, wait, ok := replan(busyNow, rounds, waitFrom, patienceFallback); ok && !kept.tooQuiet(wait) {
+				try.Fail, try.Again, try.Replan, try.Patience = failureOf(c, hw.code(), hw.errBody()), wait.Milliseconds(), len(next), int(memberWait/time.Second)
 				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 				skipped = append(skipped, c.label()+": "+call.Error)
 				rounds, busyNow = rounds+1, nil

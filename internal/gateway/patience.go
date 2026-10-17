@@ -66,11 +66,38 @@ func noteBusy(list []busyTry, c candidate, header http.Header) []busyTry {
 	return append(list, busyTry{c: c, ready: now.Add(retryAfter(header, now))})
 }
 
+// waitsOf is how long a member may be kept for replan: its own Patience
+// seconds when set (including PatienceOff → 0), else the asked group's
+// Waits (fallback).
+func waitsOf(patience int, fallback time.Duration) time.Duration {
+	switch {
+	case patience < 0:
+		return 0
+	case patience == 0:
+		return fallback
+	}
+	return time.Duration(min(patience, provider.PatienceLongest)) * time.Second
+}
+
+// maxWaits is the longest waitsOf among cands, for holding the last
+// failure while any member's budget may still cover a replan (#2410).
+func maxWaits(cands []candidate, fallback time.Duration) time.Duration {
+	var m time.Duration
+	for _, c := range cands {
+		if w := waitsOf(c.patience, fallback); w > m {
+			m = w
+		}
+	}
+	return m
+}
+
 // replan is, of the members that failed so in this round, those to ask
 // again and the pause before: retryPause doubled each round up to
-// replanLongest, and as long as the soonest Retry-After. ok is false when
-// the rounds are spent, or the pause would end past by.
-func replan(list []busyTry, round int, by time.Time) ([]candidate, time.Duration, bool) {
+// replanLongest, and as long as the soonest Retry-After. Each member's
+// own Patience budget (#2410) is counted from waitFrom; a member whose
+// budget is spent, or Off, is left out. ok is false when the rounds are
+// spent, or no member still has budget covering the pause.
+func replan(list []busyTry, round int, waitFrom time.Time, fallback time.Duration) ([]candidate, time.Duration, bool) {
 	if len(list) == 0 || round >= replanRounds {
 		return nil, 0, false
 	}
@@ -82,11 +109,22 @@ func replan(list []busyTry, round int, by time.Time) ([]candidate, time.Duration
 	}
 	wait = max(wait, soonest.Sub(now))
 	at := now.Add(wait)
-	if !at.Before(by) {
+	var alive []busyTry
+	for _, b := range list {
+		budget := waitsOf(b.c.patience, fallback)
+		if budget <= 0 {
+			continue
+		}
+		if !at.Before(waitFrom.Add(budget)) {
+			continue // this member's budget is spent
+		}
+		alive = append(alive, b)
+	}
+	if len(alive) == 0 {
 		return nil, 0, false
 	}
 	var next, later []candidate
-	for _, b := range list {
+	for _, b := range alive {
 		if b.ready.After(at) {
 			later = append(later, b.c) // still asking for time: after those back
 			continue

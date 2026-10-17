@@ -63,6 +63,11 @@ type candidate struct {
 	// member is in that sets one (#2246): a group in a group times its own
 	// members' first tokens, the group asked for only those that set none
 	firstToken int
+	// patience is the Patience of the innermost group of those the member
+	// is in that sets one (#2410): a group in a group waits out its own
+	// members' busy failures, the group asked for only those that set none;
+	// 0 falls back to the asked group's Waits, PatienceOff skips replan
+	patience int
 }
 
 // capHold is how an account is held at its usage cap: the cap of the
@@ -406,6 +411,18 @@ func innerFirstToken(m provider.Member) int {
 	return 0
 }
 
+// innerPatience is the Patience of the innermost group m is in (m.Via,
+// the outermost first) that sets one (#2410), 0 for none: PatienceOff
+// (-1) counts as set, so an inner Off stops replan for that member.
+func innerPatience(m provider.Member) int {
+	for i := len(m.Via) - 1; i >= 0; i-- {
+		if m.Via[i].Patience != 0 {
+			return m.Via[i].Patience
+		}
+	}
+	return 0
+}
+
 // planLevel orders the models ms of g, a group depth groups down from the
 // one asked for, adding to pl's order as it goes: those set aside and
 // those unlisted it gathers for planGroup to put last.
@@ -418,6 +435,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 			for i := range l {
 				l[i].effort, l[i].fast = m.Effort, m.Fast
 				l[i].firstToken = innerFirstToken(m)
+				l[i].patience = innerPatience(m)
 			}
 		}
 		pl.left = append(pl.left, barredOf(barred, m.Provider, false, from, m.Groups())...)
