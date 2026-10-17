@@ -245,10 +245,8 @@ func run(args []string) error {
 	update.AwaitPredecessor()
 	makeDirs()
 	settings.Migrate()
-	// a new install starts with the Essentials preset of built-in plugins
-	// (plugins.yml), one that ran before with all of them, told by no file
-	// of a magpie run before: so before anything below writes one
-	if _, err := pluginrt.Settle(!settings.RanBefore()); err != nil {
+	// every built-in plugin starts on (plugins.yml), on a new install too
+	if _, err := pluginrt.Settle(); err != nil {
 		fmt.Fprintf(os.Stderr, "magpie: plugins.yml: %v\n", err)
 	}
 	if _, err := pluginrt.Refresh(); err != nil {
