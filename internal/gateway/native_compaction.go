@@ -359,6 +359,15 @@ func keepCandidates(cands []candidate, pl planned, keep func(candidate) bool) ([
 	return cands, pl, len(cands) > 0 || len(pl.held) > 0 || len(pl.capped) > 0
 }
 
+// compactionWho is who sealed the native compaction cp, for the trace;
+// "" for none.
+func compactionWho(cp *checkpointWriter) string {
+	if cp == nil {
+		return ""
+	}
+	return cp.Who
+}
+
 // checkpointError is what Codex is told when the compaction a request
 // carries was sealed by a key or account the request can't go to now:
 // why, as magpie's own settings say, and what lets the conversation go on

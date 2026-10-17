@@ -1,12 +1,18 @@
 package gateway
 
 import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
@@ -537,5 +543,93 @@ func TestNativeCompactionWriterGoneSaysWhy(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// #2639: a turn carrying a native compaction goes only to the account
+// that sealed it, and its route says so (Compaction), for Routing to say
+// that is why no other account was asked, not that it is the only one on.
+func TestNativeCompactionRouteNamesItsWriter(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	noRests()
+	t.Cleanup(noRests)
+	claims := func(m map[string]any) string {
+		b, _ := json.Marshal(m)
+		return "h." + base64.RawURLEncoding.EncodeToString(b) + ".s"
+	}
+	auth := func(email, acct string) map[string]any {
+		return map[string]any{"auth_mode": "chatgpt", "tokens": map[string]any{
+			"id_token":      claims(map[string]any{"email": email}),
+			"access_token":  claims(map[string]any{"exp": time.Now().Add(time.Hour).Unix(), "who": acct}),
+			"refresh_token": "r-" + acct, "account_id": acct}}
+	}
+	os.MkdirAll(filepath.Join(home, ".codex"), 0o755)
+	os.WriteFile(filepath.Join(home, ".codex", "auth.json"), mustJSON(auth("pro@example.com", "acct-pro")), 0o600)
+	os.MkdirAll(filepath.Dir(provider.Path()), 0o755)
+	os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), mustJSON([]map[string]any{
+		{"agent": "codex", "user": "biz@example.com", "on": true, "seen": time.Now(), "auth": auth("biz@example.com", "acct-biz")},
+	}), 0o600)
+	provider.ForgetAccounts()
+	t.Cleanup(provider.ForgetAccounts)
+
+	var mu sync.Mutex
+	var tried []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		if strings.HasSuffix(r.URL.Path, "/models") {
+			io.WriteString(w, `{"models":[{"slug":"gpt-5.5","visibility":"list"}]}`)
+			return
+		}
+		mu.Lock()
+		tried = append(tried, r.Header.Get("chatgpt-account-id"))
+		mu.Unlock()
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"r1","model":"gpt-5.5"}}`,
+			`data: {"type":"response.output_text.delta","delta":"pong"}`,
+			`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":7,"output_tokens":1}}}`))
+	}))
+	t.Cleanup(up.Close)
+	old := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	t.Cleanup(func() { provider.CodexBase = old })
+	p, err := provider.Find("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	wroteCheckpoint("gAAAAB-sealed-by-biz", candidate{p: provider.Provider{ID: "codex", Account: &provider.Account{User: "biz@example.com"}}, model: "gpt-5.5"})
+
+	s := New()
+	ask := func(session, body string) Route {
+		t.Helper()
+		tried = nil
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(body))
+		req.Header.Set("session_id", session)
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "pong") {
+			t.Fatalf("%s: %d %s", session, rec.Code, rec.Body.String())
+		}
+		for _, r := range s.Trace(context.Background(), 0, 0).Routes {
+			if r.Session == session {
+				return r
+			}
+		}
+		t.Fatalf("%s: no route traced", session)
+		return Route{}
+	}
+	r := ask("sealed-1", `{"model":"codex/gpt-5.5","stream":true,"input":[{"type":"compaction","encrypted_content":"gAAAAB-sealed-by-biz"},{"type":"message","role":"user","content":[{"type":"input_text","text":"go on"}]}]}`)
+	if strings.Join(tried, ",") != "acct-biz" || r.Compaction != "codex@biz@example.com" || len(r.Order) != 1 {
+		t.Fatalf("sealed: tried %v, compaction %q, order %+v", tried, r.Compaction, r.Order)
+	}
+	r = ask("plain-1", `{"model":"codex/gpt-5.5","stream":true,"input":"ping"}`)
+	if r.Compaction != "" || len(r.Order) != 2 {
+		t.Fatalf("no compaction: compaction %q, order %+v", r.Compaction, r.Order)
 	}
 }

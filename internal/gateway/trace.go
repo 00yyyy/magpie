@@ -58,6 +58,10 @@ type Route struct {
 	Rule          *RuleHit     `json:"rule,omitempty"`          // the group's rules for it, when it has any
 	SealedTask    bool         `json:"sealedTask,omitempty"`    // only ChatGPT accounts can read this subagent's task
 	LeadAccount   string       `json:"leadAccount,omitempty"`   // the parent account put first for a sealed task
+	// Compaction: the key or account that sealed the native compaction
+	// the request carries, the only one it went to (#1099): Routing says
+	// so, not that it is the only one on for the model (#2639)
+	Compaction string `json:"compaction,omitempty"`
 	// Subagent is a Codex or Claude Desktop subagent's request put on
 	// the model set for its subagents, or kept on the one asked for and why
 	Subagent *SubagentPick `json:"subagent,omitempty"`
