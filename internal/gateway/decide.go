@@ -357,6 +357,16 @@ func (s *Server) askJev(p provider.Provider, model string, intents []string, pre
 	if model == "" {
 		model = p.Jev()
 	}
+	// what Jev reads goes masked unless Jev is itself where the user set
+	// requests to go unmasked: a group whose every member skips redaction
+	// hands rules the body as the agent wrote it (unredactedRoute), and a
+	// remote Jev is none of those members
+	if !p.SkipsRedaction() {
+		var err error
+		if text, prev.User, prev.Reply, err = maskedState(text, prev.User, prev.Reply); err != nil {
+			return verdict{}, err // fails closed: never sent unmasked
+		}
+	}
 	var l levelling
 	if len(intents) > 1 { // one kind is a topic: a message may be none of it
 		var err error
@@ -369,6 +379,22 @@ func (s *Server) askJev(p provider.Provider, model string, intents []string, pre
 		return verdict{}, err
 	}
 	return readJev(b, intents, l.levels, prev)
+}
+
+// maskedState masks what Jev is told of a turn, each as maskedText does.
+func maskedState(text, user, reply string) (string, string, string, error) {
+	out := [3]string{text, user, reply}
+	for i, v := range out {
+		if v == "" {
+			continue
+		}
+		m, _, err := maskedText(v)
+		if err != nil {
+			return "", "", "", err
+		}
+		out[i] = m
+	}
+	return out[0], out[1], out[2], nil
 }
 
 // systemOne posts body to p's System One API and returns the answer,

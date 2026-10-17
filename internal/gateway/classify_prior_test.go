@@ -233,3 +233,37 @@ func TestJevSeesTheTurnBefore(t *testing.T) {
 		t.Fatalf("previous_user_message %q", u)
 	}
 }
+
+// A group whose every member the user set to go unmasked hands its rules
+// the body as the agent wrote it; Jev, which isn't one of them, is still
+// told the turn masked.
+func TestJevIsToldTheTurnMaskedWhenTheGroupGoesUnmasked(t *testing.T) {
+	s, _, _, j := jevved(t, "", provider.Rule{Use: "b/big", Intent: "debugging"})
+	if err := settings.Save(settings.Settings{Redact: true, RedactPersonal: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"a/small", "b/big"} {
+		p, _, ok := provider.Resolve(id)
+		if !ok {
+			t.Fatalf("no %s", id)
+		}
+		p.Unredacted = true
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+		if p, _, _ := provider.Resolve(id); !p.SkipsRedaction() {
+			t.Fatalf("%s doesn't skip redaction", id)
+		}
+	}
+	postOK(t, s, "s1", chat("mail moon.shard@proton.me why the parser crashes", []string{"tell sun.ray@proton.me 继续"}, 0, ""))
+	turns := j.turns()
+	st := turns[len(turns)-1]["state"].(map[string]any)
+	for k, v := range st {
+		if s, _ := v.(string); strings.Contains(s, "@proton.me") {
+			t.Fatalf("%s went to Jev unmasked: %q", k, s)
+		}
+	}
+	if u, _ := st["previous_user_message"].(string); !strings.Contains(u, "why the parser crashes") {
+		t.Fatalf("state %v", st)
+	}
+}
