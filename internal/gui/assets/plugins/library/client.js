@@ -1102,8 +1102,19 @@ magpie.plugin("library", (ctx) => {
 
   // ---------- instructions ----------
 
+  // Measured at height auto, the textarea is short for a moment. What holds
+  // it is held at its height meanwhile, so the page never is: a page gone
+  // short has its view's scroll clamped by the browser, which no height put
+  // back undoes, and an input method's every keystroke is an input (#2636:
+  // the page jumped while a word was composed).
   function autosize(ta, min) {
-    const fit = () => { ta.style.height = "auto"; ta.style.height = Math.max(min, ta.scrollHeight + 2) + "px"; };
+    const fit = () => {
+      const box = ta.parentElement, was = box?.style.minHeight;
+      if (box) box.style.minHeight = box.offsetHeight + "px";
+      ta.style.height = "auto";
+      ta.style.height = Math.max(min, ta.scrollHeight + 2) + "px";
+      if (box) box.style.minHeight = was;
+    };
     ta.addEventListener("input", fit);
     // fitted once it's on the page, before it's painted, so what's under it
     // doesn't move a frame later
