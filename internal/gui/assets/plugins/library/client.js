@@ -754,16 +754,21 @@ magpie.plugin("library", (ctx) => {
       });
       go.append(glyph(GLYPH.search, "lib-mini"), el("span", "", t("Discover")));
       go.title = tab === "mcp" ? t("Go to the MCP servers you can add, under the list") : t("Go to the skills you can add, under the list");
+      // a narrow window's title bar shows the icon alone (app.css
+      // .tools-tight): the name stays the button's, not only its tooltip's
+      go.setAttribute("aria-label", t("Discover"));
       acts.append(go);
     }
     const more = button("", "lib-more", () => lib && reveal(lib.dir));
     more.append(glyph(GLYPH.folder, "lib-mini"), el("span", "", t("Library folder")));
+    more.setAttribute("aria-label", t("Library folder"));
     if (lib) more.title = tilde(lib.dir);
     else more.disabled = true;
     // magpie's backups beside it, on every tab: at the foot of a long
     // page they were hard to find (Dade on Discord: 备份在最底部)
     const back = button("", "lib-backups", () => lib && reveal(lib.backups));
     back.append(glyph(GLYPH.backup, "lib-mini"), el("span", "", t("Backups")));
+    back.setAttribute("aria-label", t("Backups"));
     if (lib) back.title = t("magpie keeps a copy of every file before it writes it.") + "\n" + tilde(lib.backups);
     else back.disabled = true;
     acts.append(more, back);

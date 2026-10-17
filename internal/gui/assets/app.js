@@ -23256,7 +23256,7 @@ if (mode === "window") {
   // there or by a link) is drawn again in the sidebar, once a frame
   let queued = false;
   const again = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; navSubs(); }); };
-  const mo = new MutationObserver(again);
+  const mo = new MutationObserver(() => { again(); if (document.body.classList.contains("side-nav")) tools(); });
   for (const v of Object.keys(NAV_SUBS)) mo.observe($("#view-" + v), { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
   // a page whose head is only its tools (Library, Plugins, Settings) has them
   // in the title bar beside the sidebar (app.css): between where the reader
@@ -23268,12 +23268,52 @@ if (mode === "window") {
     if (toolsAt) return;
     toolsAt = requestAnimationFrame(() => {
       toolsAt = 0;
-      const top = $(".top"), c = $("#crumb").getBoundingClientRect(), a = $(".actions").getBoundingClientRect();
-      const st = document.documentElement.style;
+      const top = $(".top"), crumb = $("#crumb"), a = $(".actions").getBoundingClientRect();
+      const st = document.documentElement.style, body = document.body;
       const set = (k, v) => { if (st.getPropertyValue(k) !== v) st.setProperty(k, v); };
       set("--top-h", top.offsetHeight + "px");
-      set("--tools-l", Math.ceil(c.right + 16) + "px");
       set("--tools-r", Math.ceil(innerWidth - a.left + 8) + "px");
+      // the room the title and the tools share (#2625): the title whole and
+      // the tools with their words; else the tools as icons; else the title
+      // cut at its end, so nothing lies over it. Each step is laid out and
+      // read again here, in this frame, the next only if it ran over
+      const kids = [...crumb.children];
+      for (const e of kids) if (e.hidden) e.hidden = false;
+      if (!body.classList.contains("side-nav")) {
+        body.classList.remove("tools-tight");
+        set("--crumb-max", "none");
+        return;
+      }
+      const head = $(":is(#view-library .lib-head, #view-plugins .pm-head, #view-settings .set-head):not([hidden] *)");
+      const c = crumb.getBoundingClientRect(), gap = parseFloat(getComputedStyle(crumb).columnGap) || 0;
+      const wide = kids.map((e) => (e.tagName === "B" ? e.scrollWidth : e.getBoundingClientRect().width) + gap);
+      const whole = Math.ceil(wide.reduce((w, x) => w + x, 0) - (kids.length ? gap : 0));
+      const over = () => {
+        const h = head.getBoundingClientRect();
+        let left = h.right;
+        for (const e of head.querySelectorAll("button, label, input")) {
+          if (!e.getClientRects().length || e.closest(".lib-tabs, .set-tabs")) continue;
+          left = Math.min(left, e.getBoundingClientRect().left);
+        }
+        return { over: left < h.left - 0.5, need: h.right - left };
+      };
+      body.classList.remove("tools-tight");
+      set("--crumb-max", "none");
+      set("--tools-l", Math.ceil(c.left + whole + 16) + "px");
+      if (!head || !over().over) return;
+      body.classList.add("tools-tight");
+      const o = over();
+      if (!o.over) return;
+      const max = Math.max(0, Math.floor(a.left - 8 - 16 - o.need - c.left));
+      // where the reader is keeps its last word: "Work / Library /" goes,
+      // a part and its slash at a time, before "MCP servers" is cut
+      let w = whole;
+      for (let i = 0; i + 1 < kids.length - 1 && w > max; i += 2) {
+        kids[i].hidden = kids[i + 1].hidden = true;
+        w -= wide[i] + wide[i + 1];
+      }
+      set("--crumb-max", max + "px");
+      set("--tools-l", Math.ceil(c.left + max + 16) + "px");
     });
   };
   const ro = new ResizeObserver(tools);

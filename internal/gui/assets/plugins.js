@@ -792,6 +792,7 @@
     b.disabled = mirrorSaving;
     b.setAttribute("role", "switch");
     b.setAttribute("aria-checked", on ? "true" : "false");
+    b.setAttribute("aria-label", t("Mirrors in China"));
     b.title = t("Download the plugin list, plugins and Bun from mirrors in China first (npmmirror, jsDelivr), their official addresses after. Each is a copy of the very file, checked as the original is");
     const sw = el("span", "lib-switch" + (on ? " on" : ""));
     sw.append(el("i"));
