@@ -5542,7 +5542,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		}
 		return writeVendorError(w, from, res.StatusCode, msg, b), msg
 	}
-	dec := decoder(actual)
+	dec := decoderFor(p, actual)
 	rd, sse := eventStream(res)
 	if !sse {
 		// the provider ignored stream:true; read the whole reply as one
@@ -5785,6 +5785,18 @@ func build(proto provider.Protocol, r *Request, model, host string, rejectTemp b
 		out = withFields(out, map[string]any{"speed": "fast"})
 	}
 	return out, nil
+}
+
+// decoderFor is decoder for p's replies. A plugin's Chat text is read as
+// OpenCode reads it, as it came: the plugin knows its vendor and gives its
+// reasoning apart, so a <think> at the head of its text is the model's
+// words, not a block of thinking to take out (Qoder's, #2634).
+func decoderFor(p provider.Provider, proto provider.Protocol) func(data string, emit func(Event)) error {
+	if proto == provider.Chat && p.IsPlugin() {
+		d := &chatDecoder{past: true}
+		return d.decode
+	}
+	return decoder(proto)
 }
 
 func decoder(proto provider.Protocol) func(data string, emit func(Event)) error {
