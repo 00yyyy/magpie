@@ -1165,10 +1165,15 @@ var unsaidWords = regexp.MustCompile(`(?i)(^|"|\\"|: )invalid request error trac
 
 // shapeRefused says a request failed over its shape alone: the next
 // member is asked, and this one doesn't rest, as nothing is wrong with it.
+// An upstream's word that the request is served on another API than the
+// one asked (wrongEndpoint) is one too, once it reaches the group: the
+// member has tried every API it has a URL for (forwardTranslated), and
+// another member, on another API or another vendor, may serve it (#2670:
+// a relay with a Chat URL alone, refusing tools with reasoning there).
 func shapeRefused(status int, body []byte) bool {
 	// the words are matched decoded, too (#1669)
 	body = wordsOf(body)
-	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body) || customToolRefusal.Match(body)) &&
+	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body) || customToolRefusal.Match(body) || wrongEndpoint(status, body)) &&
 		!quotaWords.Match(body) && !unservedWords.Match(body) && !refusedWords.Match(body)
 }
 
@@ -1238,7 +1243,7 @@ func retryable(status int, body []byte) bool {
 		// in front of zcode.z.ai): another provider goes another way
 		return true
 	case status == 400, status == 422:
-		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body) || unsaidWords.Match(body) || regionWords.Match(body)
+		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body) || unsaidWords.Match(body) || regionWords.Match(body) || wrongEndpoint(status, body)
 	}
 	return false
 }
