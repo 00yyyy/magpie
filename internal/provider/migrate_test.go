@@ -211,7 +211,8 @@ func TestMoveToPlugin(t *testing.T) {
 }
 
 // A move cut short (magpie quit mid-way) is put back before it is tried
-// again, and a failed one waits before magpie tries it by itself again.
+// again, and a failed one waits before magpie tries it by itself again:
+// hours while the built-in serves its accounts, minutes once it is retired.
 func TestMoveCutShort(t *testing.T) {
 	bun := testenv.Bun(t)
 	claudeHome(t)
@@ -265,9 +266,29 @@ func TestMoveCutShort(t *testing.T) {
 	if errs := MoveRetiring(ctx); len(errs) != 0 || Moved("fakeco") {
 		t.Fatalf("tried again at once: %v", errs)
 	}
-	_ = setMigration("fakeco", func(m *Migration) { m.At = time.Now().Add(-moveRetry - time.Minute) })
+	// past retiredRetry, still within moveRetry: the built-in serves its
+	// accounts yet, so it waits the hours
+	_ = setMigration("fakeco", func(m *Migration) { m.At = time.Now().Add(-retiredRetry - time.Minute) })
+	if errs := MoveRetiring(ctx); len(errs) != 0 || Moved("fakeco") {
+		t.Fatalf("a built-in still serving it tried again within moveRetry: %v", errs)
+	}
+	if d := nextRetiringRun(); d != time.Hour {
+		t.Fatalf("the next run with no retired built-in failed: %s, not an hour", d)
+	}
+	// retired, nothing serves its accounts: tried again after retiredRetry,
+	// the run brought forward to it
+	retiredBuiltins["fakeco"] = true
+	t.Cleanup(func() { delete(retiredBuiltins, "fakeco") })
+	_ = setMigration("fakeco", func(m *Migration) { m.At = time.Now() })
+	if d := nextRetiringRun(); d > retiredRetry || d < retiredRetry-time.Minute {
+		t.Fatalf("the next run after a retired built-in's failed move: %s, not %s", d, retiredRetry)
+	}
+	if errs := MoveRetiring(ctx); len(errs) != 0 || Moved("fakeco") {
+		t.Fatalf("a retired built-in tried again at once: %v", errs)
+	}
+	_ = setMigration("fakeco", func(m *Migration) { m.At = time.Now().Add(-retiredRetry - time.Minute) })
 	if errs := MoveRetiring(ctx); errs["fakeco"] != nil || !Moved("fakeco") {
-		t.Fatalf("after moveRetry: %v", errs)
+		t.Fatalf("a retired built-in after retiredRetry: %v", errs)
 	}
 	// a magpie that stopped between the record and logins.json: tidied
 	loginsMu.Lock()

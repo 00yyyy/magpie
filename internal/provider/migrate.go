@@ -67,8 +67,26 @@ const (
 // 10-16: 陆续把内置Provider下线掉). A tests' list stands in for it.
 var retiring = MovableIDs
 
-// moveRetry is how long a failed move waits before it is tried again.
-const moveRetry = 6 * time.Hour
+// moveRetry is how long a failed move waits before it is tried again,
+// while the built-in carries on. One whose built-in is retired waits
+// retiredRetry: nothing serves its accounts until it moves, so a move that
+// failed for a moment (npm out of reach, the plugin not installed yet) is
+// tried again soon, not hours later.
+const (
+	moveRetry    = 6 * time.Hour
+	retiredRetry = 10 * time.Minute
+)
+
+// retryWait is how long a failed move of id waits before it is tried again.
+func retryWait(id string) time.Duration {
+	if BuiltinRetired(id) {
+		return retiredRetry
+	}
+	return moveRetry
+}
+
+// retryDue says whether a failed move of id, last tried at, is due again.
+func retryDue(id string, at time.Time) bool { return time.Since(at) >= retryWait(id) }
 
 // Migration is where one built-in's move stands.
 type Migration struct {
@@ -949,7 +967,7 @@ func handBack(ctx context.Context, id string, mv *mover, accts []movedAccount, k
 }
 
 // MoveRetiring moves the built-ins being retired that have accounts, at
-// start-up: once, or again moveRetry after one failed. One an older magpie
+// start-up: once, or again retryWait after one failed. One an older magpie
 // moved back is moved again: there is no way back, as the built-in is
 // going. One whose plugin the user removed waits for them to install it.
 func MoveRetiring(ctx context.Context) map[string]error {
@@ -965,7 +983,7 @@ func MoveRetiring(ctx context.Context) map[string]error {
 			continue
 		case ok && m.State == MoveRemoved:
 			continue
-		case ok && m.State == MoveFailed && time.Since(m.At) < moveRetry:
+		case ok && m.State == MoveFailed && !retryDue(id, m.At):
 			continue
 		}
 		if accts, err := movers[id].out(); err != nil || len(accts) == 0 {
@@ -988,7 +1006,7 @@ func MoveRetiring(ctx context.Context) map[string]error {
 // in use as <id>-plugin's and the id changing would leave agents asking
 // for a provider gone; the add sheet lists it once regardless. One moved
 // whose plugin the user removed is the plugin's again once they install it,
-// its accounts still with the plugin, and a failed move waits moveRetry. No
+// its accounts still with the plugin, and a failed move waits retryWait. No
 // plugin is installed for it: the user's own install is what says to.
 func HandOver(ctx context.Context, accounts bool) map[string]error {
 	if settings.AccountDiscoveryOff() {
@@ -1008,7 +1026,7 @@ func HandOver(ctx context.Context, accounts bool) map[string]error {
 			}
 			continue
 		}
-		if ok && (m.State != MoveFailed || time.Since(m.At) < moveRetry) {
+		if ok && (m.State != MoveFailed || !retryDue(id, m.At)) {
 			continue
 		}
 		if !pluginReady(mv) {
@@ -1067,8 +1085,9 @@ func keepMovedCurrent(ctx context.Context) {
 // KeepRetiringMoved moves the built-ins being retired, and hands over
 // those whose plugin the user installed (HandOver), run by the magpie
 // serving the gateway (one magpie, never two at once): a little after it
-// starts, then every hour, so a failed move is tried again once moveRetry
-// has gone. It also keeps each moved built-in's plugin up to date.
+// starts, then every hour, so a failed move is tried again once retryWait
+// has gone; a retired built-in's failed move brings the next run forward
+// to when it is due. It also keeps each moved built-in's plugin up to date.
 func KeepRetiringMoved(ctx context.Context) {
 	t := time.NewTimer(20 * time.Second)
 	defer t.Stop()
@@ -1092,8 +1111,21 @@ func KeepRetiringMoved(ctx context.Context) {
 				log.Printf("moved %s to its plugin, %s", id, MovePackage(id))
 			}
 		}
-		t.Reset(time.Hour)
+		t.Reset(nextRetiringRun())
 	}
+}
+
+// nextRetiringRun is how long KeepRetiringMoved waits before it runs
+// again: an hour, or less when a retired built-in's failed move is due
+// sooner.
+func nextRetiringRun() time.Duration {
+	next := time.Hour
+	for _, id := range MovableIDs() {
+		if m, ok := MigrationOf(id); ok && m.State == MoveFailed && BuiltinRetired(id) {
+			next = min(next, max(time.Until(m.At.Add(retiredRetry)), time.Minute))
+		}
+	}
+	return next
 }
 
 // MovedOnto are the built-ins moved onto the plugin named (its spec or
