@@ -2403,6 +2403,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				attemptBody, _ = textOnlyBody(from, body) // omit images in prior turns and tool results
 			}
 		}
+		// a middleware's onProvider changes what this provider is sent
+		attemptBody = triedOn(r.Context(), c.p, c.model, attemptBody)
 		if !last && s.antigravityForeseen(c.p, from, attemptBody) {
 			// Antigravity would only turn it away, as it did lately, and
 			// someone after it may answer: it isn't asked, and nothing is
