@@ -1812,6 +1812,23 @@ any other `Host` are refused 403, with a gateway key too. With
 `MAGPIE_ADDR` on an address that isn't loopback, the call isn't from
 loopback, so it is refused as well.
 
+`magpie cpu [<file>] [--seconds N]` is for a report of magpie using too
+much CPU (@LeiCheng42 on X, while Codex ran). It asks the same running
+magpie for `GET /v1/magpie/cpu?seconds=N`, a Go CPU profile recorded for
+30 seconds, or N from 5 to 120 (`runtime/pprof`'s CPU profile, gzipped
+protobuf, which `go tool pprof` reads). While it records, use magpie as
+you do when it is busy, such as running Codex: the gateway goes on serving
+every other call, and the profile is of that. It writes the profile to
+`<file>`, else `magpie-cpu-<date>-<time>.pb.gz` in the working folder,
+and refuses a file that is there before it records, not after. It prints
+the file and the numbers the gateway sends in `X-Magpie-CPU-Stats`: the
+process, the CPU time it used over the seconds recorded (user and system,
+as the system counts it, with the share of one core) and since it started,
+its cores and `GOMAXPROCS`, and the goroutine count. Go records one CPU
+profile at a time, so a second `magpie cpu` while one records is refused
+409; one whose caller hangs up stops recording. The route answers the same
+callers as `/v1/magpie/heap`, and refuses the same ones 403.
+
 A gateway key held to a budget, to some models or to some accounts is told
 none of this magpie's accounts (#1981): `/v1/magpie/quotas`,
 `/v1/magpie/quotas/history`, `/v1/magpie/quotas/cards`,
