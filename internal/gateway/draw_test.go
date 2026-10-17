@@ -755,3 +755,43 @@ func TestDrawGoesWhereTheVendorPointsIt(t *testing.T) {
 		}
 	}
 }
+
+// An account's own list of models (#474) is picked from the chat models
+// its editor shows, which a ChatGPT account's GPT Image is never among: a
+// list kept for some chat models doesn't turn its drawing away as "set
+// not to be served by any account" (heyiwei5 on X). Each account draws
+// as it did with no list.
+func TestCodexDrawsPastAccountModelLists(t *testing.T) {
+	codexSignedIn(t, "plus@example.com")
+	var mu sync.Mutex
+	var tried []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		mu.Lock()
+		tried = append(tried, r.Header.Get("chatgpt-account-id"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"created":1,"data":[{"b64_json":"`+base64.StdEncoding.EncodeToString(pngBytes)+`"}]}`)
+	}))
+	defer up.Close()
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	defer func() { provider.CodexBase = was }()
+	for _, u := range []string{"me@example.com", "plus@example.com"} {
+		if err := provider.SetAccountModels("codex", u, []string{"gpt-5.5"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := New()
+	for _, model := range []string{"codex/gpt-image-2", "codex/gpt-image-2.5"} {
+		code, a, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"`+model+`","prompt":"a magpie"}`)
+		if code != 200 || len(a.Data) != 1 {
+			t.Fatalf("%s: %d %s", model, code, raw)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(tried) != 2 {
+		t.Fatalf("asked %v", tried)
+	}
+}
