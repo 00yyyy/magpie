@@ -4920,7 +4920,22 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		// it is one the plugin says the model is served at (#2514)
 		own := p.Preset == "" && p.Account == nil || p.IsRemoteMagpie()
 		if p.IsPlugin() {
-			own = req.Tier != "" && (to == provider.Chat || to == provider.Responses) && slices.Contains(provider.PluginTiers(p, model), req.Tier)
+			// fast mode in Claude's words (speed "fast", a fast pick from
+			// an agent on its API) is the priority tier, or ultrafast for
+			// a pick sent Ultrafast, on a plugin that says the model is
+			// served at it (Lovest on Discord)
+			tier := req.Tier
+			if tier == "" && req.Fast {
+				tier = "priority"
+				if req.Ultrafast || isUltra(ctx) {
+					tier = "ultrafast"
+				}
+			}
+			own = tier != "" && (to == provider.Chat || to == provider.Responses) && slices.Contains(provider.PluginTiers(p, model), tier)
+			if own && tier != req.Tier {
+				r := *req
+				r.Tier, req = tier, &r
+			}
 		}
 		if own := own && s.fits(p.ID, tierField, to); own != req.OwnTier {
 			r := *req
