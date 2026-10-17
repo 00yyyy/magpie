@@ -3572,15 +3572,33 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// compaction is on, goes as it came: a translation would leave it out
 	// (#1099)
 	keep := s.keepsCompaction(from, p, model, body)
+	// Codex's custom tools, to a model that turned them away before
+	// (custom_tool.go, #2656): translated on the client's own API, which
+	// offers them as functions
+	customOff := func() bool {
+		return from == provider.Responses && !s.fits(p.ID, customToolRefused(model), from) && hasCustomTool(body)
+	}
+	if relay && !keep && customOff() {
+		relay, ownAPI = false, true
+	}
 	if keep && relayable {
 		relay, ownAPI = true, false
 	}
 	if relay {
 		call.To = from
-		if status, msg, done := s.passthrough(w, r, p, from, model, body, &call.Usage); done {
+		status, msg, done := s.passthrough(w, r, p, from, model, body, &call.Usage)
+		if done {
 			return status, msg
 		}
-		// the model isn't served on the client's own API: speak another
+		// the model isn't served on the client's own API: speak another;
+		// or it turned the custom tools away just now: speak it translated,
+		// except a compaction, which a translation would leave out
+		if customOff() {
+			if keep {
+				return writeError(w, from, status, msg), msg
+			}
+			ownAPI = true
+		}
 	}
 	if keep {
 		msg := fmt.Sprintf("%s doesn't serve %s on the Responses API, so Codex's native compaction can't be asked of it", p.Name, model)
@@ -4243,6 +4261,15 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
+		if proto == provider.Responses && customToolRefusal.Match(wordsOf(b)) && hasCustomTool(body) {
+			// a custom tool turned away (DeepSeek's "Unsupported custom
+			// tool: 'exec'", #2656): the request is translated on the same
+			// API, its custom tools offered as functions (custom_tool.go),
+			// and from then on
+			res.Body.Close()
+			s.markUnfit(p.ID, customToolRefused(model), proto)
+			return res.StatusCode, p.Name + ": " + provider.APIError(b, res.Status), false
+		}
 		fs := refusedOptional(res.StatusCode, b, body)
 		// and an earlier turn's thinking sent back inside messages, which
 		// DeepSeek and Kimi want and a stricter vendor turns away (#494)

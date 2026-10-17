@@ -1133,7 +1133,9 @@ func promptRefused(status int, body []byte) bool {
 // (#350), OpenAI's "Unknown parameter", and a limit of its own on a tool's
 // JSON schema: OpenCode Go's 400 "JSON schema exceeds the maximum nesting
 // depth of 10 levels" on muse-spark-1.3-contributor for Claude Code's MCP
-// tools (#1870), which another member's model may take as they are. A
+// tools (#1870), which another member's model may take as they are; and a
+// custom tool turned away (customToolRefusal, DeepSeek's "Unsupported
+// custom tool: 'exec'", #2656) where no translation took it in. A
 // request missing what every API requires ("field required") or too long
 // for the model isn't one.
 var shapeWords = regexp.MustCompile(`(?i)failed to deserialize|unknown (item |content |input )?(type|variant|field|parameter)|unknown_parameter|unrecognized (request argument|field|parameter)|extra (inputs|fields) are not permitted|additional properties are not allowed|schema exceeds the maximum (nesting )?depth|schema[^"]{0,60}\bnesting depth\b`)
@@ -1160,7 +1162,7 @@ var unsaidWords = regexp.MustCompile(`(?i)(^|"|\\"|: )invalid request error trac
 func shapeRefused(status int, body []byte) bool {
 	// the words are matched decoded, too (#1669)
 	body = wordsOf(body)
-	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body)) &&
+	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body) || customToolRefusal.Match(body)) &&
 		!quotaWords.Match(body) && !unservedWords.Match(body) && !refusedWords.Match(body)
 }
 
