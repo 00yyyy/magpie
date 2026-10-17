@@ -3231,8 +3231,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				continue
 			}
 		}
-		if f := failure(hw.code(), hw.errBody()); last && len(small) > 0 && pin == "" && other == nil && hw.failed() && !hw.passing && !hw.turnedAway && !hw.refused && !outgrew &&
-			(f == failQuota || f == failCredit || try.Fail == failQuota || try.Fail == failCredit) {
+		// the body is read for why last, once the try is known to have
+		// failed: a reply held whole that passed is the whole reply, and
+		// failure over a 24MB one held its client past its timeout
+		if last && len(small) > 0 && pin == "" && other == nil && hw.failed() && !hw.passing && !hw.turnedAway && !hw.refused && !outgrew &&
+			(try.Fail == failQuota || try.Fail == failCredit || slices.Contains([]string{failQuota, failCredit}, failure(hw.code(), hw.errBody()))) {
 			// every one with room is out of its allowance: those roomy
 			// left out as too small for the request are asked after all,
 			// those not resting, for the agent to be told to compact
