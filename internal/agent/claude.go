@@ -1715,16 +1715,16 @@ func claudeIn(at place) *Agent {
 				main, tiers := curTiers()
 				// its effort, if it has one, goes with it to the new model
 				_, e := tierAt(tiers[tier])
-				// the main model picked where the tier would follow another
-				// is the user's own; any other model is by itself
-				if v != "" && strings.TrimSuffix(v, "[1m]") == strings.TrimSuffix(main, "[1m]") && follow(tier, main) != main {
-					stash(map[string]string{ownKey(tier): "1"})
-				} else {
-					forget(ownKey(tier))
-				}
+				// a model picked is the user's own, the main model or the
+				// one the tier would follow too, so it stays when the main
+				// model moves (#2654: a sonnet tier given the main model
+				// read as "Same as main model" and went with its next
+				// move); only "Same as main model" follows
 				if v != "" {
+					stash(map[string]string{ownKey(tier): "1"})
 					tiers[tier] = tierWith(v, e)
 				} else {
+					forget(ownKey(tier))
 					tiers[tier] = followAt(tier, main, e)
 				}
 				return writeTiers(main, tiers)
@@ -1766,8 +1766,15 @@ func claudeIn(at place) *Agent {
 				return fmt.Errorf("subagents: %q is not a model magpie serves", v)
 			}
 			_, e := subagentAt()
-			// a pick of its own is the user's anew
-			forget(ownKey("subagent"))
+			// a model picked is the user's own, the main model too
+			// (#2654: given the main model, the subagents' was left out
+			// and they followed the main model's next move); only "Same
+			// as main model" follows
+			if v != "" {
+				stash(map[string]string{ownKey("subagent"): "1"})
+			} else {
+				forget(ownKey("subagent"))
+			}
 			return setSubagent(v, e)
 		},
 		Options: func(map[string]string) []Option {
