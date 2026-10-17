@@ -123,7 +123,8 @@ func levelsOf(intents []string, scores []float64) map[string]string {
 // jevBody is the System One request asking which of intents text is
 // (when there are any) and, when effort, how hard it is. What was said of
 // the turn before (prev) is in the state: a message that only carries on
-// from it is of its kind and wants its reasoning. work is what each
+// from it is of its kind and wants its reasoning. What was said in it
+// (prev.User, prev.Reply) is there too, for a short follow-up. work is what each
 // intent is for when they are levels (levelsOf), nil when not known.
 func jevBody(model string, intents []string, work map[string]string, prev before, effort bool, text string) []byte {
 	qs := map[string]any{}
@@ -169,6 +170,10 @@ func jevBody(model string, intents []string, work map[string]string, prev before
 	return b
 }
 
+// jevState is what Jev is told of the turn: the message, what it said of
+// the turn before, and what was said in it (turnBefore), each only when
+// there is one. A short follow-up (继续, fix that) said alone came out
+// the hardest kind (@HirotaNagai on X).
 func jevState(prev before, effort bool, text string) map[string]string {
 	st := map[string]string{"message": text}
 	if prev.Intent != "" {
@@ -176,6 +181,12 @@ func jevState(prev before, effort bool, text string) map[string]string {
 	}
 	if effort && prev.Effort != "" {
 		st["previous_message_reasoning"] = prev.Effort
+	}
+	if prev.User != "" {
+		st["previous_user_message"] = prev.User
+	}
+	if prev.Reply != "" {
+		st["previous_assistant_reply"] = prev.Reply
 	}
 	return st
 }
@@ -185,7 +196,23 @@ func intentAsk(prev before) string {
 	if prev.Intent != "" {
 		q += " A message that only carries on from the user's message before it (go on, yes, do it, fix that) is of `previous_message_kind`; one that asks for something of its own is of the kind that fits it."
 	}
-	return q
+	return q + priorAsk(prev)
+}
+
+// priorAsk is what Jev is asked to make of what came before the message,
+// naming only the state's keys that are there.
+func priorAsk(prev before) string {
+	var keys []string
+	if prev.User != "" {
+		keys = append(keys, "`previous_user_message` (the user's message before it)")
+	}
+	if prev.Reply != "" {
+		keys = append(keys, "`previous_assistant_reply` (the assistant's last reply before it)")
+	}
+	if len(keys) == 0 {
+		return ""
+	}
+	return " " + strings.Join(keys, " and ") + " are context only: judge the `message`, and when it is short or vague (go on, yes, fix that, 继续) judge the work it asks for in that context."
 }
 
 // levelAsk is intentAsk for levels, which, told what each is for, are
@@ -203,7 +230,7 @@ func effortAsk(prev before) string {
 	if prev.Effort != "" {
 		q += " A message that only carries on from the user's message before it (go on, yes, do it) needs what that one did, `previous_message_reasoning` (low, medium, high or xhigh)."
 	}
-	return q
+	return q + priorAsk(prev)
 }
 
 // readJev is the verdict in a System One reply to jevBody, the answer
