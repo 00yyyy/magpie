@@ -266,6 +266,31 @@ func TestClaudeSignInGoesThroughItsProxy(t *testing.T) {
 	}
 }
 
+// A Claude subscription behind a socks5:// proxy (#2651): Claude Code is
+// built with Bun, which takes only http:// and https:// proxies and failed
+// as UnsupportedProxyProtocol, so its sign-in, and the auth status read
+// after it, are given magpie's HTTP bridge to the SOCKS proxy.
+func TestClaudeSignInBridgesASOCKSProxy(t *testing.T) {
+	claudeHome(t)
+	noAnthropic(t)
+	exe := fakeClaudeLogin(t, fakeClaudeAccount{email: "s@example.com", name: "S", plan: "max", refresh: "sk-ant-ort01-s"}, "", true)
+	setProxies(t, "claude", "socks5://127.0.0.1:1", nil)
+	st, err := StartSignIn("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finishInBrowser(t, st, "the-code")
+	if st = waitDone(t, st.ID); st.State != "done" {
+		t.Fatalf("state %+v", st)
+	}
+	for _, f := range []string{"login-proxy", "status-proxy"} {
+		b, _ := os.ReadFile(filepath.Join(filepath.Dir(exe), f))
+		if !strings.HasPrefix(string(b), "http://127.0.0.1:") {
+			t.Fatalf("%s: Claude Code ran with HTTPS_PROXY=%q", f, b)
+		}
+	}
+}
+
 // Signing out of a ChatGPT account, OpenAI revokes its refresh token
 // through the account's own proxy, the exit its sign-in and requests left
 // through, not the global one (#1663).

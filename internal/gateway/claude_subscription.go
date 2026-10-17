@@ -537,6 +537,14 @@ func (c claudeCLI) env(env []string, configDir string) []string {
 	return c.wsl.Env(env, names...)
 }
 
+// proxied is env told the proxy a run for ctx goes through (claudeProxy),
+// a SOCKS one bridged: Claude Code is built with Bun, which takes only
+// http:// and https:// proxies (#2651). One in a WSL distro reaches the
+// bridge only when the distro shares Windows' loopback.
+func (c claudeCLI) proxied(ctx context.Context, env []string) ([]string, error) {
+	return netproxy.EnvForBunWith(claudeProxy(ctx), env, c.wsl == nil || c.wsl.Host == "")
+}
+
 // file is where this Claude Code reads a file of magpie's at path: one in
 // WSL under the distro's mount of the drive.
 func (c claudeCLI) file(path string) string {
@@ -696,7 +704,11 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	}
 	cmd := binary.command(context.Background(), args...)
 	cmd.Dir = work
-	env := netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ()))
+	env, err := binary.proxied(ctx, cleanClaudeEnv(os.Environ()))
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	if req.clientCache != nil {
 		env = append(env, "DISABLE_PROMPT_CACHING=1")
 	}
