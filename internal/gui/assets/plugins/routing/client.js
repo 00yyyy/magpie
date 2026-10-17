@@ -848,6 +848,10 @@ function routingPage(part) {
     if (tr.fixed) return r.effort && r.effort !== tr.effort
       ? t("{level} reasoning, fixed on this model in the group; {agent} asked for {asked}", { level: tr.effort, agent, asked: r.effort })
       : t("{level} reasoning, fixed on this model in the group", { level: tr.effort });
+    // the rule that sent the turn here asks its model for one (#2633)
+    if (tr.ruleEffort) return r.effort && r.effort !== tr.effort
+      ? t("{level} reasoning, set by the rule; {agent} asked for {asked}", { level: tr.effort, agent, asked: r.effort })
+      : t("{level} reasoning, set by the rule", { level: tr.effort });
     if (tr.picked) return r.effort && r.effort !== tr.effort
       ? t("{level} reasoning, picked for the turn; {agent} asked for {asked}", { level: tr.effort, agent, asked: r.effort })
       : t("{level} reasoning, picked for the turn", { level: tr.effort });
@@ -864,6 +868,8 @@ function routingPage(part) {
     const agent = agentName(r.agent);
     return said + (/[。！？]$/.test(said) ? "" : " ") + (tr.fixed
       ? t("The group fixes this model at {fixed} reasoning, in place of the {asked} {agent} asked for.", { fixed: tr.fixed, asked: r.effort, agent })
+      : tr.ruleEffort
+      ? t("The rule asks this model for {level} reasoning, in place of the {asked} {agent} asked for.", { level: tr.effort, asked: r.effort, agent })
       : tr.picked
       ? t("The turn's pick replaced the {asked} {agent} asked for.", { asked: r.effort, agent })
       : t("{level} is the model's nearest to the {asked} {agent} asked for.", { level: tr.effort, asked: r.effort, agent }));
@@ -4168,7 +4174,7 @@ function routingPage(part) {
     if (g.firstToken > 0 && !manual) tags.append(el("span", "tag", t("Next after {n} without a first token", { n: took(g.firstToken * 1000) })));
     if (g.rules?.length) {
       const r = el("span", "tag" + (manual ? " idle" : ""), t(g.rules.length === 1 ? "1 rule" : "{n} rules", { n: g.rules.length }));
-      r.title = (manual ? t("The rules wait while you pick the model by hand.") + "\n" : "") + g.rules.map((x, i) => `${i + 1}. ${ruleText(x)} → ${x.pause ? t("pause") + " " : ""}${memberLabel(g, x.use)}`).join("\n");
+      r.title = (manual ? t("The rules wait while you pick the model by hand.") + "\n" : "") + g.rules.map((x, i) => `${i + 1}. ${ruleText(x)} → ${x.pause ? t("pause") + " " : ""}${memberLabel(g, x.use)}${x.useEffort ? " · " + t("{level} reasoning", { level: x.useEffort }) : ""}`).join("\n");
       tags.append(r);
     }
     if (g.disabled) tags.append(el("span", "tag idle", t("switched off")));
@@ -4816,7 +4822,7 @@ function routingPage(part) {
     // (the owner, 10-14: every rule showed all ten conditions, empty —
     // "用户要输入、填写这么多东西，太恐怖了"; CherryL1quor on X took Jev for
     // the effort alone while the intent sat among the others).
-    const RULE_PAUSE = "M6 4.5v7M10 4.5v7", RULE_SEND = "M3 8h9M8.5 4.5 12 8l-3.5 3.5";
+    const RULE_PAUSE = "M6 4.5v7M10 4.5v7", RULE_SEND = "M3 8h9M8.5 4.5 12 8l-3.5 3.5", RULE_EFFORT = "M3 11.5a5 5 0 0 1 10 0M8 11.5l2.5-3.5";
     // how a part works, said under an ⓘ beside it rather than in a
     // paragraph under it: on hover, and read out with focus
     const infoTip = (text) => {
@@ -5129,7 +5135,7 @@ function routingPage(part) {
           r.pause = v === "pause";
           // what a pause doesn't take is cleared, not kept out of sight
           if (r.pause) {
-            Object.assign(r, { tokens: 0, images: false, effort: "", intent: "", compact: false });
+            Object.assign(r, { tokens: 0, images: false, effort: "", intent: "", compact: false, useEffort: "" });
             for (const [k, , p] of COND_KINDS) if (!p) openedOf(r).delete(k);
           }
           drawRules();
@@ -5142,7 +5148,22 @@ function routingPage(part) {
           ], setAct, "pause");
           then.append(act);
         }
-        then.append(ub, hint);
+        then.append(ub);
+        // the reasoning the rule asks its model for (#2633): an intent
+        // picks the model and its effort as a pair. Unset, the model is
+        // asked as the agent asked, and nothing is drawn; it is set from
+        // the rule's ⋯ and shown beside the model once it is
+        const pickEffort = (anchor, ev) => pickFrom("reasoning", anchor, ev, [
+          { value: "", label: t("As the agent asks"), note: t("the rule sets none") },
+          ...EFFORTS.map((v) => ({ value: v, label: fixedWords(v), note: t("whatever the agent asks") })),
+        ], (v) => { r.useEffort = v; drawRules(); }, r.useEffort || "");
+        if (!r.pause && r.useEffort) {
+          const eb = el("button", "rt-cond on rt-useeffort", fixedWords(r.useEffort));
+          eb.title = t("The rule asks the model for {level} reasoning whatever the agent asks, at the model's nearest level; a model whose levels aren't known is asked as the agent asked", { level: r.useEffort });
+          eb.onclick = (ev) => pickEffort(eb, ev);
+          then.append(eb);
+        }
+        then.append(hint);
         // the rule's own acts, under ⋯ as on the groups' cards: its place
         // in the order, sending or pausing, and taking it out
         const more = el("button", "icon rt-rmore");
@@ -5159,6 +5180,7 @@ function routingPage(part) {
           openRowMenu(more, [
             { name: "Move up", icon: MOVE_UP, off: i === 0, run: () => move(i - 1) },
             { name: "Move down", icon: MOVE_DOWN, off: i === d.rules.length - 1, run: () => move(i + 1) },
+            ...(r.pause ? [] : [{ name: r.useEffort ? "Change its reasoning" : "Set its reasoning", icon: RULE_EFFORT, sep: true, run: (ev) => pickEffort(more, ev) }]),
             r.pause
               ? { name: "Send to the model instead", icon: RULE_SEND, sep: true, run: () => setAct("send") }
               : { name: "Pause the model instead", icon: RULE_PAUSE, sep: true, run: () => setAct("pause") },
@@ -5172,7 +5194,7 @@ function routingPage(part) {
       focusCond = null;
       focus?.();
     };
-    const newRule = () => ({ use: d.members[d.members.length - 1], pause: false, tokens: 0, images: false, effort: "", agents: [], intent: "", compact: false, folders: [], exceptFolders: [], time: null });
+    const newRule = () => ({ use: d.members[d.members.length - 1], pause: false, useEffort: "", tokens: 0, images: false, effort: "", agents: [], intent: "", compact: false, folders: [], exceptFolders: [], time: null });
     // a new rule asks for an intent first, its box focused and the
     // classifier shown (Jev picked when there is one); any other condition
     // is a + away, and the intent an × away
