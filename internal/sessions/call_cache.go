@@ -176,7 +176,8 @@ func keepCalls(path string, st *callFile) {
 // wholeCallReaders read an agent's calls from one session file at a time,
 // rather than a line at a time: its calls are not lines, or its file cannot
 // be read on from the middle of one. Every agent in callSources that is not
-// in callFiles needs an entry here, or its calls are never read.
+// in callFiles needs an entry here or in lineCallReaders, or its calls are
+// never read.
 var wholeCallReaders = map[string]func(file) (*callFile, bool){
 	"opencode":  readOpenCodeCalls,
 	"zcode":     readZCodeCalls,
@@ -185,10 +186,25 @@ var wholeCallReaders = map[string]func(file) (*callFile, bool){
 	"codebuddy": readWorkBuddyCalls, // #1779
 	// #1605
 	"minimax-code": readMiniMaxCalls,
-	"kimi":         readKimiCalls, // #1607
-	"pi":           readPiCalls,   // #1951
+	"pi":           readPiCalls, // #1951
 	"omp":          readPiCalls,
 	"agy":          readAgyCalls, // #2097
+}
+
+// lineCallReader reads an agent's calls a line at a time, as Claude Code's
+// and Codex's are: a file that only grew is read on from where the last read
+// left off (prepareCalls), and only the calls it adds are written to the
+// disk shard. begin starts a file read from its start; line reads one whole
+// line of it. Nothing a line leaves for the next may live outside st.
+type lineCallReader struct {
+	begin func(st *callFile, f file)
+	line  func(st *callFile, b []byte)
+}
+
+// lineCallReaders are the agents in callSources, beside callFiles' own,
+// whose calls are each one line of a file only appended to.
+var lineCallReaders = map[string]lineCallReader{
+	"kimi": {kimiCallsBegin, kimiCallLine}, // #1607
 }
 
 func readCalls(f file) *callFile {
@@ -247,18 +263,26 @@ func readCalls(f file) *callFile {
 	if continued {
 		start = len(old.Calls)
 	}
+	line := claudeCallLine
+	if f.agent == "codex" {
+		line = codexCallLine
+	} else if r, ok := lineCallReaders[f.agent]; ok {
+		if st.Off == 0 {
+			r.begin(st, f)
+		}
+		line = r.line
+	}
 	off, err := scanAt(f.path, st.Off, func(b []byte) bool { return callHead(st, b) }, func(b []byte, start, end int64) bool {
 		st.At, st.End = start, end
-		if f.agent == "codex" {
-			codexCallLine(st, b)
-		} else {
-			claudeCallLine(st, b)
-		}
+		line(st, b)
 		return true
 	})
 	if err == nil {
 		st.Off, st.Size, st.Mod = off, f.size, f.mod.UnixNano()
-		st.ContentHash = prefixHash(f.path, f.size)
+		// the bytes read, not the listed size: a listing may fold another
+		// file's size into this one's (Kimi's state.json), and hashing past
+		// the end would leave no hash to read on from
+		st.ContentHash = prefixHash(f.path, off)
 		writeCalls(st, start, continued)
 	}
 	// Do not turn a one-time historical scan into an indefinitely retained
