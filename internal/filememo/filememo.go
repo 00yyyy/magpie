@@ -44,7 +44,22 @@ var (
 	// on again (steady.Stat): one there before and not now may be being
 	// replaced (Windows), and is
 	gone = map[string]bool{}
+	// missing is the files found not there while a request held what was
+	// read, when, and in which of Forget's generations: taken as still
+	// not there as a file found unchanged is, not looked at again. A
+	// provider with no list fetched has no file of one, and a request
+	// asked after it for each of its models, each time a look at the disk
+	// (a third of a request's CPU with 30 providers of 60 models).
+	missing = map[string]missingFile{}
+	// stats counts the looks at the disk, for tests
+	stats int
 )
+
+type missingFile struct {
+	err     error
+	checked time.Time
+	gen     uint64
+}
 
 // heldFor is how long a file found unchanged is taken as unchanged, while
 // a request holds what was read, before it is looked at again.
@@ -86,6 +101,7 @@ func Look(path string) {
 			seen[k] = e
 		}
 	}
+	delete(missing, path)
 }
 
 // Read is parse of the file at path, from what it gave last time when the
@@ -101,10 +117,21 @@ func Read[T any](kind, path string, parse func([]byte) (T, error)) (T, error) {
 		mu.Unlock()
 		return e.v.(T), nil
 	}
+	if m, ok := missing[path]; ok && holds > 0 && m.gen == gen && time.Since(m.checked) < heldFor {
+		mu.Unlock()
+		return zero, m.err
+	}
 	g := gen
 	mu.Unlock()
 	fi, err := statFile(path)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			mu.Lock()
+			if holds > 0 && g == gen {
+				missing[path] = missingFile{err, time.Now(), g}
+			}
+			mu.Unlock()
+		}
 		return zero, err
 	}
 	if ok && e.mod.Equal(fi.ModTime()) && e.size == fi.Size() && e.raw == nil {
@@ -153,6 +180,7 @@ func Read[T any](kind, path string, parse func([]byte) (T, error)) (T, error) {
 func statFile(path string) (os.FileInfo, error) {
 	mu.Lock()
 	wasGone := gone[path]
+	stats++
 	mu.Unlock()
 	var fi os.FileInfo
 	var err error
@@ -166,6 +194,7 @@ func statFile(path string) (os.FileInfo, error) {
 		gone[path] = true
 	} else {
 		delete(gone, path)
+		delete(missing, path)
 	}
 	mu.Unlock()
 	return fi, err
