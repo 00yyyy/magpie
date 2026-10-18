@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // endProbesOnSignal: the probes magpie asks a CLI with lead a session of
@@ -39,6 +40,7 @@ func endProbesOnSignal() {
 			handled := s == os.Interrupt && interrupts.Load() > 0
 			proc.EndProbes()
 			if !handled {
+				provider.FlushServed() // a gateway's last answers, noted and not yet written
 				die(s)
 			}
 		}

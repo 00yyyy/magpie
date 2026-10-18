@@ -591,6 +591,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		defer cancel()
 		srv.Shutdown(c)
 		s.subscription.abortAll()
+		provider.FlushServed() // what answered last, kept for the next start and the CLI
 	}()
 	for {
 		err := srv.Serve(ln)
