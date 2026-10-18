@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 )
 
@@ -91,8 +92,18 @@ func ServedID(p Provider) string {
 // many requests a second writes it once in a while, not once a request
 // (a read, a write and a rename on every answer). A crash loses what was
 // noted in that last moment; FlushServed, as the gateway ends, loses
-// nothing.
-var servedFlushAfter = 2 * time.Second
+// nothing. In a test binary it is 0, the file written at once, as it
+// was: a write waiting outlived the test that noted it and wrote into its
+// temp folder as the folder was being removed ("directory not empty").
+var servedFlushAfter = writeBehind(2 * time.Second)
+
+// writeBehind is d, or 0 in a test binary: no timer outlives a test.
+func writeBehind(d time.Duration) time.Duration {
+	if testing.Testing() {
+		return 0
+	}
+	return d
+}
 
 // servedFlush is the write NoteServed has waiting, and the one being made.
 var servedFlush struct {
@@ -108,9 +119,12 @@ func NoteServed(p Provider, at time.Time) {
 	id := ServedID(p)
 	path := servedPath()
 	servedAt.Lock()
-	moved := false
+	moved, now := false, false
 	defer func() {
 		servedAt.Unlock()
+		if now {
+			flushServed(path)
+		}
 		if moved {
 			servedMoved()
 		}
@@ -128,7 +142,9 @@ func NoteServed(p Provider, at time.Time) {
 	}
 	if !servedFlush.pending {
 		servedFlush.pending = true
-		time.AfterFunc(servedFlushAfter, func() { flushServed(path) })
+		if now = servedFlushAfter <= 0; !now {
+			time.AfterFunc(servedFlushAfter, func() { flushServed(path) })
+		}
 	}
 }
 

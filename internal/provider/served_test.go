@@ -98,6 +98,29 @@ func TestCardsLastServed(t *testing.T) {
 	}
 }
 
+// In a test binary served.json is written as an answer is noted: a write
+// left waiting outlived the test that noted it, and wrote into its temp
+// folder as the folder was being removed (BenchmarkGroupOverhead failed
+// "TempDir RemoveAll cleanup: … directory not empty").
+func TestNoteServedInATestWritesAtOnce(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	at := time.Now().Truncate(time.Second)
+	NoteServed(Provider{ID: "dk", Key: "sk-key-0002"}, at)
+	var m map[string]time.Time
+	if b, err := os.ReadFile(servedPath()); err != nil || json.Unmarshal(b, &m) != nil || !m["dk#"+KeyID("sk-key-0002")].Equal(at) {
+		t.Fatalf("not written as the answer was noted: %v %v", err, m)
+	}
+	servedFlush.Lock()
+	pending := servedFlush.pending
+	servedFlush.Unlock()
+	if pending {
+		t.Fatal("a write left waiting past the test")
+	}
+}
+
 // A request answered isn't a read and a write of served.json: what is
 // noted is written once, within servedFlushAfter, however many requests
 // were answered meanwhile, or as the gateway ends (FlushServed); the file
@@ -117,6 +140,8 @@ func TestNoteServedWritesBehind(t *testing.T) {
 	if err := os.WriteFile(servedPath(), other, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	defer func(d time.Duration) { servedFlushAfter = d }(servedFlushAfter)
+	servedFlushAfter = 2 * time.Second // as outside a test binary
 	servedFlush.Lock()
 	writes := servedFlush.writes
 	servedFlush.Unlock()
@@ -150,7 +175,6 @@ func TestNoteServedWritesBehind(t *testing.T) {
 		t.Fatalf("file %s", b)
 	}
 	// and by itself, a moment later
-	defer func(d time.Duration) { servedFlushAfter = d }(servedFlushAfter)
 	servedFlushAfter = time.Millisecond
 	NoteServed(Provider{ID: "dk", Key: "sk-key-0001"}, now.Add(time.Second))
 	for deadline := time.Now().Add(10 * time.Second); ; {
