@@ -233,3 +233,57 @@ func TestDroidForkAcrossReads(t *testing.T) {
 		t.Fatalf("title %q", g.old.Title)
 	}
 }
+
+// Kimi Code appends to an agent's wire.jsonl: a record appended is read
+// alone, and a state.json rewritten reads nothing of the wire.
+func TestKimiReadsOnlyWhatWasAppended(t *testing.T) {
+	inZone(t, 0)
+	claude, _ := setup(t)
+	dir := filepath.Join(filepath.Dir(claude), "home", ".kimi-code")
+	kimiSessionsIn(t, dir)
+	sessions := filepath.Join(dir, "sessions")
+	slug := "wd_v14-cancel_000000000003"
+	g := &grower{t: t, files: kimiFiles, path: filepath.Join(sessions, slug, kimiCancel, "agents", "main", "wire.jsonl")}
+	rec := `{"type":"usage.record","model":"kimi-code/k3","usage":{"inputOther":40,"output":5,"inputCacheRead":900,"inputCacheCreation":0},"usageScope":"turn","time":1784687340000}` + "\n"
+	checkGrows(t, g, rec)
+
+	g.read()
+	kimiSetState(t, sessions, slug, kimiCancel, map[string]any{"title": "Cancelled twice", "isCustomTitle": true})
+	if at, end := g.read(), g.size(); at != end || g.old.Custom != "Cancelled twice" {
+		t.Fatalf("state.json changed: read from %d of %d, custom %q", at, end, g.old.Custom)
+	}
+	// the session now says it was forked: what it counted is read again
+	kimiSetState(t, sessions, slug, kimiCancel, map[string]any{"forkedFrom": kimiJune})
+	if at := g.read(); at != 0 {
+		t.Fatalf("made a fork: read from %d", at)
+	}
+}
+
+// A fork's marker that comes in a later read still ends its copy of its
+// source: what was counted before it is taken back.
+func TestKimiForkMarkerAcrossReads(t *testing.T) {
+	inZone(t, 0)
+	claude, _ := setup(t)
+	dir := filepath.Join(filepath.Dir(claude), "home", ".kimi-code")
+	kimiSessionsIn(t, dir)
+	sessions := filepath.Join(dir, "sessions")
+	slug := "wd_v14-cancel_000000000003"
+	src, err := os.ReadFile(filepath.Join(sessions, slug, kimiCancel, "agents", "main", "wire.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := "session_f0000000-0000-4000-8000-0000000000aa"
+	w := filepath.Join(sessions, slug, id, "agents", "main", "wire.jsonl")
+	os.MkdirAll(filepath.Dir(w), 0o755)
+	os.WriteFile(w, src, 0o644)
+	kimiSetState(t, sessions, slug, id, map[string]any{"cwd": "/w", "createdAt": int64(1784687000000), "title": "Again", "forkedFrom": kimiCancel})
+	g := &grower{t: t, files: kimiFiles, path: w}
+	g.read()
+	g.append(`{"type":"forked","agentId":"main","time":1791700000000}` + "\n")
+	g.read()
+	g.append(`{"type":"usage.record","model":"kimi-code/k3","usage":{"inputOther":7,"output":3,"inputCacheRead":0,"inputCacheCreation":0},"usageScope":"turn","time":1791700005000}` + "\n")
+	g.read()
+	if g.old.Models["kimi-code/k3"] != (Tokens{Input: 7, Output: 3}) || len(g.old.Models) != 1 {
+		t.Fatalf("the fork's own: %+v", g.old.Models)
+	}
+}

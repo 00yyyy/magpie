@@ -5,8 +5,8 @@ import "os"
 // tail is where a reader of a file another agent appends to left off: the
 // offset after the last whole line it handled, and enough of the file as it
 // was to know it again. A summary kept with one reads on from Off when the
-// file has only grown, instead of reading it whole again (Grok Build's
-// and Droid's sessions are kept so). A file that shrank, or whose
+// file has only grown, instead of reading it whole again (Grok Build's,
+// Droid's and Kimi Code's sessions are kept so). A file that shrank, or whose
 // start or sampled prefix is no longer what was read, is read whole again:
 // it was rewritten or replaced, not appended to.
 //

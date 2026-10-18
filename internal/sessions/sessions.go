@@ -216,6 +216,9 @@ type state struct {
 	// Droid: where its transcript was read to, and what the read carries
 	// on with
 	Droid *droidCarry `json:"droid,omitempty"`
+	// Kimi Code: where its wire file was read to, and what the read
+	// carries on with
+	Kimi *kimiCarry `json:"kimi,omitempty"`
 }
 
 // day is one local date's share of a file: tokens by model, and the time
@@ -1199,7 +1202,7 @@ func parserFor(agent string) sessionParser {
 	case "grok":
 		return sessionParser{grow: parseGrok}
 	case "kimi":
-		return sessionParser{whole: parseKimi}
+		return sessionParser{grow: parseKimi}
 	case "droid":
 		return sessionParser{grow: parseDroid}
 	case "cursor":
