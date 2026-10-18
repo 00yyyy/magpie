@@ -285,6 +285,22 @@ const hooks = [] // {spec, hooks}
 const gatewayHooks = [] // {spec, options, onRequest}
 const loaded = [] // {spec, id, error}
 const loaders = new Map() // account → options the auth loader returned
+// infos are info's answers a request is given, by account: built once, not
+// for every fetch, which asked the plugin's models hook (its vendor, once
+// its own list's time was up) before each request went. One goes with its
+// account's sign-in (forgetAccount), and all with the options the user set
+// (setProviderOptions) or a new models.dev catalog; a listing (providers)
+// puts its own in.
+const infos = new Map() // account → {gen, md, info}
+let infoGen = 0
+
+// forgetAccount drops what was made of the sign-in at key: its loader's
+// options and its info, which the next request makes again.
+function forgetAccount(key) {
+  loaders.delete(key)
+  infos.delete(key)
+  infoGen++
+}
 const sessions = new Map() // oauth sign-in in progress → its authorize result
 const inflight = new Map() // fetch id → its lifecycle and owned resources
 const renewing = new Map() // account → its sign-in's renewal under way
@@ -886,7 +902,7 @@ function setAuth(key, info) {
   changeAuth((all) => {
     all[key] = info
   })
-  loaders.delete(key)
+  forgetAccount(key)
   send({ event: "auth", provider: providerOf(key), account: key })
 }
 
@@ -894,7 +910,7 @@ function removeAuth(key) {
   changeAuth((all) => {
     delete all[key]
   })
-  loaders.delete(key)
+  forgetAccount(key)
   send({ event: "auth", provider: providerOf(key), account: key })
 }
 
@@ -984,8 +1000,8 @@ function settle(provider, key) {
     return false
   })
   if (k) {
-    loaders.delete(k)
-    loaders.delete(key)
+    forgetAccount(k)
+    forgetAccount(key)
     send({ event: "auth", provider, account: k })
     return k
   }
@@ -1023,7 +1039,7 @@ function makeClient() {
             all[key] = body
           })
           if (kept !== false) {
-            loaders.delete(key)
+            forgetAccount(key)
             send({ event: "auth", provider: providerOf(key), account: key })
           }
         }
@@ -1709,6 +1725,26 @@ async function info(id, key, strict) {
   return out
 }
 
+// infoOf is info(id, key) as a request has it: the one built for the
+// account, until its sign-in or the options change. What it gives is
+// shared: the caller must not change it.
+async function infoOf(id, key) {
+  const md = mdev()
+  const had = infos.get(key)
+  if (had && had.gen === infoGen && had.md === md) return had.info
+  const gen = infoGen
+  const p = await info(id, key)
+  // a sign-in changed while it was built: the next request builds it again
+  if (gen === infoGen) infos.set(key, { gen, md, info: p })
+  return p
+}
+
+// keepInfo keeps p, info(id, key) just built by a listing, for the
+// account's requests.
+function keepInfo(key, p, gen) {
+  if (gen === infoGen && !p.failed) infos.set(key, { gen, md: mdev(), info: p })
+}
+
 // shown is a plugin's string as magpie shows it: trimmed and at most n
 // characters, "" for anything else.
 const shown = (v, n) => (typeof v === "string" ? v.trim().slice(0, n) : "")
@@ -1827,12 +1863,14 @@ async function providers({ proxies } = {}) {
   for (const [id, a] of auths()) {
     const keys = accountsOf(stored, id)
     const through = (k) => proxies?.[id]?.[k ?? keys[0] ?? ""] ?? proxies?.[id]?.[""] ?? ""
+    const gen = infoGen
     const p = await via.run(through(), () => info(id))
+    keepInfo(keys[0] ?? id, p, gen)
     // each account's own models, as the built-ins read each account's: a
     // plan may serve fewer, or others, than the first account's. One that
     // can't be read is taken to have them all, or the ones it was last
     // told to have, as a built-in account whose fetch failed keeps its own.
-    const own = await Promise.all(keys.slice(1).map((k) => via.run(through(k), () => info(id, k, true)).catch((e) => ({ failed: true, listError: e?.message ?? String(e) }))))
+    const own = await Promise.all(keys.slice(1).map((k) => via.run(through(k), () => info(id, k, true)).then((q) => (keepInfo(k, q, gen), q)).catch((e) => ({ failed: true, listError: e?.message ?? String(e) }))))
     const models = { ...p.models }
     for (const q of own) for (const [k, m] of Object.entries(q?.models ?? {})) models[k] ??= m
     const ids = (q) => Object.values(q.models).filter((m) => m.status !== "deprecated").map((m) => m.id)
@@ -2106,7 +2144,7 @@ async function renew(provider, key, a) {
   })
   if (kept === false) return
   unrenewed.delete(key)
-  loaders.delete(key)
+  forgetAccount(key)
   send({ event: "auth", provider, account: key })
   send({ event: "signIn", provider, account: key, said: "renewed" })
 }
@@ -2123,7 +2161,7 @@ async function options(provider, key) {
   const stored = readAuth()[key]
   let opts = {}
   if (a?.loader && stored) {
-    const p = await info(provider, key)
+    const p = await infoOf(provider, key)
     opts = (await inScope(provider, key, () => a.loader(async () => readAuth()[key], JSON.parse(JSON.stringify(p))))) ?? {}
   }
   if (!opts.apiKey && stored?.type === "api") opts = { ...opts, apiKey: stored.key }
@@ -2180,7 +2218,7 @@ async function usageOf(provider, account) {
   const key = accountKey(provider, account)
   if (!readAuth()[key]) throw new Error("not signed in")
   await fresh(provider, key)
-  const p = await info(provider, key)
+  const p = await infoOf(provider, key)
   const u = (await inScope(provider, key, () => a.usage(async () => readAuth()[key], JSON.parse(JSON.stringify(p))))) ?? {}
   const when = (v) => {
     if (v === undefined || v === null || v === "") return ""
@@ -2255,7 +2293,7 @@ async function checkinOf(provider, account) {
   const key = accountKey(provider, account)
   if (!readAuth()[key]) throw new Error("not signed in")
   await fresh(provider, key)
-  const p = await info(provider, key)
+  const p = await infoOf(provider, key)
   const r = (await inScope(provider, key, () => a.checkin(async () => readAuth()[key], JSON.parse(JSON.stringify(p))))) ?? {}
   const num = (v) => (typeof v === "number" && isFinite(v) ? Math.max(0, v) : 0)
   const message = typeof r.message === "string" ? r.message : ""
@@ -2301,13 +2339,19 @@ async function fetchAs(id, record, key, params) {
     for (const [k, v] of Object.entries(sdkHeaders(npm, o.apiKey))) h.set(k, v)
     for (const [k, v] of Object.entries(o.headers ?? {})) h.set(k, String(v))
     for (const [k, v] of Object.entries(headers ?? {})) h.set(k, v)
-    // chat.headers: what the plugins add to the request, theirs winning
-    const p = await info(provider, key)
-    checkFetch(record)
-    const m = p.models[model] ?? { id: model, providerID: provider, api: { id: model, npm } }
-    for (const x of hooks) {
+    // chat.headers: what the plugins add to the request, theirs winning.
+    // They are told the provider as info builds it once for the account
+    // (infoOf), the one object every request is told, as OpenCode tells
+    // them the provider it keeps
+    const said = hooks.filter((x) => typeof x.hooks["chat.headers"] === "function")
+    let p, m
+    if (said.length) {
+      p = await infoOf(provider, key)
+      checkFetch(record)
+      m = p.models[model] ?? { id: model, providerID: provider, api: { id: model, npm } }
+    }
+    for (const x of said) {
       const fn = x.hooks["chat.headers"]
-      if (typeof fn !== "function") continue
       const out = { headers: {} }
       try {
         await fn(
@@ -2419,6 +2463,9 @@ const handlers = {
   // plugin reads them when it next asks (#2038)
   setProviderOptions(p) {
     chosen = p?.options ?? {}
+    // a models hook may list by them
+    infos.clear()
+    infoGen++
     return null
   },
   // check tries one account as a request would: its loader, then its
@@ -2464,7 +2511,7 @@ const handlers = {
       if (!Object.keys(out).length) return false
     })
     for (const k of Object.keys(out)) {
-      loaders.delete(k)
+      forgetAccount(k)
       send({ event: "auth", provider: providerOf(k), account: k })
     }
     return { auths: out }
@@ -2476,7 +2523,7 @@ const handlers = {
     return null
   },
   reload(p) {
-    for (const k of p.account ? [p.account] : accountsOf(readAuth(), p.provider)) loaders.delete(k)
+    for (const k of p.account ? [p.account] : accountsOf(readAuth(), p.provider)) forgetAccount(k)
     return null
   },
 }

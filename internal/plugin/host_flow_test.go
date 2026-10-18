@@ -84,7 +84,7 @@ const context = vm.createContext({
   process: { stdout, stdin: {}, exit: () => { throw Error('unexpected exit') } },
   readline: { createInterface: () => rl },
   options: async () => ({ fetch: async () => context.reply }),
-  info: async () => ({ models: {} }),
+  infoOf: async () => ({ models: {} }),
   sdkHeaders: () => ({}), bodyOf: () => undefined,
   accountKey: () => '',
   via: { run: (_, fn) => fn() }, inScope: (_, key, fn) => fn(),
@@ -225,10 +225,13 @@ async function main() {
         if (stage === 'options') { entered = true; await barrier }
         return { fetch: async () => { vendorCalls++; return context.reply } }
       }
-      context.info = async () => {
+      context.infoOf = async () => {
         if (stage === 'info') { entered = true; await barrier }
         return { models: {} }
       }
+      // a request is told the provider only for a chat.headers hook
+      run('hooks.length = 0')
+      if (stage === 'info') run('hooks.push({ spec: "t", hooks: { "chat.headers": async () => {} } })')
       fetchOne()
       await until(() => entered, 'plugin setup entered its deferred await')
       assert.equal(run('inflight.get(1).state'), 'setup')
@@ -239,7 +242,7 @@ async function main() {
       await until(idle, 'cancelled setup finishes')
       assert.equal(vendorCalls, 0, 'cancelled setup never starts vendor')
       context.options = async () => ({ fetch: async () => { vendorCalls++; return context.reply } })
-      context.info = async () => ({ models: {} })
+      context.infoOf = async () => ({ models: {} })
       fetchOne()
       await until(idle, 'healthy fetch after cancelled setup')
       assert.equal(vendorCalls, 1)
