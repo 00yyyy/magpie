@@ -716,11 +716,10 @@ let authUnread = false
 // readAuthState is the sign-ins and whether they are known: a file not
 // there is none, known; one that doesn't read is its .bak's, known, or
 // none, unknown.
-function readAuthState() {
-  const buf = readFileSteady(authPath)
+function readAuthState(buf = readFileSteady(authPath)) {
   if (buf === null) return { all: {}, known: true }
   const v = parseAuth(buf.toString("utf8"))
-  if (v) return { all: v, known: true }
+  if (v) return { all: v, known: true, own: true }
   const why = describeBad(buf)
   let bak = null
   try {
@@ -741,8 +740,41 @@ function readAuthState() {
   return { all: {}, known: false }
 }
 
+// authSeen is plugin-auth.json as last parsed, kept while the file has the
+// same time, size and inode: every request read and parsed it two or three
+// times (its account, its renewal, the plugin's getAuth), ~0.6 ms each for
+// a dozen sign-ins. While the file's time is too recent for a second write
+// to stamp a later one (Linux's clock is a tick coarse), its bytes are kept
+// and compared too, as Go's filememo does.
+let authSeen = null // {mtimeMs, size, ino, raw, all}
+const AUTH_SETTLED = 2000
+
+// readAuth is the sign-ins, shared: the caller must not change them, and
+// hands a plugin a copy (authCopy).
 function readAuth() {
-  return readAuthState().all
+  let st = null
+  try {
+    st = fs.statSync(authPath)
+  } catch {}
+  const e = authSeen
+  const same = st && e && e.mtimeMs === st.mtimeMs && e.size === st.size && e.ino === st.ino
+  if (same && !e.raw) return e.all
+  const buf = readFileSteady(authPath)
+  if (same && buf && buf.equals(e.raw)) {
+    if (Date.now() - e.mtimeMs > AUTH_SETTLED) e.raw = null
+    return e.all
+  }
+  const s = readAuthState(buf)
+  authSeen = st && s.own ? { mtimeMs: st.mtimeMs, size: st.size, ino: st.ino, raw: Date.now() - st.mtimeMs > AUTH_SETTLED ? null : buf, all: s.all } : null
+  return s.all
+}
+
+// authCopy is readAuth's sign-ins, or the one at key, the plugin's own to
+// change.
+function authCopy(key) {
+  const all = readAuth()
+  const v = key === undefined ? all : all[key]
+  return v === undefined ? undefined : structuredClone(v)
 }
 
 // writeDurable replaces p with data through a temp file flushed to the
@@ -1172,7 +1204,7 @@ async function loadPlugins(list) {
   }
   const pis = pi ? list.filter((p) => pi.isPi(p.target)) : []
   if (pis.length) {
-    const h = { readAuth, changeAuth, keyFor, send, directory }
+    const h = { readAuth: authCopy, changeAuth, keyFor, send, directory }
     const got = await pi.load(h, pis).catch((e) => pis.map((p) => ({ spec: p.spec, error: String(e?.stack ?? e) })))
     for (const r of got) {
       for (const x of r.hooks ?? []) hooks.push(x)
@@ -1692,7 +1724,7 @@ async function info(id, key, strict) {
     try {
       const given = JSON.parse(JSON.stringify(out))
       const l = { tried: false, lastOk: false }
-      const next = await listing.run(l, () => inScope(id, k, () => ph.models(given, { auth: all[k] })))
+      const next = await listing.run(l, () => inScope(id, k, () => ph.models(given, { auth: authCopy(k) })))
       // a hook that asked its vendor, got no list and gave back the one it
       // was given fell back: magpie keeps the list it had, as a built-in
       // whose fetch failed keeps the one it fetched last; so does one that
@@ -2162,7 +2194,7 @@ async function options(provider, key) {
   let opts = {}
   if (a?.loader && stored) {
     const p = await infoOf(provider, key)
-    opts = (await inScope(provider, key, () => a.loader(async () => readAuth()[key], JSON.parse(JSON.stringify(p))))) ?? {}
+    opts = (await inScope(provider, key, () => a.loader(async () => authCopy(key), JSON.parse(JSON.stringify(p))))) ?? {}
   }
   if (!opts.apiKey && stored?.type === "api") opts = { ...opts, apiKey: stored.key }
   loaders.set(key, opts)
@@ -2219,7 +2251,7 @@ async function usageOf(provider, account) {
   if (!readAuth()[key]) throw new Error("not signed in")
   await fresh(provider, key)
   const p = await infoOf(provider, key)
-  const u = (await inScope(provider, key, () => a.usage(async () => readAuth()[key], JSON.parse(JSON.stringify(p))))) ?? {}
+  const u = (await inScope(provider, key, () => a.usage(async () => authCopy(key), JSON.parse(JSON.stringify(p))))) ?? {}
   const when = (v) => {
     if (v === undefined || v === null || v === "") return ""
     const d = new Date(typeof v === "number" && v < 1e11 ? v * 1000 : v)
@@ -2294,7 +2326,7 @@ async function checkinOf(provider, account) {
   if (!readAuth()[key]) throw new Error("not signed in")
   await fresh(provider, key)
   const p = await infoOf(provider, key)
-  const r = (await inScope(provider, key, () => a.checkin(async () => readAuth()[key], JSON.parse(JSON.stringify(p))))) ?? {}
+  const r = (await inScope(provider, key, () => a.checkin(async () => authCopy(key), JSON.parse(JSON.stringify(p))))) ?? {}
   const num = (v) => (typeof v === "number" && isFinite(v) ? Math.max(0, v) : 0)
   const message = typeof r.message === "string" ? r.message : ""
   if (!checkinOutcomes.includes(r.outcome)) {
