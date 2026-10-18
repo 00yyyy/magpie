@@ -5,14 +5,14 @@ import "os"
 // tail is where a reader of a file another agent appends to left off: the
 // offset after the last whole line it handled, and enough of the file as it
 // was to know it again. A summary kept with one reads on from Off when the
-// file has only grown, instead of reading it whole again (Grok Build's,
-// Droid's and Kimi Code's sessions are kept so). A file that shrank, or whose
-// start or sampled prefix is no longer what was read, is read whole again:
-// it was rewritten or replaced, not appended to.
+// file has only grown, instead of reading it whole again (dsh's, Grok
+// Build's, Droid's and Kimi Code's sessions are kept so). A file that
+// shrank, or whose start or sampled prefix is no longer what was read, is
+// read whole again: it was rewritten or replaced, not appended to.
 //
-// A packed file (frames of zstd) is read on from the frame at Off, Skip
-// bytes into what that frame holds, and Size there is the end of that frame:
-// the bytes hashed always take in what is read again.
+// A packed file (frames of zstd, frames.go) is read on from the frame at
+// Off, Skip bytes into what that frame holds, and Size there is the end of
+// that frame: the bytes hashed always take in what is read again.
 type tail struct {
 	Off      int64  `json:"off"`
 	Skip     int64  `json:"skip,omitempty"`

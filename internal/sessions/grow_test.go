@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 // grower reads one session file as refresh does, each parse on from the
@@ -285,5 +287,116 @@ func TestKimiForkMarkerAcrossReads(t *testing.T) {
 	g.read()
 	if g.old.Models["kimi-code/k3"] != (Tokens{Input: 7, Output: 3}) || len(g.old.Models) != 1 {
 		t.Fatalf("the fork's own: %+v", g.old.Models)
+	}
+}
+
+const dshReply = `{"type":"assistant/message","seq":6,"time":1790503290000,"data":{"message":{"source":{"model":"deepseek-v4-flash"}},"usage":{"inputTokens":1,"outputTokens":1,"cacheReadTokens":0}}}` + "\n"
+
+// dsh appends to a session file a line at a time: a reply is read alone.
+func TestDshReadsOnlyWhatWasAppended(t *testing.T) {
+	inZone(t, 0)
+	home := setupAgents(t)
+	p := filepath.Join(home, ".dsh", "sessions", "work-dsh-3f2a", "dsh-a", "session.v3.jsonl")
+	checkGrows(t, &grower{t: t, files: dshFiles, path: p}, dshReply)
+}
+
+// Packed, dsh appends a frame of lines at a time: a frame appended is read
+// alone, from where it starts; a frame not yet written whole waits, and so
+// does a line a frame ends inside of, read on from the frame it starts in.
+func TestDshPackedReadsOnlyWhatWasAppended(t *testing.T) {
+	inZone(t, 0)
+	home := setupAgents(t)
+	plain := filepath.Join(home, ".dsh", "sessions", "work-dsh-3f2a", "dsh-a", "session.v3.jsonl")
+	b, err := os.ReadFile(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(plain)
+	enc, _ := zstd.NewWriter(nil)
+	defer enc.Close()
+	frame := func(s string) []byte { return enc.EncodeAll([]byte(s), nil) }
+	p := plain + ".zstd"
+	half := bytes.IndexByte(b[len(b)/2:], '\n') + len(b)/2 + 1
+	orig := append(frame(string(b[:half])), frame(string(b[half:]))...)
+	os.WriteFile(p, orig, 0o644)
+	g := &grower{t: t, files: dshFiles, path: p}
+	if at := g.read(); at != 0 {
+		t.Fatalf("first read started at %d", at)
+	}
+	reply := func(seq int) string {
+		return fmt.Sprintf(`{"type":"assistant/message","seq":%d,"time":%d,"data":{"message":{"source":{"model":"deepseek-v4-flash"}},"usage":{"inputTokens":%d,"outputTokens":1,"cacheReadTokens":0}}}`+"\n", seq, 1790503290000+int64(seq)*1000, seq)
+	}
+	// a frame appended: only it is read
+	was := g.size()
+	g.append(string(frame(reply(6))))
+	if at := g.read(); at != was {
+		t.Fatalf("after a frame appended to %d bytes, read from %d", was, at)
+	}
+	// half a frame, still being written: it waits for the rest
+	was = g.size()
+	f := frame(reply(7))
+	g.append(string(f[:len(f)/2]))
+	if at := g.read(); at != was {
+		t.Fatalf("with half a frame at %d, read from %d", was, at)
+	}
+	g.append(string(f[len(f)/2:]))
+	if at := g.read(); at != was {
+		t.Fatalf("the half frame finished at %d, read from %d", was, at)
+	}
+	// a frame that ends inside a line: the line goes on in the next
+	// frame, and the next read starts at the frame it starts in, past
+	// what of that frame it counted
+	was = g.size()
+	r9 := reply(9)
+	g.append(string(frame(reply(8) + r9[:20])))
+	if at := g.read(); at != was {
+		t.Fatalf("a frame ending in a line at %d, read from %d", was, at)
+	}
+	g.append(string(frame(r9[20:])))
+	if at := g.read(); at != was {
+		t.Fatalf("the line finished in the next frame, read from %d, not its frame's %d", at, was)
+	}
+	if m := g.old.Models["deepseek-v4-flash"]; m.Input != 10+6+7+8+9 {
+		t.Fatalf("flash, each reply once: %+v", m)
+	}
+	// cut short: read whole again
+	os.WriteFile(p, orig, 0o644)
+	if at := g.read(); at != 0 {
+		t.Fatalf("cut short, read from %d", at)
+	}
+	// replaced by one longer, its first frame changed: read whole
+	g.append(string(frame(reply(6))))
+	g.read()
+	other := append(frame(string(bytes.Replace(b[:half], []byte("house rules"), []byte("house_rules"), 1))), frame(string(b[half:]))...)
+	for len(other) <= int(g.size()) {
+		other = append(other, frame(reply(6))...)
+	}
+	os.WriteFile(p, other, 0o644)
+	if at := g.read(); at != 0 {
+		t.Fatalf("replaced, read from %d", at)
+	}
+}
+
+// A fork's end-seed that comes in a later read still ends what it was
+// seeded with: what was counted before it is its source's.
+func TestDshEndSeedAcrossReads(t *testing.T) {
+	inZone(t, 0)
+	home := setupAgents(t)
+	p := filepath.Join(home, ".dsh", "sessions", "work-dsh-3f2a", "dsh-c", "session.v3.jsonl")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := bytes.Index(b, []byte(`{"type":"session/end-seed"`))
+	rest := bytes.IndexByte(b[cut:], '\n') + cut + 1
+	os.WriteFile(p, b[:cut], 0o644)
+	g := &grower{t: t, files: dshFiles, path: p}
+	g.read()
+	g.append(string(b[cut:rest]))
+	g.read()
+	g.append(string(b[rest:]))
+	g.read()
+	if m := g.old.Models["deepseek-v4-pro"]; m.Input != 50 || len(g.old.Models) != 1 || g.old.Title != "Tidy the build script" {
+		t.Fatalf("the fork's own: %+v, title %q", g.old.Models, g.old.Title)
 	}
 }

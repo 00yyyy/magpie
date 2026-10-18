@@ -219,6 +219,8 @@ type state struct {
 	// Kimi Code: where its wire file was read to, and what the read
 	// carries on with
 	Kimi *kimiCarry `json:"kimi,omitempty"`
+	// dsh: where its file was read to, and its header
+	Dsh *dshCarry `json:"dsh,omitempty"`
 }
 
 // day is one local date's share of a file: tokens by model, and the time
@@ -1196,7 +1198,7 @@ func parserFor(agent string) sessionParser {
 	case "opencode", "zcode":
 		return sessionParser{whole: parseOpenCode}
 	case "dsh":
-		return sessionParser{whole: parseDsh}
+		return sessionParser{grow: parseDsh}
 	case "cline":
 		return sessionParser{whole: parseCline}
 	case "grok":
