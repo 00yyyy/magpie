@@ -3540,6 +3540,14 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if relay && searchAsked(from, body) && (from == provider.Chat && !p.IsRemoteMagpie() || !searchesModel(p, from, model)) && !(from == provider.Responses && hasSealedAgentMessage(body)) {
 		relay, ownAPI = false, true
 	}
+	// Copilot seals an argument the tools mark "encrypted" (spawn_agent's
+	// message, MultiAgentV2) and then can't open what it sealed: the
+	// subagent's turn came back "Encrypted function output content could
+	// not be decrypted or decoded" (2026-10-17, a real account). Translated,
+	// the marks are left out and the call goes back to Codex unsealed.
+	if relay && from == provider.Responses && p.Account != nil && p.Account.Agent == "copilot" && asksSealing(body) {
+		relay, ownAPI = false, true
+	}
 	// Zen's free models are asked as OpenCode asks them (zenfree.go)
 	if p.OpenCodeFree(model) {
 		relay = false
