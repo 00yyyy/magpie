@@ -112,8 +112,14 @@ function queueLine(line) {
 // send queues one message, ignoring whether it was written.
 const send = (msg) => queueLine(JSON.stringify(msg) + "\n").promise
 
-// sendCancelable is send, with a way to give the wait up.
-const sendCancelable = (msg) => queueLine(JSON.stringify(msg) + "\n")
+// sendCancelable is send, with a way to give the wait up. A string is a
+// line made already (chunkLine).
+const sendCancelable = (msg) => queueLine(typeof msg === "string" ? msg : JSON.stringify(msg) + "\n")
+
+// chunkLine is JSON.stringify({id, event: "chunk", data}) + "\n", made by
+// joining: base64 has nothing JSON escapes, and stringify scanning every
+// byte of it for something to escape cost more than the base64 itself.
+const chunkLine = (id, data) => '{"id":' + JSON.stringify(id) + ',"event":"chunk","data":"' + data + '"}\n'
 
 // A host cancellation suppresses the answer; a local abort still owes Go
 // its error. The record, rather than the signal, owns pending wire output.
@@ -2431,7 +2437,8 @@ async function fetchAs(id, record, key, params) {
       // the loop leaves rather than parking on a stream that never drains
       for await (const chunk of res.body) {
         checkFetch(record)
-        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+        // a chunk the stream handed over is this reader's: viewed, not copied
+        const bytes = Buffer.isBuffer(chunk) ? chunk : ArrayBuffer.isView(chunk) ? Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength) : Buffer.from(chunk)
         for (let off = 0; off < bytes.length; ) {
           // one frame at a time, no more than the reader has credited: a
           // reader that stopped leaves the upstream paused here
@@ -2440,7 +2447,7 @@ async function fetchAs(id, record, key, params) {
           if (n <= 0) break
           const data = bytes.subarray(off, off + n).toString("base64")
           gate.spend(n + FRAME_OVERHEAD)
-          await sendForFetch(record, { id, event: "chunk", data })
+          await sendForFetch(record, chunkLine(id, data))
           checkFetch(record)
           off += n
         }
