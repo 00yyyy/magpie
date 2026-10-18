@@ -23383,7 +23383,18 @@ if (mode === "window") {
   setTimeout(() => { sideGwRead.due = true; sideGwRead(); }, 1500);
 }
 
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { load(true); wag(); } });
+// loadBack: a window shown again hears visibilitychange and focus together;
+// one read for both. A read asked over a second ago gets one more after it.
+function loadBack() {
+  const f = loadBack.flight;
+  if (f && performance.now() - f.at < 1000) return f.done;
+  if (f) return (f.next ||= f.done.then(() => loadBack()));
+  const flight = { at: performance.now() };
+  flight.done = load(true).finally(() => { if (loadBack.flight === flight) loadBack.flight = null; });
+  loadBack.flight = flight;
+  return flight.done;
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadBack(); wag(); } });
 // an agent's config can be rewritten, or the agent run round magpie, while the
 // window is up: ask what drifted now and then, and redraw only on a change —
 // never under an open menu
@@ -23433,7 +23444,7 @@ setInterval(async () => {
   ro.observe($("#usageCost"));
   new MutationObserver(later).observe(head, { childList: true, subtree: true, characterData: true });
 }
-window.addEventListener("focus", () => load(true));
+window.addEventListener("focus", () => loadBack());
 setInterval(renderUpdateBadge, 15 * 60 * 1000); // a window left open still hears of a new version
 // renderPluginDot puts a dot on Plugins while a plugin's update waits for
 // the reader (someone else's plugin, or one pinned; the community's update
