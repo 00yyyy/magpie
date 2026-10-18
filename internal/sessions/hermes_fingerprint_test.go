@@ -97,3 +97,40 @@ func TestHermesUnreadFingerprintsParseAgain(t *testing.T) {
 		t.Fatalf("an unknown fingerprint reused a parse (%d parsed)", parsed)
 	}
 }
+
+// A store's path is resolved (EvalSymlinks walks every folder in it) once
+// per listing, not once per session: 2000 sessions spent ~30ms on it per
+// poll (#2776).
+func TestHermesStoreResolvedOncePerListing(t *testing.T) {
+	setup(t)
+	root := filepath.Join(t.TempDir(), "hermes")
+	t.Setenv("HERMES_HOME", root)
+	path := hermesFixture(t, root, "", "s0", true)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for i := 1; i < 10; i++ {
+		sid := "s" + string(rune('0'+i))
+		if _, err := db.Exec(`INSERT INTO sessions (id, title, started_at) VALUES (?, 'x', 1790000000)`, sid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var n atomic.Int32
+	canonicalHook = func() { n.Add(1) }
+	t.Cleanup(func() { canonicalHook = nil })
+	mu.Lock()
+	files := hermesFiles()
+	closeDBs()
+	mu.Unlock()
+	if len(files) != 10 {
+		t.Fatalf("%d files, want 10", len(files))
+	}
+	if got := int(n.Load()); got >= len(files) {
+		t.Fatalf("the store's path was resolved %d times for %d sessions", got, len(files))
+	}
+	if want := "hermes:" + hermesID(path, files[0].sid); files[0].key != want {
+		t.Fatalf("key %q, want %q", files[0].key, want)
+	}
+}

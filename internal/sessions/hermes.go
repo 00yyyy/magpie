@@ -52,7 +52,13 @@ func HermesDirs() []string {
 	return out
 }
 
+// canonicalHook, when a test sets it, runs on each canonicalHermesPath.
+var canonicalHook func()
+
 func canonicalHermesPath(path string) string {
+	if canonicalHook != nil {
+		canonicalHook()
+	}
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
@@ -62,11 +68,16 @@ func canonicalHermesPath(path string) string {
 	return filepath.Clean(path)
 }
 
-func hermesID(path, sid string) string {
-	// Include the store even for the default profile so selecting another home
-	// cannot collide with a previously indexed store or a copied session id.
+func hermesID(path, sid string) string { return hermesStoreID(path) + "-" + sid }
+
+// hermesStoreID is what a store's session ids begin with. Include the store
+// even for the default profile so selecting another home cannot collide
+// with a previously indexed store or a copied session id. Resolving the
+// path walks every folder in it (EvalSymlinks), so it is done once per
+// store, not once per session.
+func hermesStoreID(path string) string {
 	h := sha256.Sum256([]byte(canonicalHermesPath(path)))
-	return "h" + hex.EncodeToString(h[:8]) + "-" + sid
+	return "h" + hex.EncodeToString(h[:8])
 }
 
 type hermesDB struct {
@@ -291,6 +302,7 @@ func hermesFiles() []file {
 			continue
 		}
 		prints := hermesPrintsFor(path, store)
+		storeID := hermesStoreID(path)
 		messageLast, usageLast := "0", "0"
 		if store.messages["session_id"] && store.messages["timestamp"] {
 			messageLast = "COALESCE((SELECT MAX(timestamp) FROM messages m WHERE m.session_id = sessions.id), 0)"
@@ -313,7 +325,7 @@ func hermesFiles() []file {
 			if rows.Scan(&sid, &start, &end, &last, &messageAt, &usageAt) != nil || sid == "" {
 				continue
 			}
-			id := hermesID(path, sid)
+			id := storeID + "-" + sid
 			out = append(out, file{
 				agent:    "hermes",
 				key:      "hermes:" + id,
