@@ -2282,7 +2282,7 @@ type Entry struct {
 // provider not kept unlisted. A provider switched off has none in it.
 func Catalog() []Entry {
 	entries := providerEntries()
-	out := groupEntries(entries)
+	out := slices.Clone(groupEntries(entries)) // held: the caller's to change
 	kept := unlistedByGroups(entries)
 	for _, e := range entries {
 		if !e.Provider.Unlisted && !kept[e.ID] {
@@ -2321,7 +2321,7 @@ func unlistedByGroups(entries []Entry) map[string]bool {
 // model a routing group can be made of, or a request can name.
 func Served() []Entry {
 	entries := providerEntries()
-	return append(groupEntries(entries), entries...)
+	return append(slices.Clone(groupEntries(entries)), entries...)
 }
 
 // Unlisted are the models Served has and Catalog doesn't: those of the
@@ -2522,8 +2522,10 @@ func Resolve(id string) (Provider, string, bool) {
 }
 
 func resolveIn(entries []Entry, id string) (Provider, string, bool) {
-	for _, e := range entries {
-		if e.ID == id {
+	// by index: an Entry, its Provider in it, is large, and a copy of each
+	// one looked past was most of a group's members resolved (membersIn)
+	for i := range entries {
+		if e := &entries[i]; e.ID == id {
 			return e.Provider, e.Model, true
 		}
 	}
@@ -2534,14 +2536,10 @@ func resolveIn(entries []Entry, id string) (Provider, string, bool) {
 			return *p, model, true
 		}
 	}
-	var hits []Entry
-	for _, e := range entries {
-		if e.Model == id {
-			hits = append(hits, e)
+	for i := range entries {
+		if e := &entries[i]; e.Model == id {
+			return e.Provider, e.Model, true // the first that serves it
 		}
-	}
-	if len(hits) >= 1 {
-		return hits[0].Provider, hits[0].Model, true
 	}
 	// not exposed, but some provider lists it
 	var found []Provider
