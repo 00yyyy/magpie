@@ -6,7 +6,7 @@ import "os"
 // offset after the last whole line it handled, and enough of the file as it
 // was to know it again. A summary kept with one reads on from Off when the
 // file has only grown, instead of reading it whole again (Grok Build's
-// sessions are kept so). A file that shrank, or whose
+// and Droid's sessions are kept so). A file that shrank, or whose
 // start or sampled prefix is no longer what was read, is read whole again:
 // it was rewritten or replaced, not appended to.
 //
@@ -47,4 +47,31 @@ func (t *tail) holds(path string) bool {
 		return false
 	}
 	return sameHead(headOf(path), t.Head, t.HeadSize) && prefixHash(path, t.Size) == t.Hash
+}
+
+// dropUse takes back what use counted, leaving no model or day it made
+// with nothing in it: a summary read on from where it was is then the one
+// a whole read makes.
+func (s *state) dropUse(date, model string, t Tokens) {
+	if t.zero() {
+		return
+	}
+	s.unuse(date, model, t)
+	if m, ok := s.Models[model]; ok && m.zero() {
+		delete(s.Models, model)
+		if len(s.Models) == 0 {
+			s.Models = nil
+		}
+	}
+	if d := s.Days[date]; d != nil {
+		if m, ok := d.Models[model]; ok && m.zero() {
+			delete(d.Models, model)
+			if len(d.Models) == 0 {
+				d.Models = nil
+			}
+		}
+		if len(d.Models) == 0 && d.Active == 0 && d.Hours == nil && d.Prompts == 0 && d.Replies == 0 && d.Tools == nil && d.Skills == nil {
+			delete(s.Days, date)
+		}
+	}
 }

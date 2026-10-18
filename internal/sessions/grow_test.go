@@ -180,3 +180,56 @@ func TestGrokPromptAcrossReads(t *testing.T) {
 		t.Fatalf("title %q", g.old.Title)
 	}
 }
+
+// Droid appends to a transcript and keeps a running total in its
+// settings: a message appended is read alone, and the total, counted on
+// the day of the last message, moves with it instead of being counted twice.
+func TestDroidReadsOnlyWhatWasAppended(t *testing.T) {
+	inZone(t, 0)
+	home := setupAgents(t)
+	putDroid(t, home)
+	dir := filepath.Join(home, ".factory", "sessions", "-work-droid")
+	g := &grower{t: t, files: droidFiles, path: filepath.Join(dir, droidMain+".jsonl")}
+	msg := `{"type":"message","id":"m5","timestamp":"2026-09-27T08:03:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Fixed"},{"type":"tool_use","id":"t2","name":"Edit","input":{}}]}}` + "\n"
+	checkGrows(t, g, msg)
+
+	// a day later, the total grown: counted once, on the new day
+	g.read()
+	was := g.size()
+	g.append(`{"type":"message","id":"m6","timestamp":"2026-09-28T09:00:00.000Z","message":{"role":"user","content":"and the logout one"}}` + "\n")
+	os.WriteFile(filepath.Join(dir, droidMain+".settings.json"), []byte(`{"model":"claude-opus-4-5","tokenUsage":{"inputTokens":300,"outputTokens":80,"cacheCreationTokens":10,"cacheReadTokens":2000}}`), 0o644)
+	if at := g.read(); at != was {
+		t.Fatalf("read from %d, not %d", at, was)
+	}
+	if d := g.old.Days["2026-09-27"]; d == nil || len(d.Models) != 0 {
+		t.Fatalf("the total is still on the day before: %+v", d)
+	}
+	if m := g.old.Days["2026-09-28"].Models["claude-opus-4-5"]; m.Input != 300 {
+		t.Fatalf("the total on its day: %+v", g.old.Days["2026-09-28"])
+	}
+	// only the settings changed: nothing of the transcript read
+	os.WriteFile(filepath.Join(dir, droidMain+".settings.json"), []byte(`{"model":"claude-opus-4-5","tokenUsage":{"inputTokens":400,"outputTokens":90}}`), 0o644)
+	if at, end := g.read(), g.size(); at != end {
+		t.Fatalf("settings changed: read from %d of %d", at, end)
+	}
+}
+
+// A fork's copied lines that end in a later read are still passed over.
+func TestDroidForkAcrossReads(t *testing.T) {
+	inZone(t, 0)
+	home := setupAgents(t)
+	putDroid(t, home)
+	p := filepath.Join(home, ".factory", "sessions", "-work-droid", droidFork+".jsonl")
+	b, _ := os.ReadFile(p)
+	lines := bytes.SplitAfter(b, []byte("\n"))
+	os.WriteFile(p, bytes.Join(lines[:3], nil), 0o644)
+	g := &grower{t: t, files: droidFiles, path: p}
+	g.read()
+	for _, l := range lines[3:] {
+		g.append(string(l))
+		g.read()
+	}
+	if g.old.Title != "Try another way" {
+		t.Fatalf("title %q", g.old.Title)
+	}
+}

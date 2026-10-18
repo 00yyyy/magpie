@@ -213,6 +213,9 @@ type state struct {
 	// Grok Build: where its updates were read to, and what the read
 	// carries on with
 	Grok *grokCarry `json:"grok,omitempty"`
+	// Droid: where its transcript was read to, and what the read carries
+	// on with
+	Droid *droidCarry `json:"droid,omitempty"`
 }
 
 // day is one local date's share of a file: tokens by model, and the time
@@ -1198,7 +1201,7 @@ func parserFor(agent string) sessionParser {
 	case "kimi":
 		return sessionParser{whole: parseKimi}
 	case "droid":
-		return sessionParser{whole: parseDroid}
+		return sessionParser{grow: parseDroid}
 	case "cursor":
 		return sessionParser{whole: parseCursor}
 	case "codex":
