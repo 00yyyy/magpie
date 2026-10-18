@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -398,5 +399,105 @@ func TestDshEndSeedAcrossReads(t *testing.T) {
 	g.read()
 	if m := g.old.Models["deepseek-v4-pro"]; m.Input != 50 || len(g.old.Models) != 1 || g.old.Title != "Tidy the build script" {
 		t.Fatalf("the fork's own: %+v, title %q", g.old.Models, g.old.Title)
+	}
+}
+
+// Cline rewrites a session's manifest on its own (a title given, the
+// session touched), and its size and time are the session file's: when only
+// it changed, the messages are not read again. When they changed, or the
+// manifest moved the start or the fork their counts were made under, they
+// are.
+func TestClineReadsMessagesOnlyWhenTheyChange(t *testing.T) {
+	inZone(t, 0)
+	home := setupAgents(t)
+	dir := filepath.Join(home, ".cline", "data", "sessions", clineMain)
+	path := filepath.Join(dir, clineMain+".messages.json")
+	manifest := filepath.Join(dir, clineMain+".json")
+	reads := 0
+	clineHook = func(p string) {
+		if p == path {
+			reads++
+		}
+	}
+	t.Cleanup(func() { clineHook = nil })
+	at := time.Now()
+	touch := func(p string) {
+		at = at.Add(time.Minute)
+		if err := os.Chtimes(p, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	edit := func(p, from, to string) {
+		t.Helper()
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(b, []byte(from)) {
+			t.Fatalf("no %q in %s", from, p)
+		}
+		os.WriteFile(p, bytes.Replace(b, []byte(from), []byte(to), 1), 0o644)
+		touch(p)
+	}
+	var old *state
+	// read reads the session on from old and says whether it read its
+	// messages, checking it against a whole read
+	read := func() bool {
+		t.Helper()
+		var f file
+		for _, c := range clineFiles() {
+			if c.path == path {
+				f = c
+			}
+		}
+		was := reads
+		s := parse(f, old)
+		read := reads > was
+		whole := parse(f, nil)
+		got, _ := json.Marshal(s)
+		want, _ := json.Marshal(whole)
+		if !bytes.Equal(got, want) {
+			t.Fatalf("read on:\n%s\nread whole:\n%s", got, want)
+		}
+		old = s
+		return read
+	}
+	// no title of its own, so the first prompt names it
+	edit(manifest, `"title": "Importer speed-up"`, `"status": "x"`)
+	edit(manifest, `"prompt": "<user_input mode=\"act\">Speed up   the\nimporter</user_input>",`, ``)
+	if !read() {
+		t.Fatal("first read: messages not read")
+	}
+	if old.Title != "Speed up the importer" {
+		t.Fatalf("title %q", old.Title)
+	}
+	// the manifest touched and given a title: the messages are not read
+	edit(manifest, `"status": "completed"`, `"status": "running"`)
+	if read() {
+		t.Fatal("manifest touched: messages read again")
+	}
+	edit(manifest, `"status": "x"`, `"title": "Faster importer"`)
+	if read() || old.Named != "Faster importer" || old.Title != "Speed up the importer" {
+		t.Fatalf("manifest titled: named %q, title %q", old.Named, old.Title)
+	}
+	// a message more: read again
+	edit(path, `"content": "done",`, `"content": "done, all of it",`)
+	if !read() {
+		t.Fatal("messages changed: not read")
+	}
+	// the same size, a later time: read again
+	touch(path)
+	if !read() {
+		t.Fatal("messages touched: not read")
+	}
+	// made a fork after its first reply: what came before is its source's
+	edit(manifest, `"metadata": {`, `"metadata": {"fork": {"forkedAt": "2026-09-27T10:01:00.000Z"},`)
+	if !read() || old.Models["claude-opus-5-5"] != (Tokens{}) {
+		t.Fatalf("forked: %+v", old.Models)
+	}
+	// started at another time: read again
+	edit(manifest, `"started_at": "2026-09-27T10:00:00.000Z"`, `"started_at": "2026-09-27T10:05:00.000Z"`)
+	if !read() {
+		t.Fatal("start moved: not read")
 	}
 }
