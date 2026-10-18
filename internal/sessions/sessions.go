@@ -210,6 +210,9 @@ type state struct {
 	// Pi: in a forked session, the time it was forked; the lines before
 	// it are the copy of the session it was forked from
 	Since time.Time `json:"since,omitzero"`
+	// Grok Build: where its updates were read to, and what the read
+	// carries on with
+	Grok *grokCarry `json:"grok,omitempty"`
 }
 
 // day is one local date's share of a file: tokens by model, and the time
@@ -1170,7 +1173,10 @@ func assemble(fs []file, price func(string) *catalog.Price) (Session, bool) {
 // parserFor is the source of truth for both parsing and window admission.
 // A default line reader is Claude-compatible, including both Qoder variants.
 type sessionParser struct {
-	whole  func(file) *state
+	whole func(file) *state
+	// grow reads a file on from where the kept parse of it left off, when
+	// the file has only grown since (tail.go), else whole
+	grow   func(file, *state) *state
 	line   func(*state, []byte, bool)
 	claude bool
 }
@@ -1188,7 +1194,7 @@ func parserFor(agent string) sessionParser {
 	case "cline":
 		return sessionParser{whole: parseCline}
 	case "grok":
-		return sessionParser{whole: parseGrok}
+		return sessionParser{grow: parseGrok}
 	case "kimi":
 		return sessionParser{whole: parseKimi}
 	case "droid":
@@ -1216,6 +1222,9 @@ func parse(f file, old *state) *state {
 	parser := parserFor(f.agent)
 	if parser.whole != nil {
 		return parser.whole(f)
+	}
+	if parser.grow != nil {
+		return parser.grow(f, old)
 	}
 	// Every source using claudeLine must rebuild a missing transient window.
 	if parser.claude && old != nil && old.Claude == nil {
