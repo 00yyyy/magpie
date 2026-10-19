@@ -91,7 +91,8 @@ type providerJSON struct {
 	// the vendor searches the web by itself (provider.Searches)
 	Searches bool `json:"searches"`
 	// on the Cline API: its DeepSeek models are served by DeepSeek's own
-	// API alone (provider.PinUpstream), which only it offers
+	// API alone and its GLM models by Z.ai's (provider.PinUpstream), which
+	// only it offers
 	Cline       bool `json:"cline,omitempty"`
 	PinUpstream bool `json:"pinUpstream"`
 	// on this machine or the local network, set to go unmasked by

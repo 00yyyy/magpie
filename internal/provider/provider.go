@@ -251,9 +251,10 @@ type Provider struct {
 	PassUserAgent bool `json:"passUserAgent,omitempty"`
 
 	// PinUpstream, on the Cline API, has its DeepSeek models answered only
-	// by DeepSeek's own API (White Immortal on Discord): Cline routes a
-	// model through an AI gateway that may serve it from any host, and
-	// DeepSeek's own keeps its prompt cache. See ClinePin.
+	// by DeepSeek's own API (White Immortal on Discord) and its GLM models
+	// only by Z.ai's (sdytman on Discord): Cline routes a model through an
+	// AI gateway that may serve it from any host, and the maker's own
+	// keeps its prompt cache. See ClinePin.
 	PinUpstream bool `json:"pinUpstream,omitempty"`
 
 	// AuthHeader is which header the key goes in on a third-party

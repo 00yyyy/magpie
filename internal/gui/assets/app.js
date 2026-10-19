@@ -8994,14 +8994,15 @@ function drawEditor(p, presetID) {
   }
 
   // the Cline API serves a model from whichever host its AI gateway picks;
-  // pinned, its DeepSeek models are served by DeepSeek's own API alone,
-  // which keeps their prompt cache (White Immortal on Discord). ClinePass,
+  // pinned, its DeepSeek models are served by DeepSeek's own API alone and
+  // its GLM models by Z.ai's (sdytman on Discord), which keeps their prompt
+  // cache (White Immortal on Discord). One tick for both makers. ClinePass,
   // or the Cline plugin's provider (ARNO on Discord)
   const upstreamField = () => {
-    const [ptk, pcb] = tick(t("DeepSeek models only from DeepSeek's own API"), !!draft.pinUpstream);
+    const [ptk, pcb] = tick(t("DeepSeek and GLM models only from their makers' own APIs"), !!draft.pinUpstream);
     ptk.classList.add("pin-upstream");
     pcb.onchange = () => { draft.pinUpstream = pcb.checked; };
-    return field(t("Upstream"), ptk, t("Cline serves a model from any host its gateway picks; pinned, a request for a DeepSeek model goes only to DeepSeek, which keeps its prompt cache, and fails when DeepSeek can't take it"));
+    return field(t("Upstream"), ptk, t("Cline serves a model from any host its gateway picks; pinned, a request for a DeepSeek model goes only to DeepSeek and one for a GLM model only to Z.ai, which keeps its prompt cache, and fails when that API can't take it"));
   };
 
   // the settings few need — headers, proxy, limits, windows, fallback —
