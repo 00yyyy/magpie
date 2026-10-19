@@ -41,15 +41,26 @@ type sessionsJSON struct {
 	Dirs     []string `json:"dirs"` // where they were read from
 }
 
+// gatewayExternal is a gateway session without its days: a list, a manage
+// page and a detail (MergeExternal) never read them, and copying every
+// session's days for each poll of an open Sessions page was ~1.8 GB in 4
+// minutes over ~720k calls (#2776). The stats add them (gatewayDays).
 func gatewayExternal(g usage.GatewaySession) sessions.ExternalSession {
 	e := sessions.ExternalSession{Agent: g.Agent, ID: g.ID, Start: g.Start, Last: g.Last, Tokens: g.Tokens, Cost: g.Cost, Unpriced: g.Unpriced}
+	e.Models = make([]sessions.ExternalModel, 0, len(g.Models))
 	for _, m := range g.Models {
 		e.Models = append(e.Models, sessions.ExternalModel{Model: m.Model, Tokens: m.Tokens, Cost: m.Cost, Priced: m.Priced})
 	}
-	for _, d := range g.Daily {
-		e.Daily = append(e.Daily, sessions.ExternalDayUsage{Date: d.Date, Agent: d.Agent, Model: d.Model, Tokens: d.Tokens, Cost: d.Cost, Priced: d.Priced})
-	}
 	return e
+}
+
+// gatewayDays is a gateway session's usage by day, as the stats count it.
+func gatewayDays(g usage.GatewaySession) []sessions.ExternalDayUsage {
+	out := make([]sessions.ExternalDayUsage, 0, len(g.Daily))
+	for _, d := range g.Daily {
+		out = append(out, sessions.ExternalDayUsage{Date: d.Date, Agent: d.Agent, Model: d.Model, Tokens: d.Tokens, Cost: d.Cost, Priced: d.Priced})
+	}
+	return out
 }
 
 // gatewayListed is a gateway session as a list shows it: titled by what it
@@ -460,7 +471,9 @@ func combinedSessionStats(days int) sessions.Stats {
 	gs, gd := usage.GatewaySessionWindowExcept(since, nativeKeys)
 	ext := make([]sessions.ExternalSession, 0, len(gs))
 	for _, g := range gs {
-		ext = append(ext, gatewayListed(g))
+		e := gatewayListed(g)
+		e.Daily = gatewayDays(g)
+		ext = append(ext, e)
 	}
 	daily := make([]sessions.ExternalDayUsage, 0, len(gd))
 	for _, d := range gd {
