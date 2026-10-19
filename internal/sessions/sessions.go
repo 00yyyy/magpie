@@ -994,6 +994,8 @@ func Reset() {
 	directoryCache.entries = map[string]directoryEntry{}
 	directoryCache.Unlock()
 	resetCalls()
+	droidCallers.reset()
+	grokKinds.reset()
 	wslReset()
 	forgetHermesPrints()
 	mu.Lock()

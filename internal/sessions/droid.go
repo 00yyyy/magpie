@@ -64,10 +64,18 @@ func readDroidStart(path string) (droidStart, bool) {
 	return s, ok
 }
 
+// droidCallers is whose subagent each transcript is, as its session_start
+// line said when the listing last read it: a listing runs on every poll, and
+// opening every session's transcript for its first line each time cost more
+// than the rest of the listing together.
+var droidCallers listMemo[string]
+
 func droidFiles() []file {
 	root := filepath.Join(FactoryDir(), "sessions")
 	a, _ := filepath.Glob(filepath.Join(root, "*.jsonl"))
 	b, _ := filepath.Glob(filepath.Join(root, "*", "*.jsonl"))
+	callers := droidCallers.round()
+	defer callers.done()
 	var out []file
 	for _, p := range append(a, b...) {
 		id := strings.TrimSuffix(filepath.Base(p), ".jsonl")
@@ -78,6 +86,10 @@ func droidFiles() []file {
 		if !stat(&f) {
 			continue
 		}
+		calling, _ := callers.get(p, f.size, f.mod, func() (string, bool) {
+			s, ok := readDroidStart(p)
+			return s.Calling, ok
+		})
 		// what it spent and on which model are in its settings
 		m := file{path: strings.TrimSuffix(p, ".jsonl") + ".settings.json"}
 		if stat(&m) {
@@ -87,8 +99,8 @@ func droidFiles() []file {
 				f.mod = m.mod
 			}
 		}
-		if s, ok := readDroidStart(p); ok && s.Calling != "" && s.Calling != id && safeID.MatchString(s.Calling) {
-			f.key, f.main = "droid:"+s.Calling, false
+		if calling != "" && calling != id && safeID.MatchString(calling) {
+			f.key, f.main = "droid:"+calling, false
 		}
 		out = append(out, f)
 	}

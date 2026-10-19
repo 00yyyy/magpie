@@ -51,13 +51,31 @@ type grokSummary struct {
 	Kind           string `json:"session_kind"`
 }
 
+// grokSummaryHook, when a test sets it, is told each time a summary.json
+// is read.
+var grokSummaryHook func(path string)
+
 func readGrokSummary(path string) (grokSummary, bool) {
+	if grokSummaryHook != nil {
+		grokSummaryHook(path)
+	}
 	var s grokSummary
 	b, err := os.ReadFile(path)
 	return s, err == nil && json.Unmarshal(b, &s) == nil
 }
 
+// grokKind is what a listing needs of a session's summary.json: whether it
+// is a subagent's, and whose.
+type grokKind struct{ Kind, Parent string }
+
+// grokKinds keeps each summary's kind as the listing last read it: a
+// listing runs on every poll, and reading and decoding every session's
+// summary each time cost more than the rest of the listing together.
+var grokKinds listMemo[grokKind]
+
 func grokFiles() []file {
+	kinds := grokKinds.round()
+	defer kinds.done()
 	root := filepath.Join(GrokDir(), "sessions")
 	paths, _ := filepath.Glob(filepath.Join(root, "*", "*", "updates.jsonl"))
 	// a session's subagents are named in its subagents/ folder too
@@ -83,7 +101,11 @@ func grokFiles() []file {
 			if m.mod.After(f.mod) {
 				f.mod = m.mod
 			}
-			if s, ok := readGrokSummary(m.path); ok && strings.HasPrefix(s.Kind, "subagent") {
+			s, ok := kinds.get(m.path, m.size, m.mod, func() (grokKind, bool) {
+				s, ok := readGrokSummary(m.path)
+				return grokKind{s.Kind, s.Parent}, ok
+			})
+			if ok && strings.HasPrefix(s.Kind, "subagent") {
 				parent := s.Parent
 				if parent == "" {
 					parent = parentOf[id]
