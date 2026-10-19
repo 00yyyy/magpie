@@ -28,7 +28,7 @@ import (
 // one switched off or gone), with its status.
 func decisionGroupOf(asked string) (g provider.Group, ms []provider.Member, ok bool, status int, err error) {
 	ref := strings.TrimSpace(asked)
-	explicit := strings.HasPrefix(ref, provider.GroupPrefix)
+	explicit := provider.IsGroupRef(ref)
 	if !explicit {
 		gid, found := provider.GroupFor(ref)
 		if !found {
@@ -262,7 +262,7 @@ func (e decideRefused) Unwrap() error { return e.err }
 // answers, the one that failed resting as it would for a chat. ok is false
 // when model names no decision group.
 func (s *Server) askDecisionGroup(model string, intents []string, prev before, effort bool, text string) (v verdict, ok bool, err error) {
-	if !strings.HasPrefix(model, provider.GroupPrefix) {
+	if !provider.IsGroupRef(model) {
 		return verdict{}, false, nil
 	}
 	g, ms, found := provider.FindGroup(model)

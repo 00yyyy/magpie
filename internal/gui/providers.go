@@ -541,7 +541,7 @@ func agentUses(agents []*agent.Agent, findGroup func(string) (provider.Group, []
 	for _, a := range agents {
 		u := agentUse{Agent: a}
 		v := agentModel(a)
-		if strings.HasPrefix(v, provider.GroupPrefix) {
+		if provider.IsGroupRef(v) {
 			u.group, u.members, u.inGroup = findGroup(v)
 		} else if pid, model, ok := strings.Cut(v, "/"); ok {
 			if _, err := provider.Find(pid); err == nil {

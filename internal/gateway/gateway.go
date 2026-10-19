@@ -190,7 +190,7 @@ func claudeTierStandIn(r *http.Request, agent, asked string) string {
 // session that started before it was switched off still asks for the model
 // its agent was then on, and the agent has been moved since (#200).
 func unserved(asked string) bool {
-	if asked == "" || strings.HasPrefix(asked, provider.GroupPrefix) {
+	if asked == "" || provider.IsGroupRef(asked) {
 		return false
 	}
 	if _, ok := provider.GroupFor(asked); ok {
@@ -1141,7 +1141,7 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 	id := unprefixed(r.PathValue("id"))
 	shown := keyAllowed(r, provider.Catalog())
 	for _, e := range shown {
-		if e.ID == id {
+		if e.ID == id || e.Group != "" && provider.SameRef(e.ID, id) {
 			if agentOf(r) == ScienceID {
 				// by the alias it asked by, which it keeps what it reads
 				// under
@@ -6165,7 +6165,9 @@ func validateModel(model string) (string, error) {
 		// otherwise reads as Claude Opus 4 (provider.ClaudeSpelled)
 		return real, nil
 	}
-	return unflat(model), nil
+	// a found group's auto/<model> as group/auto-<slug>, the one id its
+	// key limits, routing, stats and usage rows know it by
+	return provider.CanonicalRef(unflat(model)), nil
 }
 
 // unflat is the catalog id a flat one stands for (provider.Unflat): MiniMax

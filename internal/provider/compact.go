@@ -114,9 +114,10 @@ func ClaudeGroup(id string) bool {
 }
 
 // catalogID is an agent's model id as the catalog has it: magpie/ and
-// Claude Code's [1m] mark taken off.
+// Claude Code's [1m] mark taken off, a found group's auto/<model> as
+// group/auto-<slug> (CanonicalRef).
 func catalogID(id string) string {
-	return strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(id), "magpie/"), "[1m]")
+	return CanonicalRef(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(id), "magpie/"), "[1m]"))
 }
 
 func compactSet(s settings.Settings, id string, find func(string) (Group, []Member, bool)) int {

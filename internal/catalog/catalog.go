@@ -964,6 +964,14 @@ func Knows(id string) bool {
 	return ContextOf(id) > 0 || len(EffortsOf(id)) > 0 || Thinks(id)
 }
 
+// Lists reports whether models.dev lists a model by this very id (its
+// last part, any case), not one found by another spelling: claude-opus-5.5
+// only when that is how one of its providers spells it.
+func Lists(id string) bool {
+	load()
+	return listed[bareID(id)]
+}
+
 // SeesImages reports whether models.dev says a model of this id takes
 // images, as most of the providers it lists serving it do; for a vendor it
 // doesn't list, serving a model it knows from others ("z-ai/glm-5.3" is

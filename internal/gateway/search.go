@@ -392,7 +392,7 @@ func Searchers() []SearcherChoice {
 		}
 		var ms []catalog.Model
 		for _, m := range p.Available() {
-			if !strings.HasPrefix(m.ID, provider.GroupPrefix) && searchableModel(p, m.ID) {
+			if !provider.IsGroupRef(m.ID) && searchableModel(p, m.ID) {
 				ms = append(ms, m)
 			}
 		}
@@ -458,7 +458,7 @@ func smallReady(p provider.Provider, keep func(catalog.Model) bool, from provide
 		}
 		l := strings.ToLower(m.ID)
 		// a subscription's list can have what magpie wrote into its agent
-		if strings.HasPrefix(m.ID, provider.GroupPrefix) || (p.Account != nil && strings.Contains(m.ID, "/")) ||
+		if strings.HasPrefix(m.ID, provider.GroupPrefix) || strings.HasPrefix(m.ID, provider.AutoPrefix) || (p.Account != nil && strings.Contains(m.ID, "/")) ||
 			strings.ContainsAny(l, ":~") || slices.ContainsFunc([]string{"nano", "lite", "image", "audio", "tts", "embed", "free"}, func(w string) bool { return strings.Contains(l, w) }) {
 			continue
 		}

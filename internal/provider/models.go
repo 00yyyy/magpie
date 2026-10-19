@@ -2545,6 +2545,13 @@ func entryIn(entries []Entry, id string) (Entry, bool) {
 			return e, true
 		}
 	}
+	if gid, ok := GroupIDOf(id); ok { // a found group by either of its ids
+		for _, e := range entries {
+			if e.Group == gid {
+				return e, true
+			}
+		}
+	}
 	return Entry{}, false
 }
 
@@ -2561,11 +2568,9 @@ func Resolve(id string) (Provider, string, bool) {
 	// Claude Code's mark for a model with a 1M window; it drops it before
 	// asking, but a value in its settings still has it
 	id = strings.TrimSuffix(strings.TrimSpace(id), "[1m]")
-	if strings.HasPrefix(id, GroupPrefix) {
-		for _, e := range Catalog() {
-			if e.ID == id {
-				return e.Provider, e.Model, true
-			}
+	if IsGroupRef(id) {
+		if e, ok := entryIn(Catalog(), id); ok {
+			return e.Provider, e.Model, true
 		}
 		return Provider{}, "", false
 	}
@@ -2919,7 +2924,7 @@ func DropModelOutput(id string) (string, bool, error) {
 // display name, and the same resolution outputOf reads it back under.
 func outputKeyOf(id string) (string, error) {
 	r := strings.TrimPrefix(strings.TrimSpace(id), "magpie/")
-	if strings.HasPrefix(r, GroupPrefix) {
+	if IsGroupRef(r) {
 		return "", errorf("that is a routing group, not a provider's model")
 	}
 	pid, model, ok := strings.Cut(r, "/")

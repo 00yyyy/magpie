@@ -782,6 +782,9 @@ func Save(p Provider) error {
 	if p.ID == strings.TrimSuffix(GroupPrefix, "/") {
 		return errors.New(`"group" starts the ids of routing groups; pick another id`)
 	}
+	if p.ID == autoID && !stored(p.ID) { // one saved before keeps it (autoRefsOn)
+		return errAutoID
+	}
 	if err := settings.CheckProxy(p.Proxy); err != nil {
 		return err
 	}

@@ -567,7 +567,7 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 // other names a model on its own.
 func drawingGroup(asked string, p provider.Provider, model string) (provider.Group, []provider.Member, bool) {
 	ref := asked
-	if !strings.HasPrefix(ref, provider.GroupPrefix) {
+	if !provider.IsGroupRef(ref) {
 		gid, ok := provider.GroupFor(ref)
 		if !ok {
 			return provider.Group{}, nil, false

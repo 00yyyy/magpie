@@ -38,11 +38,12 @@ import (
 // GroupPrefix starts a group's id in the catalog: "group/<id>".
 const GroupPrefix = "group/"
 
-// GroupIDOf is the group id a ref names ("group/<id>"), with spaces and the
-// [1m] mark Claude Code puts on a 1M window taken off, as an agent's own
-// settings carry it. ok is false for a ref that isn't a group's.
+// GroupIDOf is the group id a ref names ("group/<id>", or a found group's
+// "auto/<model>": CanonicalRef), with spaces and the [1m] mark Claude Code
+// puts on a 1M window taken off, as an agent's own settings carry it. ok is
+// false for a ref that isn't a group's.
 func GroupIDOf(ref string) (string, bool) {
-	return strings.CutPrefix(strings.TrimSuffix(strings.TrimSpace(ref), "[1m]"), GroupPrefix)
+	return strings.CutPrefix(CanonicalRef(strings.TrimSuffix(strings.TrimSpace(ref), "[1m]")), GroupPrefix)
 }
 
 // Affinities are how long a conversation stays with the key or account that
@@ -236,6 +237,10 @@ type Group struct {
 	// Auto is set on a group magpie found: one model served by several
 	// providers. It is derived, never stored.
 	Auto bool `json:"auto,omitempty"`
+	// Spelled is how a vendor spells the model of a group magpie found
+	// (auto-…), which agents are given it by: auto/<Spelled> (Ref). It is
+	// derived from the members each time the groups are read, never stored.
+	Spelled string `json:"-"`
 	// Hidden is stored for a found group the user removed.
 	Hidden bool `json:"hidden,omitempty"`
 	// Disabled is a group of the user's switched off (PAMI on Discord):
@@ -419,15 +424,18 @@ func buildGroupsIn(entries []Entry) []Group {
 	if !served(f.Groups) { // plugins/groups is off: the user's own aren't served
 		out = slices.DeleteFunc(out, func(g Group) bool { return !g.Auto })
 	}
-	if f.NoAutoGroups {
-		return orderedGroups(out, f.GroupOrder)
-	}
-	for _, g := range foundGroups(entries) {
-		if slices.ContainsFunc(out, func(o Group) bool { return o.ID == g.ID }) {
-			continue // the user changed it: theirs now
+	if !f.NoAutoGroups {
+		for _, g := range foundGroups(entries) {
+			if slices.ContainsFunc(out, func(o Group) bool { return o.ID == g.ID }) {
+				continue // the user changed it: theirs now
+			}
+			g.Hidden = hidden[g.ID]
+			out = append(out, g)
 		}
-		g.Hidden = hidden[g.ID]
-		out = append(out, g)
+	}
+	same := heldSettings().ModelSameAs
+	for i := range out {
+		out[i].Spelled = spelledIn(out[i], same)
 	}
 	return orderedGroups(out, f.GroupOrder)
 }
@@ -948,7 +956,7 @@ func buildGroupEntries(entries []Entry) []Entry {
 		if len(ms) == 0 || DecisionGroup(ms) {
 			continue // a decision group answers System One, no agent's conversation
 		}
-		e := Entry{ID: GroupPrefix + g.ID, Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Named: !g.Auto}
+		e := Entry{ID: g.Ref(), Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Named: !g.Auto}
 		var fixed []string // the efforts members are fixed at
 		levelled := false  // a member that follows the agent's effort was met
 		// Codex's ultra (max, with Codex handing parts of the task to agents
@@ -1182,6 +1190,7 @@ func (e Entry) Quiet() bool {
 // found makes it the user's.
 func SaveGroup(g Group) error {
 	g = g.own() // cleaned below in place: the caller's lists stay as they were
+	g.canonicalRefs()
 	g.ID = strings.ToLower(strings.TrimSpace(g.ID))
 	g.Name = strings.TrimSpace(g.Name)
 	if g.ID == "" {
@@ -1226,7 +1235,7 @@ func SaveGroup(g Group) error {
 		return err
 	}
 	for i, m := range g.Members {
-		if model, effort := memberEffortIn(entries, m); effort != "" && strings.HasPrefix(model, GroupPrefix) {
+		if model, effort := memberEffortIn(entries, m); effort != "" && IsGroupRef(model) {
 			return fmt.Errorf("%s is a group: its models reason as it says, so it takes no effort of its own (:%s)", model, effort)
 		}
 		g.Members[i] = cleanMember(entries, m)

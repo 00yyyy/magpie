@@ -198,7 +198,7 @@ the core. The five other routings are the built-in plugin `rotation`'s.
 | `plugins/rotation` | Requires `providers` and `gateway`, `Essential`. Apply registers every `routes.Builtin` and removes them when turned off. `InUse` counts the providers and groups providers.json routes by one of them (`provider.Routings`, the file alone, not the catalog); an unreadable providers.json is an error, so it stays on. The gateway's `KeepFresh` watches providers.json too, so a routing set from the CLI or the TUI turns it on within 2s. Off, the window's routing pickers (the provider editor, the Routing page's pools and groups) offer Smart alone: their options are marked `data-feature="rotation"` (`routingSegs`). | [`rotation.go`](../../plugins/rotation/rotation.go), [`provider.go`](../../internal/provider/provider.go), [`app.js`](../../internal/gui/assets/app.js) |
 
 The user's own routing groups are the `groups` plugin's on this point. The
-groups magpie finds (a model two providers serve, `auto-<model>`) stay the
+groups magpie finds (a model two providers serve, `auto/<model>`) stay the
 core's, as Smart does: they are how a model several providers serve is one
 model with failover, which a user has with the Essentials preset,
 where `groups` is off. `planGroup` and the walk over a group's members are

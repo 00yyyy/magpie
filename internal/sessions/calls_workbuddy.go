@@ -104,7 +104,7 @@ func buddyGateway(dir, id string) bool {
 		return false
 	}
 	id = id[len(local):]
-	return strings.HasPrefix(id, provider.GroupPrefix) || buddyGatewayIDs(dir)[id]
+	return provider.IsGroupRef(id) || buddyGatewayIDs(dir)[id]
 }
 
 // wbEntry is what is read of a models.json entry: its id and whose it is.

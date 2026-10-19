@@ -1350,7 +1350,7 @@ function routingPage(part) {
     s.pk = "group/" + info.id;
     s.li.style.setProperty("--depth", d);
     s.name.textContent = info.name || info.id;
-    s.id.textContent = "group/" + info.id;
+    s.id.textContent = info.ref || "group/" + info.id;
     s.mode.textContent = t(modeOf(info.routing || "")[0]);
     s.rules = info.rules ? t(info.rules === 1 ? "1 rule" : "{n} rules", { n: info.rules }) : "";
     return s;
@@ -3793,7 +3793,7 @@ function routingPage(part) {
     try { return hayMatches(g, words); } catch { return true; } // a group that can't be read is shown, flagged
   }
   function hayMatches(g, words) {
-    const hay = [g.name, g.id, "group/" + g.id, ...g.members.flatMap((id) => [id, memberLabel(g, id)]), ...(g.patterns || []).map((p) => p.pattern)].join("\n").toLowerCase();
+    const hay = [g.name, g.id, "group/" + g.id, g.ref || "", ...g.members.flatMap((id) => [id, memberLabel(g, id)]), ...(g.patterns || []).map((p) => p.pattern)].join("\n").toLowerCase();
     return words.every((w) => hay.includes(w));
   }
   // rowOrFlag: a group's row, or when drawing it fails, a row that says so
@@ -3804,7 +3804,7 @@ function routingPage(part) {
       const row = el("div", "rt-group off rt-gbad");
       row.dataset.id = g.id;
       const main = el("div", "main"), nm = el("div", "nm");
-      nm.append(el("b", "", String(g.name || g.id)), el("code", "mdl", "group/" + g.id));
+      nm.append(el("b", "", String(g.name || g.id)), el("code", "mdl", g.ref || "group/" + g.id));
       main.append(nm, el("div", "mem", t("This group can't be shown: {error}", { error: e?.message || String(e) })));
       row.append(el("span", "ics"), main);
       return row;
@@ -4105,7 +4105,7 @@ function routingPage(part) {
     const ics = el("span", "ics");
     ics.append(stackIcon(groupIcons(g)));
     const main = el("div", "main"), nm = el("div", "nm");
-    nm.append(el("b", "", g.name), el("code", "mdl", "group/" + g.id));
+    nm.append(el("b", "", g.name), el("code", "mdl", g.ref || "group/" + g.id));
     if (g.auto) nm.append(el("small", "auto", t("found by magpie")));
     main.append(nm, el("div", "mem", g.members.map((id) => memberLabel(g, id)).join(g.routing === "order" ? " → " : " · ")));
     row.append(cb, ics, main);
@@ -4127,7 +4127,7 @@ function routingPage(part) {
     s.onclick = (e) => { e.stopPropagation(); setFound(!on, s); };
     const txt = el("div", "txt");
     txt.append(el("b", "", t("Find groups on their own")), el("small", "", on
-      ? t("A model two or more of your providers serve becomes a group of them (auto-…). Switch it off to list and serve only the groups you made or changed.")
+      ? t("A model two or more of your providers serve becomes a group of them (auto/…). Switch it off to list and serve only the groups you made or changed.")
       : t("Off: only the groups you made or changed are listed and served. An agent set to a found group is moved to its model from one provider, and a request still naming one goes there too.")));
     gFound.replaceChildren(txt, s);
   }
@@ -4161,7 +4161,7 @@ function routingPage(part) {
     const ics = groupHandle(g, row);
     const main = el("div", "main");
     const nm = el("div", "nm");
-    nm.append(el("b", "", g.name), el("code", "mdl", "group/" + g.id));
+    nm.append(el("b", "", g.name), el("code", "mdl", g.ref || "group/" + g.id));
     if (g.auto) nm.append(el("small", "auto", t("found by magpie")));
     const manual = g.routing === "manual";
     const sep = g.routing === "order" ? " → " : " · ";
@@ -4406,8 +4406,8 @@ function routingPage(part) {
       return id;
     };
     const showId = () => {
-      idHint.textContent = t("Agents pick it as {id}", { id: "group/" + idOf() }) +
-        (g && idOf() !== g.id ? " · " + t("an agent set to {id} needs setting again", { id: "group/" + g.id }) : "");
+      idHint.textContent = t("Agents pick it as {id}", { id: g?.ref && idOf() === g.id ? g.ref : "group/" + idOf() }) +
+        (g && idOf() !== g.id ? " · " + t("an agent set to {id} needs setting again", { id: g.ref || "group/" + g.id }) : "");
     };
     // what the agents' lists will call it (#868: an agent's narrow menu
     // cut it to "· rou…"); whether "· routing group" follows the name is
