@@ -1413,8 +1413,9 @@ func scanAt(path string, off int64, head func([]byte) bool, fn func(b []byte, st
 	}
 }
 
-// scanBuffer is the read buffer scanAt needs for what is left of f from off:
-// 1 MiB at most, and no more than that rest of a plain file. Every scan
+// scanBuffer is the read buffer a reader of f needs for what is left of it
+// from off: 1 MiB at most, and no more than that rest of a plain file.
+// Every line reader of a session file sizes its buffer by it. Every scan
 // took 1 MiB, and a start's read of ~4,600 mostly small session files
 // (each read again from where it was left) allocated ~9 GB of them, which
 // the GC's heap target followed up (#2776). A line longer than the buffer

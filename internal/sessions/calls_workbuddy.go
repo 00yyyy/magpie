@@ -167,7 +167,7 @@ func readWorkBuddyCalls(f file) (*callFile, bool) {
 	defer r.Close()
 	st := &callFile{Agent: f.agent, Path: f.path, Session: strings.TrimPrefix(f.key, f.agent+":")}
 	dir := buddyDir(f.agent)
-	br := bufio.NewReaderSize(r, 1<<20)
+	br := bufio.NewReaderSize(r, scanBuffer(r, 0))
 	last := "" // the messageId the call before this line carried
 	for {
 		b, err := br.ReadBytes('\n')

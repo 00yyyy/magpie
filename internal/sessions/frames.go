@@ -136,7 +136,7 @@ func scanFrames(path string, off, skip int64, fn func([]byte) bool) (next, nextS
 		return
 	}
 	defer dec.Close()
-	r := bufio.NewReaderSize(f, 1<<20)
+	r := bufio.NewReaderSize(f, scanBuffer(f, off))
 	var frame, out, pending []byte
 	at := off
 	first := true
