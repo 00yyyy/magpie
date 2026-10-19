@@ -7235,13 +7235,19 @@ async function openPlugins(q) {
 }
 
 // pluginSignIn: a plugin's provider signed in to as every subscription is,
-// in the Providers add sheet
-async function pluginSignIn(id) {
+// in the Providers add sheet. Its sign-in is drawn at the sheet's foot,
+// under every tile: the click that asked for it, on the Plugins page, takes
+// the reader there, with room around it for what the sign-in asks next.
+async function pluginSignIn(id, e) {
+  const go = scrollOnPurpose(e, 3000);
   if (!await show("providers")) return;
   closeModal();
   adding = true; editing = null; draft = null; presetQuery = "";
   renderProviders();
   startSignIn(id);
+  if (!go) return;
+  $("#addSheet .signing")?.scrollIntoView({ block: "center" });
+  arrived($("#view-providers"));
 }
 
 // openProvider: a provider opened in the Providers tab
@@ -22242,6 +22248,13 @@ function scrollOnPurpose(e, ms = 1000) {
   }
   readerScrolls(ms);
   return true;
+}
+// arrived: a scroll asked for is done. Where it left v is where the reader
+// is now, and what redraws after it (a load come in, which WebKit lets pull
+// the view up while it is drawn) is put back there, not taken as theirs.
+function arrived(v) {
+  readerLeaves(v);
+  purposeUntil = performance.now();
 }
 const SCROLL_KEYS = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " "]);
 // Enter/Space can move focus to another field (opening a form, or validation).
