@@ -4862,6 +4862,12 @@ function routingPage(part) {
     const openedOf = (r) => { let s = opened.get(r); if (!s) opened.set(r, s = new Set()); return s; };
     // the condition to open once the rules are drawn: {r, k}
     let focusCond = null;
+    // a rule with nothing to match by can't be saved (provider.cleanRules
+    // refuses it too): one Save refused for it says so under it, with the
+    // way out, until it has a condition or is removed
+    const bareRule = (r) => r.pause ? !condSet(r, "time") && !r.agents.length && !r.folders?.length && !r.exceptFolders?.length
+      : !COND_KINDS.some(([k]) => condSet(r, k));
+    const refused = new WeakSet();
     // what a rule can hold, in the order a rule reads: [kind, its name in
     // the menu, whether a pause takes it]. A pause holds by hours, days,
     // agents and folders only: the others are about a request, and a pause
@@ -4956,7 +4962,7 @@ function routingPage(part) {
             // one line of words: a pasted line break is a space
             if (/[\r\n]/.test(ii.value)) { const at = ii.selectionStart; ii.value = ii.value.replace(/\r?\n|\r/g, " "); ii.setSelectionRange(at, at); }
             r.intent = ii.value; it.classList.toggle("on", !!r.intent.trim());
-            size();
+            size(); warn();
             // Jev, when there is one, as the effort picked per turn takes it
             if (r.intent.trim() && !d.classifier && deciders.length) d.classifier = deciders[0].id;
             drawClassifier();
@@ -4998,7 +5004,7 @@ function routingPage(part) {
             { value: "", label: t("any reasoning"), note: t("not a condition") },
             { value: "on", label: t("reasoning on"), note: t("thinking or any effort level") },
             ...EFFORTS.map((v) => ({ value: v, label: t("reasoning ≥ {level}", { level: v }) })),
-          ], (v) => { r.effort = v; ef.textContent = effortName(v); ef.classList.toggle("on", !!v); });
+          ], (v) => { r.effort = v; ef.textContent = effortName(v); ef.classList.toggle("on", !!v); warn(); });
           wrap("effort", ef);
           if (mine === "effort") focus = () => { ef.focus({ preventScroll: true }); ef.onclick({ stopPropagation() {} }); };
         }
@@ -5021,7 +5027,7 @@ function routingPage(part) {
             ...clients.map((a) => ({ value: a.id, label: a.name, icon: a.icon, note: r.agents.includes(a.id) ? "✓" : "" })),
           ], (v) => {
             r.agents = !v ? [] : r.agents.includes(v) ? r.agents.filter((x) => x !== v) : [...r.agents, v];
-            ag.textContent = agentsName(); ag.classList.toggle("on", r.agents.length > 0);
+            ag.textContent = agentsName(); ag.classList.toggle("on", r.agents.length > 0); warn();
           });
           wrap("agents", ag);
           if (mine === "agents") focus = () => { ag.focus({ preventScroll: true }); ag.onclick({ stopPropagation() {} }); };
@@ -5033,7 +5039,7 @@ function routingPage(part) {
           fd.onclick = (e) => { if (e.target === fd || e.target.tagName === "SPAN") fi.focus(); };
           const fi = input((r.folders || []).join(", "), "~/work/acme, ~/oss");
           fd.title = t("The agent works in one of these folders or a folder inside one, as it tells the model (Claude Code, Codex, OpenCode, Pi); an agent that doesn't say isn't matched");
-          fi.oninput = () => { r.folders = fi.value.split(",").map((x) => x.trim()).filter(Boolean); fd.classList.toggle("on", r.folders.length > 0); fitBox(fi); };
+          fi.oninput = () => { r.folders = fi.value.split(",").map((x) => x.trim()).filter(Boolean); fd.classList.toggle("on", r.folders.length > 0); fitBox(fi); warn(); };
           fi.onkeydown = (e) => e.stopPropagation();
           fitBox(fi);
           fd.append(el("span", "", t("in folder")), fi);
@@ -5048,7 +5054,7 @@ function routingPage(part) {
           xf.onclick = (e) => { if (e.target === xf || e.target.tagName === "SPAN") xi.focus(); };
           const xi = input((r.exceptFolders || []).join(", "), "~/big-task");
           xf.title = t("The agent works in none of these folders, nor a folder inside one, as it tells the model; an agent that doesn't say counts as outside them");
-          xi.oninput = () => { r.exceptFolders = xi.value.split(",").map((x) => x.trim()).filter(Boolean); xf.classList.toggle("on", r.exceptFolders.length > 0); fitBox(xi); };
+          xi.oninput = () => { r.exceptFolders = xi.value.split(",").map((x) => x.trim()).filter(Boolean); xf.classList.toggle("on", r.exceptFolders.length > 0); fitBox(xi); warn(); };
           xi.onkeydown = (e) => e.stopPropagation();
           fitBox(xi);
           xf.append(el("span", "", t("not in folder")), xi);
@@ -5125,7 +5131,10 @@ function routingPage(part) {
         ub.onclick = (ev) => pickFrom("member", ub, ev, d.members.map((id) => { const s = subOf(id); return { value: id, label: memberName(id), note: memberNote(id), icon: s ? undefined : modelOf(id)?.icon, icons: s ? groupIcons(s) : undefined }; }),
           (v) => { r.use = v; drawUse(); warn(); });
         const hint = el("span", "rt-rwarn");
+        const need = el("div", "rt-rneed");
         const warn = () => {
+          need.hidden = !(refused.has(r) && bareRule(r));
+          need.textContent = need.hidden ? "" : t(r.pause ? "A pause needs hours, days, agents or folders. Add one with its +, or remove the rule from its ⋯ menu" : "This rule has no condition. Add one with its +, or remove the rule from its ⋯ menu");
           const m = infoOf(r.use), bits = [];
           if (r.pause) bits.push(t("left out of the group then: not tried, not a fallback"));
           if (!r.pause && r.images && m && m.ready && !m.images) bits.push(t("it doesn't take images"));
@@ -5198,7 +5207,7 @@ function routingPage(part) {
             { name: "Remove rule", icon: CROSS, sep: true, run: () => { d.rules.splice(i, 1); drawRules(); } },
           ]);
         };
-        row.append(el("span", "i", String(i + 1)), line, then, more);
+        row.append(el("span", "i", String(i + 1)), line, then, more, need);
         rlist.append(row);
       });
       drawClassifier();
@@ -5379,10 +5388,16 @@ function routingPage(part) {
       // a folder is a whole path (provider.cleanFolder)
       const badDir = d.rules.findIndex((r) => [...(r.folders || []), ...(r.exceptFolders || [])].some((f) => !/^(~$|~[\\/]|\/|\\\\|[A-Za-z]:([\\/]|$))/.test(f)));
       if (badDir >= 0) return status(t("Rule {n}: a folder is a whole path, like ~/work or /Users/me/work", { n: badDir + 1 }), "warn");
-      const bare = d.rules.findIndex((r) => !r.pause && !r.tokens && !r.images && !r.effort && !r.agents.length && !r.intent && !r.compact && !r.time && !r.folders?.length && !r.exceptFolders?.length);
-      if (bare >= 0) return status(t("Rule {n} needs a condition", { n: bare + 1 }), "warn");
-      const bareP = d.rules.findIndex((r) => r.pause && !r.time && !r.agents.length && !r.folders?.length && !r.exceptFolders?.length);
-      if (bareP >= 0) return status(t("Rule {n}: a pause needs hours, days, agents or folders", { n: bareP + 1 }), "warn");
+      // a rule with nothing to match by: said under each such rule, with
+      // the way out (its + or its ⋯'s Remove rule), and in the status line
+      const bares = d.rules.filter(bareRule);
+      if (bares.length) {
+        for (const r of bares) refused.add(r);
+        const n = d.rules.indexOf(bares[0]);
+        focusCond = { r: bares[0], k: "+" };
+        drawRules();
+        return status(t(bares[0].pause ? "Rule {n}: a pause needs hours, days, agents or folders. Add one with its +, or remove the rule from its ⋯ menu" : "Rule {n} has no condition. Add one with its +, or remove the rule from its ⋯ menu", { n: n + 1 }), "warn");
+      }
       if (d.rules.some((r) => r.intent) && !d.classifier) return status(t("Choose the model that tells which intent a message is"), "warn");
       if (d.effort === "auto" && !d.classifier) return status(t("Choose the model that rates how hard a turn is"), "warn");
       if (own && !d.levels.length) return status(t("Pick a level to offer, or leave them to its models"), "warn");
