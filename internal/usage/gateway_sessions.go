@@ -348,6 +348,10 @@ func buildGatewaySessions(snapshot *logSnapshot, since time.Time, nativeKeys map
 		m.addRecord(r, p)
 	})
 	for k, s := range groups {
+		// of their own size: the projection keeps them, and grown an item
+		// at a time they kept append's spare room, ~40% of them (#2776)
+		s.Daily = make([]GatewayDayUsage, 0, len(perSession[k]))
+		s.Models = make([]GatewayModel, 0, len(models[k]))
 		for _, d := range perSession[k] {
 			s.Daily = append(s.Daily, *d)
 		}
