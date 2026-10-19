@@ -22633,6 +22633,9 @@ async function show(v) {
       if (!(await confirmDiscard())) return false;
       magpie.call("library", "discard");
     }
+    // the page left lets go of what was only for this visit (the Usage
+    // page's Requests, what a click filtered them by)
+    magpie.call(view, "leave");
   }
   view = v;
   // the page the reader leaves is the one the window opens on next (keptView)
