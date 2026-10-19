@@ -592,6 +592,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		srv.Shutdown(c)
 		s.subscription.abortAll()
 		provider.FlushServed() // what answered last, kept for the next start and the CLI
+		flushSticks()          // who answered which conversation, for the next start or the magpie handed over to
 	}()
 	for {
 		err := srv.Serve(ln)

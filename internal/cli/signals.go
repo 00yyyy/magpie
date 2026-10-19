@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"syscall"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -41,6 +42,7 @@ func endProbesOnSignal() {
 			proc.EndProbes()
 			if !handled {
 				provider.FlushServed() // a gateway's last answers, noted and not yet written
+				gateway.FlushSticks()  // and who answered which conversation
 				die(s)
 			}
 		}
