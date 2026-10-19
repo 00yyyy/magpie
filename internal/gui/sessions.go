@@ -481,15 +481,29 @@ func warmSessions() {
 		time.Sleep(3 * time.Second)
 		// with few readers, as nobody waits on it yet: after an update
 		// that reads every file again, it held every core (#1665)
-		sessions.Warm(func() {
-			warmUp(
-				func() { statsFor(0) },
-				func() { statsFor(30) },
-				func() { usage.QueryPage(usage.All, usage.Filter{}, 0, 50) },
-			)
-		})
+		sessions.Warm(func() { warmUp(warmSteps()...) })
 	}()
 }
+
+// warmSteps are the reads the warm-up makes before any page asks for them.
+// The last is Codex's per-thread effort, when there are Codex sessions: a
+// first Codex page after a start read it from the whole ledger while it
+// waited (#2776), and every later ask is answered from what it kept.
+func warmSteps() []func() {
+	return []func(){
+		func() { statsFor(0) },
+		func() { statsFor(30) },
+		func() { usage.QueryPage(usage.All, usage.Filter{}, 0, 50) },
+		func() {
+			if slices.ContainsFunc(statsFor(0).Keys, func(k string) bool { return strings.HasPrefix(k, "codex:") }) {
+				warmCodexEffort()
+			}
+		},
+	}
+}
+
+// warmCodexEffort reads what the Sessions page's Codex rows ask for.
+var warmCodexEffort = func() { usage.CodexModelEffort(usage.All) }
 
 // warmUp runs the warm-up's reads, then hands what they threw away back to
 // the system at once. Reading a long history allocates many times what it
