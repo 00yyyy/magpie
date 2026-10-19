@@ -96,6 +96,8 @@ type callFile struct {
 	CX *cxRun
 	// Pi and omp
 	Pi *piCarry
+	// dsh
+	Dsh *dshCarry
 }
 
 // cxRun is where a rollout's read stands: what its lines have said so far.
@@ -310,14 +312,14 @@ func callFiles() []file {
 
 // callSources are callFiles and the other agents' session files. Most are
 // read whole rather than line by line: OpenCode's (#680) and ZCode's, whose
-// calls are rows of their database or their JSON files; DeepSeek Harness's,
-// whose session file is packed in frames and so cannot be read on from the
-// middle of one; and WorkBuddy's, whose usage lines repeat a reply's id as it
+// calls are rows of their database or their JSON files; and WorkBuddy's, whose usage lines repeat a reply's id as it
 // goes on, as CodeBuddy Code's do (#1779); and MiniMax Code's, whose messages
 // file a later generation of its history may replace (#1605). Kimi Code's
 // (#1607), Pi's and omp's (#1951) are lines of a file only appended to,
-// read on as callFiles' are.
-// Every agent here needs an entry in wholeCallReaders or lineCallReaders.
+// read on as callFiles' are; DeepSeek Harness's, a file only appended to
+// that may be packed in zstd frames, is read on from the frame it was
+// left in (readDshCalls). Every agent here needs an entry in
+// wholeCallReaders, lineCallReaders or resumeCallReaders.
 func callSources() []file {
 	out := callFiles()
 	out = append(out, openCodeCallFiles()...)
@@ -403,6 +405,14 @@ func (st *callFile) clone() *callFile {
 	if st.Pi != nil {
 		p := *st.Pi
 		c.Pi = &p
+	}
+	if st.Dsh != nil {
+		d := *st.Dsh
+		if d.Tail != nil {
+			t := *d.Tail
+			d.Tail = &t
+		}
+		c.Dsh = &d
 	}
 	return &c
 }

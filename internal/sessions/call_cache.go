@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
+	"encoding/json"
 	"hash/crc32"
 	"hash/fnv"
 	"io"
@@ -176,17 +177,27 @@ func keepCalls(path string, st *callFile) {
 // wholeCallReaders read an agent's calls from one session file at a time,
 // rather than a line at a time: its calls are not lines, or its file cannot
 // be read on from the middle of one. Every agent in callSources that is not
-// in callFiles needs an entry here or in lineCallReaders, or its calls are
-// never read.
+// in callFiles needs an entry here, in lineCallReaders or in
+// resumeCallReaders, or its calls are never read.
 var wholeCallReaders = map[string]func(file) (*callFile, bool){
 	"opencode":  readOpenCodeCalls,
 	"zcode":     readZCodeCalls,
-	"dsh":       readDshCalls,
 	"workbuddy": readWorkBuddyCalls,
 	"codebuddy": readWorkBuddyCalls, // #1779
 	// #1605
 	"minimax-code": readMiniMaxCalls,
 	"agy":          readAgyCalls, // #2097
+}
+
+// resumeCallReaders read an agent's calls from a file only appended to that
+// the line reader can't read on through, as dsh's packed file of zstd
+// frames: each is handed what the last read came to and reads on from
+// where it left off, or whole when it can't. It gives how many of the
+// calls it hands back were in old, kept as they were (0 when it read
+// whole, or what it had counted no longer stands), so only the rest are
+// appended to the disk shard.
+var resumeCallReaders = map[string]func(f file, old *callFile) (st *callFile, kept int, ok bool){
+	"dsh": readDshCalls,
 }
 
 // lineCallReader reads an agent's calls a line at a time, as Claude Code's
@@ -245,6 +256,22 @@ func readCalls(f file) *callFile {
 	// that changed is read again, and one that did not is kept. OpenCode's
 	// and ZCode's are rows of a database or JSON documents; dsh's file is
 	// packed in frames, so it cannot be read on from the middle of one.
+	if read, ok := resumeCallReaders[f.agent]; ok {
+		st, kept, readOK := read(f, old)
+		if !readOK && old != nil {
+			return old
+		}
+		if readOK {
+			st.Size, st.Mod = f.size, f.mod.UnixNano()
+			writeCalls(st, kept, kept > 0)
+		}
+		callsMu.Lock()
+		if readOK && generation == callGeneration {
+			keepCalls(f.path, st)
+		}
+		callsMu.Unlock()
+		return st
+	}
 	if read, ok := wholeCallReaders[f.agent]; ok {
 		st, readOK := read(f)
 		if !readOK && old != nil {
@@ -332,6 +359,8 @@ type callDiskState struct {
 	At, End, AsstEnd   int64
 	Session, Requested string
 	LastUser, LastAsst time.Time
+	// dsh's carry (dshCarry), as JSON: nil when there is none
+	Dsh []byte
 	// Pi's and omp's carry (piCarry), flat: PiOn when there is one
 	PiOn, PiHeader      bool
 	PiCwd               string
@@ -343,6 +372,9 @@ func diskCallState(s *callFile) callDiskState {
 	d := callDiskState{ContentHash: s.ContentHash, Size: s.Size, Mod: s.Mod, Off: s.Off, Head: s.Head, HeadSize: s.HeadSize,
 		Path: s.Path, Agent: s.Agent, At: s.At, End: s.End, AsstEnd: s.AsstEnd, Session: s.Session, Requested: s.Requested,
 		LastUser: s.LastUser, LastAsst: s.LastAsst}
+	if s.Dsh != nil {
+		d.Dsh, _ = json.Marshal(s.Dsh)
+	}
 	if p := s.Pi; p != nil {
 		d.PiOn, d.PiHeader, d.PiCwd, d.PiSince, d.PiProvider, d.PiModel = true, p.Header, p.Cwd, p.Since, p.Provider, p.Model
 	}
@@ -352,6 +384,12 @@ func (s callDiskState) restore() *callFile {
 	st := &callFile{ContentHash: s.ContentHash, Size: s.Size, Mod: s.Mod, Off: s.Off,
 		Head: s.Head, HeadSize: s.HeadSize, Path: s.Path, Agent: s.Agent, At: s.At, End: s.End,
 		AsstEnd: s.AsstEnd, Session: s.Session, Requested: s.Requested, LastUser: s.LastUser, LastAsst: s.LastAsst}
+	if len(s.Dsh) > 0 {
+		var c dshCarry
+		if json.Unmarshal(s.Dsh, &c) == nil {
+			st.Dsh = &c
+		}
+	}
 	if s.PiOn {
 		st.Pi = &piCarry{s.PiHeader, s.PiCwd, s.PiSince, s.PiProvider, s.PiModel}
 	}
