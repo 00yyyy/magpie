@@ -1371,7 +1371,7 @@ func scanAt(path string, off int64, head func([]byte) bool, fn func(b []byte, st
 		}
 		return off, err
 	}
-	r := bufio.NewReaderSize(f, 1<<20)
+	r := bufio.NewReaderSize(f, scanBuffer(f, off))
 	var long []byte
 	var n int64 // bytes of the line so far
 	skip, seen := false, false
@@ -1411,6 +1411,22 @@ func scanAt(path string, off int64, head func([]byte) bool, fn func(b []byte, st
 		off += n
 		n, skip, seen, long = 0, false, false, long[:0]
 	}
+}
+
+// scanBuffer is the read buffer scanAt needs for what is left of f from off:
+// 1 MiB at most, and no more than that rest of a plain file. Every scan
+// took 1 MiB, and a start's read of ~4,600 mostly small session files
+// (each read again from where it was left) allocated ~9 GB of them, which
+// the GC's heap target followed up (#2776). A line longer than the buffer
+// (a file grown since) is still read whole, through scanAt's long line.
+func scanBuffer(f io.Reader, off int64) int {
+	const most, least = 1 << 20, 16 << 10
+	if pf, ok := f.(*os.File); ok {
+		if info, err := pf.Stat(); err == nil {
+			return int(min(most, max(least, info.Size()-off+1)))
+		}
+	}
+	return most
 }
 
 // packed says whether a session file is compressed: a Codex rollout the
