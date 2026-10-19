@@ -186,8 +186,6 @@ var wholeCallReaders = map[string]func(file) (*callFile, bool){
 	"codebuddy": readWorkBuddyCalls, // #1779
 	// #1605
 	"minimax-code": readMiniMaxCalls,
-	"pi":           readPiCalls, // #1951
-	"omp":          readPiCalls,
 	"agy":          readAgyCalls, // #2097
 }
 
@@ -195,16 +193,22 @@ var wholeCallReaders = map[string]func(file) (*callFile, bool){
 // and Codex's are: a file that only grew is read on from where the last read
 // left off (prepareCalls), and only the calls it adds are written to the
 // disk shard. begin starts a file read from its start; line reads one whole
-// line of it. Nothing a line leaves for the next may live outside st.
+// line of it. Nothing a line leaves for the next may live outside st. kept,
+// when a reader carries something from line to line, says whether st holds
+// it: a read kept on disk before it was carried there does not, and is
+// read whole again.
 type lineCallReader struct {
 	begin func(st *callFile, f file)
 	line  func(st *callFile, b []byte)
+	kept  func(st *callFile) bool
 }
 
 // lineCallReaders are the agents in callSources, beside callFiles' own,
 // whose calls are each one line of a file only appended to.
 var lineCallReaders = map[string]lineCallReader{
-	"kimi": {kimiCallsBegin, kimiCallLine}, // #1607
+	"kimi": {kimiCallsBegin, kimiCallLine, nil},         // #1607
+	"pi":   {piCallsBegin, readPiCallLine, piCallsKept}, // #1951
+	"omp":  {piCallsBegin, readPiCallLine, piCallsKept},
 }
 
 func readCalls(f file) *callFile {
@@ -256,6 +260,9 @@ func readCalls(f file) *callFile {
 		}
 		callsMu.Unlock()
 		return st
+	}
+	if r, ok := lineCallReaders[f.agent]; ok && r.kept != nil && old != nil && !r.kept(old) {
+		old = nil
 	}
 	st := prepareCalls(f, old)
 	continued := old != nil && st.Off == old.Off && st.Off > 0
@@ -325,16 +332,30 @@ type callDiskState struct {
 	At, End, AsstEnd   int64
 	Session, Requested string
 	LastUser, LastAsst time.Time
+	// Pi's and omp's carry (piCarry), flat: PiOn when there is one
+	PiOn, PiHeader      bool
+	PiCwd               string
+	PiSince             time.Time
+	PiProvider, PiModel string
 }
 
 func diskCallState(s *callFile) callDiskState {
-	return callDiskState{s.ContentHash, s.Size, s.Mod, s.Off, s.Head, s.HeadSize,
-		s.Path, s.Agent, s.At, s.End, s.AsstEnd, s.Session, s.Requested, s.LastUser, s.LastAsst}
+	d := callDiskState{ContentHash: s.ContentHash, Size: s.Size, Mod: s.Mod, Off: s.Off, Head: s.Head, HeadSize: s.HeadSize,
+		Path: s.Path, Agent: s.Agent, At: s.At, End: s.End, AsstEnd: s.AsstEnd, Session: s.Session, Requested: s.Requested,
+		LastUser: s.LastUser, LastAsst: s.LastAsst}
+	if p := s.Pi; p != nil {
+		d.PiOn, d.PiHeader, d.PiCwd, d.PiSince, d.PiProvider, d.PiModel = true, p.Header, p.Cwd, p.Since, p.Provider, p.Model
+	}
+	return d
 }
 func (s callDiskState) restore() *callFile {
-	return &callFile{ContentHash: s.ContentHash, Size: s.Size, Mod: s.Mod, Off: s.Off,
+	st := &callFile{ContentHash: s.ContentHash, Size: s.Size, Mod: s.Mod, Off: s.Off,
 		Head: s.Head, HeadSize: s.HeadSize, Path: s.Path, Agent: s.Agent, At: s.At, End: s.End,
 		AsstEnd: s.AsstEnd, Session: s.Session, Requested: s.Requested, LastUser: s.LastUser, LastAsst: s.LastAsst}
+	if s.PiOn {
+		st.Pi = &piCarry{s.PiHeader, s.PiCwd, s.PiSince, s.PiProvider, s.PiModel}
+	}
+	return st
 }
 
 func callText(c *Call) [13]*string {

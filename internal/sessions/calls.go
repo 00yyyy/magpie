@@ -94,6 +94,8 @@ type callFile struct {
 	CompactMs int64
 	// Codex
 	CX *cxRun
+	// Pi and omp
+	Pi *piCarry
 }
 
 // cxRun is where a rollout's read stands: what its lines have said so far.
@@ -313,7 +315,8 @@ func callFiles() []file {
 // middle of one; and WorkBuddy's, whose usage lines repeat a reply's id as it
 // goes on, as CodeBuddy Code's do (#1779); and MiniMax Code's, whose messages
 // file a later generation of its history may replace (#1605). Kimi Code's
-// (#1607) are lines of a file only appended to, read on as callFiles' are.
+// (#1607), Pi's and omp's (#1951) are lines of a file only appended to,
+// read on as callFiles' are.
 // Every agent here needs an entry in wholeCallReaders or lineCallReaders.
 func callSources() []file {
 	out := callFiles()
@@ -396,6 +399,10 @@ func (st *callFile) clone() *callFile {
 		r.Contexts = maps.Clone(r.Contexts)
 		r.Timings = append([]cxCallTiming(nil), r.Timings...)
 		c.CX = &r
+	}
+	if st.Pi != nil {
+		p := *st.Pi
+		c.Pi = &p
 	}
 	return &c
 }
