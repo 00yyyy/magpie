@@ -1354,7 +1354,7 @@ func passing(status int, header http.Header, body []byte, again int) (time.Durat
 	case wait > longestPause:
 		return 0, false
 	case status == 408, status == 500, status == 502, status == 503, status == 504, status == 529:
-		if strings.Contains(string(body), didNotStream) {
+		if bytes.Contains(body, []byte(didNotStream)) {
 			return 0, false
 		}
 		return wait, again < lastRetries
