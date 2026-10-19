@@ -221,6 +221,10 @@ const (
 	// failOverflow: the conversation is too long for the member's model
 	// (#700) — another member, with room for it, is asked, and nobody rests
 	failOverflow = "overflow"
+	// failRoom: the window held the prompt but not the reply asked for
+	// with it — the same one is asked again for the reply the window has
+	// left, and nobody rests
+	failRoom = "room"
 	// failSlow: the member hadn't begun its reply when its group's
 	// FirstToken ran out, nothing of it sent — the next is asked, and
 	// nobody rests, as a long prompt is slow anywhere

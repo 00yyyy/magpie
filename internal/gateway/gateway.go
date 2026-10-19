@@ -2247,6 +2247,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	repicked := 0    // times Copilot's Auto was asked again for a model the account is served
 	floored := false // the reply's length raised to what the provider takes
 	plainFor := ""   // the account and model asked again without effort updates (#617)
+	// the account and model asked again for a reply that fits the window
+	// the prompt leaves, and how long that is (roomCap)
+	roomFor, roomCap := "", 0
 	// the key or subscription account the last try went to (#557)
 	providerKeyID, providerKeyName, providerAccount := "", "", ""
 	var other *Try                 // the first failure that wasn't an allowance run out
@@ -2430,6 +2433,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 		} else if n := userOutput(c.p, c.model); n > 0 {
 			attemptBody = withMaxOutput(from, attemptBody, n)
+		}
+		if roomFor == c.who()+"|"+c.model {
+			if b, ok := withReplyCap(from, attemptBody, roomCap); ok {
+				attemptBody = b
+			}
 		}
 		picked := false // the effort asked for in place of the agent's
 		// a member fixed at an effort (#189), else the model asked for at
@@ -2868,6 +2876,24 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 				i--
 				continue
+			}
+		}
+		if roomFor != c.who()+"|"+c.model && !hw.passing && (hw.code() == 400 || hw.code() == 422) {
+			// the window holds the prompt but not the reply asked for with
+			// it: DeepSeek counts max_tokens in its 1M window, and a client
+			// asking its full 384K for a 700K conversation (max_completion_
+			// tokens, passed as max_tokens since #2355) was refused as too
+			// long, where every other member of its group answered
+			// (molvqingtai on Discord). The same one is asked again for what
+			// the window has left, as the vendor counted it
+			if left := replyLeft(wordsOf(hw.errBody())); left >= leastReplyLeft {
+				if _, ok := withReplyCap(from, attemptBody, left); ok {
+					roomFor, roomCap = c.who()+"|"+c.model, left
+					try.Fail = failRoom
+					s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+					i--
+					continue
+				}
 			}
 		}
 		if hw.failed() && hw.refused {
