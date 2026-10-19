@@ -11842,7 +11842,7 @@ async function followSignIn(id) {
     if (signing?.id !== id) continue;
     if (st.state === "waiting" || st.state === "installing") {
       // the CLI it needed is in: now the vendor's page can open
-      if (signing.state === "installing" && st.state === "waiting" && st.url) {
+      if (signing.state === "installing" && st.state === "waiting" && st.url && !st.opened) {
         api("open", { url: st.url }).catch((e) => {
           if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
         });
@@ -11927,7 +11927,8 @@ async function startPluginSignIn(sub, method, inputs = {}, o = {}) {
     if (o.user) body.user = o.user;
     if (o.proxy != null) body.proxy = o.proxy;
     signing = { ...(await api("plugin-signin", body)), ...keep };
-    if (web && signing.url) api("open", { url: signing.url });
+    // opened: the plugin's own CLI opened the page already (Grok Build's)
+    if (web && signing.url && !signing.opened) api("open", { url: signing.url });
     renderProviders();
     followSignIn(signing.id);
   } catch (e) {

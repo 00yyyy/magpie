@@ -132,6 +132,9 @@ export const FakePlugin = async ({ client }) => ({
           url: "https://fake.invalid/auth?where=" + inputs.where,
           instructions: "Paste the code",
           method: "code",
+          // team "cli-opened": the page is open already, as Grok Build's
+          // `grok login` opens its own on macOS and Windows
+          opened: inputs.team === "cli-opened",
           callback: async (code) =>
             (process.env.FAKE_SIGNIN && (await fetch(process.env.FAKE_SIGNIN + "/token").catch(() => {})), code === "good")
               ? { type: "success", refresh: "r-" + (inputs.team ?? "none"), access: "stale", expires: 0, ...fakeWho(inputs.team) }

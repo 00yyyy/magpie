@@ -2061,7 +2061,10 @@ async function authorize({ provider, method, inputs, account, proxy }) {
   const a = await via.run(proxy ?? "", () => inScope(provider, key, () => m.authorize(m.prompts?.length ? inputs ?? {} : undefined)))
   const session = String(nextSession++)
   sessions.set(session, { provider, key, a, inputs, proxy: proxy ?? "" })
-  return { session, url: a.url ?? "", instructions: a.instructions ?? "", method: a.method }
+  // opened (not OpenCode's) is a page the plugin's own CLI opened already:
+  // Grok Build's `grok login` opens it on macOS and Windows, and magpie's
+  // opening it too showed it twice (andyfmyth on X)
+  return { session, url: a.url ?? "", instructions: a.instructions ?? "", method: a.method, opened: a.opened === true }
 }
 
 // failed is a sign-in's failure, with why, where the plugin tells it
