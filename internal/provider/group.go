@@ -28,6 +28,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -351,7 +352,50 @@ func Groups() []Group {
 	return groupsIn(providerEntries())
 }
 
+// groupsIn is the groups among entries (Groups), built once while a
+// request holds the catalog: a request looked its group up by building
+// every group again, matching each pattern and finding the automatic
+// groups over every model (FindGroup, then the groups' entries). Each
+// caller gets a copy of its own to change.
 func groupsIn(entries []Entry) []Group {
+	return cloneGroups(heldFrom("groups", entries, buildGroupsIn))
+}
+
+// cloneGroups is gs with nothing shared with it: no slice, map or pointer
+// of a group or its rules.
+func cloneGroups(gs []Group) []Group {
+	if gs == nil {
+		return nil
+	}
+	out := make([]Group, len(gs))
+	for i, g := range gs {
+		g.Members, g.Match, g.Matched = slices.Clone(g.Members), slices.Clone(g.Match), slices.Clone(g.Matched)
+		g.Off, g.Levels, g.Fast = slices.Clone(g.Off), slices.Clone(g.Levels), slices.Clone(g.Fast)
+		g.Weights = maps.Clone(g.Weights)
+		if g.Rules != nil {
+			rs := make([]Rule, len(g.Rules))
+			for j, r := range g.Rules {
+				r.Agents, r.Folders, r.ExceptFolders = slices.Clone(r.Agents), slices.Clone(r.Folders), slices.Clone(r.ExceptFolders)
+				if r.Time != nil {
+					t := *r.Time
+					t.Days = slices.Clone(t.Days)
+					r.Time = &t
+				}
+				rs[j] = r
+			}
+			g.Rules = rs
+		}
+		out[i] = g
+	}
+	return out
+}
+
+// groupsBuilt counts buildGroupsIn, for the test that a held request
+// builds the groups once.
+var groupsBuilt atomic.Int64
+
+func buildGroupsIn(entries []Entry) []Group {
+	groupsBuilt.Add(1)
 	f := heldOf("file", load)
 	var out []Group
 	hidden := map[string]bool{}
