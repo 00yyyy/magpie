@@ -615,10 +615,20 @@ func rolloutTwin(p string) string {
 }
 
 var (
-	// DB readers share connection lifetimes; call-file readers need only mu.
-	dbReadMu        sync.Mutex
-	mu              sync.Mutex
-	cache           map[string]*state // path → parse
+	// storeMu keeps the reads of the sessions apart from the changes made
+	// to their files (Delete, a provider move, a project relocation): a
+	// read takes it shared, so reads never wait on one another, and a
+	// change alone. The store handles they share live as long as their last
+	// user (useDBs), not as long as the read that opened them.
+	storeMu sync.RWMutex
+	mu      sync.Mutex
+	cache   map[string]*state // path → parse
+	// parsing holds the files a refresh is reading now, each closed when
+	// its parse is in the cache: another reader serves the parse kept of
+	// such a file rather than reading it a second time, and waits only for
+	// one it has no parse of yet (#2776: the start's warm-up held every
+	// page for its whole read)
+	parsing         = map[string]chan struct{}{}
 	loaded          bool
 	cacheGeneration uint64
 	// the zone the parses in memory date their days in
@@ -770,14 +780,25 @@ func writeCache(c *save) {
 // cached agents alone, for a Codex-only identity refresh.
 func refresh(want, all []file) {
 	defer func() { trimSummaryRevisions(time.Now()) }()
-	var todo []file
+	var todo, waits []file
 	for _, f := range want {
 		if f.cold {
 			continue // in a stopped WSL distro: what was read of it stands
 		}
 		if s := cache[f.path]; s == nil || s.Size != f.size || s.Mod != f.mod.UnixNano() || (f.agent == "hermes" && (f.hermes == nil || f.rev == "" || s.DBRevision != f.rev)) || ((f.agent == "alma" || f.agent == "cursor") && s.DBRevision != f.rev) {
+			if parsing[f.path] != nil {
+				// another refresh is reading it: its last parse stands
+				// until that one is in, and one never read is waited for
+				if s == nil {
+					waits = append(waits, f)
+				}
+				continue
+			}
 			todo = append(todo, f)
 		}
+	}
+	if len(waits) > 0 {
+		defer waitParsing(waits)
 	}
 	gone := false
 	if len(cache) > 0 && all != nil {
@@ -821,6 +842,7 @@ func refresh(want, all []file) {
 	jobs := make([]job, len(todo))
 	for i, f := range todo {
 		jobs[i] = job{f: f, old: cache[f.path]}
+		parsing[f.path] = make(chan struct{})
 	}
 	generation := cacheGeneration
 	mu.Unlock()
@@ -853,15 +875,16 @@ func refresh(want, all []file) {
 		}
 		close(ch)
 	}()
-	// publish puts the parses finished since last time in the cache.
-	publish := func(done []int) {
-		for _, i := range done {
-			j := &jobs[i]
-			// A concurrent read may already have published a newer parse.
-			if generation == cacheGeneration && cache[j.f.path] == j.old {
-				cache[j.f.path] = j.parsed
-			}
+	// publish puts a finished parse in the cache at once, for a reader
+	// waiting on it, and lets the file be read again.
+	publish := func(i int) {
+		j := &jobs[i]
+		// A concurrent read may already have published a newer parse.
+		if generation == cacheGeneration && cache[j.f.path] == j.old {
+			cache[j.f.path] = j.parsed
 		}
+		close(parsing[j.f.path])
+		delete(parsing, j.f.path)
 	}
 	// What is read is kept on disk every checkpointEvery, not only at the
 	// end: a first read of a long history on a slow disk runs for minutes,
@@ -869,30 +892,62 @@ func refresh(want, all []file) {
 	// of it, so the next start read it all again.
 	tick := time.NewTicker(checkpointEvery)
 	defer tick.Stop()
-	var done []int
+	unsaved := false
 	for n := 0; n < len(jobs); {
 		select {
 		case i := <-finished:
-			done = append(done, i)
+			mu.Lock()
+			publish(i)
+			mu.Unlock()
+			unsaved = true
 			n++
 		case <-tick.C:
-			if len(done) == 0 {
+			if !unsaved {
 				continue
 			}
 			mu.Lock()
-			publish(done)
 			if generation == cacheGeneration {
 				saveCache()
 			}
 			mu.Unlock()
-			done = done[:0]
+			unsaved = false
 		}
 	}
 	mu.Lock()
-	publish(done)
 	progress.finish()
 	if generation == cacheGeneration {
 		saveCache()
+	}
+}
+
+// waitParsing waits, with mu let go, for the files other refreshes are
+// reading, and reads itself any of them that came to nothing (a Reset
+// dropped its parse).
+func waitParsing(fs []file) {
+	for {
+		var chans []chan struct{}
+		for _, f := range fs {
+			if ch := parsing[f.path]; ch != nil {
+				chans = append(chans, ch)
+			}
+		}
+		if len(chans) == 0 {
+			break
+		}
+		mu.Unlock()
+		for _, ch := range chans {
+			<-ch
+		}
+		mu.Lock()
+	}
+	var missing []file
+	for _, f := range fs {
+		if cache[f.path] == nil {
+			missing = append(missing, f)
+		}
+	}
+	if len(missing) > 0 {
+		refresh(missing, nil)
 	}
 }
 
@@ -1008,8 +1063,8 @@ func Reset() {
 // List reads the latest sessions of every agent, the most recently active
 // first, at most limit of them (Limit when 0).
 func List(limit int) []Session {
-	dbReadMu.Lock()
-	defer dbReadMu.Unlock()
+	storeMu.RLock()
+	defer storeMu.RUnlock()
 	if limit <= 0 {
 		limit = Limit
 	}
@@ -1017,7 +1072,7 @@ func List(limit int) []Session {
 	defer mu.Unlock()
 	loadCache()
 
-	defer closeDBs()
+	defer useDBs()()
 	files := allFiles()
 	groups := map[string][]file{}
 	latest := map[string]time.Time{}
@@ -1627,7 +1682,7 @@ func Titles(keys []string) map[string]string {
 	mu.Lock()
 	defer mu.Unlock()
 	loadCache()
-	defer closeDBs()
+	defer useDBs()()
 	files := allFiles()
 	groups := map[string][]file{}
 	var fs []file
@@ -1675,7 +1730,7 @@ func get(key string) (s Session, ok, found bool) {
 	mu.Lock()
 	defer mu.Unlock()
 	loadCache()
-	defer closeDBs()
+	defer useDBs()()
 	files := allFiles()
 	var fs []file
 	for _, f := range files {
