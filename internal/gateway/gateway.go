@@ -3095,12 +3095,22 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// had cost 616 tries, and the accounts their allowances. Another
 		// vendor left in the group is asked, once
 		protected := !hw.passing && !hw.refused && protectionRefused(hw.code(), hw.errBody())
-		if protected {
+		// Command Code's Zero Data Retention setting refused the model
+		// (plugins #246): every account of the provider is sent the same
+		// header, so none of them is asked the model again, and nobody
+		// rests — it answers as soon as the switch is off. Another member,
+		// its other models among them, is asked
+		zdr := !hw.passing && !hw.refused && hw.code() >= 400 && hw.header.Get(zdrHeader) != ""
+		if protected || zdr {
 			if other == nil {
 				other = &Try{Status: call.Status, Error: call.Error}
 			}
 			try.Fail = failOther
-			if left := elsewhere(cands[i+1:], c); len(left) > 0 {
+			left := elsewhere(cands[i+1:], c)
+			if zdr {
+				left = notMates(cands[i+1:], c)
+			}
+			if len(left) > 0 {
 				try.Fail = failShape
 				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 				skipped = append(skipped, c.label()+": "+call.Error)
@@ -3110,6 +3120,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			cands = cands[:i+1]
 			last = true
 		}
+		// nor is it asked again after a moment
+		protected = protected || zdr
 		if wait, ok := passing(hw.code(), hw.header, hw.errBody(), again); ok && !protected && !last && hw.failed() && spentAfter(cands[i+1:]) {
 			// the others left are out of their allowance (Discord, waroy: a
 			// Codex account run out, Grok busy a moment): this one is the

@@ -814,6 +814,12 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	now := time.Now()
 	d := fallbackCooldown
 	why := failureOf(c, status, body)
+	if header.Get(zdrHeader) != "" || zdrRefused(status, body) {
+		// Command Code's Zero Data Retention setting refused the request:
+		// the model and the account are as good as they were, and answer
+		// as soon as the switch is off
+		return Rest{Why: why, Status: status, By: "off", Until: now}
+	}
 	// read before the allowance is asked again below: out of a pool that
 	// counts some models only, the account's others are still in theirs
 	// (Cursor's Auto with Other Models used up)
@@ -1111,6 +1117,11 @@ func keepRetry(dst, src http.Header, body []byte) {
 		// code (bio_policy): that it was the safety filter goes on beside
 		// it, for settle to try the next account (#248)
 		dst.Set(refusedHeader, note)
+	}
+	if zdrCoded.Match(body) {
+		// the error the agent gets may lose Command Code's code: that it
+		// was its Zero Data Retention setting goes on beside it
+		dst.Set(zdrHeader, "1")
 	}
 }
 

@@ -74,7 +74,7 @@ func (s *Server) decideTries(g provider.Group, ms []provider.Member) ([]candidat
 // would fail the same at any. It returns why it failed, and its rest when
 // it rests.
 func (s *Server) decideFailed(c candidate, status int, header http.Header, body []byte) (string, *Rest) {
-	if shapeRefused(status, body) || promptRefused(status, body) || protectionRefused(status, body) || !retryable(status, body) {
+	if shapeRefused(status, body) || promptRefused(status, body) || protectionRefused(status, body) || zdrRefused(status, body) || !retryable(status, body) {
 		return failureOf(c, status, body), nil
 	}
 	rest := s.restAfter(c, status, header, body)
