@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/steady"
@@ -86,8 +87,16 @@ func Hold() (release func()) {
 func Forget() {
 	mu.Lock()
 	gen++
+	gens.Store(gen)
 	mu.Unlock()
 }
+
+// gens is gen, read without mu.
+var gens atomic.Uint64
+
+// Gen is moved on by every Forget: what is built from files read here, and
+// kept past one read, is built again when it moved.
+func Gen() uint64 { return gens.Load() }
 
 // Look has the file at path looked at on its next read, even while a
 // request holds what was read (Hold): another magpie may have written it,
