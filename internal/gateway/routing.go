@@ -602,8 +602,11 @@ var zhipuResets = regexp.MustCompile(`(?:\bYour limit will reset at|您的限额
 // offset goes with it: "20:12 UTC+8" today, else "Oct 16 09:00 UTC+8".
 // Without it a magpie on UTC+8 said "not asked again before 17:12" to a
 // user who couldn't tell whose 17:12 it was (Player on Discord).
-func heldClock(t, now time.Time) string {
-	t, now = t.Local(), now.Local()
+func heldClock(t, now time.Time) string { return heldClockIn(t, now, time.Local) }
+
+// heldClockIn is heldClock on the clock of loc.
+func heldClockIn(t, now time.Time, loc *time.Location) string {
+	t, now = t.In(loc), now.In(loc)
 	s := t.Format("Jan 2 15:04")
 	if y, m, d := t.Date(); now.Year() == y && now.Month() == m && now.Day() == d {
 		s = t.Format("15:04")
