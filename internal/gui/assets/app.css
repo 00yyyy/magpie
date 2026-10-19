@@ -3038,7 +3038,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .mbulk { display: flex; align-items: center; gap: 6px; }
 .mbulk > input { max-width: 260px; flex: 1; }
 /* a long list scrolls on its own, not the editor with it past its ends */
-.mchips { display: flex; flex-wrap: wrap; gap: 4px; max-height: min(132px, 28vh); overflow-y: auto; overscroll-behavior: contain; padding: 1px; }
+.mchips { display: flex; flex-wrap: wrap; gap: 4px; max-height: min(240px, 40vh); overflow-y: auto; overscroll-behavior: contain; padding: 1px; }
 .mchips::-webkit-scrollbar { width: 0; }
 /* let out to its full height (#833): the editor's body scrolls instead */
 .mchips.open { max-height: none; overflow-y: visible; }
@@ -3064,6 +3064,15 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .mchip:hover { color: var(--fg); border-color: var(--muted); }
 .mchip.on { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); font-weight: 500; }
 .mchip.on::before { content: "✓"; font-size: 10px; }
+/* a chip a click picks and unpicks keeps its size either way (frankdeng on
+   Discord: the tick, and the bolder name, widened a chip as it was picked,
+   and every chip after it moved under the pointer). Its tick has a place
+   of its own, as a menu's check column has, held empty while unpicked, and
+   a pick is said by the tick and the colour, the weight left as it is. */
+.mchip.pick { padding-left: 7px; }
+.mchip.pick::before { content: "✓"; font-size: 10px; margin-right: -1px; visibility: hidden; }
+.mchip.pick.on { font-weight: inherit; }
+.mchip.pick.on::before { visibility: visible; }
 /* what tells a model from others of the same name (modelTells): quiet,
    after the name, never in the accent of a pick */
 .mchip .mtell { color: var(--muted); font-weight: 400; font-size: 10.5px; }

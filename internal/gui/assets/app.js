@@ -10443,7 +10443,7 @@ function addFormModels(ex) {
       const on = draft.extra.includes(m.id);
       // past the first 120 only the picked are drawn, till the rest are asked for
       if (shown >= 120 && !f && !showAll && !on) { hidden++; continue; }
-      const c = el("button", "mchip" + (on ? " on" : ""));
+      const c = el("button", "mchip pick" + (on ? " on" : ""));
       c.append(el("span", "", m.name || m.id));
       const tell = tellTag(tells.get(m.id));
       if (tell) c.append(tell);
@@ -10694,9 +10694,9 @@ const servedIds = (p) => draft.chosen.length ? draft.chosen : draft.none ? [] : 
 
 // modelsOpen: a provider editor's models let out to their full height
 // (#833), kept for the next editor opened. MCHIPS_MAX: the most the box is
-// tall held, as app.css's .mchips max-height: min(132px, 28vh) says
+// tall held, as app.css's .mchips max-height: min(240px, 40vh) says
 let modelsOpen = false;
-const MCHIPS_MAX = 132;
+const MCHIPS_MAX = 240;
 // emptyModelsHint is what an empty model list says. Azure OpenAI's is its
 // deployments, asked for with the key after it is added (#1995): while that
 // is under way it says so, and after it says the deployments' names are
@@ -10852,7 +10852,7 @@ function renderModels(p) {
     // Held, the box is MCHIPS_LINES tall (app.css .mchips); open, it is as
     // tall as its chips, which must be more than that to fold
     requestAnimationFrame(() => {
-      const most = Math.min(MCHIPS_MAX, innerHeight * 0.28);
+      const most = Math.min(MCHIPS_MAX, innerHeight * 0.4);
       fold.hidden = !(chips.scrollHeight > (modelsOpen ? most : chips.clientHeight) + 1);
     });
   };
@@ -10878,7 +10878,7 @@ function renderModels(p) {
       // asked for: a picked model is never out of sight (#685: 10 picked,
       // 7 shown, and "4 more, filter to find them" with no names to filter by)
       if (shown >= 80 && !f && !showAll && !on) { hidden++; continue; }
-      const c = el("button", "mchip" + (on ? " on" : served.has(m.id) ? " auto" : "") + (noAPI(m) ? " noapi" : ""));
+      const c = el("button", "mchip pick" + (on ? " on" : served.has(m.id) ? " auto" : "") + (noAPI(m) ? " noapi" : ""));
       c.append(el("span", "", m.name && m.name !== m.id ? m.name : m.id));
       const tell = tellTag(tells.get(m.id));
       if (tell) c.append(tell);
@@ -13953,7 +13953,7 @@ function accountModels(p, ref, isKey, name) {
     for (const id of ids) {
       const m = p.models.find((x) => x.id === id);
       const on = acctModels.chosen.includes(id);
-      const c = el("button", "mchip" + (on ? " on" : ""));
+      const c = el("button", "mchip pick" + (on ? " on" : ""));
       c.append(el("span", "", m?.name && m.name !== id ? m.name : id));
       const tell = tellTag(tells.get(id));
       if (tell) c.append(tell);
