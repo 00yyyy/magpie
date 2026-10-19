@@ -63,7 +63,7 @@ func TestSessionCachesHoldNoDecodedBlocks(t *testing.T) {
 	logIndex.Unlock()
 	withCaches := held()
 	gatewayCache.Lock()
-	gatewayCache.entries = nil
+	gatewayCache.entry = nil
 	gatewayCache.Unlock()
 	viasCache.Lock()
 	viasCache.value = nil
