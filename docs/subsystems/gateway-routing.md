@@ -178,6 +178,28 @@ recorded as a prediction failure (`noPrediction`).
 
 ## Remote magpie APIs
 
+`GET /v1/magpie/trace` answers the routing this gateway has decided, for a
+magpie on the same computer that does not serve it, whose console plays it as
+its own Routing page (#2606). A trace names accounts and their emails, what
+they served, session ids, a folder's last two parts and why accounts rest; it
+holds no prompt text and no key. So it answers `local(r)` alone: a request
+from another address is refused 403, and so is one from loopback that carries
+a proxy's forwarding header (a tunnel or Tailscale Serve here), or a LAN
+request while the gateway is shared, whatever key it holds. Rebinding,
+`Origin: null` and `*.localhost` pages are stopped before it by `lanGuard` and
+`corsGuard`, as on every route. A gateway key held to a budget, models or
+accounts is refused with `KeyHeldCode`, as `/v1/magpie/concurrency` and
+`/v1/magpie/quotas` refuse it. It answers what `Server.Trace` holds, plus
+this process's `pid` and `serves` (the command that started it, `Serves`), so
+a caller long-polls it with `after` and `wait` the way the page's own
+`/api/gateway/trace` does. `/` adds `pid` and `serves` too, to a loopback
+request alone. `Server.gatewayTrace` in
+[`trace.go`](../../internal/gateway/trace.go), and
+`TestGatewayTraceIsLoopbackOnly` in
+[`trace_peer_test.go`](../../internal/gateway/trace_peer_test.go) and
+`TestHeldKeyToldNoAccounts` in
+[`quotas_held_key_test.go`](../../internal/gateway/quotas_held_key_test.go).
+
 A remote provider serves the conversation, token-counting, System One,
 embeddings, rerank, speech-to-text, image generation/edit and video
 creation/status/content APIs. Gemini clients enter through the local Gemini adapter and follow the

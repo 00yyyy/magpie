@@ -1057,7 +1057,7 @@ function routingPage(part) {
   // ---------- state ----------
 
   const routes = new Map(); // id → the latest of each route
-  let seq = 0, mine = true, loaded = false, daysAt = 0;
+  let seq = 0, mine = true, loaded = false, daysAt = 0, by = null;
   let traceTotals = { requests: 0, rerouted: 0, errors: 0 };
   let offMsg = ""; // why the trace can't be watched here, when it can't
   // the request the window was opened on (?req=), from the tray panel
@@ -3385,6 +3385,11 @@ function routingPage(part) {
         noteAccounts(d);
         skew = at(d.now) - Date.now();
         mine = d.mine;
+        // another magpie took the gateway over (#2606): its routes and seq
+        // are its own, so the page starts again from its whole trace
+        const fromOther = loaded && (d.by?.pid || 0) !== (by?.pid || 0);
+        by = d.by || null;
+        if (fromOther) { routes.clear(); seq = 0; loaded = false; hubText(); continue; }
         hubText();
         traceTotals = d.totals || traceTotals;
         if (!mine) {
@@ -3460,7 +3465,17 @@ function routingPage(part) {
     }
   }
 
-  function hubText() { setText(hubSub, (providers?.gateway?.url || "").replace(/^https?:\/\//, "") || t("gateway")); }
+  function hubText() {
+    const g = providers?.gateway;
+    // which magpie is routing, when it isn't this one (#2606): this page plays
+    // that magpie's routing, and its window is the other place it shows. It
+    // is named by the trace the page plays, so it goes with a takeover at once
+    const who = mine && by?.serves
+      ? t("{serves} (pid {pid}) is routing", { serves: by.serves, pid: by.pid }) + " · "
+      : "";
+    setText(hubSub, who + ((g?.url || "").replace(/^https?:\/\//, "") || t("gateway")));
+    hubSub.title = who ? hubSub.textContent : ""; // whole, where the node cuts it short
+  }
 
   // labels in the page's language, and again when it changes
   function words() {

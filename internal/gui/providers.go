@@ -434,10 +434,15 @@ type gatewayJSON struct {
 	// Version is another magpie's, serving it, and Older says it is older
 	// than this one: agents' requests are then sent as that version sends
 	// them, without this one's fixes (#506)
-	Version string         `json:"version,omitempty"`
-	Older   bool           `json:"older,omitempty"`
-	Models  int            `json:"models"`
-	Calls   []gateway.Call `json:"calls"`
+	Version string `json:"version,omitempty"`
+	Older   bool   `json:"older,omitempty"`
+	// Pid and Serves are the serving magpie's own: which process it is and
+	// how it was started, for the Routing page to name the one that is
+	// routing (#2606)
+	Pid    int            `json:"pid,omitempty"`
+	Serves string         `json:"serves,omitempty"`
+	Models int            `json:"models"`
+	Calls  []gateway.Call `json:"calls"`
 	// Lanes are the keys and accounts with requests out or waiting under
 	// a limit on requests at once (#892), by provider#keyid or
 	// provider@account
@@ -936,6 +941,15 @@ func providersState() providersJSON {
 		o := gateway.ServedBy()
 		s.Gateway.Running, s.Gateway.Window, s.Gateway.Version = o.Running, o.Window, o.Version
 		s.Gateway.Older = o.Running && update.Newer(gateway.Version, o.Version)
+		// the process that is routing, for the Routing page to name it
+		// (#2606): another magpie on this computer, whose routing this
+		// console shows through OwnerTrace, and its lanes for the rows
+		s.Gateway.Pid, s.Gateway.Serves = o.Pid, o.Serves
+		if o.Running {
+			if l, ok := gateway.OwnerLanes(); ok {
+				s.Gateway.Lanes = l
+			}
+		}
 	}
 	s.Gateway.Archive = archiveState()
 	s.CodexDaemon = provider.CodexDaemonStale()
@@ -985,6 +999,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		lanes := map[string]gateway.Lane{}
 		if gw := served.Load(); gw != nil {
 			lanes = gw.Lanes()
+		} else if l, ok := gateway.OwnerLanes(); ok {
+			// another magpie on this computer serves the gateway: its lanes
+			// are the ones to show (the rows read the same wherever it runs)
+			lanes = l
 		}
 		writeJSON(rw, lanes)
 	})

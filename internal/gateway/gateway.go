@@ -242,6 +242,11 @@ func URL() string {
 // not magpie serve, which has none. Set by the gui.
 var Window bool
 
+// Serves says how this process was started (app, tray, web, serve or tui):
+// the Routing page of another magpie on this computer, which shows this
+// one's routing, names it (#2606). Set by the cli.
+var Serves = "app"
+
 // Running reports whether a gateway answers at the address.
 func Running() bool {
 	running, _ := Serving()
@@ -262,6 +267,8 @@ type Served struct {
 	Running bool   // a magpie gateway answers
 	Window  bool   // its routing can be watched in its window (#110)
 	Version string // its version; "" from one that doesn't say
+	Pid     int    // its process id; 0 from one that doesn't say
+	Serves  string // how it was started: app, tray, web, serve or tui; "" from one that doesn't say
 }
 
 // ServedBy asks the address which magpie answers there. Another magpie can
@@ -282,11 +289,13 @@ func ServedBy() Served {
 		Name    string `json:"name"`
 		Version string `json:"version"`
 		Window  bool   `json:"window"`
+		Pid     int    `json:"pid"`
+		Serves  string `json:"serves"`
 	}
 	if decodeJSON(b, &info) != nil || info.Name != "magpie" {
 		return Served{Running: bytes.Contains(b, []byte(`"magpie"`)), Window: bytes.Contains(b, []byte(`"window":true`))}
 	}
-	return Served{Running: true, Window: info.Window, Version: info.Version}
+	return Served{Running: true, Window: info.Window, Version: info.Version, Pid: info.Pid, Serves: info.Serves}
 }
 
 // Taken reports whether anything accepts connections at the gateway's
@@ -641,6 +650,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET "+provider.RemoteCardsPath, s.quotaCards)
 	mux.HandleFunc("POST "+provider.RemoteRefreshPath, s.quotaCardsRefresh)
 	mux.HandleFunc("GET /v1/magpie/route", s.sessionRoute)
+	mux.HandleFunc("GET /v1/magpie/trace", s.gatewayTrace)
 	mux.HandleFunc("GET /v1/magpie/concurrency", s.concurrency)
 	mux.HandleFunc("GET /v1/magpie/limit", s.keyLimit)
 	// a heap profile of this process, for magpie heap (loopback only)
@@ -713,8 +723,14 @@ func responsesOverHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"name": "magpie", "version": Version, "models": len(provider.Catalog()), "window": Window,
-		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/systemone", "/v1beta/models/{model}:generateContent", "/v1/images/generations", "/v1/images/edits", "/v1/videos", "/v1/embeddings", "/v1/rerank", "/v1/audio/transcriptions", "/v1/audio/translations", "/v1/magpie/quotas", "/v1/magpie/quotas/history", "/v1/magpie/usage", "/v1/magpie/usage/requests", "/v1/magpie/route", SearchMCPPath, VisionMCPPath, ToolsMCPPath}})
+	out := map[string]any{"name": "magpie", "version": Version, "models": len(provider.Catalog()), "window": Window,
+		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/systemone", "/v1beta/models/{model}:generateContent", "/v1/images/generations", "/v1/images/edits", "/v1/videos", "/v1/embeddings", "/v1/rerank", "/v1/audio/transcriptions", "/v1/audio/translations", "/v1/magpie/quotas", "/v1/magpie/quotas/history", "/v1/magpie/usage", "/v1/magpie/usage/requests", "/v1/magpie/route", "/v1/magpie/trace", SearchMCPPath, VisionMCPPath, ToolsMCPPath}}
+	// which process serves, for another magpie on this computer to name it
+	// on its Routing page (#2606); not told to another machine
+	if local(r) {
+		out["pid"], out["serves"] = os.Getpid(), Serves
+	}
+	writeJSON(w, 200, out)
 }
 
 // quotas is what is left of every subscription, plan and key magpie has,
