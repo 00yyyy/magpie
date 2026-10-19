@@ -4542,6 +4542,11 @@ function openPicker(agent, field, anchor, ev, only) {
   options = [...options.filter((o) => o.reset), ...options.filter((o) => !o.reset && o.group === ROUTING_GROUPS), ...rest.filter((o) => !o.direct), ...rest.filter((o) => o.direct)];
   const effortPicker = !only && (field.key === "effort" || field.label === "effort" || field.label === "thinking" || field.label === SUB_EFFORT || roleLevel(field.label));
   options = oneRowPerModel(options, cur);
+  // models of one provider that would read alike say what tells them apart
+  if (!effortPicker) {
+    const tells = modelTells(options.filter((o) => !o.reset && !o.run && !o.custom), (o) => o.label || "", (o) => o.value, (o) => o.group || "");
+    if (tells.size) options = options.map((o) => tells.has(o.value) && !o.reset && !o.run && !o.custom ? { ...o, tell: tells.get(o.value) } : o);
+  }
   // Current model first, then the rest in catalog order. Effort levels keep
   // their natural low → high order because their position is meaningful.
   // The row keeps its group as `home`: a provider picked in the rail still
@@ -4983,6 +4988,52 @@ function rateTag(rate = 0, was = 0) {
   return tag;
 }
 
+// modelTells: what tells apart the models of one list that would show the
+// same label (sunset on Discord: the Our Free Model plugin's several
+// "DeepSeek-V4.1-Flash · x0.1", told apart only by the buddy/… of their
+// ids, in the tooltip). items are the list's entries, label(x) what each
+// shows, id(x) its id, and key(x) the part of the list it is shown in (a
+// picker's provider): labels are compared within a key. Returns a Map of
+// id → tell for the entries whose label another of the same key shares; an
+// entry whose label is its own gets none, and is drawn as it was.
+//
+// A tell is the part of its id the others' don't share: the path segments
+// every id of the label begins with and ends with are dropped, so buddy/x
+// and cline/x say "buddy" and "cline", p/buddy/x and p/cline/x the same,
+// and buddy/x-fast and buddy/x-slow "x-fast" and "x-slow". An id left with
+// nothing (x beside buddy/x) says itself whole; and where tells would
+// still read alike, each says its whole id.
+function modelTells(items, label = (x) => x.name || x.id, id = (x) => x.id, key = () => "") {
+  const by = new Map();
+  for (const x of items || []) {
+    const v = id(x), l = label(x);
+    if (!v || !l) continue;
+    const k = key(x) + "\0" + l;
+    if (!by.has(k)) by.set(k, new Set());
+    by.get(k).add(v);
+  }
+  const out = new Map();
+  for (const set of by.values()) {
+    if (set.size < 2) continue;
+    const ids = [...set], segs = ids.map((v) => v.split("/"));
+    const first = segs[0];
+    let pre = 0;
+    while (segs.every((s) => s.length > pre && s[pre] === first[pre])) pre++;
+    let suf = 0;
+    while (segs.every((s) => s.length - suf > pre && s[s.length - 1 - suf] === first[first.length - 1 - suf])) suf++;
+    let tells = segs.map((s, i) => s.slice(pre, s.length - suf).join("/") || ids[i]);
+    if (new Set(tells).size < tells.length) tells = ids;
+    ids.forEach((v, i) => out.set(v, tells[i]));
+  }
+  return out;
+}
+
+// tellTag: a model's tell (modelTells), quiet and after its name on a chip
+// or a picker's row
+function tellTag(tell) {
+  return tell ? el("span", "mtell", tell) : null;
+}
+
 // contextTag: the small grey 1M by a model that holds a million tokens or
 // more (Cursor's names said it, and no longer do); the usual 128K–400K
 // aren't marked, as nearly every model has one of those; nor is a name
@@ -5037,6 +5088,8 @@ function renderList() {
     // a choice of magpie's own (Codex's sign-in) reads in the page's language
     const own = pick.field.label === "sign-in";
     words.append(el("span", "v", own ? t(o.label || o.value) : o.label || o.value));
+    const tell = tellTag(o.tell);
+    if (tell) words.append(tell);
     if (o.free || (pick.modelPicker && o.value && namedFree(o.value, o.label))) words.append(freeBadge(o.free));
     const rate = rateTag(o.rate, o.rateWas);
     if (rate) words.append(rate);
@@ -10385,12 +10438,15 @@ function addFormModels(ex) {
     const f = q.value.trim().toLowerCase();
     let shown = 0, hidden = 0;
     const match = listed.filter((m) => !f || m.id.toLowerCase().includes(f) || (m.name || "").toLowerCase().includes(f));
+    const tells = modelTells(listed);
     for (const m of match) {
       const on = draft.extra.includes(m.id);
       // past the first 120 only the picked are drawn, till the rest are asked for
       if (shown >= 120 && !f && !showAll && !on) { hidden++; continue; }
       const c = el("button", "mchip" + (on ? " on" : ""));
       c.append(el("span", "", m.name || m.id));
+      const tell = tellTag(tells.get(m.id));
+      if (tell) c.append(tell);
       if (m.name) c.title = m.id;
       c.dataset.model = m.id;
       c.onclick = (e) => { e.preventDefault(); draft.extra = on ? draft.extra.filter((x) => x !== m.id) : [...draft.extra, m.id]; sync(); draw(); };
@@ -10812,6 +10868,8 @@ function renderModels(p) {
     // while the card and the auto groups had all 17); after Select none,
     // none is served
     const served = draft.chosen.length || decideOnly(p) || draft.none ? new Set() : new Set(p.models.filter((m) => !noAPI(m)).slice(0, 24).map((m) => m.id));
+    // models that would read alike say what tells them apart (modelTells)
+    const tells = modelTells(p.models);
     // a filter is a search: what it doesn't match is left out, picked or not
     for (const m of p.models) {
       const on = draft.chosen.includes(m.id);
@@ -10822,6 +10880,8 @@ function renderModels(p) {
       if (shown >= 80 && !f && !showAll && !on) { hidden++; continue; }
       const c = el("button", "mchip" + (on ? " on" : served.has(m.id) ? " auto" : "") + (noAPI(m) ? " noapi" : ""));
       c.append(el("span", "", m.name && m.name !== m.id ? m.name : m.id));
+      const tell = tellTag(tells.get(m.id));
+      if (tell) c.append(tell);
       // one the plan serves at no cost to it (WorkBuddy's x0.00 credits)
       // or one its vendor names free (#185)
       const free = m.free || namedFree(m.id, m.name);
@@ -11603,7 +11663,8 @@ function renderFallback(p) {
   const all = [];
   for (const o of providers.providers) {
     if (!o.ready || o.off) continue;
-    for (const m of o.models) if (m.on) all.push({ id: o.id + "/" + m.id, label: o.name + " · " + (m.name || m.id), icon: o.icon });
+    const tells = modelTells(o.models.filter((m) => m.on));
+    for (const m of o.models) if (m.on) all.push({ id: o.id + "/" + m.id, label: o.name + " · " + (m.name || m.id) + (tells.has(m.id) ? " · " + tells.get(m.id) : ""), icon: o.icon });
   }
   let open = false;
   const add = (id) => { if (id && !draft.fallback.includes(id)) draft.fallback.push(id); q.value = ""; draw(); };
@@ -13888,11 +13949,14 @@ function accountModels(p, ref, isKey, name) {
   };
   const draw = () => {
     chips.replaceChildren();
+    const tells = modelTells(ids.map((id) => p.models.find((x) => x.id === id) || { id }));
     for (const id of ids) {
       const m = p.models.find((x) => x.id === id);
       const on = acctModels.chosen.includes(id);
       const c = el("button", "mchip" + (on ? " on" : ""));
       c.append(el("span", "", m?.name && m.name !== id ? m.name : id));
+      const tell = tellTag(tells.get(id));
+      if (tell) c.append(tell);
       if (m?.name && m.name !== id) c.title = id;
       c.onclick = () => { acctModels.chosen = on ? acctModels.chosen.filter((x) => x !== id) : [...acctModels.chosen, id]; draw(); };
       chips.append(c);

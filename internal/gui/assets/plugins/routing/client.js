@@ -3724,7 +3724,17 @@ function routingPage(part) {
   const offOf = (id) => { for (const g of groups?.groups || []) { const i = g.memberInfo?.find((x) => x.id === id && x.providerOff); if (i) return i; } };
   const offWords = (i) => t("{name} is switched off: the group skips it until it is on again", { name: i.name });
   const memberIcon = (id) => { const s = subOf(id); return s ? stackIcon(groupIcons(s)) : icon(modelOf(id)?.icon || offOf(id)?.icon || "generic"); };
-  const memberName = (id) => { const s = subOf(id), m = modelOf(id), o = !m && offOf(id); return s ? s.name : m ? m.name || m.id : o ? o.model : id; };
+  // models of one provider that would read alike (several "DeepSeek-V4.1-Flash"
+  // of a plugin's sources) are said with what tells them apart (app.js's
+  // modelTells), worked out once for each list the groups' state brings
+  let tellsFor = null, tellsOf = null;
+  const tellOf = (m) => {
+    if (!m) return "";
+    if (tellsFor !== groups?.models) { tellsFor = groups?.models; tellsOf = modelTells(tellsFor || [], (x) => x.name || x.id, (x) => x.id, (x) => x.provider || x.providerName || ""); }
+    return tellsOf.get(m.id) || "";
+  };
+  const modelName = (m) => { const tell = tellOf(m); return (m.name || m.id) + (tell ? " · " + tell : ""); };
+  const memberName = (id) => { const s = subOf(id), m = modelOf(id), o = !m && offOf(id); return s ? s.name : m ? modelName(m) : o ? o.model : id; };
   const memberNote = (id) => { const o = !subOf(id) && !modelOf(id) && offOf(id); return subOf(id) ? t("routing group") : [modelOf(id)?.providerName || o && `${o.name} · ${t("switched off")}`, fixedOf(id) && fixedWords(fixedOf(id))].filter(Boolean).join(" · "); };
   // a member the group sends in its vendor's fast mode (Group.Fast)
   const fastIn = (g, id) => !!g?.fast?.includes(id) && !subOf(id);
@@ -3732,7 +3742,7 @@ function routingPage(part) {
     const i = g.memberInfo?.find((x) => x.id === id), m = modelOf(id), s = subOf(id), f = fixedOf(id);
     if (s) return `${t("routing group")} · ${s.name}`;
     const at = (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${t("fast")}` : "");
-    if (m) return `${m.providerName} · ${m.name || m.id}${at}`;
+    if (m) return `${m.providerName} · ${modelName(m)}${at}`;
     if (i?.providerOff) return `${i.name} · ${i.model}${at} (${t("switched off")})`;
     return i?.name ? `${i.name} · ${i.model}${at}` : id;
   }
