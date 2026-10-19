@@ -4651,8 +4651,17 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if proto == provider.Responses {
 		phases = &phaseTidy{sse: sse}
 	}
-	// out is what a filter let through, through phases
+	// each item keeps the id it was added with (itemids.go): Copilot gives
+	// it another in every event
+	var ids *idTidy
+	if proto == provider.Responses && sse {
+		ids = &idTidy{}
+	}
+	// out is what a filter let through, through ids and phases
 	out := func(b []byte) []byte {
+		if ids != nil {
+			b = ids.write(b)
+		}
 		if phases != nil {
 			return phases.write(b)
 		}
@@ -4706,6 +4715,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			}
 			if sigs != nil {
 				out = sigs.write(out)
+			}
+			if ids != nil {
+				out = ids.write(out)
 			}
 			if phases != nil {
 				out = phases.write(out)
@@ -4768,6 +4780,13 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	if sigs != nil {
 		write(out(sigs.flush()))
+	}
+	if ids != nil {
+		b := ids.flush()
+		if phases != nil {
+			b = phases.write(b)
+		}
+		write(b)
 	}
 	if phases != nil {
 		write(phases.flush())
