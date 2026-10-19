@@ -615,12 +615,18 @@ func load() map[string]mdProvider {
 	return mdev
 }
 
-// Reset forgets the loaded catalog so the next call re-reads the cache.
+// Reset forgets the loaded catalog so the next call re-reads the cache,
+// and tells Forget: what the provider package built of the old one (the
+// windows and output limits of its entries) is kept between requests
+// for a moment, and would answer for the old catalog meanwhile.
 func Reset() {
 	loadMu.Lock()
-	defer loadMu.Unlock()
 	loaded = false
 	mdev, images, windows, outputs, efforts, thinks, names, listed, canonical = nil, nil, nil, nil, nil, nil, nil, nil, nil
+	loadMu.Unlock()
+	if Forget != nil {
+		Forget()
+	}
 }
 
 // Sync downloads the models.dev catalog into CachePath. It serializes with

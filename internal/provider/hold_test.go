@@ -89,8 +89,8 @@ func TestHoldKeptForTheNextRequest(t *testing.T) {
 // What is held across requests is built again when anything it was built
 // from may have moved: a write that only tells filememo (settings.Save, an
 // account's file), the providers' or the settings' file written by
-// another process (the CLI's "magpie group add"), and the groups served
-// or not (GateGroups, ServeGroups).
+// another process (the CLI's "magpie group add"), the groups served or
+// not (GateGroups, ServeGroups), and the models.dev catalog read again.
 func TestHoldKeptUntilAWrite(t *testing.T) {
 	defer func(d time.Duration) { heldFor = d }(heldFor)
 	heldFor = time.Minute // a loaded machine's pause between requests isn't the change
@@ -123,6 +123,9 @@ func TestHoldKeptUntilAWrite(t *testing.T) {
 			os.WriteFile(settings.Path(), []byte(`{}`), 0o600)
 		}},
 		{"the groups gated", func() { GateGroups(nil)() }},
+		// models.dev's catalog read again: the entries' windows and
+		// output limits come from it (Pi's maxTokens, Crush's default)
+		{"the catalog reset", catalog.Reset},
 	} {
 		was := n
 		c.write()
