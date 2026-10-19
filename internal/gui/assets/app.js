@@ -13121,6 +13121,8 @@ function balanceError(err) {
   if (/takes the API key, not the access token/.test(err)) return t("The Balance URL …/api/usage/token takes the API key, not the access token — set it to …/api/user/self in the provider's settings");
   if (/takes the API key, not the login token/.test(err)) return t("The Balance URL …/v1/usage takes the API key, not the login token — set it to …/api/v1/user/profile in the provider's settings");
   if (/New-Api-User/i.test(err)) return t("Add the header New-Api-User = your user ID (shown in the site's personal settings) to the provider's Headers");
+  // errOpenCodeNoBalance: not a reading that failed
+  if (/^OpenCode tells no API key its balance/.test(err)) return t("OpenCode doesn't tell an API key its balance — see Zen's credits in the OpenCode console, Overview → Credits");
   return "";
 }
 
@@ -17794,12 +17796,13 @@ function quotaWindows(sub) {
     e.title = sub.error;
     // read again from here too: a failed reading is the one most wanted
     e.prepend(quotaRefresh(sub));
-    // a plan that needs the access key the provider hasn't: the way to
-    // give it, one click away (#1821)
-    if (sub.needsAccessKey && sub.provider) {
-      const go = el("button", "quota-fix", t("Open settings"));
+    // one click away: the access key a plan needs (#1821), or the
+    // vendor's page for a balance it tells no key (seeAt, Zen's console)
+    const key = sub.needsAccessKey && sub.provider;
+    if (key || sub.seeAt) {
+      const go = el("button", "quota-fix", t(key ? "Open settings" : "Open the console ↗"));
       go.type = "button";
-      go.onclick = (ev) => { ev.stopPropagation(); openProvider(sub.provider); };
+      go.onclick = (ev) => { ev.stopPropagation(); key ? openProvider(sub.provider) : api("open", { url: sub.seeAt }).catch(() => {}); };
       e.append(" ", go);
     }
     return e;
