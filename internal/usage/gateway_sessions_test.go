@@ -40,10 +40,19 @@ func TestGatewaySessionsCacheRefreshAndOwnership(t *testing.T) {
 	if len(first) != 1 {
 		t.Fatalf("first: %+v", first)
 	}
-	first[0].Models[0].Model = "changed by caller"
-	first[0].Daily[0].Input = 999
+	// the lists are the kept projection's, read only; an append is the
+	// caller's own (#2776)
 	again := GatewaySessions(time.Time{}, nil)
-	if again[0].Models[0].Model != "m" || again[0].Daily[0].Input != 10 {
+	if &again[0].Daily[0] != &first[0].Daily[0] {
+		t.Fatal("each ask has a copy of the days of its own")
+	}
+	mine := append(first[0].Daily, GatewayDayUsage{Date: "mine"})
+	theirs := append(again[0].Daily, GatewayDayUsage{Date: "theirs"})
+	models := append(first[0].Models, GatewayModel{Model: "mine"})
+	if mine[1].Date != "mine" || theirs[1].Date != "theirs" || &mine[0] == &first[0].Daily[0] || &models[0] == &first[0].Models[0] {
+		t.Fatalf("two callers' appends share the kept lists: %+v %+v", mine, theirs)
+	}
+	if again := GatewaySessions(time.Time{}, nil); len(again[0].Models) != 1 || len(again[0].Daily) != 1 || again[0].Models[0].Model != "m" || again[0].Daily[0].Input != 10 {
 		t.Fatalf("caller changed cache: %+v", again)
 	}
 	if got := GatewaySessions(time.Time{}, map[string]bool{"pi|native": true}); len(got) != 0 {

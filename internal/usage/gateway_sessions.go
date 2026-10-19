@@ -58,13 +58,19 @@ type GatewayModel struct {
 // GatewaySessions aggregates one usage snapshot without reading routing
 // history or agent files. NativeKeys contains identities already represented
 // by local session files and is used to suppress the duplicate projection.
+//
+// A session's Models and Daily are the kept projection's own, shared by
+// every caller, which reads them and never changes them: each ask cloned
+// every session's days, and the start's first asks together held ~450 MB
+// of copies over ~720k calls (#2776). They are clipped, so an append
+// makes a slice of the caller's own.
 func GatewaySessions(since time.Time, nativeKeys map[string]bool) []GatewaySession {
 	if since.IsZero() {
 		e := gatewayProjection()
 		out := make([]GatewaySession, 0, len(e.sessions))
 		for _, s := range e.sessions {
 			if !nativeKeys[s.Agent+"|"+s.ID] {
-				out = append(out, cloneGatewaySession(s))
+				out = append(out, s)
 			}
 		}
 		return out
@@ -105,9 +111,9 @@ func gatewaySessionFrom(s GatewaySession, date string) (GatewaySession, bool) {
 		return GatewaySession{}, false
 	}
 	if i == 0 {
-		return cloneGatewaySession(s), true
+		return s, true
 	}
-	w := GatewaySession{Agent: s.Agent, ID: s.ID, Models: []GatewayModel{}, Daily: slices.Clone(s.Daily[i:])}
+	w := GatewaySession{Agent: s.Agent, ID: s.ID, Models: []GatewayModel{}, Daily: s.Daily[i:]}
 	models := map[string]int{} // index in w.Models, which grows
 	for _, d := range w.Daily {
 		if w.Start.IsZero() || d.first.Before(w.Start) {
@@ -204,6 +210,8 @@ func gatewayProjection() gatewayProjectionEntry {
 	e := gatewayProjectionEntry{version: snapshot.version, meta: meta, zone: time.Local, sessions: ss, byID: make(map[string]int, len(ss))}
 	for i, s := range ss {
 		e.byID[s.Agent+"|"+s.ID] = i
+		// handed out as they are: an append is the caller's own
+		ss[i].Models, ss[i].Daily = slices.Clip(s.Models), slices.Clip(s.Daily)
 	}
 	// A failed or partial read must be retried, not published as current.
 	if snapshot.info != nil && snapshot.off == snapshot.info.Size() {
