@@ -66,7 +66,7 @@ func TestSessionCachesHoldNoDecodedBlocks(t *testing.T) {
 	gatewayCache.entry = nil
 	gatewayCache.Unlock()
 	viasCache.Lock()
-	viasCache.value = nil
+	viasCache.all, viasCache.window.m = nil, nil
 	viasCache.Unlock()
 	without := held()
 	decoded := uint64(blocks * logBlockRows * text)
