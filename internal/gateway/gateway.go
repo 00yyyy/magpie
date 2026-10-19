@@ -2253,6 +2253,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// the key or subscription account the last try went to (#557)
 	providerKeyID, providerKeyName, providerAccount := "", "", ""
 	var other *Try                 // the first failure that wasn't an allowance run out
+	var forbade []forbidden        // the plain 403s rested so far (forbiddenAlike)
 	autoReset := resetFirst != nil // a Codex or Claude reset looked at, once a request
 	// what the tries' held streams sent the agent ahead of a reply (#751)
 	kept := &keptAlive{proto: from, told: start}
@@ -3169,13 +3170,47 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			matesLast(cands[i+1:], c)
 			continue
 		}
+		plain403 := hw.failed() && !hw.refused && plainForbidden(c, hw.code(), hw.errBody())
+		if alike, others := forbiddenAlike(forbade, c); plain403 && len(alike) > 0 {
+			// a mate refused this request with a plain 403 too: the
+			// request is what is refused, not each account (plugins#243).
+			// Neither rests, the mate's rest taken back, and its other
+			// mates are asked last, as for a prompt turned away
+			for _, f := range alike {
+				unforbid(f)
+			}
+			forbade = others // each taken back once
+			try.Fail = failOther
+			s.trace.update(tr, func(t *Route) {
+				for _, f := range alike {
+					if f.try >= 0 && f.try < len(t.Tries) {
+						t.Tries[f.try].Rest = nil
+					}
+				}
+				if !last {
+					t.Tries[len(t.Tries)-1] = try
+				}
+			})
+			if !last {
+				if other == nil {
+					other = &Try{Status: call.Status, Error: call.Error}
+				}
+				skipped = append(skipped, c.label()+": "+call.Error)
+				matesLast(cands[i+1:], c)
+				continue
+			}
+		}
 		if !last && hw.failed() {
 			if f := failure(hw.code(), hw.errBody()); other == nil && f != failQuota && f != failCredit {
 				other = &Try{Status: call.Status, Error: call.Error}
 			}
 			rest := s.restAfterMarked(c, hw.code(), hw.header, hw.errBody(), hw.sharedPool)
 			try.Fail, try.Rest = rest.Why, &rest
-			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			at := -1
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1], at = try, len(t.Tries)-1 })
+			if plain403 {
+				forbade = append(forbade, forbidden{c: c, rest: rest, try: at})
+			}
 			skipped = append(skipped, c.label()+": "+call.Error)
 			if waitsOf(c.patience, patienceFallback) > 0 && !hw.turnedAway && busy(hw.code(), hw.errBody()) {
 				busyNow = noteBusy(busyNow, c, hw.header)

@@ -79,6 +79,68 @@ func servedCandidate(c candidate, tokens int) {
 	}
 }
 
+// forbidden is a plain 403 one request was given, and the rest it took:
+// what forbiddenAlike and unforbid read.
+type forbidden struct {
+	c    candidate
+	rest Rest
+	try  int // its index in the route's Tries, -1 untraced
+}
+
+// plainForbidden says a reply is a 403 that says nothing of why: no
+// quota, credit, rate, verification, restriction, a model not served.
+// Such a 403 may be the key's or the request's.
+func plainForbidden(c candidate, status int, body []byte) bool {
+	return status == http.StatusForbidden && failureOf(c, status, body) == failOther &&
+		!modelRefused(status, body) && !codeAssistModelMissing(c.p, status, body)
+}
+
+// forbiddenAlike is the plain 403s of c's mates earlier in the request:
+// another key or account of its provider, asked the same model at the
+// same reasoning. Two of them refusing one request alike, it is the
+// request that is refused, not each account (plugins#243,
+// zygs1083-dotcom: Factory's 403 for a Claude Code wrapper it refused
+// rested every account in turn, and the next requests found them all in
+// backoff).
+// The rest of seen is returned beside them, for the request to keep.
+func forbiddenAlike(seen []forbidden, c candidate) (alike, others []forbidden) {
+	for _, f := range seen {
+		if f.c.p.ID == c.p.ID && f.c.model == c.model && f.c.effort == c.effort && f.c.who() != c.who() {
+			alike = append(alike, f)
+		} else {
+			others = append(others, f)
+		}
+	}
+	return alike, others
+}
+
+// unforbid takes back the rest a plain 403 took and the failures it
+// counted, when a mate's alike 403 said the request was what was refused.
+// A rest taken since, which isn't this one, stays.
+func unforbid(f forbidden) {
+	if f.rest.By == "off" || f.rest.Key == "" {
+		return // it neither rested nor counted
+	}
+	routed.Lock()
+	for _, k := range []string{f.c.restKey(), f.c.restID()} {
+		if n := routed.failures[k]; n > 1 {
+			routed.failures[k] = n - 1
+		} else {
+			delete(routed.failures, k)
+		}
+		if f.c.model == "" {
+			break // restID is restKey: counted once
+		}
+	}
+	routed.Unlock()
+	restingUntil.Lock()
+	if until, ok := restingUntil.m[f.rest.Key]; ok && until.Equal(f.rest.Until) {
+		delete(restingUntil.m, f.rest.Key)
+		delete(restingUntil.note, f.rest.Key)
+	}
+	restingUntil.Unlock()
+}
+
 // clearRest wakes a candidate that just answered, whether it was tried after
 // a provider rest or after a model-specific rest.
 func clearRest(key string) {
@@ -865,8 +927,12 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// everyone (sub2api's 503) says nothing of the key's own windows.
 		// Held to the longest an account out of quota sits out: the window
 		// is the vendor's reading, and one read a year off (a /usage date
-		// with no year) would bench the account until someone noticed
-		if t := c.full(now); !t.IsZero() && c.p.Account != nil && !unserved {
+		// with no year) would bench the account until someone noticed.
+		// Not a refusal (401, 403) that names no quota: one that did is
+		// failQuota already, and a plain 403 is about the key or the
+		// request, so a cached reading of 98% benched a working account
+		// until its window reset (plugins#243, zygs1083-dotcom)
+		if t := c.full(now); !t.IsZero() && c.p.Account != nil && !unserved && status != http.StatusUnauthorized && status != http.StatusForbidden {
 			d, r.By, modelBackoff = min(t.Sub(now), longestQuota), "window", false
 		}
 	}
