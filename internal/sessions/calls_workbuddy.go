@@ -185,7 +185,9 @@ func readWorkBuddyCalls(f file) (*callFile, bool) {
 				// it is a new one, so both readers end on the same call
 				id := st.str(l.ProviderData.MessageID)
 				if c, ok := workbuddyCall(st, dir, l, b); ok {
-					if c.Msg != "" && c.Msg == last {
+					// a zero-token line made no call, so the call before is
+					// this reply's only when it carries the same id
+					if n := len(st.Calls); c.Msg != "" && c.Msg == last && n > 0 && st.Calls[n-1].Msg == c.Msg {
 						st.Calls[len(st.Calls)-1] = c // another line of the reply before it
 					} else {
 						st.Calls = append(st.Calls, c)
