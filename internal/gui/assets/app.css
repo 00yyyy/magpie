@@ -4129,7 +4129,8 @@ input[type="checkbox"]:disabled { opacity: .45; }
 .ag-manager .ag-manage-search { width: 100%; box-sizing: border-box; }
 .ag-manage-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
 .ag-manage-count, .ag-manage-state { color: var(--fg-2); font-size: 12px; }
-.ag-manage-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+/* a row is a <label>: .editor label (a form field's, right-aligned) is not this */
+.modal .editor label.ag-manage-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; text-align: left; font-size: 13px; color: var(--fg); cursor: pointer; }
 .ag-manage-row > input { flex: none; }
 .ag-manage-row > .ic { width: 22px; height: 22px; flex: none; }
 .ag-manage-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
