@@ -120,7 +120,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		}
 		vias := usage.Vias(since.Add(-time.Minute))
 		for _, s := range list {
-			j := sessionJSON{Session: s, Name: s.Agent, Icon: "generic", Via: vias[s.Agent+"|"+s.ID]}
+			j := sessionJSON{Session: s, Name: s.Agent, Icon: "generic", Via: vias.Of(s.Agent + "|" + s.ID)}
 			if a := agents[s.Agent]; a != nil {
 				j.Name, j.Icon = a.SharedName(), a.Icon
 			}
@@ -226,7 +226,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		if since.IsZero() {
 			since = s.Last
 		}
-		j.Via = usage.Vias(since.Add(-time.Minute))[s.Agent+"|"+s.ID]
+		j.Via = usage.Vias(since.Add(-time.Minute)).Of(s.Agent + "|" + s.ID)
 		j.Path = tilde(j.Path)
 		writeJSON(rw, j)
 	})

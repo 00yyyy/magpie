@@ -54,8 +54,8 @@ func TestSessionCachesHoldNoDecodedBlocks(t *testing.T) {
 	if got := GatewaySessions(time.Time{}, nil); len(got) != blocks {
 		t.Fatalf("sessions: %d, want %d", len(got), blocks)
 	}
-	if got := Vias(time.Time{}); len(got) != blocks {
-		t.Fatalf("vias: %d, want %d", len(got), blocks)
+	if got := Vias(time.Time{}); got.Len() != blocks {
+		t.Fatalf("vias: %d, want %d", got.Len(), blocks)
 	}
 	// the index is kept by design; only what the caches hold is measured
 	logIndex.Lock()

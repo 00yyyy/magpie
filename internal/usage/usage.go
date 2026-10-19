@@ -999,7 +999,7 @@ type Via struct {
 
 // Vias is what the gateway sent each session's calls to since a time, by
 // agent id and the session's id ("codex|<id>"), the most calls first.
-func Vias(since time.Time) map[string][]Via {
+func Vias(since time.Time) ViaIndex {
 	return cachedVias(since)
 }
 

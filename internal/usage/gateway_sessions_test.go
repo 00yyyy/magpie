@@ -64,7 +64,7 @@ func TestClientRequestPrefixedSessionsCount(t *testing.T) {
 	if len(summary.Sessions) != 1 || summary.Sessions[0].ID != "request-mine" {
 		t.Fatalf("the client's session is missing from Usage: %+v", summary.Sessions)
 	}
-	if got := Vias(time.Time{}); len(got["pi|request-mine"]) != 1 {
+	if got := Vias(time.Time{}); len(got.Of("pi|request-mine")) != 1 {
 		t.Fatalf("the client's session is missing from Routing: %+v", got)
 	}
 	if _, ok := GatewaySessionByID("pi", "request-mine", nil); !ok {
@@ -100,11 +100,11 @@ func TestGatewaySessionsCachePricesWindowsAndRewrite(t *testing.T) {
 		}
 	}
 	vias := Vias(time.Time{})
-	vias["pi|native"][0].Calls = 999
-	if got := Vias(time.Time{})["pi|native"][0].Calls; got != 2 {
+	vias.Of("pi|native")[0].Calls = 999
+	if got := Vias(time.Time{}).Of("pi|native")[0].Calls; got != 2 {
 		t.Fatalf("caller mutated routing cache: %d", got)
 	}
-	if got := Vias(at.Add(-time.Minute))["pi|native"][0].Calls; got != 1 {
+	if got := Vias(at.Add(-time.Minute)).Of("pi|native")[0].Calls; got != 1 {
 		t.Fatalf("routing window: %d", got)
 	}
 	if err := os.WriteFile(Path(), nil, 0600); err != nil {
@@ -113,7 +113,7 @@ func TestGatewaySessionsCachePricesWindowsAndRewrite(t *testing.T) {
 	if got := GatewaySessions(time.Time{}, nil); len(got) != 0 {
 		t.Fatalf("rewrite retained sessions: %+v", got)
 	}
-	if got := Vias(time.Time{}); len(got) != 0 {
+	if got := Vias(time.Time{}); got.Len() != 0 {
 		t.Fatalf("rewrite retained routing: %+v", got)
 	}
 }

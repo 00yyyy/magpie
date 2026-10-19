@@ -14,7 +14,20 @@ var viasCache struct {
 	value   map[string][]Via
 }
 
-func cachedVias(since time.Time) map[string][]Via {
+// ViaIndex is Vias' answer: the one copy every caller shares, handed out
+// whole and read only through Of, which gives each session's list as a
+// copy of its own. Each ask cloned every session's list, ~66 MB a time
+// over ~720k calls, where a page reads the few sessions it lists (#2776).
+type ViaIndex struct{ m map[string][]Via }
+
+// Of is what the gateway sent one session's calls to ("agent|id"), the
+// most calls first; nil for a session it sent none of.
+func (x ViaIndex) Of(key string) []Via { return slices.Clone(x.m[key]) }
+
+// Len is how many sessions have a list.
+func (x ViaIndex) Len() int { return len(x.m) }
+
+func cachedVias(since time.Time) ViaIndex {
 	snapshot := readLogSnapshot()
 	clients := clientAgentsKey()
 	viasCache.Lock()
@@ -26,9 +39,5 @@ func cachedVias(since time.Time) map[string][]Via {
 			viasCache.version, viasCache.since, viasCache.value, viasCache.clients = snapshot.version, since, value, clients
 		}
 	}
-	out := make(map[string][]Via, len(value))
-	for k, vs := range value {
-		out[k] = slices.Clone(vs)
-	}
-	return out
+	return ViaIndex{value}
 }
