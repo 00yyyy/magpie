@@ -465,6 +465,11 @@ function routingPage(part) {
   const LONE = "Only one account or key is on for this, so routing has nothing to choose between. Turn on a second in the provider's editor, and how it routes is set under Several accounts or keys below.";
 
   const agentOf = (id) => (state.clients || state.agents).find((a) => a.id === id);
+  // uaName is a client as the gateway names one it doesn't know
+  // (usage.AgentOf): its User-Agent's product name, before the first / or
+  // space, in lower case as a rule keeps it. "SillyTavern/1.12" is
+  // sillytavern; a comma would part it in two (ParseRule)
+  const uaName = (s) => String(s || "").trim().split(/[\/\s,]/)[0].toLowerCase();
   const agentName = (id) => agentOf(id)?.name || (id && id !== "other" ? id : t("your agent"));
   // who names an account or key in a sentence
   const who = (w) => w.kind === "provider" ? w.name : w.who;
@@ -4440,6 +4445,13 @@ function routingPage(part) {
     // More are picked with the model picker the agents use.
     const infoOf = (id) => g?.memberInfo?.find((x) => x.id === id);
     const pickFrom = (label, anchor, ev, options, onPick, value = "") => openPicker({ id: "", name: "", fields: [] }, { key: "rule", label, value, menu: true, options, onPick }, anchor, ev);
+    // the agents magpie heard from in the last 30 days that it doesn't
+    // know, by the names the gateway gave them (usage.AgentOf), asked for
+    // once while the editor is open; none when usage can't be read
+    let heardFrom = null;
+    const heard = () => heardFrom || (heardFrom = api("usage?period=30d")
+      .then((u) => (u?.agents || []).map((a) => uaName(a.id)).filter((id) => id && id !== "other" && id !== "magpie"))
+      .catch(() => []));
     const box = el("div", "fallback");
     const list = el("div", "fbl");
     const addBtn = el("button", "rt-gadd");
@@ -5032,18 +5044,31 @@ function routingPage(part) {
           wrap("compact", cp);
           if (mine === "compact") focus = () => cp.focus({ preventScroll: true });
         }
-        // agents
+        // agents: the ones magpie knows, the others it has heard from, and
+        // any typed by the name the gateway gives a client it doesn't know
+        // (raikyou on Discord: SillyTavern, one's own app)
         if (kinds.includes("agents")) {
           const clients = state.clients || state.agents || [];
           const agentsName = () => r.agents.length ? r.agents.map((id) => clients.find((a) => a.id === id)?.name || id).join(", ") : t("any agent");
           const ag = el("button", "rt-cond" + (r.agents.length ? " on" : ""), agentsName());
-          ag.onclick = (ev) => pickFrom("agent", ag, ev, [
-            { value: "", label: t("any agent"), note: t("not a condition") },
-            ...clients.map((a) => ({ value: a.id, label: a.name, icon: a.icon, note: r.agents.includes(a.id) ? "✓" : "" })),
-          ], (v) => {
-            r.agents = !v ? [] : r.agents.includes(v) ? r.agents.filter((x) => x !== v) : [...r.agents, v];
-            ag.textContent = agentsName(); ag.classList.toggle("on", r.agents.length > 0); warn();
-          });
+          heard();
+          ag.onclick = async (ev) => {
+            ev.stopPropagation();
+            const known = new Set(clients.map((a) => a.id));
+            const others = [...(await heard()), ...r.agents].filter((id, i, all) => !known.has(id) && all.indexOf(id) === i);
+            const tick = (id) => r.agents.includes(id) ? "✓" : "";
+            openPicker({ id: "", name: "", fields: [] }, { key: "rule", label: "agent", value: "", menu: true,
+              placeholder: t("Filter, or type an agent's name…"),
+              typed: (s) => { const id = uaName(s); return id && { value: id, label: id, note: t("the name its User-Agent begins with") }; },
+              options: [
+                { value: "", label: t("any agent"), note: t("not a condition") },
+                ...clients.map((a) => ({ value: a.id, label: a.name, icon: a.icon, note: tick(a.id) })),
+                ...others.map((id) => ({ value: id, label: id, icon: "generic", note: tick(id) || t("heard from in the last 30 days") })),
+              ], onPick: (v) => {
+                r.agents = !v ? [] : r.agents.includes(v) ? r.agents.filter((x) => x !== v) : [...r.agents, v];
+                ag.textContent = agentsName(); ag.classList.toggle("on", r.agents.length > 0); warn();
+              } }, ag, ev);
+          };
           wrap("agents", ag);
           if (mine === "agents") focus = () => { ag.focus({ preventScroll: true }); ag.onclick({ stopPropagation() {} }); };
         }

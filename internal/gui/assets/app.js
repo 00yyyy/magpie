@@ -4605,7 +4605,7 @@ function openPicker(agent, field, anchor, ev, only) {
   }
   const q = $("#q");
   q.value = "";
-  q.placeholder = modelPicker && extra(field) ? t("{field} — filter, or type any model id…", { field: t(field.label) }) : modelPicker ? t("Filter, or type any model id…") : t("Filter {field}…", { field: t(field.label) });
+  q.placeholder = field.placeholder || (modelPicker && extra(field) ? t("{field} — filter, or type any model id…", { field: t(field.label) }) : modelPicker ? t("Filter, or type any model id…") : t("Filter {field}…", { field: t(field.label) }));
   filter();
   // On touch screens leave the keyboard closed until the filter is tapped,
   // so opening a model list leaves room to browse its choices.
@@ -4842,6 +4842,14 @@ function filter(keep) {
   const typed = $("#q").value.trim();
   if (typed && pick.free && ["model", "small", "large", "executor", "planner", ...ROLE_MODELS].includes(pick.field.label) && !pick.items.some((o) => o.value === typed)) {
     pick.items.push({ value: typed, note: t("use as typed"), custom: true });
+  }
+  // a picker that takes a name it doesn't list (a rule's agents: one known
+  // only by its User-Agent) offers what is typed as the field reads it, or
+  // the option that name already is
+  const own = typed && pick.field.typed?.(typed);
+  if (own) {
+    const listed = pick.options.find((o) => o.value === own.value);
+    if (!pick.items.includes(listed)) pick.items.push(listed || { ...own, custom: true });
   }
   pick.items = foldSame(pick.items);
   // a model the filter finds among those kept for routing groups, which
