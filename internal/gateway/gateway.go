@@ -628,6 +628,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/hello", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"name": "magpie", "version": Version})
 	})
+	// the Ollama API's model routes, for a client that takes a custom
+	// endpoint only as an Ollama server (ollama.go)
+	mux.HandleFunc("GET /api/version", s.ollamaVersion)
+	mux.HandleFunc("GET /api/tags", s.ollamaTags)
+	mux.HandleFunc("POST /api/show", s.ollamaShow)
 	mux.HandleFunc("GET /v1/magpie/quotas", s.quotas)
 	mux.HandleFunc("GET /v1/magpie/usage", s.usageSummary)
 	mux.HandleFunc("GET /v1/magpie/usage/requests", s.usageRequests)

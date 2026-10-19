@@ -1693,6 +1693,7 @@ It exposes:
 | `/v1/audio/transcriptions`, `/v1/audio/translations` | OpenAI speech to text (multipart, passed through) |
 | `/v1/models`, `/v1beta/models` | the catalog            |
 | `/v1/codex/models`       | the catalog as Codex's `model_catalog_url` reads it ([Codex on another computer](#providers-and-the-gateway)) |
+| `/api/version`, `/api/tags`, `/api/show` | the catalog as an Ollama server lists it, for a client that takes a custom endpoint only as Ollama (below) |
 
 Each `/v1/models` entry includes `reasoning` and `supported_reasoning_levels`
 (`[{"effort":"low"}, ...]`), and the same levels as plain names in
@@ -1708,6 +1709,16 @@ what the agent asked, as before. `native_endpoints`
 (`["/v1/messages"]`) names the APIs a request for the model is passed
 straight through on; it is left out of a routing group, and of a model every
 request to which is translated anyway.
+
+A client that takes a custom endpoint only as an Ollama server (Visual
+Studio's and VS Code's Copilot: Manage Models, then Ollama) is given
+`http://127.0.0.1:3425` as the Ollama URL, no `/v1`. It reads the models
+from `/api/tags`, each one's tools, vision, thinking and window from
+`/api/show`, and chats on `/v1/chat/completions`. Ollama's own chat
+(`/api/chat`, `/api/generate`, so `ollama run`) isn't served. Copilot sends
+no key, so this works on this computer only; behind a reverse proxy with a
+single public URL, `/api` goes to `magpie web`'s page, so give the
+gateway's own port.
 
 Requests pass straight through when the vendor speaks the agent's API and
 are translated otherwise, streaming, tool calls and reasoning included. The
