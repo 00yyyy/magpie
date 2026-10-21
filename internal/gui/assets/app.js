@@ -20885,6 +20885,12 @@ function renderAgentPrefLinks() {
   const box = $("#agentPrefLinks");
   box.replaceChildren();
   homeAgentPrefRows();
+  // Long conversations sets the windows the gateway serves, which an agent
+  // on another computer reads too: with no Codex or Claude Code here to
+  // hold it (a gateway, magpie in Docker) it stays in Settings (Linka)
+  const loose = $("#fullContextRow");
+  if (!state.agents.some((a) => agentPrefsOf(a)?.includes(loose.id))) box.before(loose);
+  else if (loose.parentElement === box.parentElement) $("#agentPrefRows").append(loose);
   for (const r of agentPrefRowEls) {
     const agents = state.agents.filter((a) => agentPrefsOf(a)?.includes(r.id) && !a.id.includes("@wsl:"));
     if (!agents.length || (r.id === "codexMemoriesRow" && r.hidden)) continue;
