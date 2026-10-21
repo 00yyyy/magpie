@@ -23783,20 +23783,41 @@ const barLifted = () => {
   readerScrolls(250);
   barDrag = null;
 };
+// The middle button's autoscroll (Windows) is the reader's scroll: put back,
+// each of its scrolls twitched the page (#2767). From a trusted middle press,
+// the view it lands in follows it and lets go of what a click held, till it
+// ends as Chromium ends it: the next press (only its pointerup arrives), a
+// key, blur, or the lift after moving past 15px. More in gui-shell.md.
+let panning = null; // { v, from: [x, y], far, lifted }
+const panEnds = () => { panning = null; };
 addEventListener("pointerdown", (e) => {
   downAt = [e.clientX, e.clientY];
+  panEnds();
+  if (e.button === 1 && e.isTrusted) {
+    const pv = e.target instanceof Element ? e.target.closest(".view") : null;
+    if (pv && !pv.hidden && pv.scrollHeight > pv.clientHeight) { panning = { v: pv, from: downAt, far: false, lifted: false }; held = null; }
+  }
   const v = e.target;
   const bar = v instanceof Element && v.classList.contains("view") ? v.offsetWidth - v.clientWidth : 0;
   barDrag = v instanceof Element && v.classList.contains("view") && !v.hidden && bar > 0 &&
     e.clientX >= v.getBoundingClientRect().right - bar ? v : null;
   if (barDrag) held = null;
 }, { capture: true, passive: true });
-addEventListener("pointerup", barLifted, { capture: true, passive: true });
+addEventListener("pointerup", (e) => {
+  barLifted();
+  if (!panning) return;
+  if (panning.lifted || e.button !== 1 || panning.far || Math.hypot(e.clientX - panning.from[0], e.clientY - panning.from[1]) > 15) panEnds();
+  else panning.lifted = true;
+}, { capture: true, passive: true });
 addEventListener("pointercancel", barLifted, { capture: true, passive: true });
 addEventListener("pointermove", (e) => {
+  if (panning && !panning.lifted && Math.hypot(e.clientX - panning.from[0], e.clientY - panning.from[1]) > 15) panning.far = true;
   if (e.buttons && downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) readerScrolls(250);
 }, { capture: true, passive: true });
+addEventListener("keyup", panEnds, true);
+addEventListener("blur", panEnds);
 addEventListener("keydown", (e) => {
+  panEnds();
   const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
   if (e.key === "Tab" || (!typing && SCROLL_KEYS.has(e.key))) readerScrolls(400);
   if (e.isTrusted && e.key === "Enter") keyboardFocus(e);
@@ -23805,6 +23826,9 @@ addEventListener("keyup", (e) => {
   if (e.isTrusted && e.key === " " && !e.target.closest?.("input, textarea, select, [contenteditable]")) keyboardFocus(e);
 }, true);
 const readerAt = new WeakMap();
+// what had the focus when the reader last scrolled a view themselves: they
+// took it out of sight, and it isn't brought back (backToReader)
+const scrolledFrom = new WeakMap();
 // Where the reader is is a number, the view's scrollTop, unless the view
 // names a part of itself to keep in place (keepInView): a part under others
 // that redraw on their own (the Routing page's groups, under the live stage
@@ -23845,9 +23869,11 @@ function backToReader(v) {
   if (pinned != null) readerAt.set(v, want);
   if (Math.abs(v.scrollTop - want) < 0.5) return;
   v.scrollTop = want;
-  // a field focused out of sight still comes into view, no further than needed
+  // a field focused out of sight still comes into view, no further than needed,
+  // unless the reader scrolled it away (scrolledFrom): else a middle press's
+  // button, left behind by the autoscroll, pulled the page back to it.
   const f = document.activeElement;
-  if (f && f !== document.body && v.contains(f)) {
+  if (f && f !== document.body && f !== scrolledFrom.get(v) && v.contains(f)) {
     const r = f.getBoundingClientRect(), b = v.getBoundingClientRect();
     if (r.bottom > b.bottom || r.top < b.top) { readerScrolls(1000); guardUntil = purposeUntil; f.scrollIntoView({ block: "nearest" }); }
   }
@@ -24028,7 +24054,8 @@ for (const v of document.querySelectorAll(".view")) {
   v.tabIndex = -1;
   v.addEventListener("scroll", () => {
     if (v.hidden) return;
-    if (performance.now() < purposeUntil || barDrag === v) { fitRoom(v); readerLeaves(v); return; }
+    if (panning?.v === v) readerScrolls(250);
+    if (performance.now() < purposeUntil || barDrag === v) { fitRoom(v); readerLeaves(v); scrolledFrom.set(v, document.activeElement); return; }
     const from = v.scrollTop;
     if (held?.v === v) hold(held);
     else backToReader(v);
