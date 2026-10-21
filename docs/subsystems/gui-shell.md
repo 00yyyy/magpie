@@ -207,6 +207,19 @@ under its id (`render`, #1835). The row itself keeps one line: the
 fullest window while idle, what it is doing while it answers. See
 `routing-seat-windows.test.cjs`.
 
+### The Sessions page's folders
+
+The Sessions page lists an agent's project folders as one list, newest
+session first ([`client.js`](../../internal/gui/assets/plugins/sessions/client.js)).
+A row says the folder's name, the folder it is in (home as `~`, from the
+manage reply's `home`), its newest session's title, when, and how many.
+Temporary folders, the disk's root and apps' hidden folders under home
+(`scratch`) wait folded under Other folders at the end; a search, or a
+session opened from elsewhere, unfolds them. Checkboxes and the Delete bar
+come only with Select, and Done lets the pick go. Relocate project and
+Delete all sessions are in a folder's ⋯ menu, shown on hover (always on a
+touch screen) and on a right-click. See `sessions-folder-list.test.cjs`.
+
 ### Stored agent sessions in WSL
 
 The Sessions page uses `sessions.ListAgent`; Usage → Sessions uses
