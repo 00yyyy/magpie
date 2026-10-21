@@ -380,11 +380,18 @@ tool on (`searchesItself`, `modelSearches`, `remoteSearch`). A provider
 that searches for some of its models only (`searchModels`: Command Code's
 Provider API, `partSearcher`) is offered and picked with those models
 alone, never under `x-cmd-zdr`; before, its searching models were left out
-of both (01huadalang on Discord). A provider none of whose models searches
-by itself, such as a plugin whose `config` hook doesn't set `searches`
-(Trae's), is not a searcher: its models are given magpie's `web_search`,
-and the row's `searchLeftOut` names it. Covered by
-`TestCommandCodeSearchesForOtherModels` and `TestSearcherChosen`.
+of both (01huadalang on Discord). So is a plugin's provider with models
+its list marks `searches` (`pluginSearches`: a model that searches the web
+by itself when asked in plain words, catalog `WebSearch` "native"): it is
+asked with no search tool, and `searchWith` takes a reply that names a
+link. Before, every plugin's provider was left out whatever its models
+did (01huadalang, 10-20, of Trae's search model). A client's own
+`web_search` to such a model still gets magpie's searcher. A provider none
+of whose models searches by itself, such as a plugin that marks none and
+whose `config` hook doesn't set `searches`, is not a searcher: its models
+are given magpie's `web_search`, and the row's `searchLeftOut` names it.
+Covered by `TestCommandCodeSearchesForOtherModels`,
+`TestPluginSearchModelIsASearcher` and `TestSearcherChosen`.
 
 ## A searcher that fails or finds nothing
 
