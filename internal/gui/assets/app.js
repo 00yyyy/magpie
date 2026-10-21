@@ -22303,32 +22303,59 @@ function maskFlow(sum, move) {
   const mid = el("div", "mo-mid");
   const rowH = 34;
   const H = Math.max(fromRows.length, toRows.length) * rowH - 4;
-  const s = sv("svg", { viewBox: `0 0 100 ${H}`, preserveAspectRatio: "none", "aria-hidden": "true" });
   const max = Math.max(...fromRows.map((r) => r.n), ...toRows.map((r) => r.n), 1);
   const ys = (rows) => {
     const off = (H - (rows.length * rowH - 4)) / 2;
     return rows.map((_, i) => off + i * rowH + 15);
   };
-  const c = H / 2;
-  const ribs = [];
-  const line = (d, n, out) => sv("path", { d, class: "mo-rib" + (out ? " out" : ""), "stroke-width": 1 + n / max, "stroke-opacity": (out ? .3 : .16) + (.5 * n) / max, "vector-effect": "non-scaling-stroke", pathLength: 1 });
-  ys(fromRows).forEach((y, i) => ribs.push(line(`M0,${y}C28,${y} 26,${c} 50,${c}`, fromRows[i].n)));
-  ys(toRows).forEach((y, i) => ribs.push(line(`M50,${c}C74,${c} 72,${y} 100,${y}`, toRows[i].n, true)));
-  s.append(...ribs);
+  const c = H / 2, hubR = 19;
   const hub = el("span", "mo-hub");
   hub.append(svg(SHIELD, 16, 1.6));
   hub.title = t("Masked here, on this computer");
+  // drawn in the middle's own pixels, again as it is resized: a viewBox
+  // stretched to fit would bend the strokes and their dashes
+  const s = sv("svg", { "aria-hidden": "true" });
+  let drawnW = 0, first = true;
+  const draw = () => {
+    const W = Math.round(mid.clientWidth);
+    if (!W || W === drawnW) return;
+    drawnW = W;
+    s.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    s.replaceChildren();
+    const m = W / 2, bend = Math.max(18, (m - hubR) * .55);
+    const ribs = [];
+    const rib = (d, n, out, i) => {
+      const w = 1.5 + 5 * n / max;
+      const path = sv("path", { d, class: "mo-rib" + (out ? " out" : ""), "stroke-width": w, "stroke-opacity": (out ? .34 : .14) + .36 * n / max });
+      s.append(path);
+      ribs.push(path);
+      // what goes along it: a value as it was on the way in, a placeholder
+      // after the shield; more of them on a busier ribbon
+      if (!stillMotion()) for (let k = 0, dots = 1 + Math.round(2 * n / max); k < dots; k++) {
+        const dot = sv("circle", { r: out ? 2.2 : 1.8, class: "mo-dot" + (out ? " out" : "") });
+        const dur = 2.4 + i * .17;
+        dot.append(sv("animateMotion", { path: d, dur: dur + "s", begin: (out ? 1.2 : 0) + k * dur / dots + "s", repeatCount: "indefinite", keyPoints: "0;1", keyTimes: "0;1", calcMode: "spline", keySplines: ".45 0 .55 1" }));
+        dot.append(sv("animate", { attributeName: "opacity", values: "0;1;1;0", keyTimes: "0;.12;.85;1", dur: dur + "s", begin: (out ? 1.2 : 0) + k * dur / dots + "s", repeatCount: "indefinite" }));
+        s.append(dot);
+      }
+    };
+    ys(fromRows).forEach((y, i) => rib(`M0,${y}C${bend},${y} ${m - hubR - bend},${c} ${m - hubR},${c}`, fromRows[i].n, false, i));
+    ys(toRows).forEach((y, i) => rib(`M${m + hubR},${c}C${m + hubR + bend},${c} ${W - bend},${y} ${W},${y}`, toRows[i].n, true, i));
+    if (move && first) ribs.forEach((r, i) => {
+      // drawn in once, by its own length, then left whole
+      const len = r.getTotalLength();
+      r.style.strokeDasharray = `${len} ${len}`;
+      const out = r.classList.contains("out");
+      r.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 760, delay: 380 + (out ? 520 : 0) + i * 40, easing: "cubic-bezier(.65, 0, .35, 1)", fill: "backwards" })
+        .finished.then(() => { r.style.strokeDasharray = ""; }, () => { r.style.strokeDasharray = ""; });
+    });
+    first = false;
+  };
   mid.append(s, hub);
   flow.style.height = H + "px";
   flow.append(from, mid, to);
-  if (move) {
-    ribs.forEach((r, i) => {
-      r.style.strokeDasharray = "1";
-      const out = r.classList.contains("out");
-      r.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 760, delay: 380 + (out ? 520 : 0) + i * 40, easing: "cubic-bezier(.65, 0, .35, 1)", fill: "backwards" });
-    });
-    hub.animate([{ transform: "scale(.4)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 520, delay: 760, easing: "cubic-bezier(.34, 1.56, .64, 1)", fill: "backwards" });
-  }
+  new ResizeObserver(draw).observe(mid);
+  if (move) hub.animate([{ transform: "scale(.4)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 520, delay: 760, easing: "cubic-bezier(.34, 1.56, .64, 1)", fill: "backwards" });
   return flow;
 }
 
