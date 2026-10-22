@@ -3271,7 +3271,6 @@ body:not(.side-nav) #view-settings .set-head.stuck::before { box-shadow: 0 1px 0
 .mo-meter i { display: block; height: 100%; background: color-mix(in srgb, var(--fg) 40%, transparent); transform-origin: left; }
 .mo-row.model .mo-meter i { background: var(--c6); }
 .mo-dotc { flex: none; width: 7px; height: 7px; border-radius: 50%; }
-.mo-spark { flex: none; display: inline-flex; justify-self: center; color: var(--c6); }
 .mo-flow { display: grid; grid-template-columns: minmax(0, 200px) minmax(96px, 1fr) minmax(0, 200px); max-width: 760px; margin: 0 auto; }
 .mo-col { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; }
 .mo-node { display: flex; align-items: center; gap: 7px; height: 30px; min-width: 0; padding: 0 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-size: 12px; cursor: default; }

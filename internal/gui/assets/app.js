@@ -21934,7 +21934,6 @@ const MASK_BY = { rule: "Rules", yours: "Your rules", word: "Your words", model:
 // what a request was, beside a chat (gateway's noteMasked)
 const MASK_WHAT = { search: "Web search", image: "Image", video: "Video", decide: "System One", embeddings: "Embeddings", audio: "Audio" };
 const SHIELD = "M8 1.8 13 3.6v4.1c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5V3.6Z";
-const SPARK = "M7 2.2c.5 2.9 1.4 3.8 4.3 4.3-2.9.5-3.8 1.4-4.3 4.3-.5-2.9-1.4-3.8-4.3-4.3 2.9-.5 3.8-1.4 4.3-4.3Z M12.2 10.2c.2 1.1.6 1.5 1.7 1.7-1.1.2-1.5.6-1.7 1.7-.2-1.1-.6-1.5-1.7-1.7 1.1-.2 1.5-.6 1.7-1.7Z";
 const PLACEHOLDER = /\{\{[^{}\s]{1,64}\}\}/g;
 let maskS = null;            // the settings the card was drawn with
 let maskSum = null, maskSumDays = 0, maskAt = 0, maskBusy = null, maskBusyDays = 0;
@@ -22236,15 +22235,9 @@ function maskLedger(title, kind, rows, move) {
   rows.forEach((r, i) => {
     const b = el("button", "mo-row" + (r.model ? " model" : ""));
     b.type = "button";
-    if (r.model) {
-      const sp = el("span", "mo-spark");
-      sp.append(svg(SPARK, 12, 1.3));
-      b.append(sp);
-    } else {
-      const d = el("span", "mo-dotc");
-      d.style.background = r.c || "var(--faint)";
-      b.append(d);
-    }
+    const d = el("span", "mo-dotc");
+    d.style.background = r.c || (r.model ? "var(--c6)" : "var(--faint)");
+    b.append(d);
     const m = el("span", "mo-meter"), f = el("i");
     f.style.width = (100 * r.n) / max + "%";
     if (r.c) f.style.background = r.c;
