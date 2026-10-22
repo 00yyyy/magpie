@@ -1485,7 +1485,7 @@ magpie.strings({
     "{names} not set": "{names} が未設定",
     "magpie can't check it: {names} isn't set where magpie runs. An agent started where it is set still gets it": "magpie はチェックできません: magpie の実行環境に {names} が設定されていません。設定済みの環境で起動したエージェントには渡されます",
     "WSL {distro} not running": "WSL {distro} は停止中",
-    "magpie can't check it: the agents given it run in WSL {distro}, which isn't running, and a check doesn't start it": "magpie はチェックできません: これを使うエージェントは WSL {distro} で動きますが、{distro} は起動していません。チェックのために起動はしません",
+    "magpie can't check it: the agents given it run in WSL {distro}, which isn't running, and a check doesn't start it": "magpie はチェックできません: これを使うエージェントが動く WSL {distro} は起動しておらず、チェックのために起動はしません",
     "Checked in: {places}": "チェックした場所: {places}",
     "Failed in: {place}": "失敗した場所: {place}",
     "{agent} runs only a command from its settings — add a remote server in its Connectors instead": "{agent} は設定ファイルからコマンドのみ実行できます — リモートサーバーは代わりに「コネクタ」で追加してください",
