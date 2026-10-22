@@ -1106,6 +1106,11 @@ func modelRetired(status int, body []byte) bool {
 	default:
 		return false
 	}
+	// the safety filter turning the request away (#3274) is about the
+	// request, whatever its message says of the model
+	if _, refused := policyRefusal(body); refused {
+		return false
+	}
 	// the words are matched decoded, too (#1669)
 	body = wordsOf(body)
 	return retiredWords.Match(body) && !quotaWords.Match(body)
