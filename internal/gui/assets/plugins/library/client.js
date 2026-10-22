@@ -1580,7 +1580,10 @@ magpie.plugin("library", (ctx) => {
   // each says it does (nf1qaz2w on Discord), with Check again under them.
   const health = new Map(); // name → { key: the server as checked, h: what was found, null while checking }
   const toolsOpen = new Set(); // the servers whose tools are shown
-  const healthKey = (s) => JSON.stringify([s.transport, s.command, s.args, s.env, s.url, s.headers, s.signIn]);
+  // a command is started where its agents run, this computer or a WSL
+  // distro (mcp_check_wsl.go): agents moved between them is a check anew
+  const healthKey = (s) => JSON.stringify([s.transport, s.command, s.args, s.env, s.url, s.headers, s.signIn,
+    s.transport === "stdio" ? [...new Set((s.agents || []).map((a) => a.split("@wsl:")[1] || ""))].sort() : null]);
   const toolList = (name) => { const h = health.get(name)?.h; return h?.state === "ok" ? h.toolList || [] : []; };
   // whether an agent the page shows gets the server, here or in a project
   // magpie keeps whose folder is there. The library keeps every agent it
@@ -1754,6 +1757,9 @@ magpie.plugin("library", (ctx) => {
       // a ${NAME} magpie's own environment hasn't; an agent started from a
       // shell that has it still gets it
       case "novar": return [t("{names} not set", { names: h.detail }), t("magpie can't check it: {names} isn't set where magpie runs. An agent started where it is set still gets it", { names: h.detail })];
+      // the agents given it run in a WSL distro that isn't running, which
+      // a check doesn't start: nothing is known of the server
+      case "wsldown": return [t("WSL {distro} not running", { distro: h.detail }), t("magpie can't check it: the agents given it run in WSL {distro}, which isn't running, and a check doesn't start it", { distro: h.detail })];
       default: return [t("couldn't check"), more(t("magpie couldn't check it"))];
     }
   }
@@ -1781,12 +1787,20 @@ magpie.plugin("library", (ctx) => {
         b.title = t("Connecting to it to list its tools");
         continue;
       }
-      const [text, tip] = healthWords(e.h, lib.servers.find((s) => s.name === b.dataset.server));
+      let [text, tip] = healthWords(e.h, lib.servers.find((s) => s.name === b.dataset.server));
+      // a command agents in WSL start is checked where they run: the tip
+      // says where, and a failure which place it was (loong on Discord)
+      const places = (e.h.checked || []).map((p) => (p ? "WSL " + p : "Windows"));
+      if (places.length && e.h.state === "ok") tip += "\n" + t("Checked in: {places}", { places: places.join(", ") });
+      else if (places.length) {
+        text += " · " + places[places.length - 1];
+        tip += "\n" + t("Failed in: {place}", { place: places[places.length - 1] });
+      }
       // a check magpie couldn't make for want of a variable only the
       // agent's own launch sets says nothing of the server, so it isn't
       // painted as broken (#2308, ASD-max: Codex's host-only codex_app,
       // whose pipe Codex itself hands it)
-      b.className = "lib-health " + (e.h.state === "ok" ? "ok" : e.h.state === "auth" ? "auth" : e.h.why === "novar" ? "unknown" : "err");
+      b.className = "lib-health " + (e.h.state === "ok" ? "ok" : e.h.state === "auth" ? "auth" : e.h.why === "novar" || e.h.why === "wsldown" ? "unknown" : "err");
       b.replaceChildren(el("span", "", text));
       if (toolList(b.dataset.server).length) {
         const open = toolsOpen.has(b.dataset.server);
