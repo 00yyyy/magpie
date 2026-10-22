@@ -2845,14 +2845,21 @@ func OutputsOf(providerID string) map[string]int {
 // SetModelOutputs makes a provider's reply limits outs, by model id, "*"
 // for all of them, as its editor's Max output says (ARNO on Discord: a
 // model's maxTokens was wrong, and only the context window could be set in
-// the editor): those it leaves out are taken away, and every one set has
-// to be a model the provider serves, as for SetModelOutput. Nothing is
-// saved, nor the agents told, when nothing changed.
+// the editor): those it leaves out are taken away, and every one set or
+// changed has to be a model the provider serves, as for SetModelOutput.
+// One the user set for a model the provider has since stopped listing,
+// sent back as it is, is kept and not refused: the editor is given it
+// (OutputsOf) and sends it again on every Save, so refusing it stopped
+// each Save of that provider, whatever else changed, and the model may be
+// listed again at the next refresh (#3305, LoKi). Taking it out of Max
+// output clears it. Nothing is saved, nor the agents told, when nothing
+// changed.
 func SetModelOutputs(providerID string, outs map[string]int) error {
 	p, err := Find(providerID)
 	if err != nil {
 		return err
 	}
+	s := settings.Load()
 	for model, n := range outs {
 		if n < 0 {
 			return errorf("an output limit is a number of tokens, not %d", n)
@@ -2860,11 +2867,10 @@ func SetModelOutputs(providerID string, outs map[string]int) error {
 		if err := settings.CheckModelKey("an output limit", p.ID+"/"+model); err != nil {
 			return err
 		}
-		if model != "*" && n > 0 && !p.serves(model) {
+		if model != "*" && n > 0 && s.ModelOutputs[p.ID+"/"+model] != n && !p.serves(model) {
 			return errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
 		}
 	}
-	s := settings.Load()
 	changed := false
 	for k := range s.ModelOutputs {
 		if model, ok := strings.CutPrefix(k, p.ID+"/"); ok && outs[model] <= 0 {
