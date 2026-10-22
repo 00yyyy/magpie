@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -498,6 +499,22 @@ func allFiles() []file {
 		grokFiles(), workbuddyFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles()} {
 		out = append(out, fs...)
 	}
+	return distinctPaths(out)
+}
+
+// distinctPaths is fs with each path kept once, the first time it is
+// listed. A path is one file to read and count: a session a database
+// holds twice under one id (a TEXT and a BLOB row, #2932), or a folder
+// two agents are told to share, would otherwise be counted twice.
+func distinctPaths(fs []file) []file {
+	seen := make(map[string]bool, len(fs))
+	out := fs[:0]
+	for _, f := range fs {
+		if !seen[f.path] {
+			seen[f.path] = true
+			out = append(out, f)
+		}
+	}
 	return out
 }
 
@@ -505,6 +522,7 @@ func allFiles() []file {
 // Codex's, and the other agents' where they keep sessions on this computer.
 func Dirs() []string {
 	out := []string{ClaudeDir(), CodexDir()}
+	var named []os.FileInfo
 	for _, d := range []struct{ dir, sessions string }{
 		{OpenCodeDir(), OpenCodeDir()},
 		{PiDir(), PiDir()},
@@ -525,9 +543,18 @@ func Dirs() []string {
 		{MiniMaxDir(), minimaxSessions()},
 		{KimiCodeDir(), kimiSessions()},
 	} {
-		if _, err := os.Stat(d.sessions); err == nil {
-			out = append(out, d.dir)
+		if _, err := os.Stat(d.sessions); err != nil {
+			continue
 		}
+		// a folder two agents share is named once
+		// (CODEBUDDY_CONFIG_DIR set to ~/.workbuddy, #2932)
+		if fi, err := os.Stat(d.dir); err == nil {
+			if slices.ContainsFunc(named, func(o os.FileInfo) bool { return os.SameFile(o, fi) }) {
+				continue
+			}
+			named = append(named, fi)
+		}
+		out = append(out, d.dir)
 	}
 	out = append(out, HermesDirs()...)
 	out = append(out, wslDirs()...)
@@ -789,13 +816,18 @@ func refresh(want, all []file) {
 		}
 		if s := cache[f.path]; s == nil || s.Size != f.size || s.Mod != f.mod.UnixNano() || (f.agent == "hermes" && (f.hermes == nil || f.rev == "" || s.DBRevision != f.rev)) || ((f.agent == "alma" || f.agent == "cursor") && s.DBRevision != f.rev) {
 			if parsing[f.path] != nil {
-				// another refresh is reading it: its last parse stands
-				// until that one is in, and one never read is waited for
+				// a refresh is reading it, another or this one (a path
+				// listed twice): its last parse stands until that one is
+				// in, and one never read is waited for
 				if s == nil {
 					waits = append(waits, f)
 				}
 				continue
 			}
+			// marked as it is taken, so a second listing of the path is
+			// not a second job: two jobs shared one entry, and the second
+			// publish closed a nil channel (#2932)
+			parsing[f.path] = make(chan struct{})
 			todo = append(todo, f)
 		}
 	}
@@ -844,7 +876,6 @@ func refresh(want, all []file) {
 	jobs := make([]job, len(todo))
 	for i, f := range todo {
 		jobs[i] = job{f: f, old: cache[f.path]}
-		parsing[f.path] = make(chan struct{})
 	}
 	generation := cacheGeneration
 	mu.Unlock()
