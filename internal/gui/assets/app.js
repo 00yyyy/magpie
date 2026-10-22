@@ -436,7 +436,7 @@ function renderAgents() {
       b.title = claudePicks(a, f) && !f.value ? t("{label}: {value}", { label: t(f.label), value: t(AUTO_MODE_UNSET) }) + "\n" + t(CLAUDE_PICKS)
         : t("{label}: {value}", { label: t(f.label), value: f.value || t("agent default") }) + (opt?.note ? ` · ${opt.note}` : "");
       if (f.value && opt?.direct) b.title += "\n" + directSaid(a, opt);
-      const effort = f.key === "effort" || f.label === "effort" || f.label === "thinking" || TIER_EFFORTS.includes(f.label);
+      const effort = f.key === "effort" || f.label === "effort" || f.label === "thinking" || TIER_EFFORTS.includes(f.label) || f.label === SUB_EFFORT;
       if (opt?.icon || opt?.icons?.length) b.append(optionIcon(opt));
       // a field with no logo of its own still leads with an icon: how much
       // effort, or the agent's own for its default, as the picker shows it
@@ -626,7 +626,7 @@ function renderAgents() {
       // Claude Code's tiers, subagents and auto mode have rows of their own
       // when opened
       if (a.id === "claude") {
-        for (const f of a.fields.filter((f) => TIERS.includes(f.label) || f.label === "subagents" || f.label === AUTO_MODE)) extras.querySelector(`[data-key="${CSS.escape(f.key)}"]`)?.remove();
+        for (const f of a.fields.filter((f) => TIERS.includes(f.label) || f.label === "subagents" || f.label === SUB_EFFORT || f.label === AUTO_MODE)) extras.querySelector(`[data-key="${CSS.escape(f.key)}"]`)?.remove();
         extras.querySelector('[data-key="tiers"]')?.remove();
       }
       row.append(agentHandle(a, row, inFold), who);
@@ -1895,22 +1895,29 @@ function connectPanel(a, { fields, fieldBtn }) {
     const tiers = a.fields.filter((f) => TIERS.includes(f.label) && f.options.length);
     const hint = { opus: "/model opus", sonnet: "/model sonnet", haiku: "/model haiku", fable: "/model fable" };
     const also = { sonnet: " · " + t("the default tier"), haiku: " · " + t("also for small background tasks") };
+    // a tier's own effort (#536) or the subagents', while there are levels
+    // to pick; unset, at the effort Claude Code asks for (off: no model)
+    const effortBtn = (e, off) => {
+      const b = fieldBtn(off ? { ...e, value: "" } : e, "ag-eff");
+      b.disabled = !!off;
+      b.title = t("{label}: {value}", { label: t(e.label), value: off ? t("default") : e.value ? effortName(optionFor(e, e.value) || { value: e.value }) : t("the effort Claude Code asks for") }) + (off ? "\n" + t("Set a subagent model first") : "");
+      b.setAttribute("aria-label", b.title);
+      return b;
+    };
     const rows = tiers.map((f) => {
       const l = line(el("span", "ag-tier", f.label[0].toUpperCase() + f.label.slice(1)), fieldBtn(f, "ag-pick"));
-      // the tier's own effort (#536), while there are levels to pick;
-      // unset, it runs at the effort Claude Code asks for
       const e = a.fields.find((x) => x.label === f.label + " effort" && (x.options.length || x.value));
-      if (e) {
-        const b = fieldBtn(e, "ag-eff");
-        b.title = t("{label}: {value}", { label: t(e.label), value: e.value ? effortName(optionFor(e, e.value) || { value: e.value }) : t("the effort Claude Code asks for") });
-        b.setAttribute("aria-label", b.title);
-        l.append(b);
-      }
+      if (e) l.append(effortBtn(e));
       l.append(el("span", "ag-hint", (hint[f.label] || "") + (also[f.label] || "")));
       return l;
     });
     const sub = a.fields.find((f) => f.label === "subagents" && (f.options.length || f.value));
-    if (sub) rows.push(line(el("span", "ag-tier", t("Subagents")), fieldBtn(sub, "ag-pick")));
+    if (sub) {
+      const l = line(el("span", "ag-tier", t("Subagents")), fieldBtn(sub, "ag-pick"));
+      const e = a.fields.find((x) => x.label === SUB_EFFORT && (x.options.length || x.value));
+      if (e) l.append(effortBtn(e, !sub.value));
+      rows.push(l);
+    }
     // the model its auto mode classifier runs on; unset, Claude Code's own
     const auto = a.fields.find((f) => f.label === AUTO_MODE && (f.options.length || f.value));
     if (auto) rows.push(line(el("span", "ag-tier", t("Auto mode")), fieldBtn(auto, "ag-pick"), el("span", "ag-hint", t("the model that checks each action in auto mode"))));
@@ -4841,14 +4848,14 @@ function renderEffortPicker() {
     }
     opened.anchor.querySelector(".effort-ic")?.replaceWith(effortIcon(opened.field));
     // a square (the subagents' effort) says it in its title, lit while set
-    if (opened.field.label === SUB_EFFORT) {
+    if (opened.field.label === SUB_EFFORT && !opened.anchor.classList.contains("ag-eff")) {
       opened.anchor.classList.toggle("set", !!option.value);
       opened.anchor.title = subEffortTitle(opened.agent, opened.field, option);
       opened.anchor.setAttribute("aria-label", opened.anchor.title);
     }
     // a tier's effort, opened from the tiers' square: that square's title
     // and light follow the level
-    if (roleLevel(opened.field.label) && opened.anchor.classList.contains("ag-eff")) {
+    if ((roleLevel(opened.field.label) || opened.field.label === SUB_EFFORT) && opened.anchor.classList.contains("ag-eff")) {
       opened.anchor.title = t("{label}: {value}", { label: t(opened.field.label), value: option.value ? effortName(option) : levelUnset(opened.agent) });
       opened.anchor.setAttribute("aria-label", opened.anchor.title);
     } else if (roleLevel(opened.field.label)) {
