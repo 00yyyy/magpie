@@ -149,6 +149,9 @@ type Session struct {
 	// WSL is the WSL distro the session ran in, its files read through
 	// \\wsl.localhost (see wsl.go); "" for this computer's own
 	WSL string `json:"wsl,omitempty"`
+	// Convs are the ids magpie's gateway keys the session's requests by
+	// when they carry no session id of their own (dshConvs)
+	Convs []string `json:"-"`
 }
 
 // PriceOf is the effective price of a model as a session names it, at the
@@ -193,6 +196,7 @@ type state struct {
 	Named                 string            `json:"named,omitempty"`  // the agent's own title for it
 	Custom                string            `json:"custom,omitempty"` // the name the user gave it
 	First                 string            `json:"first,omitempty"`  // the first message, when no prompt looked typed
+	Convs                 []string          `json:"convs,omitempty"`  // the gateway's ids for its requests (dshConvs)
 	Start                 time.Time         `json:"start"`
 	Last                  time.Time         `json:"last"`
 	Models                map[string]Tokens `json:"models,omitempty"`
@@ -363,6 +367,7 @@ func (s *state) clone() *state {
 		t := *s.Total
 		c.Total = &t
 	}
+	c.Convs = slices.Clone(s.Convs)
 	c.CodexSpawnNames = maps.Clone(s.CodexSpawnNames)
 	c.CodexSpawnConflicts = maps.Clone(s.CodexSpawnConflicts)
 	c.CodexAgentIDs = maps.Clone(s.CodexAgentIDs)
@@ -685,7 +690,8 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // 19: the names the user gave Claude Code's and WorkBuddy's (custom-title).
 // 20: Codex's source and direct parent thread identity.
 // 21: Codex subagent nicknames and parent spawn task names.
-const cacheVersion = 21
+// 22: dsh's gateway conversation ids (Convs).
+const cacheVersion = 22
 
 type cacheFile struct {
 	Version int               `json:"version"`
@@ -1229,6 +1235,7 @@ func assembleListed(fs []file, price func(string) *catalog.Price) (Session, bool
 			if first == "" {
 				first = st.First
 			}
+			s.Convs = append(s.Convs, st.Convs...)
 		}
 		if s.Agent == "codex" && st.CodexNickname != "" {
 			s.Nickname = st.CodexNickname
