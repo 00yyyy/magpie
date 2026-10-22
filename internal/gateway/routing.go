@@ -820,6 +820,18 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// as soon as the switch is off
 		return Rest{Why: why, Status: status, By: "off", Until: now}
 	}
+	if status == http.StatusBadRequest {
+		if _, ok := policyRefusal(body); ok {
+			// the safety filter refused the request's content (#3274:
+			// Codex's 400 cyber_policy), read from the vendor's error
+			// object, never from words a body may echo of the request:
+			// any account is refused it alike, so none is set aside and
+			// the failure counts nowhere. The serve loop doesn't rest a
+			// refusal it reads (failRefused); this holds for every other
+			// route that rests one
+			return Rest{Why: failRefused, Status: status, By: "off", Until: now}
+		}
+	}
 	// read before the allowance is asked again below: out of a pool that
 	// counts some models only, the account's others are still in theirs
 	// (Cursor's Auto with Other Models used up)

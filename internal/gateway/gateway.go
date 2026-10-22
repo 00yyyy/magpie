@@ -5930,11 +5930,26 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		msg := p.Name + ": " + err.Error()
 		return writeError(w, from, 502, msg), msg
 	}
-	if col.err != "" && !saidAnything(col.res.Parts) {
+	// a reply the vendor refused part way is no answer either: handed
+	// whole, its words so far went as a finished turn and the refusal as
+	// a failure after it, which rested the account (#3274). Nothing has
+	// reached the client yet, so it is told the refusal, as it would be
+	// with nothing said
+	if col.err != "" && (!saidAnything(col.res.Parts) || col.errSaid != nil) {
 		said := col.err
 		if markAntigravityRefused(w, p, request.System, said) {
 			said += " — " + antigravityTurnedAwayHint
 			u.ErrType = turnedAwayErrType
+		}
+		if code := gjson.GetBytes(col.errSaid, "error.code").String(); code != "" {
+			e, _ := json.Marshal(map[string]string{"code": code, "message": col.err})
+			if note, ok := policyRefusal(e); ok {
+				// the safety filter's: said beside the error, which loses
+				// its code in Anthropic's shape, for settle to ask the next
+				// account and rest nobody (#3274), as keepRetry notes a
+				// status refusal
+				w.Header().Set(refusedHeader, note)
+			}
 		}
 		// a request the vendor refused in its stream is answered as
 		// refused, with its code (magpie-releases#18); anything else is
