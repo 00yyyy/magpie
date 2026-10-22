@@ -38,7 +38,15 @@ var routed = struct {
 	sync.Mutex
 	used     map[string]tokenUse // candidate restKey → tokens it served
 	failures map[string]int      // candidate restKey → failures since it last answered
-}{used: map[string]tokenUse{}, failures: map[string]int{}}
+	slow     map[string]slowRun  // candidate restID → its slow starts since it last answered (restSlow)
+}{used: map[string]tokenUse{}, failures: map[string]int{}, slow: map[string]slowRun{}}
+
+// slowRun is a model's slow starts in a row on one account or key, and
+// when the last of them was.
+type slowRun struct {
+	n  int
+	at time.Time
+}
 
 type tokenUse struct {
 	n  float64
@@ -74,6 +82,7 @@ func servedCandidate(c candidate, tokens int) {
 	if id := c.restID(); id != c.restKey() {
 		routed.Lock()
 		delete(routed.failures, id)
+		delete(routed.slow, id)
 		routed.Unlock()
 		clearRest(id)
 	}
@@ -183,6 +192,11 @@ const (
 	// afternoon without anyone acting; the Routing page lifts it at once
 	// (Unrest) for a user whose appeal went through
 	restrictedRest = 2 * time.Hour
+	// slowRests is how many slow starts in a row (restSlow) rest a model
+	// on an account or key, and slowForget how long after the last one
+	// the next starts a new run
+	slowRests  = 2
+	slowForget = 30 * time.Minute
 )
 
 var (
@@ -298,8 +312,9 @@ const (
 	// left, and nobody rests
 	failRoom = "room"
 	// failSlow: the member hadn't begun its reply when its group's
-	// FirstToken ran out, nothing of it sent — the next is asked, and
-	// nobody rests, as a long prompt is slow anywhere
+	// FirstToken ran out, nothing of it sent — the next is asked. Once,
+	// nobody rests, as a long prompt is slow anywhere; again and again on
+	// one account's model, that model rests there (restSlow)
 	failSlow = "slow"
 	// failLoop: the reply was ended stuck in a loop (#1359) — the agent
 	// is told, and nobody rests, as the model, not the account, looped
@@ -1070,6 +1085,61 @@ func remoteModelRest(c candidate, why string, header http.Header) bool {
 		return false
 	}
 	return why == failQuota || why == failCredit || why == failRate || why == failRestricted || why == failVerify
+}
+
+// restSlow counts a slow start — let go for no first token in its group's
+// FirstToken — against the candidate's model on its account or key
+// (restID), and rests that model there from the slowRests'th in a row: a
+// minute, twice as long each time after, up to the provider's rest cap.
+// One alone rests nothing, a long prompt being slow to start anywhere; a
+// run ends when the model answers there (servedCandidate) or slowForget
+// passes with none. Its other models and the account's other mates are
+// asked as before (小八 on Discord: WorkBuddy's kimi-k3-1 and glm-5.3,
+// out of a per-model token limit the vendor never named, stalled 15 times
+// in 17 minutes, each request waiting 30s for it before the fallback
+// answered). A slow start while it rests for one keeps the count where it
+// is, so one request's tries don't stretch it. A provider set never to
+// rest after a failure that says nothing of why (RestCapOff) isn't
+// rested, nor its slow starts counted.
+func restSlow(c candidate, now time.Time) (Rest, bool) {
+	if c.p.NoFailRest() {
+		return Rest{}, false
+	}
+	id := c.restID()
+	prev, resting := restOf(id)
+	routed.Lock()
+	run := routed.slow[id]
+	if now.Sub(run.at) >= slowForget {
+		run.n = 0
+	}
+	if !resting || prev.Why != failSlow || run.n == 0 {
+		run.n++
+	}
+	run.at = now
+	routed.slow[id] = run
+	routed.Unlock()
+	if run.n < slowRests {
+		return Rest{}, false
+	}
+	d, by := min(fallbackCooldown<<min(run.n-slowRests, 10), c.p.RestCapOr(longestRetry)), "cooldown"
+	if run.n > slowRests {
+		by = "backoff"
+	}
+	r := Rest{Why: failSlow, Status: http.StatusGatewayTimeout, Until: now.Add(d), By: by, Failures: run.n, Key: id, Model: c.model}
+	if a := c.p.Account; a != nil {
+		r.agent, r.user = a.UsageAgent(), a.User
+	}
+	restingUntil.Lock()
+	defer restingUntil.Unlock()
+	if until, ok := restingUntil.m[id]; ok && until.After(r.Until) {
+		// resting longer already, for what another failure said
+		kept := restingUntil.note[id]
+		kept.Until = until
+		return kept, true
+	}
+	restingUntil.m[id] = r.Until
+	restingUntil.note[id] = r
+	return r, true
 }
 
 // rateRest is how long a rate-limited candidate sits out: as long as the
