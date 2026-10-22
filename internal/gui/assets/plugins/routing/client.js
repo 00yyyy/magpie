@@ -477,11 +477,22 @@ function routingPage(part) {
   // sillytavern; a comma would part it in two (ParseRule)
   const uaName = (s) => String(s || "").trim().split(/[\/\s,]/)[0].toLowerCase();
   const agentName = (id) => agentOf(id)?.name || (id && id !== "other" ? id : t("your agent"));
+  // userShown is an account of provider as the user named it in magpie
+  // (provider.AccountNames, #1515), else as its vendor names it. The name
+  // is looked up as the page is drawn, by the account a request kept (its
+  // vendor's name, which the user's name is kept by), so every request
+  // reads by the name the account has now, one from before a rename too
+  // (plugins#310: a renamed Kiro account kept its old name on requests
+  // made after). Requests are still told apart by that vendor's name.
+  const userShown = (provider, user) => user && accountNameOf(providers?.providers?.find((p) => p.id === provider), user) || user;
+  // whoShown is the account or key a weighed one is: an account by its
+  // name of the user's own; a key's name is already the user's
+  const whoShown = (w) => w.kind === "account" ? userShown(w.provider, w.who) : w.who;
   // who names an account or key in a sentence
-  const who = (w) => w.kind === "provider" ? w.name : w.who;
+  const who = (w) => w.kind === "provider" ? w.name : whoShown(w);
   // where names one as a place a request went: the provider, and the
   // account or key when it has one
-  const where = (w) => w.kind === "provider" || !w.who ? w.name || w.provider : `${w.name || w.provider} · ${w.who}`;
+  const where = (w) => w.kind === "provider" || !w.who ? w.name || w.provider : `${w.name || w.provider} · ${whoShown(w)}`;
   // why one is left out: an account's plan lacks the model; a key's list
   // from its vendor does — relays list each key its own group's models
   // or the user set the account or key to serve other models only (#474)
@@ -987,7 +998,7 @@ function routingPage(part) {
     // a Codex reset spent by itself: with Codex's own sign-in the one try
     // it was spent for is the one that then answered
     const spent = tr.reset && tr.status < 400
-      ? t("Its week was used up, so one of {account}'s Codex resets was used by itself first.", { account: tr.reset.who }) + " "
+      ? t("Its week was used up, so one of {account}'s Codex resets was used by itself first.", { account: userShown(w?.provider, tr.reset.who) }) + " "
       : "";
     if (tr.status < 400 && tr.fail)
       return tr.rest
@@ -1002,7 +1013,7 @@ function routingPage(part) {
     }
     if (tr.reset)
       return t("{who} answered {status}: its week is used up and nobody else could take the request, so one of {account}'s Codex resets was used by itself and the request is asked again, before any of the reply reaches {agent}.",
-        { who: name, status: tr.status, account: tr.reset.who, agent });
+        { who: name, status: tr.status, account: userShown(w?.provider, tr.reset.who), agent });
     if (tr.fail === "canceled")
       return t("{agent} canceled the request while {who} was answering: nobody failed, so nobody rests and nobody else is asked.", { who: name, agent });
     if (tr.fail === "auth")
@@ -5926,7 +5937,7 @@ function routingPage(part) {
   function pSeat(r, tr) {
     const w = tr && tried(r, tr);
     if (!w) return { key: r.provider || "?", name: r.provider || "?", sub: "" };
-    const sub = w.kind === "provider" ? "" : w.who || "";
+    const sub = w.kind === "provider" ? "" : whoShown(w) || "";
     return { key: w.provider || r.provider || "?", name: w.name || w.provider, sub };
   }
   // pPlace keeps those on the stage that are still wanted where they are,

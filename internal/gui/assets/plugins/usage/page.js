@@ -1546,7 +1546,7 @@ function renderLedger() {
   sessPick($("#ledComputer"), "All computers", ledComputer, computers, "Computer", (v) => { ledComputer = v; ledOwn("computer"); ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   sessPick($("#ledAgent"), "All agents", ledAgent, l.agents.map((a) => ({ v: a.id, name: a.name, note: "" })), "Agent", (v) => { ledAgent = v; ledOwn("agent"); ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   sessPick($("#ledProvider"), "All providers", ledProvider, providers.map((p) => ({ v: p.id, name: t(p.name), note: "" })), "Provider", (v) => { ledProvider = v; ledOwn("provider"); ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
-  sessPick($("#ledAccount"), "All accounts", ledAccount, accounts.map((a) => ({ v: a.id, name: a.id, note: (a.providers || []).map((p) => t(p)).join(" · ") })), "Account", (v) => { ledAccount = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
+  sessPick($("#ledAccount"), "All accounts", ledAccount, accounts.map((a) => ({ v: a.id, name: a.name || a.id, note: [a.name && a.id, ...(a.providers || []).map((p) => t(p))].filter(Boolean).join(" · ") })), "Account", (v) => { ledAccount = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   sessPick($("#ledKey"), "All gateway keys", ledCallerKey, callers.map((k) => ({
     v: k.id, name: k.name, note: "",
   })).concat(noKey ? [{ v: "none", name: t("No gateway key"), note: "" }] : []), "Gateway keys", (v) => { ledCallerKey = v; ledOwn("callerKey"); ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
