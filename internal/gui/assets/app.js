@@ -11178,9 +11178,9 @@ function renderModels(p) {
     if (!ids.length) { names.append(el("span", "hint", t("Pick a model first."))); return; }
     const prefs = draft.modelPrefs = draft.modelPrefs || {};
     draft.onModelPrefs = drawNames;
-    // how the agents' lists will call them, and the setting that says so
-    // (#868), above the names given here
-    const sfx = el("div", "msuffix");
+    // how the agents' lists will call them (#868), and that the setting is
+    // every provider's, on Settings (joe on Discord)
+    const sfx = el("div", "msuffix suffix-said");
     const sfxSaid = el("span", "hint");
     const first = p.models.find((x) => x.id === ids[0]) || { id: ids[0], name: ids[0] };
     const sayLabel = (mode) => {
@@ -11193,7 +11193,13 @@ function renderModels(p) {
       sfxSaid.textContent = t("Agents’ lists show “{label}”", { label });
     };
     sayLabel();
-    sfx.append(el("span", "", t("Provider in model names")), suffixSegs(sayLabel), sfxSaid);
+    sfx.dataset.mode = suffixMode();
+    sfx.drawnAgain = sayLabel;
+    const where = el("button", "text action", t("Change in Settings"));
+    where.type = "button";
+    where.hidden = gatewayMode; // Settings has no such row then
+    where.onclick = (e) => openSettingsAt(e, "general", $("#plainNamesSegs").closest(".row"));
+    sfx.append(sfxSaid, el("span", "where", t("“Provider in model names” is one setting for every provider")), where);
     sfx.append(noNamesLine("span", "said"));
     names.append(sfx);
     // the APIs a model can be asked on alone: those of a key's provider
@@ -20195,7 +20201,8 @@ function suffixMode(s = state.settings || {}) { return s.plainNames ? "off" : s.
 function suffixSegs(drawn) {
   const mode = suffixMode();
   const seg = segs([["off", t("Off")], ["own", t("Not on names I set")], ["on", t("On")]], mode, (v) =>
-    writingPrefs(api("settings/plain-names", { mode: v })).then((ns) => { prefs = state.settings = ns; seg.dataset.mode = v; renderSettings(); drawn?.(v); })
+    // every place that says it follows (Names & levels behind Settings)
+    writingPrefs(api("settings/plain-names", { mode: v })).then((ns) => { prefs = state.settings = ns; seg.dataset.mode = v; renderSettings(); drawn?.(v); redrawSuffix(); })
       .catch((e) => { status(t(e.message), "err"); renderSettings(); drawn?.(suffixMode()); }));
   seg.classList.add("suffix-segs");
   seg.dataset.mode = mode;
@@ -20237,13 +20244,15 @@ function sayNoNamesInSettings() {
 // redrawSuffix draws each suffix choice in the page again when the
 // settings that came in say another mode than it was drawn with: a page
 // drawn before the state's first read (Routing's groups can come back
-// first) showed the default, On (#1433).
+// first) showed the default, On (#1433). A line that only says what the
+// lists show (.suffix-said, a provider's Names & levels) is said again.
 function redrawSuffix() {
   const mode = suffixMode();
-  for (const seg of document.querySelectorAll(".suffix-segs")) {
+  for (const seg of document.querySelectorAll(".suffix-segs, .suffix-said")) {
     if (seg.dataset.mode === mode) continue;
     const drawn = seg.drawnAgain;
-    seg.replaceWith(suffixSegs(drawn));
+    if (seg.matches(".suffix-said")) seg.dataset.mode = mode;
+    else seg.replaceWith(suffixSegs(drawn));
     drawn?.(mode);
   }
 }
@@ -24246,6 +24255,20 @@ function openSettings() {
   closeProtoMenu();
   closeAgentMenu();
   show("settings");
+}
+// openSettingsAt: Settings at a row, in sight and lit; e is the click
+async function openSettingsAt(e, tab, row) {
+  const go = scrollOnPurpose(e, 3000);
+  closeProtoMenu();
+  closeAgentMenu();
+  if (!await show("settings")) return;
+  if (setQuery) { $("#setQ").value = ""; searchSettings(""); }
+  setSetTab(tab, true);
+  if (!row) return;
+  if (go) { row.scrollIntoView({ block: "center" }); arrived($("#view-settings")); }
+  row.classList.remove("flash");
+  void row.offsetWidth; // the light goes again on a second click
+  row.classList.add("flash");
 }
 $("#prefs").onclick = () => { openSettings(); $("#prefs").blur(); };
 
