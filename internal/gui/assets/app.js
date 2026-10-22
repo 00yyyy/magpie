@@ -21145,6 +21145,11 @@ function renderImages(s, keep) {
   if (gone) who.append(el("div", "sub err vision-missing", s.visionAuto
     ? t("{model}, picked here, isn't set up any more: its provider was removed or turned off, or no longer has it. {auto}, the automatic choice, describes images in its place. Pick another model here.", { model: v, auto: named(s.visionAuto) })
     : t("{model}, picked here, isn't set up any more: its provider was removed or turned off, or no longer has it. No other model sees, so images are turned away. Pick another model here.", { model: v })));
+  // a custom provider's model nothing says takes images isn't offered: say
+  // where it is marked, by the editor's own words (nexnull on Discord)
+  const notMarked = s.visionNotMarked || [];
+  if (notMarked.length && v !== "off") who.append(el("div", "sub vision-not-marked", t("Models of {providers} aren’t listed until marked in their provider’s {names} › {images}",
+    { providers: notMarked.join(", "), names: t("Names & levels"), images: t("Accepts images") })));
   // a routing group (no provider of its own) goes with the others, as in
   // an agent's picker, not in a group of its own with its own rail button
   const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
