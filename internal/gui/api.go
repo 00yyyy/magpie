@@ -1216,6 +1216,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.AllowIPs = cur.AllowIPs                         // set on its own (allowips below)
 		in.FetchPrivate = cur.FetchPrivate                 // in settings.json only
 		in.GitHubToken = cur.GitHubToken                   // set on its own (github-token below), never sent to the page
+		in.ProxyCustom = cur.ProxyCustom                   // set by settings.Save from the proxy, never by the page
 		in.RequestArchive = cur.RequestArchive             // the Gateway page's, set on its own
 		in.RequestArchiveMaxMB = cur.RequestArchiveMaxMB   // in settings.json only
 		in.ClaudeRunsMost = cur.ClaudeRunsMost             // magpie claude-code runs, or settings.json (#2956)

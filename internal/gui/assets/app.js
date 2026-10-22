@@ -20374,7 +20374,7 @@ const UPDATE_EVERY = [30, 60, 360, 1440];
 // their own; this row says which one, and lets it be turned off or set. A provider, account or key
 // that names a proxy of its own (or Direct) keeps it whatever this says (netproxy.With), so the
 // line says it holds for those without one (#1832).
-let proxyCustom = false; // Custom picked, nothing typed yet
+let proxyCustom = false; // Custom picked, not saved yet
 // Keep SOCKS credentials in their own fields; URL userinfo is the existing
 // saved format, with reserved characters escaped before it reaches Go/Bun.
 function proxyFields(value) {
@@ -20419,7 +20419,9 @@ function renderProxy(s, keep) {
     else renderProxy(s, keep);
   };
   if (mode === "custom") {
-    let fields = proxyFields(cur === "custom" ? s.proxy : "");
+    // Custom picked again after Off or Auto: the last one saved, login and
+    // all, which settings.Save keeps as proxyCustom (Zane on Discord)
+    let fields = proxyFields(cur === "custom" ? s.proxy : s.proxyCustom || "");
     const i = input(fields.address, "http://127.0.0.1:7890");
     i.className = "proxy";
     i.setAttribute("aria-label", t("Proxy address"));
