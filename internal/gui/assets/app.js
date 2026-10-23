@@ -18496,8 +18496,7 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
   }
   const topV = ledAxis(max);
   const selectable = l.bucket === "day" && !!box.chooseDay;
-  const g = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: selectable ? "group" : "img" });
-  g.setAttribute("aria-label", t("Usage trend"));
+  const g = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: selectable ? "group" : "img", "aria-label": t("Usage trend") });
   // the side's labels, measured as drawn: the plot starts where the widest
   // ends ("8000 万", "¥1250" are wider than "80M"), so none reaches past the
   // card's padding
@@ -18537,9 +18536,7 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
     let y0 = 0;
     const draw = (key, color, v) => {
       if (!(v > 0)) return;
-      const r = sv("rect", { x, width: bw, y: Y(y0 + v), height: Math.max(0.5, Y(y0) - Y(y0 + v)), rx: 1, class: "col", "data-k": key, "data-day": p.time.slice(0, 10), "data-color": color }, { fill: color });
-      g.append(r);
-      segs.push(r);
+      segs.push(g.appendChild(sv("rect", { x, width: bw, y: Y(y0 + v), height: Math.max(0.5, Y(y0) - Y(y0 + v)), rx: 1, class: "col", "data-k": key, "data-day": p.time.slice(0, 10), "data-color": color }, { fill: color })));
       y0 += v;
     };
     const by = p.by?.[split] || {};
@@ -18559,16 +18556,12 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
         // be drawn back down into the column
         if (v > totals[i]) {
           const top = Y(totals[i]);
-          const stem = sv("line", {
+          segs.push(g.appendChild(sv("line", {
             x1: x + bw / 2, x2: x + bw / 2, y1: top, y2: Math.min(Y(v) + 1.5, top),
             class: "col stem", "data-k": c.id, "data-day": p.time.slice(0, 10), "data-color": c.color,
-          }, { stroke: c.color, strokeWidth: 1, strokeOpacity: ".45" });
-          g.append(stem);
-          segs.push(stem);
+          }, { stroke: c.color, strokeWidth: 1, strokeOpacity: ".45" })));
         }
-        const r = sv("rect", { x, width: bw, y: Y(v) - 1.5, height: 3, rx: 1.5, class: "col mark", "data-k": c.id, "data-day": p.time.slice(0, 10), "data-color": c.color }, { fill: c.color });
-        g.append(r);
-        segs.push(r);
+        segs.push(g.appendChild(sv("rect", { x, width: bw, y: Y(v) - 1.5, height: 3, rx: 1.5, class: "col mark", "data-k": c.id, "data-day": p.time.slice(0, 10), "data-color": c.color }, { fill: c.color })));
       }
       return;
     }
@@ -18576,6 +18569,8 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
     for (const c of top) { const v = ledPart(metric, by[c.id] || {}); stacked += v; draw(c.id, c.color, v); }
     draw("\0other", "var(--faint)", Math.max(0, totals[i] - stacked));
   });
+  // the Usage page's lines take the columns' place (ledLines)
+  box.drawn?.(g, Y, M.l + slot / 2, slot, segs);
   if (selectable) pts.forEach((p, i) => {
     const day = p.time.slice(0, 10);
     const hit = sv("rect", { class: "led-day", x: M.l + slot * i, y: M.t, width: slot, height: ph, fill: "transparent", role: "button", tabindex: 0, "aria-label": ledWhen(p, l.bucket), "aria-pressed": day === l.day, "data-day": day });
@@ -18632,9 +18627,8 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
       const dimDay = l.day && r.dataset.day !== l.day;
       const color = dimDay ? "var(--faint)" : r.dataset.color;
       r.style.opacity = dimDay || key != null && r.dataset.k !== key ? ".22" : "";
-      // a mark's leader line is a line, which is stroked, not filled
-      if (r.tagName === "line") r.style.stroke = color;
-      else r.style.fill = color;
+      // a leader line or a line chart's series is stroked, not filled
+      r.style[r.tagName == "rect" ? "fill" : "stroke"] = color;
     }
   };
   box.emphasize(null);
