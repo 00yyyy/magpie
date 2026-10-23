@@ -4004,6 +4004,7 @@ function routingPage(part) {
       "This routing group will no longer be available to agents.")) return;
     try {
       groups = groupsFrom(await api("groups/" + action, body));
+      if (action === "save" && gEdit) { gMorph = [gEdit.id, body.id]; gSaved = body.id; }
       gEdit = null;
       renderGroups();
       // The editor closed on its Save, and the page is shorter by its height: the
@@ -4016,7 +4017,7 @@ function routingPage(part) {
       // opens under (backToReader, app.js, guards the same way).
       const saved = body.id || body.from || "";
       const row = saved && document.querySelector(`#view-routing .rt-group[data-id="${CSS.escape(saved)}"]`);
-      const view = row && document.getElementById("view-routing");
+      const view = row && gFolded !== saved && document.getElementById("view-routing");
       if (view) {
         const rr = row.getBoundingClientRect(), vb = view.getBoundingClientRect();
         if (rr.bottom > vb.bottom || rr.top < vb.top) { readerScrolls(1000); row.scrollIntoView({ block: "nearest" }); }
@@ -4234,8 +4235,108 @@ function routingPage(part) {
       rows.push(h);
     }
     // the import box's text stays in the page as the list is drawn again
+    const was = slotsOf();
     replaceKeeping(gList, rows);
+    morphSlots(was);
     renderPools();
+  }
+  // A group's row opens into its editor and folds back into it, as a cell
+  // does on iOS (the owner, 10-23): its slot goes from the height it had to
+  // its new one, on a spring as it opens and on iOS's ease as it folds, the
+  // list below moving with it, and what is in it comes in as it does. A
+  // group saved shows it with a check by its name.
+  // gMorph: the editor's slot to the group's row after a Save, which may
+  // name the group anew (a new group, an id changed); gSaved: the group just
+  // saved
+  // gFolded: the slot whose fold keeps itself in sight, as groupAction
+  // would after a Save
+  let gMorph = null, gSaved = null, gFolded = null;
+  const slotKey = (n) => n.dataset?.gslot;
+  function slotsOf() {
+    const m = new Map(), vt = document.getElementById("view-routing").getBoundingClientRect().top;
+    for (const n of gList.children) {
+      const k = slotKey(n);
+      if (k === undefined) continue;
+      const b = n.getBoundingClientRect();
+      m.set(k, { n, h: b.height, top: b.top - vt, ed: n.classList.contains("rt-gedit") });
+    }
+    return m;
+  }
+  function morphSlots(was) {
+    const alias = gMorph, saved = gSaved;
+    gMorph = gSaved = gFolded = null;
+    if (still() || !shown()) return;
+    for (const n of gList.children) {
+      const k = slotKey(n);
+      if (k === undefined) continue;
+      const ed = n.classList.contains("rt-gedit");
+      const old = was.get(k) || (alias && alias[1] === k ? was.get(alias[0]) : undefined);
+      if (old?.n === n) continue;
+      // a new group's editor grows out of nothing at the list's top
+      const from = old ? (old.ed === ed ? null : old.h) : ed && k === "" ? 0 : null;
+      if (from != null) slotMorph(n, from, ed, old?.top);
+      if (!ed && saved === k) savedMark(n);
+    }
+  }
+  function slotMorph(n, from, opening, top) {
+    const to = n.getBoundingClientRect().height;
+    if (Math.abs(to - from) < 1) return false;
+    const shape = opening ? { duration: 570, easing: SPRING } : { duration: 420, easing: IOS_EASE };
+    n.style.overflow = "hidden";
+    const grow = n.animate([{ height: from + "px" }, { height: to + "px" }], shape);
+    grow.finished.then(() => { n.style.overflow = ""; }, () => { n.style.overflow = ""; });
+    if (!opening && top < 0) foldInSight(n, grow, from, to, top);
+    if (opening) {
+      // its parts come in from just above, one after another; those past
+      // the first dozen together
+      let i = 0;
+      for (const c of n.children) {
+        c.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+          { duration: 420, delay: 40 + Math.min(i++, 12) * 18, easing: IOS_EASE, fill: "backwards" });
+      }
+    } else {
+      for (const c of n.children) c.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 90, easing: "ease-out", fill: "backwards" });
+    }
+  }
+  // foldInSight: an editor folded from its foot (Save and Cancel are there)
+  // would leave the page shorter under the reader, and the browser's clamp
+  // would land them at the list's foot with the row above the window. The
+  // page goes up with the fold instead, step for step with the slot's
+  // height, until the row's top is the window's — as the reader's own
+  // scroll, since it answers their click. top is how far the editor's top
+  // was above the window's; the page's scroll is read once the redraw
+  // has put it back (steady).
+  function foldInSight(n, grow, from, to, top) {
+    const view = document.getElementById("view-routing");
+    readerScrolls(1000);
+    let s0, target;
+    const step = () => {
+      if (s0 === undefined) { s0 = view.scrollTop; target = s0 + top; }
+      if (!n.isConnected) return;
+      const p = grow.playState === "finished" ? 1 : Math.min(1, Math.max(0, (from - n.getBoundingClientRect().height) / (from - to)));
+      view.scrollTop = s0 + (target - s0) * p;
+      if (p < 1 && grow.playState === "running") requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    gFolded = n.dataset.gslot;
+  }
+  // savedMark: the row of the group just saved lights up and a check pops
+  // in by its name, then both go
+  function savedMark(row) {
+    row.animate([{ backgroundColor: "color-mix(in srgb, var(--accent) 16%, transparent)" }, { backgroundColor: "color-mix(in srgb, var(--accent) 16%, transparent)", offset: 0.35 }, { backgroundColor: "transparent" }],
+      { duration: 1400, easing: "ease-out" });
+    const nm = row.querySelector(".nm");
+    if (!nm) return;
+    const ok = el("span", "rt-gsaved");
+    ok.setAttribute("aria-hidden", "true");
+    ok.append(svg(CHECK, 11, 2));
+    nm.append(ok);
+    ok.animate([{ opacity: 0, transform: "scale(.4)" }, { opacity: 1, transform: "none" }], { duration: 570, easing: SPRING });
+    const path = ok.querySelector("path");
+    const len = path.getTotalLength?.() || 14;
+    path.animate([{ strokeDasharray: len, strokeDashoffset: len }, { strokeDasharray: len, strokeDashoffset: 0 }], { duration: 360, delay: 120, easing: IOS_EASE, fill: "backwards" });
+    ok.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, delay: 1500, easing: "ease-in", fill: "forwards" })
+      .finished.then(() => ok.remove(), () => ok.remove());
   }
   // Copy to share (laincatx on X): the group as text, its models, routing
   // and rules and no key (provider.ShareGroup), for anyone to paste into
@@ -4503,7 +4604,7 @@ function routingPage(part) {
   }
   function groupRow(g) {
     const row = el("div", "rt-group" + (g.ready ? "" : " off") + (g.disabled ? " disabled" : ""));
-    row.dataset.id = g.id;
+    row.dataset.id = row.dataset.gslot = g.id;
     const ics = groupHandle(g, row);
     const main = el("div", "main");
     const nm = el("div", "nm");
@@ -4714,6 +4815,7 @@ function routingPage(part) {
     for (const k of ["members", "match", "matched", "fast", "off", "rules"]) if (!Array.isArray(d[k])) d[k] = [];
     if (!d.weights || typeof d.weights !== "object") d.weights = {};
     const ed = el("div", "editor rt-gedit");
+    ed.dataset.gslot = g ? g.id : "";
     const h = el("div", "ehead");
     h.append(el("b", "", g ? g.name : t("New group")));
     if (g?.auto) h.append(el("span", "note", t("found by magpie — saving a change makes it yours")));
