@@ -46,7 +46,7 @@ export const PARTNERS = [
     catalog: "kimi-code-plan-cn",
     keysUrl: "https://www.kimi.com/code?aff=magpie",
     website: "https://www.kimi.com/code?aff=magpie",
-    iconUrl: "https://usemagpie.ai/img/partner-kimi.svg",
+    iconUrl: "https://usemagpie.ai/img/partner-kimi.png",
     notes: {
       en: "One subscription, one K3 quota shared by every agent",
       zh: "一份订阅，所有 agent 共享 K3 额度",
