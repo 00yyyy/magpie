@@ -555,7 +555,7 @@ func accountJSON(ctx context.Context, url, token string, headers map[string]stri
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		e := &accountStatusError{status: res.StatusCode}
+		e := &accountStatusError{status: res.StatusCode, body: b[:min(len(b), 4<<10)]}
 		if secs, err := strconv.Atoi(res.Header.Get("Retry-After")); err == nil && secs > 0 {
 			e.retryAfter = time.Duration(secs) * time.Second
 		}
@@ -567,6 +567,7 @@ func accountJSON(ctx context.Context, url, token string, headers map[string]stri
 type accountStatusError struct {
 	status     int
 	retryAfter time.Duration // what the vendor asked to wait, when it said
+	body       []byte        // the start of what it answered (accountJSON)
 }
 
 func (e *accountStatusError) Error() string { return http.StatusText(e.status) }
@@ -897,7 +898,10 @@ func codexSubscriptionUsage(ctx context.Context, dir string) SubscriptionQuota {
 		q.Error = err.Error()
 		return q
 	}
-	q.Plan, q.Windows, q.Resets, q.Balance, q.Held, err = codexWindows(ctx, token, accountID)
+	renew := func(ctx context.Context, stale string) (string, string, error) {
+		return codexTokenRenewing(ctx, dir, stale)
+	}
+	q.Plan, q.Windows, q.Resets, q.Balance, q.Held, err = codexWindowsRenewing(ctx, token, accountID, renew)
 	if b, _, rerr := readCodexLogin(dir, false); rerr == nil {
 		q.Until = codexUntil(b, time.Now())
 	}
