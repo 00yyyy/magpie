@@ -1343,6 +1343,12 @@ function ledHScroll() {
   if (!over) return;
   bar.firstElementChild.style.width = wrap.scrollWidth - wrap.clientWidth + bar.clientWidth + "px";
   bar.scrollLeft = wrap.scrollLeft;
+  // a sticky box keeps clear of its scroller's padding, so at bottom 0 it
+  // stood the view's bottom padding above the window's foot, the table
+  // showing through the strip under it: it goes down over that padding
+  const view = bar.closest(".view");
+  const pad = view ? parseFloat(getComputedStyle(view).paddingBottom) || 0 : 0;
+  bar.style.bottom = -pad + "px";
 }
 $("#ledWrap").addEventListener("scroll", () => { const bar = $("#ledHScroll"); if (bar.scrollLeft !== $("#ledWrap").scrollLeft) bar.scrollLeft = $("#ledWrap").scrollLeft; }, { passive: true });
 $("#ledHScroll").addEventListener("scroll", () => { const wrap = $("#ledWrap"); if (wrap.scrollLeft !== $("#ledHScroll").scrollLeft) wrap.scrollLeft = $("#ledHScroll").scrollLeft; }, { passive: true });
