@@ -44,6 +44,12 @@ const modelUsage = `usage:
   magpie model output <provider/model>           the most a reply of it may hold, and what you said
   magpie model output <provider/model> <n>       say the most, as 128000 or 128k; '<provider>/*' is every model
   magpie model output <provider/model> --reset   take your limit off this model
+  magpie model spec <provider/model>             its context window, max output, vision and reasoning levels
+  magpie model spec <provider/model> [--context <n>] [--output <n>] [--vision on|off] [--reasoning <levels>]
+                                                 say any of them at once, e.g. --reasoning low-high; auto as a
+                                                 value goes back to the vendor's list (magpie model spec --help)
+  magpie model spec <provider/model> --reset     take every value you set off this model
+  magpie model specs                             the models you gave a spec
   magpie model wire <provider/model>             the name the vendor is asked for, and the one you gave
   magpie model wire <provider/model> <name>      ask for the model by this name, for a relay that serves it
   magpie model wire '<provider>/*' <name>        ask for every model of that provider by this name; a * in
@@ -127,6 +133,10 @@ func modelCmd(args []string) error {
 		return modelOutput(args[1:])
 	case "wire", "upstream":
 		return modelWire(args[1:])
+	case "spec", "specs-of":
+		return modelSpec(args[1:])
+	case "specs":
+		return modelSpecs()
 	case "alias":
 		return modelUsageAlias(args[1:])
 	case "aliases":
@@ -223,9 +233,12 @@ func modelEfforts(args []string) error {
 		return err
 	}
 	id := p.ID + "/" + model
-	all := p.Efforts(model)
+	all := p.Known(model) // the model's own, the kept ones bold below
 	rest := args[1:]
-	given := len(p.Known(model)) == 0 // levels aren't known: those it has are the user's
+	given := len(all) == 0 // levels aren't known: those it has are the user's
+	if given {
+		all = p.Efforts(model)
+	}
 	if len(rest) == 1 && slices.Contains([]string{"off", "--off"}, rest[0]) {
 		// no reasoning field at all, for a vendor that turns one away
 		// though its list says the model reasons (yuexian7 on Discord)

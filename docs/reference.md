@@ -1234,6 +1234,39 @@ at start-up. A session already running therefore keeps the window it began with,
 while the gateway's own `/models` and every request from then on are right at
 once.
 
+#### All of a model at once: `magpie model spec`
+
+`magpie model spec` sets a model's window, reply limit, vision and reasoning
+levels in one command, and says where each value magpie goes by came from:
+
+```sh
+magpie model spec kenari/glm-5:free                          # what it has, and whether each is yours
+magpie model spec kenari/glm-5:free --context 128k --output 16k --vision on --reasoning low-high
+magpie model spec kenari/glm-5:free --reasoning low,medium,high   # a list instead of a range
+magpie model spec kenari/glm-5:free --reasoning off          # send it no reasoning field
+magpie model spec kenari/glm-5:free --vision auto            # take one value of yours off
+magpie model spec "kenari/*" --context 200000 --output 32k   # every model of the provider without its own
+magpie model spec kenari/glm-5:free --reset                  # take every value of yours off
+magpie model specs                                           # the models you gave a spec
+```
+
+It writes the same stores `magpie model context`, `output`, `images` and
+`efforts` do — the window in providers.json, the rest in settings.json
+(`modelOutputs`, `modelImages`, `modelEfforts`, `modelReasonless`) — so the
+order above holds for each part, and a catalog refresh keeps them. A model
+nothing knew the levels of can be given them (`--reasoning low-high`); one
+that has its own can only be narrowed to some of them. A bad number, an
+unknown flag, a level that isn't one, or a range that runs backwards is
+refused, and nothing of the command is written.
+
+What you set wins everywhere magpie reads a model: the app's badges and
+level chips, the gateway's `/v1/models` (`context_window`,
+`max_output_tokens`, `reasoning_levels`), the `max_tokens` a request is sent
+with, the level a request is sent at (an ask above the levels you kept goes
+at the nearest one you kept), whether images reach it or are described
+first, which model magpie picks to describe images, and the model lists
+magpie writes into the agents.
+
 ### The name a vendor knows a model by
 
 A relay often serves a model under an id of its own — a prefix it namespaces

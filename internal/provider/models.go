@@ -1594,15 +1594,15 @@ func (p Provider) RejectsTemperature(model string) bool {
 }
 
 // Efforts are the reasoning levels the model takes, when known: its own,
-// or those the user gave it when it has none known.
+// only those of them the user kept (magpie model efforts, magpie model
+// spec --reasoning), or those the user gave it when it has none known.
+// The gateway fits a request to these, so an agent asking a level the
+// user left out is asked the nearest one kept.
 func (p Provider) Efforts(model string) []string {
 	if Reasonless(p.ID, model) {
 		return nil
 	}
-	if all := p.Known(model); len(all) > 0 {
-		return all
-	}
-	return effortsKept(nil, settings.Shared().ModelEfforts[p.ID+"/"+model])
+	return effortsKept(p.Known(model), settings.Shared().ModelEfforts[p.ID+"/"+model])
 }
 
 // Thinks reports whether the model reasons: it has levels, its list says
@@ -2488,6 +2488,9 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	// providers serving it say (#402)
 	e.Reasoning = m.Reasoning || len(e.Efforts) > 0 || catalog.Thinks(m.ID)
 	e.Efforts = effortsKept(e.Efforts, s.ModelEfforts[e.ID])
+	// levels the user gave a model with none known say it thinks too, so
+	// an agent told its levels isn't told it doesn't reason
+	e.Reasoning = e.Reasoning || len(e.Efforts) > 0
 	// Codex's Ultra on a model OpenAI offers it on, served by another
 	// vendor (Copilot's gpt-6.1-sol, #656): a ChatGPT account's list says it
 	// already. Its subagents take their tasks as text from a magpie-served
