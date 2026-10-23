@@ -2,9 +2,11 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -53,7 +55,9 @@ func TestPartnersFromTheFeed(t *testing.T) {
 	t.Cleanup(resetPartners)
 	was := fetchPartnerIcon
 	t.Cleanup(func() { fetchPartnerIcon = was })
+	var iconFetches atomic.Int32
 	fetchPartnerIcon = func(_ context.Context, u string) (string, error) {
+		iconFetches.Add(1)
 		if u != "https://acme.example/logo.png" {
 			t.Errorf("icon fetched from %q", u)
 		}
@@ -99,6 +103,15 @@ func TestPartnersFromTheFeed(t *testing.T) {
 	// the host a /go website sends the browser to, which the editor's link reads
 	if a.SiteHost != "www.acme.example" || got[1].Regions[0].SiteHost != "cn.regioned.example" {
 		t.Errorf("siteHost = %q, region's %q", a.SiteHost, got[1].Regions[0].SiteHost)
+	}
+
+	// fetched again, its icon from the same URL is the one kept
+	fetchPartnersNow()
+	if n := iconFetches.Load(); n != 1 {
+		t.Errorf("icon fetched %d times over two fetches of one URL, want 1", n)
+	}
+	if got := Partners(); len(got) == 0 || got[0].Icon != a.Icon {
+		t.Errorf("icon after a second fetch = %v, want the kept %q", got, a.Icon)
 	}
 
 	// a provider is added from it as from a preset
@@ -184,6 +197,33 @@ func TestPartnersFetchedLastIsHeld(t *testing.T) {
 	}
 	if n := asked.Load(); n != 2 {
 		t.Fatalf("asked %d times, want 2", n)
+	}
+}
+
+// A process started fetches the list on its first ask, however fresh the
+// list kept on disk: one fetched empty a minute before a partner was added
+// held it back for six hours, restart or not.
+func TestPartnersFetchedOnStart(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	resetPartners()
+	t.Cleanup(resetPartners)
+	kept, _ := json.Marshal(partnerCache{At: time.Now().Add(-time.Minute)})
+	if err := os.MkdirAll(filepath.Dir(partnerCacheFile()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(partnerCacheFile(), kept, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var body atomic.Value
+	body.Store(`{"partners":[{"id":"acme","name":"Acme","chat":"https://a.example/v1"}]}`)
+	t.Setenv("MAGPIE_PARTNERS", partnerFeedServer(t, &body).URL)
+
+	Partners()
+	// the fetch it started has ended once a fetch can be claimed
+	claimPartnerFetch()
+	partnerMu.Unlock()
+	if ids := partnerIDs(Partners()); ids != "acme" {
+		t.Fatalf("partners after a start with a fresh empty list kept = %q, want acme", ids)
 	}
 }
 
