@@ -8606,17 +8606,21 @@ $("#modal").addEventListener("keydown", (e) => {
 const modalHold = { off: 0, at: null, y: 0, cap: null, capSet: "" };
 // how far down the dialog an element sits, to the fraction of a pixel,
 // what moves it in an animation (a row coming in) left out. An element
-// that scales (a Copy button's pop) is measured by what holds it, as its
-// top moves round its middle by more than the matrix says.
+// that scales (a Copy button's pop, a segment pressed) is measured by its
+// own top as drawn unscaled, round its transform-origin: measured by what
+// holds it, a pressed segment read 2px above where it was marked, and the
+// dialog went 2px down at every click (the owner, 10-23). One that turns
+// or skews is measured by what holds it.
 function modalDepth(a, d) {
   if (!a?.isConnected || !d.contains(a) || a === d || !a.offsetParent) return null;
   if (getComputedStyle(d).transform === "none") {
     const moves = [];
     for (let x = a; x && x !== d; x = x.parentElement) {
-      const t = getComputedStyle(x).transform;
+      const c = getComputedStyle(x), t = c.transform;
       if (t === "none") continue;
       const m = new DOMMatrixReadOnly(t);
       if (m.m11 === 1 && m.m22 === 1 && !m.m12 && !m.m21) moves.push(m.m42);
+      else if (!m.m12 && !m.m21) { a = x; moves.length = 0; moves.push(m.m42 + parseFloat(c.transformOrigin.split(" ")[1]) * (1 - m.m22)); }
       else { a = x.parentElement; moves.length = 0; }
     }
     if (a === d) return null;
