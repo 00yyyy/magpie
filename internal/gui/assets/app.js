@@ -17702,14 +17702,21 @@ function checkinRow(q, first, subs) {
     switch (r.outcome) {
       case "claimed":
       case "done":
+        if (r.again) {
+          // "already in" before noon with no claim magpie saw: maybe the
+          // vendor's day before, so not shown as today's (#3326)
+          kind = "wait";
+          text = t("{name} says already checked in; its day may not have turned yet, so magpie asks again later", { name: checkinVendorName(r, q.name) });
+          break;
+        }
         kind = "ok";
         text = t("Checked in today") + (r.credit ? " +" + r.credit : "") + (r.streak ? " · " + t("{n}-day streak", { n: r.streak }) : "");
         break;
       case "ineligible":
-        text = t("Not eligible for the daily check-in");
+        text = t("Not eligible for the daily check-in") + (r.again ? " · " + t("magpie asks again later") : "");
         break;
       case "inactive":
-        text = t("No check-in event now");
+        text = t("No check-in event now") + (r.again ? " · " + t("magpie asks again later") : "");
         break;
       case "captcha":
         // the vendor wants a captcha, which magpie never solves
@@ -17761,9 +17768,11 @@ function checkinRow(q, first, subs) {
   };
   row.append(auto);
   // pressed now: shown while an account isn't in today and could be; a
-  // Qoder campaign can open later in the day, so its inactive too (#2696)
+  // Qoder campaign can open later in the day, so its inactive too (#2696),
+  // and an answer magpie asks again, which may be the vendor's day before
+  // (#3326)
   const later = /^(plugin:)?qoder(-cn)?$/.test(by);
-  const due = subs.filter((x) => x.checkins && !x.checkinOff && (x.checkinBy || "") === by && !(x.checkin?.day === today && x.checkin.outcome !== "failed" && !(later && x.checkin.outcome === "inactive")));
+  const due = subs.filter((x) => x.checkins && !x.checkinOff && (x.checkinBy || "") === by && !(x.checkin?.day === today && x.checkin.outcome !== "failed" && !x.checkin.again && !(later && x.checkin.outcome === "inactive")));
   if (due.length) {
     const now = el("button", "text ci-now", t("Check in now"));
     now.type = "button";
@@ -23605,6 +23614,8 @@ function wbCheckinLine(r) {
   switch (r.outcome) {
     case "claimed":
     case "done":
+      // maybe the vendor's day before (#3326)
+      if (r.again) return t("{user}: {name} says already checked in; magpie asks again later", { user: r.user, name: checkinVendorName(r) });
       return t("{user} checked in today", { user: r.user }) + (r.credit ? " +" + r.credit : "")
         + (r.streak ? ", " + t("{n}-day streak", { n: r.streak }) : "");
     case "ineligible":
