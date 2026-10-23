@@ -7324,6 +7324,9 @@ function renderAdd() {
     if (partners.length) {
       any = true;
       const grid = section("Partners", "magpie's sponsors");
+      // a new one's tile keeps a dot until opened (partnerTile)
+      newPartnerTiles ??= new Set();
+      for (const p of partners) if (p.new && !p.added) newPartnerTiles.add(p.id);
       for (const pr of partners) grid.append(partnerTile(pr));
       partnersCounted ??= new Set();
       const fresh = partners.filter((p) => !partnersCounted.has(p.id));
@@ -7589,12 +7592,26 @@ function markNewPartners() {
   else b.removeAttribute("title");
 }
 
+// partners new when the sheet showed them, each dotted until opened, this
+// run; a dot scales in once
+let newPartnerTiles = null;
+const newPartnerDotsIn = new Set();
+
 // a partner's row: its own section says it is sponsored, so no badge
 function partnerTile(pr) {
   const b = tile({ ...pr, sponsored: false, note: "" });
   if (!pr.added) {
     const open = b.onclick;
-    b.onclick = (e) => { countPartner("opened", [pr.id]); open(e); };
+    b.onclick = (e) => { newPartnerTiles?.delete(pr.id); countPartner("opened", [pr.id]); open(e); };
+  }
+  if (!pr.added && newPartnerTiles?.has(pr.id)) {
+    const d = el("span", "new-dot" + (newPartnerDotsIn.has(pr.id) ? "" : " in"));
+    newPartnerDotsIn.add(pr.id);
+    // a hidden dot's animation starts over when shown again
+    d.addEventListener("animationend", (e) => { if (e.animationName === "new-dot-ring") d.classList.remove("in"); });
+    d.setAttribute("role", "img");
+    d.setAttribute("aria-label", t("New"));
+    b.querySelector(".nm").append(d);
   }
   if (!pr.added) b.title = pr.name + (partnerNote(pr) ? " · " + partnerNote(pr) : "") + "\n" + hostOf(pr.chat || pr.responses || pr.anthropic);
   return b;

@@ -1953,7 +1953,10 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
 #addProvider.has-new::after { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 0 0 5px; border-radius: 50%; background: var(--accent); vertical-align: 6px; box-shadow: 0 0 0 0 var(--accent); animation: new-dot-in .4s cubic-bezier(.3, 1.6, .5, 1), new-dot-ring 2.4s ease-out .4s 2; }
 @keyframes new-dot-in { from { transform: scale(0); } }
 @keyframes new-dot-ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 70%, 100% { box-shadow: 0 0 0 5px transparent; } }
-@media (prefers-reduced-motion: reduce) { #addProvider.has-new::after { animation: none; } }
+/* and on the tile of each partner new when the sheet showed it, until it is opened (partnerTile) */
+.tile .new-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.tile .new-dot.in { animation: new-dot-in .4s cubic-bezier(.3, 1.6, .5, 1), new-dot-ring 2.4s ease-out .4s 1; }
+@media (prefers-reduced-motion: reduce) { #addProvider.has-new::after, .tile .new-dot.in { animation: none; } }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 6px; min-height: 12px; }
 .chip {
   display: inline-flex; align-items: center; gap: 2px;
