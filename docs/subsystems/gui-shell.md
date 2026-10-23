@@ -12,7 +12,7 @@ three.
 | Part | Responsibility | Source |
 | --- | --- | --- |
 | Native host | `Run` starts the Wails v3 app: the tray icon, the panel, the main window, single-instance handover, `magpie://` import links and open at login. `host` implements `Windows` for the API: show and hide, open URLs and folders, copy to the clipboard, fit and tint the panel, and set the text size. A copy on Linux sets PRIMARY before CLIPBOARD, since GTK 3 serves CLIPBOARD empty when PRIMARY is set after it on a compositor with no primary selection (KDE Plasma with middle-click paste off, #1881); on Wayland the copy is read back through the compositor, and one that doesn't read back whole answers `/api/copy` with 501, so the page tries its clipboard API, then the copy command, then says the copy failed with the text to copy by hand (`copy-fallback.test.cjs`). | [`app.go`](../../internal/gui/app.go), [`clipboard_gtk3.go`](../../internal/gui/clipboard_gtk3.go), [`clipboard_gtk3.h`](../../internal/gui/clipboard_gtk3.h), [`mainwindow.go`](../../internal/gui/mainwindow.go), [`traymenu.go`](../../internal/gui/traymenu.go) |
-| Backend | `startBackend` starts the gateway this process serves, unless another magpie already serves it. In that case this process only shows the other one's status (`gw` is nil). `stopServing` drains requests in flight. | [`backend.go`](../../internal/gui/backend.go) |
+| Backend | `startBackend` starts the gateway this process serves, unless another magpie already serves it. In that case this process only shows the other one's status (`gw` is nil). `stopServing` drains requests in flight. A restart to update can hand the listening socket to the new version instead (see [A restart to update hands the gateway over](#a-restart-to-update-hands-the-gateway-over)). | [`backend.go`](../../internal/gui/backend.go) |
 | API and assets | `Handler` serves `assets/` (embedded with `//go:embed assets`) and the `/api/*` routes, such as `/api/state`, `/api/set` and `/api/agents/{action}/{id}`. `held` lets one API request's reads share one catalog build (`provider.Hold`), and drops it after any write. `revalidated` and `versionedPage` name each script by its content hash, so a cache never serves an old `app.js` under a new page; a file asked for under its current hash (`?v=`) is cached for good (`immutable`), anything else is revalidated by its ETag. | [`api.go`](../../internal/gui/api.go) |
 | Browser mode | `StartWeb` serves the page and the gateway for `magpie web`. The browser signs in with a run key in a link. Gateway mode shows Providers, Gateway, Routing, Usage, Sessions, Plugins and Settings on a machine that is only a gateway. `webHandler` gzips the page's text files and the API's JSON for a browser that takes gzip (`webCompressed`, with a `-gzip` ETag that still answers 304); the app's own windows read the page in-process and get it uncompressed. | [`web.go`](../../internal/gui/web.go), [`gatewaymode.go`](../../internal/gui/gatewaymode.go) |
 | The page | `app.js` keeps one state object per view and renders it into a list, with no framework. The views have their own files: `plugins.js` and `context.js`, and those a plugin adds under `assets/plugins/<id>/` (the Gateway, Sessions, Library, Routing and Usage pages, see [plugin runtime](plugin-runtime.md)) (Usage's Context tab, and the context window card the Routing page draws under a request's story, fed by `/api/context` in `context.go`, which scores and tags each agent; clicking a part, a cell or an item opens its text from `/api/context/text`, the last 10 requests' masked bodies in memory (`openCtxText`), rendered 100 items and 20000 characters at a time; its "Tuned for you" cards are fed by `/api/tune` in `tune.go`, see [agent wiring](agent-wiring.md)). Strings go through `t()` with translations in `i18n.js`, and a plugin's own in its `i18n.js` (zh, zh-TW, ja and de; the English text is the key and the fallback). zh-TW is Traditional Chinese with Taiwan's words; a system language of zh-TW, zh-HK, zh-MO or any zh-Hant picks it, and the tray menu and notifications follow (`trayLang`). Dropdowns use `openProtoMenu`. Every app menu (`openProtoMenu`, `openRowMenu`, `openSessCombo`) is placed by `placeMenu`: under its anchor, or over it when the window runs out below; one that fits neither way takes the larger room, its height held to it, and scrolls inside itself, and a scroll inside a menu doesn't close it (#1437, `removed-groups-menu-scroll.test.cjs`). The highest any popover goes is `popTop`: 8px under `header.top` on a Mac window, where the traffic lights are drawn over the page, and 8px from the top elsewhere; `placeMenu`, the field picker's `placePop` (which also holds `#pop`'s height to that room) and an agent's model list (`openAgentModels`) all use it (#1573, `popover-mac-chrome.test.cjs`). Scrolling is done only by `scrollOnPurpose(e)` with the reader's event. | [`assets/app.js`](../../internal/gui/assets/app.js), [`assets/i18n.js`](../../internal/gui/assets/i18n.js) |
@@ -437,6 +437,107 @@ never empty: `OwnerTrace` says so with its second result). See
 [`trace_peer_test.go`](../../internal/gui/trace_peer_test.go), and
 `TestGatewayTraceIsLoopbackOnly` in
 [`trace_peer_test.go`](../../internal/gateway/trace_peer_test.go).
+
+### A restart to update hands the gateway over
+
+On a Mac and on Linux, a restart into a downloaded update (the Update pill,
+Settings › Version, the tray's Restart to update, Restart automatically)
+starts the new version beside the running one and hands it the gateway's
+listening socket, rather than ending the gateway and waiting for the new
+one to listen again (xuanwo on X). Nothing an agent sends meanwhile is
+refused: the port never closes, and requests already in flight finish in
+the old process.
+
+The trigger is `handsOver` in
+[`handover.go`](../../internal/gui/handover.go): the app (`Run` sets
+`handoverHost` and `startExe`), on darwin or linux, serving the gateway
+itself, not a dev backend (whose own handover is `gateway.Handover`,
+below) and no `MAGPIE_NO_HANDOVER` in the environment. `restartInto` in [`update.go`](../../internal/gui/update.go)
+then calls `beginHandover` instead of the relaunch-after-exit. The steps:
+
+1. The old magpie opens an Offer ([`internal/handoff`](../../internal/handoff/handoff.go)):
+   a unix socket in a 0700 temporary folder (in `/tmp` when `TMPDIR`'s
+   path leaves a socket's name no room, `sockDir`), named by `handover.json` in
+   the config folder with its pid, its program path and the time. Then it
+   starts the new version beside itself: `open -n` on the bundle on a Mac
+   (`update.OpenBeside`), the binary at the path it started from on Linux
+   (`update.StartBeside`; `startExe`, since `/proc/self/exe` reads
+   "(deleted)" once the update replaced it).
+2. The new magpie's `Run` calls `takeOver` before anything else: a pointer
+   fresh (2 minutes), of a process still running, for the same program and
+   not its own is dialled, the new one says hello, and receives the
+   listening socket (SCM_RIGHTS) with the address, the bridge's callback
+   socket and the old pid (`handoff.Take`). The peer's uid is checked on
+   accept. `gateway.Inherit` keeps the socket for the next `ListenAndServe`
+   on the same address (`sameAddr`; another address lets it go), which
+   serves on it and then acks.
+3. The old one, on the ack (`AwaitAck`), withdraws the pointer, hides
+   itself where it can (below), calls `gateway.Server.HandOff`, ends its
+   backend and waits for its requests, then quits. A handed-off server's
+   shutdown waits up to `handedOffDrain` (15 minutes) for requests in
+   flight, not the 2s an ordinary quit gives them (`shortDrain`). Its
+   `OnShutdown` then skips what goes with the gateway, which the new one
+   now does: ending Codex's failover, porting Codex rollouts and installing
+   the update.
+4. Should the Offer not open, the new version not start, not say hello in
+   60s (`helloWait`), not ack in 90s (`ackWait`), or drop the connection,
+   the old one keeps the socket, takes its instance lock back and restarts
+   as before: the new one opened once it has exited (`fail`,
+   `update.Relaunch` or `relaunchBinary`). It first waits, still serving,
+   for its requests in flight to finish (at most `fallbackWait`, 15
+   minutes), since the restart was let go without waiting for them. A
+   second restart click while a handover is under way does nothing
+   (`pending`).
+
+Two magpies never show at once. On a Mac the old one lets go of its
+instance lock before it gives the socket (`releaseInstance`), so the new
+one's `runningAlready` takes it, and once the ack comes the old one hides
+its menu bar icon, panel and window and leaves the Dock (`onHandedOver`).
+On Linux the D-Bus name Wails holds can't be let go, so the new one serves
+the gateway at once but waits for the old pid to end (`awaitExit`, at most
+`handedOffWait`, 16 minutes) before it makes its app and tray; the old one
+keeps its tray icon until it has drained.
+
+What the old process alone has:
+
+- Sticky routing (which account each conversation stuck to) is flushed to
+  disk before the socket is given (`gateway.FlushSticks`).
+- Claude Code runs the subscription bridge started send their tool calls
+  to the gateway's port, which the new one now serves. The old one serves
+  them on a unix socket in the Offer's folder (`ServeCallbacks`), and the
+  new one forwards a claude-mcp token it doesn't know there
+  (`ForwardCallbacks`, `forwardCallback`; `ownCallback` lets them in while
+  forwarding is on). See [Claude subscription bridge](claude-subscription-bridge.md#a-restart-to-update).
+- Bridge turns can't move to another process, so a restart that hands
+  over waits only for them (`restartBusy`, `blocking`: `Busy.Bridge` as
+  Requests, `Tools`, `BridgeLast` as Last). The page is told
+  (`updateJSON.Handover`) and says it waits for the Claude subscription's
+  replies, with other requests carrying on across the restart.
+- Refreshes of rotating OAuth tokens hold a file lock across both
+  processes (see [Providers and accounts](providers-accounts.md)).
+
+Not carried over, accepted: each process counts its own requests per
+minute and concurrency, so for the drain a provider's limits can be
+exceeded by what the old one still has in flight; a bridge run idle
+between turns ends with the old process, and the next turn starts a new
+run as after any restart; the new one's start-up migrations run while the
+old one still serves its last requests.
+
+Windows has no SCM_RIGHTS for a listening socket in this form, and
+`magpie web` re-executes itself in place; both restart as before, waiting
+for the gateway to be idle (#577). `make dev` keeps its own handover, a
+new backend listening beside the old one (`gateway.Handover`, `devBackend`).
+
+See `TestRestartHandsTheGatewayOver` (the new version a second process,
+a stream across the restart finishing whole, requests during it answered,
+and the old one quitting only after its stream) and
+`TestHandoverNotMadeRestartsAsBeforeOnceIdle` in
+[`handover_unix_test.go`](../../internal/gui/handover_unix_test.go),
+`TestRestartWaitsForWhatAHandoverCantCarry` in
+[`handover_test.go`](../../internal/gui/handover_test.go), the gateway's
+[`handover_test.go`](../../internal/gateway/handover_test.go), the
+socket passing in [`handoff_test.go`](../../internal/handoff/handoff_test.go),
+and `update-wait.test.cjs`.
 
 ## Verification
 

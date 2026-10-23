@@ -936,3 +936,31 @@ func (c *counter) Read(p []byte) (int, error) {
 
 // Alive reports whether the process pid is still running.
 func Alive(pid int) bool { return alive(pid) }
+
+// OpenBeside opens bundle now, a new instance beside this one (open -n),
+// tried again while open fails: a restart that hands the gateway over
+// (internal/handoff) starts the new version before this one quits. With
+// window, its window; else its menu bar icon only, as Relaunch.
+func OpenBeside(bundle string, window bool) error {
+	cmd := proc.Command("/bin/sh", "-c", retried(openBeside(bundle, window), openWaits))
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
+	detach(cmd)
+	return cmd.Start()
+}
+
+// openBeside is the open command OpenBeside runs for bundle.
+func openBeside(bundle string, window bool) string {
+	if window {
+		return fmt.Sprintf("open -n %q", bundle)
+	}
+	return fmt.Sprintf("open -n %q --args tray", bundle)
+}
+
+// StartBeside starts exe now, beside this process, as RelaunchBinary's
+// args say: the new version of a restart that hands the gateway over. It
+// isn't told to wait for this one (MAGPIE_REPLACES): it takes the gateway
+// from it while it runs.
+func StartBeside(exe string, window bool, view string) error {
+	_, _, err := launch(exe, RelaunchArgs(window, view), os.Environ())
+	return err
+}
