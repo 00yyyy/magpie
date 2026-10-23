@@ -120,8 +120,10 @@ type WorkBuddyCheckin struct {
 	// Vendor is a plugin's provider by name, for a check-in By
 	// "plugin:<id>"; never kept.
 	Vendor string `json:"vendor,omitempty"`
-	// Asked is true of one checked in on this run, not one read back.
-	Asked bool `json:"-"`
+	// Asked is true of one checked in on this run, not one read back;
+	// sent so a press can tell a claim now from one earlier today.
+	// Never kept: the file is written before it is set.
+	Asked bool `json:"asked,omitempty"`
 	// Claimed is when magpie last saw the account's credits claimed,
 	// carried over while later answers that day say done: a done after
 	// magpie's own claim is the day's, one before it may be yesterday's

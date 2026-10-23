@@ -5,7 +5,9 @@
 // magpie asks again (again: true) is not shown as today's check-in: its
 // card says the vendor said already, magpie asks again later, and keeps
 // Check in now, whose press asks the vendor. A done answer magpie keeps
-// (no again) is still "Checked in today" with no press. English,
+// (no again) is still "Checked in today" with no press. The press says
+// what came of it: claimed now (+credits), already checked in today, not
+// available yet, failed. English,
 // Simplified and Traditional Chinese, Japanese and German, the window and
 // the panel's 440px; the API is faked here.
 const assert = require("node:assert/strict");
@@ -37,7 +39,7 @@ function serve(lang, asked) {
     if (url.pathname === "/api/settings") return json(settings);
     if (url.pathname === "/api/usage/plugin-checkin") {
       asked.push(route.request().postDataJSON());
-      return json([{ outcome: "claimed", credit: 200 }]);
+      return json([{ user: "hu", outcome: "claimed", credit: 200, asked: true }]);
     }
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true } });
     if (url.pathname === "/api/usage/quotas") return json(quotas());
@@ -56,6 +58,13 @@ const again = {
   "zh-TW": "AutoClaw CN 回覆已簽到，但它的簽到日可能還沒換日，magpie 稍後會再問",
   ja: "AutoClaw CN はチェックイン済みと答えましたが、まだ日付が切り替わっていない可能性があるため、magpie は後でもう一度確認します",
   de: "AutoClaw CN meldet bereits eingecheckt; sein Tag hat vielleicht noch nicht gewechselt, daher fragt magpie später erneut",
+};
+const said = {
+  en: { claimed: "Claimed: 1 (+200 credits)", already2: "Already checked in today: 2", notYet3: "Not available yet: 3", mixed: "Claimed: 2 (+150 credits) · Already checked in today: 1 · Check-in failed for 1 account(s)" },
+  zh: { claimed: "已领取：1（+200 积分）", already2: "今日已签到过：2", notYet3: "暂不可签到：3", mixed: "已领取：2（+150 积分） · 今日已签到过：1 · 1 个账号签到失败" },
+  "zh-TW": { claimed: "已領取：1（+200 點數）", already2: "今日已簽到過：2", notYet3: "暫不可簽到：3", mixed: "已領取：2（+150 點數） · 今日已簽到過：1 · 1 個帳號簽到失敗" },
+  ja: { claimed: "受け取り済み：1（+200 クレジット）", already2: "今日はすでにチェックイン済み：2", notYet3: "まだチェックインできません：3", mixed: "受け取り済み：2（+150 クレジット） · 今日はすでにチェックイン済み：1 · 1 件のアカウントでチェックインに失敗しました" },
+  de: { claimed: "Eingelöst: 1 (+200 Credits)", already2: "Heute bereits eingecheckt: 2", notYet3: "Noch nicht verfügbar: 3", mixed: "Eingelöst: 2 (+150 Credits) · Heute bereits eingecheckt: 1 · Check-in für 1 Konto/Konten fehlgeschlagen" },
 };
 const done = { en: "Checked in today +50", zh: "今日已签到 +50", "zh-TW": "今日已簽到 +50", ja: "今日はチェックイン済み +50", de: "Heute eingecheckt +50" };
 
@@ -87,8 +96,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await now.count(), 1, "an answer magpie asks again keeps Check in now");
         await reach(page, now);
         await now.click();
-        await page.waitForFunction(() => document.querySelector("#status")?.textContent);
+        await page.waitForFunction((want) => document.querySelector("#status")?.textContent === want, said[lang].claimed);
         assert.deepEqual(asked, [{ provider: "autoclaw-cn" }], "the press asks the vendor");
+        // what a press says, each kind (the coordinator's ask on #3326)
+        const say = (rs) => page.evaluate((rs) => checkinPressSaid(rs).text, rs);
+        assert.equal(await say([{ outcome: "claimed", credit: 200 }, { outcome: "done" }]), said[lang].already2);
+        assert.equal(await say([{ outcome: "done", again: true }, { outcome: "inactive" }, { outcome: "ineligible" }]), said[lang].notYet3);
+        assert.equal(await say([{ outcome: "claimed", credit: 100, asked: true }, { outcome: "claimed", credit: 50, asked: true }, { outcome: "done" }, { outcome: "failed" }]), said[lang].mixed);
+        assert.equal(await page.evaluate(() => checkinPressSaid([{ outcome: "failed" }]).bad), 1);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no sideways scroll");
         assert.deepEqual(errors, []);
       });

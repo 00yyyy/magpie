@@ -17783,8 +17783,8 @@ function checkinRow(q, first, subs) {
       now.classList.add("busy");
       try {
         const rs = await api("usage/" + vendor.api, vendor.plugin ? { provider: vendor.plugin } : {});
-        const bad = (rs || []).filter((x) => x.outcome === "failed").length;
-        status(bad ? t("Check-in failed for {n} account(s)", { n: bad }) : t("Check-in status refreshed"), bad ? "err" : "ok");
+        const said = checkinPressSaid(rs);
+        status(said.text, said.bad ? "err" : "ok");
       } catch (err) {
         status(err.message, "err");
       }
@@ -17793,6 +17793,22 @@ function checkinRow(q, first, subs) {
     row.append(now);
   }
   return row;
+}
+
+// checkinPressSaid: what a press came to, a count per kind (#3326)
+function checkinPressSaid(rs) {
+  const n = {};
+  let cr = 0;
+  for (const r of rs || []) {
+    const o = r.outcome, k = r.again || o === "inactive" || o === "ineligible" ? "Not available yet: {n}"
+      : o === "claimed" && r.asked ? "Claimed: {n}"
+      : o === "claimed" || o === "done" ? "Already checked in today: {n}"
+      : o === "captcha" || o === "own-app" ? "Check in in its own app: {n}" : "Check-in failed for {n} account(s)";
+    n[k] = (n[k] || 0) + 1;
+    if (r.asked && o === "claimed") cr += r.credit || 0;
+  }
+  const bad = n["Check-in failed for {n} account(s)"] || 0;
+  return { bad, text: Object.keys(n).map((k) => t(k === "Claimed: {n}" && cr ? "Claimed: {n} (+{credits} credits)" : k, { n: n[k], credits: Math.round(cr * 100) / 100 })).join(" · ") || t("Check-in status refreshed") };
 }
 
 // checkinVendorName is the vendor of check-in r by name: a plugin's as
