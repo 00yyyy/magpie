@@ -1254,16 +1254,18 @@ It writes the same stores `magpie model context`, `output`, `images` and
 `efforts` do — the window in providers.json, the rest in settings.json
 (`modelOutputs`, `modelImages`, `modelEfforts`, `modelReasonless`) — so the
 order above holds for each part, and a catalog refresh keeps them. A model
-nothing knew the levels of can be given them (`--reasoning low-high`); one
-that has its own can only be narrowed to some of them. A bad number, an
+nothing knew the levels of can be given them (`--reasoning low-high`), and
+a request to it is sent at the nearest of those. One that has its own can
+only be narrowed to some of them, which narrows what agents are offered:
+the vendor is still asked at any level it has, as with
+`magpie model efforts`. A bad number, an
 unknown flag, a level that isn't one, or a range that runs backwards is
 refused, and nothing of the command is written.
 
 What you set wins everywhere magpie reads a model: the app's badges and
 level chips, the gateway's `/v1/models` (`context_window`,
 `max_output_tokens`, `reasoning_levels`), the `max_tokens` a request is sent
-with, the level a request is sent at (an ask above the levels you kept goes
-at the nearest one you kept), whether images reach it or are described
+with, whether images reach it or are described
 first, which model magpie picks to describe images, and the model lists
 magpie writes into the agents.
 

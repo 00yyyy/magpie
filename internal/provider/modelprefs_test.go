@@ -173,10 +173,8 @@ func TestModelEfforts(t *testing.T) {
 	if got := entry(t, "auto/sol").Efforts; !slices.Equal(got, []string{"low", "high"}) {
 		t.Fatal(got)
 	}
-	// the gateway fits a request to the levels kept, not all the vendor
-	// has: what the user kept wins in routing too (magpie model spec
-	// --reasoning, Dani Ariyanto on Discord)
-	if got := (Provider{ID: "a", Catalog: "a"}).Efforts("sol"); !slices.Equal(got, []string{"low", "high"}) {
+	// the vendor is still asked at any level it has
+	if got := (Provider{ID: "a", Catalog: "a"}).Efforts("sol"); len(got) != 4 {
 		t.Fatal(got)
 	}
 	if err := SetModelEfforts("a/sol", []string{"ultra"}); err == nil {

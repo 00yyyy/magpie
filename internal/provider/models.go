@@ -1594,15 +1594,18 @@ func (p Provider) RejectsTemperature(model string) bool {
 }
 
 // Efforts are the reasoning levels the model takes, when known: its own,
-// only those of them the user kept (magpie model efforts, magpie model
-// spec --reasoning), or those the user gave it when it has none known.
-// The gateway fits a request to these, so an agent asking a level the
-// user left out is asked the nearest one kept.
+// or those the user gave it when it has none known (magpie model spec
+// --reasoning on a custom provider's model). The gateway fits a request
+// to these. Levels the user kept of a model's own only narrow what is
+// offered (#92): the vendor is still asked at any level it has.
 func (p Provider) Efforts(model string) []string {
 	if Reasonless(p.ID, model) {
 		return nil
 	}
-	return effortsKept(p.Known(model), settings.Shared().ModelEfforts[p.ID+"/"+model])
+	if all := p.Known(model); len(all) > 0 {
+		return all
+	}
+	return effortsKept(nil, settings.Shared().ModelEfforts[p.ID+"/"+model])
 }
 
 // Thinks reports whether the model reasons: it has levels, its list says

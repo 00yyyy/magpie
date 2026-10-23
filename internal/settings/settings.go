@@ -652,9 +652,10 @@ type Settings struct {
 	ModelNames map[string]string `json:"modelNames,omitempty"`
 	// ModelEfforts are the reasoning levels the user keeps of a model's,
 	// by "<provider id>/<model id>": the lists magpie hands out offer only
-	// those, and the gateway fits a request's level to them; for a model
-	// with no levels known they are the levels given it (see
-	// provider.SetModelEfforts, magpie model spec).
+	// those, while the vendor is still asked at any level it has; for a
+	// model with no levels known they are the levels given it, and the
+	// gateway fits a request to them (see provider.SetModelEfforts,
+	// magpie model spec).
 	ModelEfforts map[string][]string `json:"modelEfforts,omitempty"`
 	// ModelReasonless are the models the user said take no reasoning ask,
 	// by "<provider id>/<model id>": magpie offers them no levels and

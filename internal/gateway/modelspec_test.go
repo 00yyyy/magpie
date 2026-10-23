@@ -124,10 +124,13 @@ func TestModelSpecReachesTheGateway(t *testing.T) {
 	}
 }
 
-// A model whose levels the vendor's list names, kept to some of them by
-// the user, is asked the nearest of those kept, not a level left out: the
-// user's range bounds the ask, as it bounds what agents are offered.
-func TestKeptLevelsBoundTheAsk(t *testing.T) {
+// Levels the user keeps of a model's own (magpie model efforts, Names &
+// levels, magpie model spec --reasoning) only narrow what agents are
+// offered (#92, 47e12df41): the vendor is still asked at any level it
+// has, so an agent's xhigh goes as xhigh. Only a model with no levels
+// known is fitted to the ones the user declared
+// (TestModelSpecReachesTheGateway).
+func TestNarrowedVendorLevelsAskAsBefore(t *testing.T) {
 	fresh(t)
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	data := `{"kenari":{"models":{"sol":{"id":"sol","name":"Sol","reasoning_options":[{"type":"effort","values":["low","medium","high","xhigh","max"]}]}}}}`
@@ -155,18 +158,17 @@ func TestKeptLevelsBoundTheAsk(t *testing.T) {
 		res.Body.Close()
 		return up.last(t)["reasoning_effort"]
 	}
-	if got := ask("xhigh"); got != "xhigh" {
-		t.Fatalf("with every level offered, xhigh went as %v", got)
-	}
 	r := "low-high"
 	if err := provider.SetModelSpec("kenari/sol", provider.SpecChange{Reasoning: &r}); err != nil {
 		t.Fatal(err)
 	}
-	if got := ask("xhigh"); got != "high" {
-		t.Fatalf("kept to low-high, xhigh went as %v", got)
+	if e, _ := provider.EntryOf("kenari/sol"); !slices.Equal(e.Efforts, []string{"low", "medium", "high"}) {
+		t.Fatalf("the levels offered are the ones kept: %v", e.Efforts)
 	}
-	if got := ask("low"); got != "low" {
-		t.Fatalf("kept to low-high, low went as %v", got)
+	for _, effort := range []string{"xhigh", "max", "low"} {
+		if got := ask(effort); got != effort {
+			t.Errorf("narrowed to low-high, %s went as %v; the vendor has it", effort, got)
+		}
 	}
 }
 

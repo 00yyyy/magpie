@@ -28,6 +28,8 @@ const specUsage = `usage:
   What you set wins over the vendor's list and models.dev everywhere magpie reads them: the app's
   badges, the gateway's model list and routing, max_tokens, image handling, and the model lists
   magpie writes into the agents. A model you set nothing on is as it was. A catalog refresh keeps them.
+  Reasoning levels narrowed from the model's own only narrow what agents are offered; the vendor is
+  still asked at any level it has. Levels given a model with none known are what it is asked at.
 
   e.g. magpie model spec kenari/glm-5:free --context 128k --output 16k --vision off --reasoning low-high`
 
