@@ -20421,21 +20421,23 @@ const UPDATE_EVERY = [30, 60, 360, 1440];
 // that names a proxy of its own (or Direct) keeps it whatever this says (netproxy.With), so the
 // line says it holds for those without one (#1832).
 let proxyCustom = false; // Custom picked, not saved yet
-// Keep SOCKS credentials in their own fields; URL userinfo is the existing
-// saved format, with reserved characters escaped before it reaches Go/Bun.
+// The login has fields of its own; the setting stays one address with it as
+// userinfo, split as Go's url.Parse does (last @, then first :).
 function proxyFields(value) {
-  try {
-    const u = new URL(value);
-    if (/^socks5h?:$/.test(u.protocol)) {
-      const encodedUsername = u.username, encodedPassword = u.password;
-      // A saved proxy can contain non-UTF-8 credential bytes. Keep their
-      // escapes, still masked, and preserve those bytes until edited.
-      const decode = (v) => { try { return decodeURIComponent(v); } catch { return v; } };
-      u.username = ""; u.password = "";
-      return { address: u.href, username: decode(encodedUsername), password: decode(encodedPassword), encodedUsername, encodedPassword, socks: true };
-    }
-  } catch {}
-  return { address: value, username: "", password: "", socks: /^socks5h?:\/\//i.test(value) };
+  const [, scheme = "", auth, rest] = /^([a-z][\w+.-]*:\/\/)?([^/?#]*)(.*)$/is.exec((value || "").trim());
+  const at = auth.lastIndexOf("@"), info = at < 0 ? "" : auth.slice(0, at), c = info.indexOf(":");
+  const eu = c < 0 ? info : info.slice(0, c), ep = c < 0 ? "" : info.slice(c + 1);
+  // non-UTF-8 escapes are kept as saved until edited
+  const dec = (v) => { try { return decodeURIComponent(v); } catch { return v; } };
+  return { address: scheme + auth.slice(at + 1) + rest, username: dec(eu), password: dec(ep), eu, ep };
+}
+// each typed part percent-encoded; one left as loaded keeps its escapes
+function proxyAddress(a, f, user, pass) {
+  a = (a || "").trim();
+  if (!a || !(user || pass)) return a;
+  const enc = (t, l, e) => t === l && e !== undefined ? e : encodeURIComponent(t);
+  const [, scheme = "", rest] = /^([a-z][\w+.-]*:\/\/)?(.*)$/is.exec(a);
+  return scheme + enc(user, f.username, f.eu) + (pass ? ":" + enc(pass, f.password, f.ep) : "") + "@" + rest;
 }
 function proxyDisplay(value) {
   // Also mask an older backend's proxyNow, and environment/system proxies.
@@ -20478,29 +20480,20 @@ function renderProxy(s, keep) {
       field.className = "proxy-credential";
       field.setAttribute("aria-label", field.placeholder);
     }
-    const updateAuth = () => {
-      const parsed = proxyFields(i.value.trim());
-      auth.hidden = !parsed.socks;
+    // a pasted login moves into the fields
+    i.oninput = () => {
+      const parsed = proxyFields(i.value);
       if (parsed.username || parsed.password) {
         fields = parsed;
         i.value = parsed.address;
         username.value = parsed.username; password.value = parsed.password;
       }
     };
-    i.oninput = updateAuth;
-    updateAuth();
     let saving = false;
     const save = () => {
-      let v = i.value.trim();
-      if (!v || saving) return;
-      if (!auth.hidden) {
-        try {
-          const u = new URL(v);
-          u.username = username.value === fields.username && fields.encodedUsername !== undefined ? fields.encodedUsername : encodeURIComponent(username.value);
-          u.password = password.value === fields.password && fields.encodedPassword !== undefined ? fields.encodedPassword : encodeURIComponent(password.value);
-          v = u.href;
-        } catch {} // the settings API explains an invalid address
-      }
+      if (!i.value.trim() || saving) return;
+      let v;
+      try { v = proxyAddress(i.value, fields, username.value, password.value); } catch { return; }
       if (v === s.proxy) return;
       saving = true;
       proxyCustom = false;
