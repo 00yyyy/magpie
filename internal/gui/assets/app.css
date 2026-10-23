@@ -357,7 +357,7 @@ body.side-drag, body.side-drag * { cursor: col-resize !important; user-select: n
 .side-top .brand { font-size: 13.5px; }
 /* the traffic lights are the sidebar's top left, as in a Mac app's sidebar;
    the magpie beside them, level with them (see .top above) */
-body.window.mac .side-top { height: calc(50px / var(--zoom, 1)); padding: calc(2px / var(--zoom, 1)) 0 0 calc(84px / var(--zoom, 1)); }
+body.window.mac .side-top { height: calc(50px / var(--zoom, 1)); padding: calc(2px / var(--zoom, 1)) 0 0 calc(90px / var(--zoom, 1)); }
 /* Windows' title bar above already shows the icon and the name */
 body.window:not(.mac):not(.linux):not(.web) .side-top { height: 10px; }
 .side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 10px 10px; }
