@@ -221,7 +221,9 @@ A remote provider serves the conversation, token-counting, System One,
 embeddings, rerank, speech-to-text, image generation/edit and video
 creation/status/content APIs. Gemini clients enter through the local Gemini adapter and follow the
 same model routing as other conversation clients. Responses uses HTTP/SSE;
-its WebSocket route still answers 426. Discovery and older-peer behavior
+its WebSocket route still answers 426 (magpie's own leg to the ChatGPT
+backend is a WebSocket for a streamed turn: see
+[Providers and accounts](providers-accounts.md)). Discovery and older-peer behavior
 are described in [Providers and accounts](providers-accounts.md#remote-magpie).
 `GET /v1/magpie/limit` (`keyLimit` in
 [`key_limit.go`](../../internal/gateway/key_limit.go)) answers the limit of
