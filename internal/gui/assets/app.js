@@ -1830,6 +1830,29 @@ function daemonRestart() {
   return go;
 }
 
+// appReopen is the Restart beside the Codex app left on the old list: magpie
+// quits it, as ⌘Q does, and opens it again
+function appReopen(bundle) {
+  const go = el("button", "ag-quiet accent", t("Restart"));
+  go.type = "button";
+  go.title = bundle;
+  go.onclick = async () => {
+    go.disabled = true;
+    go.classList.add("busy");
+    try {
+      await api("codex/app/reopen", { bundle });
+      state = await api("state");
+      renderAgents();
+      status(t("The Codex app reopened"));
+    } catch (e) {
+      go.disabled = false;
+      go.classList.remove("busy");
+      status(e.message, "err");
+    }
+  };
+  return go;
+}
+
 // connectPanel: a connected agent's row, opened
 function connectPanel(a, { fields, fieldBtn }) {
   const box = el("div", "ag-exp");
@@ -1883,6 +1906,7 @@ function connectPanel(a, { fields, fieldBtn }) {
         // session is on it: with one on, here, when the user says (open
         // sessions of Codex 0.162 reconnect to the new one)
         if (c.kind === "daemon" && a.id === "codex") l.append(daemonRestart());
+        if (c.kind === "app" && a.id === "codex" && c.bundle) l.append(appReopen(c.bundle));
         parts.push(l);
       }
     }
