@@ -65,6 +65,12 @@ type QuotaWindow struct {
 	Span  time.Duration `json:"-"`
 	Model string        `json:"-"`
 	Aside bool          `json:"-"`
+	// Credits is set on each window of a ChatGPT account that holds
+	// credits (has_credits with a balance left, or unlimited): using the
+	// window up doesn't stop it, the vendor spends the credits instead
+	// (codexGoesOnCredits). Routing reads it (Allowance.OnCredits); kept
+	// with the reading, so one shown from before still says it.
+	Credits bool `json:"credits,omitempty"`
 	// Capped is set, for the GUI only (WithCapped), on a window an
 	// account's usage cap counts: neither Aside nor unlimited. One model's
 	// own counts for that model (CapHeld), so it is marked like the rest.
@@ -953,7 +959,31 @@ func codexWindows(ctx context.Context, token, accountID string) (plan string, ou
 	if data.RateLimit.Secondary != nil {
 		out = append(out, data.RateLimit.Secondary.window())
 	}
+	if codexGoesOnCredits(data) {
+		for i := range out {
+			out[i].Credits = true
+		}
+	}
 	return data.PlanType, out, resets, credits, codexHeld(data), nil
+}
+
+// codexGoesOnCredits reports whether the ChatGPT account goes on past its
+// allowance on credits, as the Codex app reads it (codexHeld): it has
+// them (has_credits) or they are unlimited. A balance said and spent (0
+// or less) is none left, whatever has_credits says.
+func codexGoesOnCredits(u codexUsage) bool {
+	c := u.Credits
+	if c == nil {
+		return false
+	}
+	if c.Unlimited {
+		return true
+	}
+	if !c.Has {
+		return false
+	}
+	n, err := strconv.ParseFloat(strings.TrimSpace(c.Balance), 64)
+	return err != nil || n > 0
 }
 
 // codexUsage is what /wham/usage tells of a ChatGPT account.
