@@ -60,7 +60,7 @@ func tries(dir string) int {
 func TestRelaunchOpenTriedAgain(t *testing.T) {
 	dir := fakeOpen(t, 2)
 	bundle := filepath.Join(t.TempDir(), "magpie.app")
-	if err := runAfterExit(gonePid(t), relaunchCommand(bundle, false)); err != nil {
+	if err := runAfterExit(gonePid(t), relaunchCommand(bundle, false, filepath.Join(t.TempDir(), relaunchLogName))); err != nil {
 		t.Fatal(err)
 	}
 	opened := filepath.Join(dir, "opened")
