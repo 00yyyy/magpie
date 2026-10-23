@@ -54,6 +54,16 @@ const modelUsage = `usage:
                                                  and says when there was no name of its own to take away
   magpie model wires                             the names your vendors are asked for models by
   magpie model names                             the models you named or narrowed
+  magpie model alias <model> <name>              count the model's usage under another model id in Usage,
+                                                 Sessions and the usage summaries, e.g. deepseek-v4.1-flash
+                                                 deepseek-flash: two ids of one model are one row. Each call is
+                                                 still priced by the id it was made under. Requests, routing and
+                                                 the agents' model lists never change. Ids match as the routing
+                                                 groups match them: a vendor/ prefix, case, "_" or a snapshot
+                                                 date make no difference
+  magpie model alias <model>                     the name the model's usage is counted under
+  magpie model alias <model> --reset             count its usage under its own id again
+  magpie model aliases                           the models whose usage you count under another id
   magpie model disable <model> [<model>...]      turn models off for every request through magpie: each an id
                                                  (provider/model or a bare model id) or a glob, * any run of
                                                  characters and ? one, as '*fable*'. A disabled model leaves
@@ -117,6 +127,10 @@ func modelCmd(args []string) error {
 		return modelOutput(args[1:])
 	case "wire", "upstream":
 		return modelWire(args[1:])
+	case "alias":
+		return modelUsageAlias(args[1:])
+	case "aliases":
+		return modelUsageAliases()
 	case "disable":
 		return modelDisable(args[1:])
 	case "enable":
@@ -771,6 +785,83 @@ func modelWires() error {
 	}
 	for _, r := range rows {
 		fmt.Println("  " + pad(r[0], w) + "  " + r[1])
+	}
+	return nil
+}
+
+// modelUsageAlias shows or sets the name a model's usage is counted under
+// (provider.SetUsageAlias).
+func modelUsageAlias(args []string) error {
+	if len(args) == 0 || len(args) > 2 {
+		return fmt.Errorf("%s", modelUsage)
+	}
+	if slices.Contains([]string{"-h", "--help", "help"}, args[0]) {
+		fmt.Println(modelUsage)
+		return nil
+	}
+	from := args[0]
+	if len(args) == 1 {
+		f, to, counted, ok, err := provider.UsageAliasFor(from)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fmt.Println(bold.Render(from), muted.Render("· counted under its own id"))
+			return nil
+		}
+		line := muted.Render("· counted as ") + to
+		if counted != to {
+			line += muted.Render(" → " + counted)
+		}
+		fmt.Println(bold.Render(f), line)
+		return nil
+	}
+	if isReset(args[1:]) {
+		changed, err := provider.SetUsageAlias(from, "")
+		if err != nil {
+			return err
+		}
+		if !changed {
+			fmt.Println(muted.Render(from + " was counted under its own id already"))
+			return nil
+		}
+		fmt.Println(bold.Render(from), muted.Render("· counted under its own id again"))
+		return nil
+	}
+	to := args[1]
+	changed, err := provider.SetUsageAlias(from, to)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		fmt.Println(muted.Render(from + " was counted as " + to + " already"))
+		return nil
+	}
+	fmt.Println(bold.Render(from), muted.Render("· counted as ")+to, muted.Render("in Usage and Sessions; requests still ask for "+from))
+	return nil
+}
+
+// modelUsageAliases lists the models whose usage is counted under another id.
+func modelUsageAliases() error {
+	s, err := settings.LoadChecked()
+	if err != nil {
+		return err
+	}
+	m := s.UsageAliases
+	rows := make([][2]string, 0, len(m))
+	w := 0
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		if n := strings.TrimSpace(m[k]); n != "" {
+			rows = append(rows, [2]string{k, n})
+			w = max(w, len(k))
+		}
+	}
+	if len(rows) == 0 {
+		fmt.Println(muted.Render("no model is counted under another id yet · magpie model alias <model> <name>"))
+		return nil
+	}
+	for _, r := range rows {
+		fmt.Println("  " + pad(r[0], w) + "  → " + r[1])
 	}
 	return nil
 }
