@@ -4338,9 +4338,9 @@ function showWhatsNew(releases, auto, more = {}) {
   ok.focus({ preventScroll: true });
 }
 
-// noteBlocks draws a release's markdown as text: headings, bullets,
-// paragraphs, and inline bold, code and links. Nothing in it is taken as
-// HTML; #123 links the issue.
+// noteBlocks draws a release's markdown as text: headings (tHeading),
+// bullets, paragraphs, inline bold, code and links, never as HTML; #123
+// links the issue.
 function noteBlocks(md) {
   const box = el("div", "wn-notes");
   let list = null;
@@ -4349,7 +4349,7 @@ function noteBlocks(md) {
     const li = /^\s*[-*+]\s+(.*)$/.exec(line);
     if (h) {
       list = null;
-      box.append(inlineMD(el("div", "wn-h wn-h" + Math.min(h[1].length, 4)), h[2]));
+      box.append(inlineMD(el("div", "wn-h wn-h" + Math.min(h[1].length, 4)), tHeading(h[2])));
     } else if (li) {
       if (!list) box.append(list = el("ul"));
       list.append(inlineMD(el("li"), li[1]));

@@ -2967,6 +2967,14 @@ const I18N = {
     "Don't show again today": "今天不再弹出",
     "Couldn't load the release notes": "无法获取更新说明",
     "No release notes provided.": "这个版本没有更新说明。",
+    "Features": "新功能",
+    "Bug Fixes": "错误修复",
+    "Improvements": "改进",
+    "Changes": "更新",
+    "Documentation": "文档",
+    "Performance Improvements": "性能改进",
+    "Security": "安全",
+    "Provider Changes": "提供商变更",
     "Open the release page": "打开发布页面",
     "Check": "检查",
     "Couldn't check for updates": "检查更新失败",
@@ -6820,6 +6828,14 @@ const I18N = {
     "Don't show again today": "今天不再彈出",
     "Couldn't load the release notes": "無法取得更新說明",
     "No release notes provided.": "這個版本沒有更新說明。",
+    "Features": "新功能",
+    "Bug Fixes": "錯誤修正",
+    "Improvements": "改進",
+    "Changes": "更新",
+    "Documentation": "文件",
+    "Performance Improvements": "效能改進",
+    "Security": "安全性",
+    "Provider Changes": "供應商變更",
     "Open the release page": "打開發布頁面",
     "Check": "檢查",
     "Couldn't check for updates": "檢查更新失敗",
@@ -10685,6 +10701,14 @@ const I18N = {
     "Don't show again today": "今日はもう表示しない",
     "Couldn't load the release notes": "リリースノートを読み込めませんでした",
     "No release notes provided.": "リリースノートはありません。",
+    "Features": "新機能",
+    "Bug Fixes": "バグ修正",
+    "Improvements": "改善",
+    "Changes": "変更点",
+    "Documentation": "ドキュメント",
+    "Performance Improvements": "パフォーマンス改善",
+    "Security": "セキュリティ",
+    "Provider Changes": "プロバイダーの変更",
     "Open the release page": "リリースページを開く",
     "Check": "確認",
     "Couldn't check for updates": "アップデートを確認できませんでした",
@@ -14560,6 +14584,14 @@ const I18N = {
     "Don't show again today": "Heute nicht mehr anzeigen",
     "Couldn't load the release notes": "Versionshinweise konnten nicht geladen werden",
     "No release notes provided.": "Keine Versionshinweise vorhanden.",
+    "Features": "Neue Funktionen",
+    "Bug Fixes": "Fehlerbehebungen",
+    "Improvements": "Verbesserungen",
+    "Changes": "Änderungen",
+    "Documentation": "Dokumentation",
+    "Performance Improvements": "Leistungsverbesserungen",
+    "Security": "Sicherheit",
+    "Provider Changes": "Änderungen an Anbietern",
     "Open the release page": "Release-Seite öffnen",
     "Check": "Prüfen",
     "Couldn't check for updates": "Suche nach Updates fehlgeschlagen",
@@ -15652,6 +15684,31 @@ function tNotice(s) {
     rest = rest.slice(hit.m[0].length).replace(/^ /, "");
   }
   return out.join(/^(zh|ja)/.test(locale) ? "" : " ");
+}
+
+// tHeading is a release's section heading in the GUI's language (Wei He
+// on Discord: past versions' headings switched between Chinese and
+// English). The Chinese notes are a model's translation, which keeps the
+// English headings in some releases and words them its own way in others
+// (功能 or 新功能; 错误修复, 缺陷修复 or Bug 修复), and a release without
+// Chinese, or a GUI in a language the notes don't come in, has English
+// ones. A heading said either way is the GUI's own word for it; one it
+// doesn't know reads as written.
+const NOTE_HEADINGS = {
+  "Features": ["features", "new features", "功能", "新功能", "新特性", "特性"],
+  "Bug Fixes": ["bug fixes", "bug fix", "bugfixes", "fixes", "错误修复", "缺陷修复", "bug 修复", "bug修复", "问题修复", "修复", "錯誤修正", "錯誤修復"],
+  "Improvements": ["improvements", "改进", "优化", "改進"],
+  "Changes": ["changes", "更新", "变更", "變更"],
+  "Documentation": ["documentation", "docs", "文档"],
+  "Performance Improvements": ["performance improvements", "performance", "性能改进", "性能优化", "效能改進"],
+  "Security": ["security", "安全", "安全性"],
+  "Provider Changes": ["provider changes", "提供商变更", "供应商变更", "供應商變更"],
+};
+let noteHeadingKeys;
+function tHeading(s) {
+  noteHeadingKeys ??= new Map(Object.entries(NOTE_HEADINGS).flatMap(([k, ws]) => ws.map((w) => [w, k])));
+  const k = noteHeadingKeys.get(s.trim().replace(/[:：]$/, "").replace(/\s+/g, " ").toLowerCase());
+  return k ? t(k) : s;
 }
 
 // withNotice is a status line followed by the agent's advice, as the
