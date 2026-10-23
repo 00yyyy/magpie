@@ -236,6 +236,19 @@ and `TestHistoricalWindowHoldsUsesEachWindowsOwnReading`.
 - The Vertex AI preset's `HeaderHints` are Google's Priority PayGo and Flex PayGo headers, `X-Vertex-AI-LLM-Request-Type` and `X-Vertex-AI-LLM-Shared-Request-Type`: the editor offers to add them, the values are the user's, and they go as `Headers` do. Priority PayGo couldn't be confirmed: on the project it was tried on, Vertex AI answered with `trafficType` `ON_DEMAND`.
 - A usage cap is kept per account (`AccountCaps`, 1–99) and, beside it, per window (`AccountWindowCaps`, by the account and the window's `capId`, its name in lower case: `WindowCapID`). A window's own share wins over the account's; 100 is no cap on that window. `CapsOf` gives both (`WindowCaps`), `CapHeld` and `capReached` judge each window by its own, and `SetWindowCap` (GUI `provider/windowcap`, `magpie provider account-cap <id> <account> --window <name>`) sets one. A config without window caps reads as before.
 - A window whose reset time has passed has started again, whatever share it was read at (`resetPassed`). That holds for a reading kept from before (`AsOf`) and for a fresh one: Claude Code's `/usage` gives a reset to the minute and can lag it, so a run just after a reset can still say 100% with that reset. `claudeWindows` hands such a window back empty on every path, and `usedPast`, `usedUp`, `BackAt` and `capReached` leave it out when they judge an account spent, for Codex, Claude Code and `magpie quota wait` alike. A card can still show a kept reading as it was read (`reported`, for a Claude card while `/usage` is unavailable); that changes what it shows, never which account is used. A reset `/usage` gives as a time alone ("resets 3pm") can be read as its next one, a day on (`claudeResetTime`), and is then not seen as passed here.
+- A restart to update can run two magpies for up to the old one's drain
+  ([GUI shell](gui-shell.md#a-restart-to-update-hands-the-gateway-over)), each
+  able to refresh a sign-in. A refresh that rotates its refresh token holds
+  a file lock beside `logins.json`, so the second waits and takes the
+  first's tokens instead of spending the used one: Codex's `auth.json`
+  (`codexMu`, `.codex.lock`) and the ChatGPT API's sign-in (`siwcRefreshing`,
+  `.siwc.lock`) since this change; Claude's saved tokens (`savedTokenMu`),
+  MCP servers' (`mcpauth`'s renew lock) and plugins' were already held so.
+  Google's, Vertex AI's and Copilot's refresh tokens don't rotate. Claude
+  Code run in its own folder (`claudeDirRun`) is held in this process only;
+  the bridge's turns hold the restart back, so the two don't overlap there.
+  `TestCodexRefreshWaitsForAnotherMagpie`,
+  `TestChatGPTAPIRefreshWaitsForAnotherMagpie`.
 
 ## Verification
 
