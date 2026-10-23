@@ -9025,11 +9025,12 @@ function drawEditor(p, presetID) {
     h.append(icon(p?.icon || (copyOf && draft.icon) || pr?.icon || "generic"), el("b", "", p ? p.name : copyOf ? t("Copy of {name}", { name: copyOf.name }) : pr ? pr.name : t("Custom provider")));
     if (pr?.kind === "partner") { if (partnerNote(pr)) h.append(el("span", "note", partnerNote(pr))); } else if (pr?.note) h.append(el("span", "note", t(pr.note)));
     h.append(el("span", "grow"));
-    // a region with docs of its own (Tencent Cloud's plan and TokenHub) has
-    // its page here, following the region picked below
-    const site = regionAt(pr, draft)?.website || pr?.website || p?.website || hostSite(p);
+    // a region's own page (Tencent Cloud's), following the region picked
+    // below; a partner's /go link is named by where it goes (siteHost)
+    const at = regionAt(pr, draft)?.website ? regionAt(pr, draft) : pr;
+    const site = at?.website || p?.website || hostSite(p);
     if (site) {
-      const b = el("button", "link site", hostOf(site) + " ↗");
+      const b = el("button", "link site", hostOf(at?.siteHost || site) + " ↗");
       b.dataset.url = site;
       b.onclick = () => api("open", { url: b.dataset.url });
       h.append(b);
@@ -9699,7 +9700,7 @@ function drawEditor(p, presetID) {
         const site = ed.querySelector(".ehead .link.site");
         if (site && pr.regions.some((x) => x.website)) {
           site.dataset.url = r.website || pr.website;
-          site.textContent = hostOf(site.dataset.url) + " ↗";
+          site.textContent = hostOf((r.website ? r : pr).siteHost || site.dataset.url) + " ↗";
         }
         onRegion(r);
         accessAt(r);
