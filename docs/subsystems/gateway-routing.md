@@ -382,6 +382,30 @@ the `TestResponsesSearch` tests in
 and the Responses cases of `TestWebSearchForAModelThatCannot` in
 [`search_test.go`](../../internal/gateway/search_test.go).
 
+## Citations in translated Anthropic replies
+
+After a `KSearch` event (or a `Search` part), the Anthropic encoder and
+`renderAnthropic` cut the text that follows into lines (`citer` in
+[`search_cite.go`](../../internal/gateway/search_cite.go)). magpie's
+`web_search` tool asks the model to cite the URLs it uses, so a line that
+names the URL of a page the reply's searches found, whole (`urlIn`: not a
+longer path, a query or another host), is a text block of its own whose
+`citations` are `web_search_result_location` entries for those pages
+(`citesOf`), as Anthropic's own search cites them; the lines between run
+together in one block without citations, and a whitespace-only line is
+held for the next, so no block is whitespace alone. Streamed, each cited
+block's `citations_delta` events come before its `text_delta`, and the
+stream buffers only to the end of a line, only after a search. The text
+itself is the model's, unchanged. `encrypted_index` is `""`, like the
+results' `encrypted_content`: it is Anthropic's sealed pointer, which
+magpie can't make. `cited_text` is what the search said of the page,
+cut to 150 characters (`Hit.Cited`: a search API's snippet, or the text an
+Anthropic searcher's own citation quoted), else `""`. A reply with no
+search is said as before. Covered by `TestSearchCitedAsAnthropics`
+(streamed and whole), `TestNoSearchNoCitations` and
+`TestCitesOnlyTheWholeURL`. Responses and Chat replies carry no
+`url_citation` annotations yet.
+
 While a provider asked by `searchReply` is queued or thinking, sending only
 keepalives or `response.in_progress`, `askTranslated` reads it with
 `readSSEAlive` and hands on a `KAlive` event after `keepaliveGap` with
