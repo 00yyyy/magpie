@@ -14429,12 +14429,12 @@ function renderKeyAccounts(p) {
     keys.oninput = () => { addingKey.key = keys.value; counted(); };
     counted();
     const go = async () => {
-      if (!splitKeys(keys.value).length) return;
-      add.classList.add("busy");
+      if (!splitKeys(keys.value).length || add.classList.contains("busy")) return;
+      saving(add, t("Adding…"));
       try {
         providers = await api("keys/import", { id: p.id, key: keys.value, protocol: addingKey.protocol || "" });
       } catch (e) {
-        add.classList.remove("busy");
+        doneSaving(add);
         if (!editorError(e.message, "err")) status(e.message, "err");
         return;
       }
@@ -14478,12 +14478,15 @@ function renderKeyAccounts(p) {
       renderProviders();
     };
     const add = el("button", "text primary", t("Add"));
+    // checking a key with its provider can take seconds: the button says
+    // so with a spinner, not only a fade
     const go = async () => {
-      add.classList.add("busy");
+      if (add.classList.contains("busy")) return;
+      saving(add, t("Adding…"));
       const id = await keyFingerprint(key.value.trim() || p.anonKey || "");
       if (await accountAction("keys/add", { id: p.id, name: name.value, key: key.value, protocol: addingKey.protocol || "" }, t("Key added — it takes over when the ones before it run out"))) {
         addingKey = null; justAdded = id; renderProviders(); setTimeout(() => { justAdded = ""; }, 2000);
-      }
+      } else doneSaving(add);
     };
     add.onclick = go;
     for (const i of [name, key]) i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") go(); else if (e.key === "Escape") { addingKey = null; renderProviders(); } };
