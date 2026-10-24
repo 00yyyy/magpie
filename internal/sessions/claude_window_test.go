@@ -199,3 +199,61 @@ func BenchmarkClaudeLargeActive(b *testing.B) {
 		})
 	}
 }
+
+// After a restart a grown Claude file is read on from where it was left, with
+// the window it had: a live 2 GB session was read from its first line on the
+// first Requests page after every update (#3493). What it reads is what a
+// read from the start makes.
+func TestClaudeFileReadOnAfterRestart(t *testing.T) {
+	d := setupCalls(t)
+	path := filepath.Join(d.claude, "projects", "fixture", "session.jsonl")
+	const count = 3000
+	at := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	line := func(i int, id string, out int) string {
+		return string(claudeUsageLine(at.Add(time.Duration(i)*time.Second), id, "req-"+id, "m", Tokens{Input: 1, Output: out}, "", true))
+	}
+	lines := make([]string, count)
+	for i := range lines {
+		lines[i] = line(i, fmt.Sprint(i), 2)
+	}
+	writeLines(t, path, lines...)
+	read := func() []Call {
+		t.Helper()
+		for _, source := range CallSources() {
+			if source.Path == path {
+				return ReadCallSource(source)
+			}
+		}
+		t.Fatal("source missing")
+		return nil
+	}
+	read()
+	before, err := os.Stat(callCachePath(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	Reset()
+	// a recent message written again with more output, the last one replayed
+	// as it was, and a new one
+	appendText(t, path, line(count, "2990", 9)+"\n"+lines[count-1]+"\n"+line(count+1, "new", 2)+"\n")
+	got := read()
+	after, err := os.Stat(callCachePath(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) {
+		t.Fatal("the grown file was read again from its start")
+	}
+	Reset()
+	os.Remove(callCachePath(path))
+	os.Remove(callRevisionsPath(path))
+	want := read()
+	if len(got) != count+1 || !reflect.DeepEqual(got, want) {
+		t.Fatalf("read on: %d calls, from the start: %d", len(got), len(want))
+	}
+	for _, c := range got {
+		if c.Msg == "2990" && c.Output != 9 {
+			t.Fatalf("the rewritten message kept its old output: %+v", c)
+		}
+	}
+}
