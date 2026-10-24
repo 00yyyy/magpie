@@ -1498,6 +1498,10 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 				s.codexDescription(w, r, body, to)
 				return
 			}
+			if to := codexSummariesTo(r.Header, body, true); to != "" {
+				s.codexSummary(w, r, body, to)
+				return
+			}
 			if to := codexPredictionsTo(r.Header, body, true); to != "" {
 				s.codexPrediction(w, r, body, to)
 				return

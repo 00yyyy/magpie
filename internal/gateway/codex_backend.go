@@ -112,6 +112,10 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 				s.codexDescription(w, r, body, to)
 				return
 			}
+			if to := codexSummariesTo(r.Header, body, false); to != "" {
+				s.codexSummary(w, r, body, to)
+				return
+			}
 			if to := codexPredictionsTo(r.Header, body, false); to != "" {
 				s.codexPrediction(w, r, body, to)
 				return

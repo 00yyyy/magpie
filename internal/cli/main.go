@@ -293,6 +293,10 @@ func run(args []string) error {
 	// a Codex that reaches magpie for account failover alone is handed
 	// only its own models (#1385)
 	gateway.CodexOwnOnly = agent.CodexOwnOnly
+	// the Codex app's titles, descriptions and summaries, which it asks
+	// for on a model of its own, on the model of magpie's picked beside
+	// its ChatGPT sign-in rather than on that account (atom_Ray on X)
+	gateway.CodexSideModel = agent.CodexSideModel
 	// the setup kept the same on every computer, by whichever serves
 	gateway.WhileServing = append(gateway.WhileServing, davsync.Run)
 	// and dsh's patch lists, which dsh reads live: a route left behind by

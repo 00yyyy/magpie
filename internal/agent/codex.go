@@ -1255,6 +1255,12 @@ func codexIn(at place) *Agent {
 			return errors.Join(dropMirrorFailover(), dropBase())
 		},
 		OwnVia: codexOwnViaMagpie,
+		SideModel: func() string {
+			if m := get("model"); viaBase() && !asProvider() && isMagpie(m) {
+				return m
+			}
+			return ""
+		},
 		Sync: func() error {
 			// after the sync, which may have put Codex back beside its
 			// sign-in, and whatever it failed at
@@ -1997,6 +2003,17 @@ func CodexOwnOnly() bool {
 		}
 	}
 	return true
+}
+
+// CodexSideModel is the model this machine's Codex is set to when it is
+// one of magpie's, picked beside its ChatGPT sign-in (SideModel), for the
+// gateway to answer the Codex app's side turns on (gateway.CodexSideModel).
+func CodexSideModel() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return codex(home).SideModel()
 }
 
 // codexChatGPT reports whether Codex is signed in to a ChatGPT account:
