@@ -56,8 +56,9 @@ func shownRecord(r maskrec.Record, t gwmw.Teller) maskedRecord {
 
 // maskingRoutes are Settings → Privacy's record of what masking swapped:
 //   - GET /api/masking/summary?days= is maskrec.Sum;
-//   - GET /api/masking/records?before=&limit=&kind=&by=&agent=&provider=
-//     a page of records, newest first;
+//   - GET /api/masking/records?before=&limit=&kind=&by=&agent=&provider=&blocked=
+//     a page of records, newest first (kind may list several, split by
+//     commas; blocked=1 keeps the requests held back);
 //   - GET /api/masking/record?key= one record;
 //   - GET /api/masking/value?p= what a placeholder stood for, while this
 //     magpie's masker remembers it (404 after a restart: it is never on
@@ -106,7 +107,7 @@ func maskingRoutes(mux *http.ServeMux) {
 		q := r.URL.Query()
 		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
 		limit, _ := strconv.Atoi(q.Get("limit"))
-		rs, more := maskrec.List(before, min(max(limit, 1), 200), maskrec.Filter{Kind: q.Get("kind"), By: q.Get("by"), Agent: q.Get("agent"), Provider: q.Get("provider")})
+		rs, more := maskrec.List(before, min(max(limit, 1), 200), maskrec.Filter{Kind: q.Get("kind"), By: q.Get("by"), Agent: q.Get("agent"), Provider: q.Get("provider"), Blocked: q.Get("blocked") == "1"})
 		t, _ := teller()
 		out := []maskedRecord{}
 		for _, rec := range rs {

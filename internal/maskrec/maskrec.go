@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -329,21 +330,24 @@ func SentOf(key int64) (string, bool) {
 	return "", false
 }
 
-// Filter narrows List: by kind, by finder, by agent or provider; "" is
-// any.
+// Filter narrows List: by kind (one, or several split by commas), by
+// finder, by agent or provider, "" is any; Blocked keeps only the requests
+// masking held back.
 type Filter struct {
 	Kind, By, Agent, Provider string
+	Blocked                   bool
 }
 
 func (f Filter) takes(r Record) bool {
-	if f.Agent != "" && r.Agent != f.Agent || f.Provider != "" && r.Provider != f.Provider {
+	if f.Agent != "" && r.Agent != f.Agent || f.Provider != "" && r.Provider != f.Provider || f.Blocked && !r.Blocked {
 		return false
 	}
 	if f.Kind == "" && f.By == "" {
 		return true
 	}
+	kinds := strings.Split(f.Kind, ",")
 	for _, v := range r.Values {
-		if (f.Kind == "" || v.Kind == f.Kind) && (f.By == "" || v.By == f.By) {
+		if (f.Kind == "" || slices.Contains(kinds, v.Kind)) && (f.By == "" || v.By == f.By) {
 			return true
 		}
 	}
