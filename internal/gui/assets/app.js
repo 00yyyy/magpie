@@ -8518,10 +8518,12 @@ function calm() { return matchMedia("(prefers-reduced-motion: reduce)").matches;
 // what was last pressed, and a way to find it again once re-rendered
 let pressed = null;
 document.addEventListener("pointerdown", (e) => {
-  const at = e.target.closest?.("[data-pick], .row.provider[data-id], button");
+  // a provider's logo is its row's handle: pressed, the row opens, and
+  // the editor grows from the row drawn again
+  const at = e.target.closest?.(".pv-handle")?.closest(".row.provider[data-id]") || e.target.closest?.("[data-pick], .row.provider[data-id], button");
   if (!at || at.closest("#modal")) return;
   const find = at.dataset.pick ? `[data-pick="${CSS.escape(at.dataset.pick)}"]` : at.matches(".row.provider") ? `.row.provider[data-id="${CSS.escape(at.dataset.id)}"]` : null;
-  pressed = { el: at, find, time: performance.now() };
+  pressed = { el: at, find, time: performance.now(), x: e.clientX };
 }, true);
 // Text cut short with an ellipsis says its whole self on hover (#721): an
 // agent's status line, a long model name. Which lines are cut depends on the
@@ -8549,14 +8551,16 @@ let modalOrigin = null, modalDone = null;
 function originRect(o) {
   const at = o && (o.el.isConnected ? o.el : o.find ? document.querySelector(o.find) : null);
   if (!at || at.closest("[hidden]")) return null;
-  const r = at.matches(".row.provider") ? rowOwnRect(at) : at.getBoundingClientRect();
+  const r = at.matches(".row.provider") ? rowOwnRect(at, o.x) : at.getBoundingClientRect();
   return r.width && r.height && r.bottom > 0 && r.top < innerHeight ? r : null;
 }
 // rowOwnRect: a provider row as a tile in the add sheet is, its icon and
 // name. The whole row is wider than the dialog, so the dialog couldn't
 // shrink into it and opened as a full-size strip widening (the owner: "太
 // 生硬", the add sheet's tiles "特别完美"); out of this it zooms as they do.
-function rowOwnRect(row) {
+// Pressed past them, it grows from where it was pressed (the owner: 应该从
+// 点击处放大): that much of the row, around the press.
+function rowOwnRect(row, x) {
   const r = row.getBoundingClientRect(), who = row.querySelector(".who");
   if (!who) return r;
   // where its words end: a range over the block itself spans its width
@@ -8566,8 +8570,9 @@ function rowOwnRect(row) {
     text.selectNodeContents(n);
     end = Math.max(end, text.getBoundingClientRect().right);
   }
-  const right = Math.min(r.right, end + 12);
-  return new DOMRect(r.left, r.top, right - r.left, r.height);
+  const w = Math.min(r.right, end + 12) - r.left;
+  const left = x > r.left + w ? Math.max(r.left, Math.min(r.right - w, x - w / 2)) : r.left;
+  return new DOMRect(left, r.top, w, r.height);
 }
 // fromRect: the transform putting the dialog (at `to`) over the rect `from`
 function fromRect(from, to) {
