@@ -348,26 +348,35 @@ func fillJSONIn(raw []byte, v reflect.Value, members []memberSpan) error {
 		if f.err != nil {
 			return f.err
 		}
-		var seen []bool
+		// seen is a bit a field, in few or in many when a struct has more
+		// than 64: a []bool made for each struct decoded was one of a
+		// request's commonest allocations
+		var few uint64
+		var many []bool
 		var err error
 		eachMemberIn(raw, members, func(key, val []byte) bool {
-			name, ok := unquoteJSON(key)
+			name, ok := keyName(key)
 			if !ok {
 				err = errSlowJSON
 				return false
 			}
-			i := f.field([]byte(name))
+			i := f.field(name)
 			if i < 0 {
 				return true
 			}
-			if seen == nil {
-				seen = make([]bool, len(f.names))
+			twice := false
+			if len(f.names) <= 64 {
+				twice, few = few&(1<<i) != 0, few|1<<i
+			} else {
+				if many == nil {
+					many = make([]bool, len(f.names))
+				}
+				twice, many[i] = many[i], true
 			}
-			if seen[i] {
+			if twice {
 				err = errSlowJSON // a key twice: encoding/json merges them
 				return false
 			}
-			seen[i] = true
 			err = fillJSON(val, v.Field(f.index[i]))
 			return err == nil
 		})
@@ -628,6 +637,23 @@ func skipJSONValue(data []byte, i int) int {
 		i++
 	}
 	return i
+}
+
+// keyName is a member's key as unquoteJSON reads it, without making a
+// string of it: a plain ASCII key, the kind nearly every key is, is the
+// bytes between its quotes.
+func keyName(key []byte) ([]byte, bool) {
+	if len(key) < 2 || key[0] != '"' || key[len(key)-1] != '"' {
+		return nil, false
+	}
+	k := key[1 : len(key)-1]
+	for _, c := range k {
+		if c == '\\' || c == '"' || c < ' ' || c >= utf8.RuneSelf {
+			name, ok := unquoteJSON(key)
+			return []byte(name), ok
+		}
+	}
+	return k, true
 }
 
 // unquoteJSON is the string a valid JSON string literal holds, as

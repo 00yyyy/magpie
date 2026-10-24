@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand/v2"
 	"reflect"
 	"strings"
@@ -93,6 +94,7 @@ var fjSeeds = []string{
 	`"a long string with no escapes at all, past eight bytes"`, `"sevené then \"quoted\" \\ and \t past eight"`,
 	"\"a control byte \x1f deep in a long string\"", "\"\x7f\x80 high bytes \xc3\xa9 \xe2\x82\xac in a long string\"",
 	`{"strs":["a",null,"b"]}`, `{"strs":"notarray"}`, `{"metadata":null}`, `{"metadata":[]}`,
+	`{"modèl":"a non-ASCII key","Ｍodel":"fullwidth","MODEL":"b","Model":"c"}`, "{\"mo\x7fdel\":\"d\",\"mo\x1fdel\":1}",
 }
 
 func fjCompare(t *testing.T, data []byte) {
@@ -150,6 +152,34 @@ func TestDecodeJSONIsUnmarshal(t *testing.T) {
 			b := []byte(s)
 			b[i] = "{}[]\",:\\ nul0e.-x\xff"[r.IntN(18)]
 			fjCompare(t, b)
+		}
+	}
+}
+
+// A struct marks the fields it has seen in a word's bits, or in a slice
+// when it has more than 64: a key twice is refused the same in either.
+func TestDecodeJSONKeyTwice(t *testing.T) {
+	var fields []reflect.StructField
+	for i := range 70 {
+		fields = append(fields, reflect.StructField{Name: fmt.Sprintf("F%d", i), Type: reflect.TypeFor[string](), Tag: reflect.StructTag(fmt.Sprintf(`json:"f%d"`, i))})
+	}
+	wide := reflect.StructOf(fields)
+	for _, s := range []string{`{"f0":"a","f69":"b","f65":"c"}`, `{"f66":"a","f66":"b"}`, `{"f3":"a","F3":"b"}`, `{"f69":1}`} {
+		got, want := reflect.New(wide).Interface(), reflect.New(wide).Interface()
+		gerr, werr := decodeJSON([]byte(s), got), json.Unmarshal([]byte(s), want)
+		if (gerr == nil) != (werr == nil) || !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: decodeJSON %v %v, json.Unmarshal %v %v", s, got, gerr, want, werr)
+		}
+	}
+	// the fast path's own refusal, which encoding/json then decodes
+	for _, s := range []string{`{"f66":"a","f66":"b"}`, `{"f3":"a","F3":"b"}`} {
+		if err := fillJSON([]byte(s), reflect.New(wide).Elem()); err != errSlowJSON {
+			t.Fatalf("%s: fillJSON %v, want errSlowJSON", s, err)
+		}
+	}
+	for _, s := range []string{`{"model":"a","model":"b"}`, `{"Model":"a","MODEL":"b"}`} {
+		if err := fillJSON([]byte(s), reflect.ValueOf(new(fjBody)).Elem()); err != errSlowJSON {
+			t.Fatalf("%s: fillJSON %v, want errSlowJSON", s, err)
 		}
 	}
 }
