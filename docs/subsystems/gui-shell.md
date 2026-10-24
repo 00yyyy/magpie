@@ -312,7 +312,11 @@ record it); a route id is not a call id. When the ring no longer has it,
 the story shows the request archive's copy through `archivePanel` if the
 route names one (`Route.Archive`, `call.archiveName()`, set only when the
 archive was on for that request), and otherwise says how to turn the
-archive on. Nothing more is captured than before. See
+archive on. Nothing more is captured than before. The archive's switch
+(`POST /api/settings/archive`) sets `RequestArchive` while sync has an S3
+bucket and `RequestArchiveLocal` while it has none; `GET
+/api/archive?name=…` reads this computer's copy first and then the bucket's
+(`TestArchiveSwitchKeepsOnThisComputer`, `request-archive.test.cjs`). See
 `TestRoutingRequestOpensItsBodies`, `TestArchiveWholeBodies` and
 `routing-bodies.test.cjs`.
 

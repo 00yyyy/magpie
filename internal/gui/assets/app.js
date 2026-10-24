@@ -7074,13 +7074,10 @@ function callBodyPanel(label, raw, truncated, id, key = id) {
   return panel;
 }
 
-// The request archive: with it on, each call's headers and bodies, secrets
-// taken out, go to the S3 bucket sync keeps its backup in, and a request's
-// row on the Usage page reads its own back from there (gateway/archive.go).
-// Its switch sits over that list, at its right (Jorben on Discord); what it
-// keeps, and where, or what it needs first, is its tooltip, and a failed
-// upload says so beside it. The switch is the same element across redraws,
-// changed in place, so one being pressed or focused is never swapped out.
+// The request archive: each call, secrets out, kept in sync's S3 bucket or
+// else a folder here (gateway/archive*.go), read back by its Usage row. Its
+// switch is over that list (Jorben); where it keeps is its tooltip, a failed
+// save is beside it. It is changed in place, never swapped out mid-press.
 let archiveSaving = false;
 function renderArchive() {
   const box = $("#ledArchive");
@@ -7114,12 +7111,12 @@ function renderArchive() {
   b.disabled = archiveSaving;
   b.querySelector(".led-arch-name").textContent = t("Request archive");
   b.title = a.bucket ? t("Keeps each call’s headers and bodies, secrets taken out, in {where}", { where: a.bucket })
-    : t("Keeps each call’s headers and bodies, secrets taken out, in your S3 bucket. Set up Sync and backup in Settings with an s3:// address first");
+    : t("Keeps each call’s headers and bodies, secrets taken out, on this computer in {where}, the oldest removed past {size}", { where: a.folder || "", size: fmtBytes(a.cap || 0) });
   let err = box.querySelector(".led-arch-err");
   if (a.on && a.error) {
     if (!err) { err = el("span", "led-arch-err"); box.prepend(err); }
-    err.textContent = t("Upload failed");
-    err.title = t("Last upload failed: {e}", { e: a.error });
+    err.textContent = t(a.bucket ? "Upload failed" : "Not saved");
+    err.title = t(a.bucket ? "Last upload failed: {e}" : "Last save failed: {e}", { e: a.error });
   } else err?.remove();
 }
 

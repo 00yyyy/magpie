@@ -1239,6 +1239,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.RedactActions = cur.RedactActions               // set on their own (redact-actions below)
 		in.RedactAllow = cur.RedactAllow                   // set on its own (redact-allow below)
 		in.DisabledModels = cur.DisabledModels             // set on their own (disabled-models below, #1867)
+		// the request archive on this computer: the archive's switch while no
+		// S3 bucket, and its size in settings.json only
+		in.RequestArchiveLocal, in.RequestArchiveLocalMB = cur.RequestArchiveLocal, cur.RequestArchiveLocalMB
 		// used or left is the Usage page's toggle as much as Settings', set on its own
 		in.QuotaLeft = cur.QuotaLeft
 		in.QuotaReads = cur.QuotaReads // set on its own (quota-reads below)
