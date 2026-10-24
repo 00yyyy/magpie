@@ -3980,21 +3980,19 @@ if (mode === "window") {
 // glide moves the panel's edge there over time instead of at once.
 // The panel is as tall as its tallest tab, not the one showing, so it keeps
 // its height as the tabs change and a shorter tab leaves room below (#124).
-// Each tab counts its view's padding and margins too (sections alone left
-// a scrollbar), all laid out at once: hiding the open tab ends its motion.
+// Margins count; tabs lay out at once (hiding one ends its motion).
 function fit(extra = 0, glide) {
   if (mode !== "panel") return;
-  const body = document.body, view = $("#view-agents"), tab = body.dataset.ptab, vs = getComputedStyle(view);
+  const body = document.body, v = $("#view-agents"), tab = body.dataset.ptab, f = parseFloat, vs = getComputedStyle(v);
   delete body.dataset.ptab;
-  const need = { agents: extra, usage: 0, stats: 0, routing: 0 };
-  for (const c of view.children) {
-    const cs = getComputedStyle(c), px = cs.display === "none" ? 0 : c.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
-    const only = { agentsLead: "agents", agents: "agents", panelQuota: "usage", panelUsage: "stats", panelRouting: "routing" }[c.id];
-    for (const t in need) if (!only || only === t) need[t] += px;
+  const n = { agents: extra, usage: 0, stats: 0, routing: 0 };
+  for (const c of v.children) {
+    const cs = getComputedStyle(c), px = cs.display == "none" ? 0 : c.offsetHeight + f(cs.marginTop) + f(cs.marginBottom);
+    const o = { agentsLead: "agents", agents: "agents", panelQuota: "usage", panelUsage: "stats", panelRouting: "routing" }[c.id];
+    for (const t in n) if (!o || o == t) n[t] += px;
   }
-  let h = body.clientHeight - view.offsetHeight + parseFloat(vs.paddingTop) + parseFloat(vs.paddingBottom) + Math.max(...Object.values(need));
+  const h = Math.ceil(body.clientHeight - v.offsetHeight + f(vs.paddingTop) + f(vs.paddingBottom) + Math.max(...Object.values(n)));
   if (tab) body.dataset.ptab = tab;
-  h = Math.ceil(h);
   if (h === fit.last) return;
   fit.last = h;
   const still = !glide || calm();
