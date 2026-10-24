@@ -108,7 +108,8 @@ type promptBuilder struct {
 
 // PromptPiece is a stretch of an item's text as the request sent it: a
 // message, a tool's definition, a call and its input, what a tool
-// answered. An image or sealed reasoning is only named, with its size.
+// answered. Sealed reasoning is only named, with its size; an image is
+// its picture when the request carried it inline (Src).
 type PromptPiece struct {
 	// Role: system, user, assistant, thinking, call, result, tool, image,
 	// sealed; "" for text that is the item itself (an instruction file)
@@ -116,7 +117,11 @@ type PromptPiece struct {
 	Name string `json:"name,omitempty"` // the tool called or defined
 	Text string `json:"text,omitempty"`
 	Size int    `json:"size,omitempty"` // a sealed piece's bytes
-	raw  []byte // JSON (or a custom tool's text), Text once read out
+	// Src: an image's picture as a data: URL, when the request sent it
+	// inline as a PNG, JPEG, GIF or WebP; a linked image stays a name
+	Src string `json:"src,omitempty"`
+	raw []byte // JSON (or a custom tool's text), Text once read out
+	img []byte // an image's source as the request sent it, Src once read out
 }
 
 func txt(role, s string) PromptPiece { return PromptPiece{Role: role, Text: s} }
@@ -125,7 +130,9 @@ func rawPiece(role, name string, raw []byte) PromptPiece {
 	return PromptPiece{Role: role, Name: name, raw: raw}
 }
 
-var imagePiece = PromptPiece{Role: "image"}
+// imgPiece is an image, its source (an Anthropic source, an image_url,
+// Gemini's inlineData) kept to be read out as its picture.
+func imgPiece(src []byte) PromptPiece { return PromptPiece{Role: "image", img: src} }
 
 func sealedPiece(n int) PromptPiece { return PromptPiece{Role: "sealed", Size: n} }
 
@@ -714,7 +721,7 @@ func (b *promptBuilder) anthropicBlock(role string, x rawBlock) {
 		for _, c := range blocksOf(x.Content) {
 			switch c.Type {
 			case "image", "document":
-				b.add(PartFiles, c.Type, "image", imageTokens, imagePiece)
+				b.add(PartFiles, c.Type, "image", imageTokens, imgPiece(c.Source))
 			default:
 				n += tokensOf(c.Text)
 				texts = append(texts, c.Text)
@@ -731,7 +738,7 @@ func (b *promptBuilder) anthropicBlock(role string, x rawBlock) {
 			b.add(PartFiles, "document", "image", rawTokens(x.Source), rawPiece("", "", x.Source))
 			return
 		}
-		b.add(PartFiles, x.Type, "image", imageTokens, imagePiece)
+		b.add(PartFiles, x.Type, "image", imageTokens, imgPiece(x.Source))
 	default:
 		b.chat(tokensOf(x.Text), txt(role, x.Text))
 	}
@@ -853,7 +860,7 @@ func (b *promptBuilder) responsesItem(raw json.RawMessage) {
 			}
 			for _, p := range parts {
 				if p.image {
-					b.add(PartFiles, "image", "image", imageTokens, imagePiece)
+					b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.src))
 					continue
 				}
 				b.userText(p.text)
@@ -897,7 +904,7 @@ func (b *promptBuilder) responsesItem(raw json.RawMessage) {
 			var texts []string
 			for _, p := range responsesContent(it.Output) {
 				if p.image {
-					b.add(PartFiles, "image", "image", imageTokens, imagePiece)
+					b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.src))
 					continue
 				}
 				n += tokensOf(p.text)
@@ -921,6 +928,7 @@ func (b *promptBuilder) responsesItem(raw json.RawMessage) {
 type rPart struct {
 	text  string
 	image bool
+	src   json.RawMessage // an image's image_url
 }
 
 func responsesContent(c json.RawMessage) []rPart {
@@ -929,13 +937,14 @@ func responsesContent(c json.RawMessage) []rPart {
 		return []rPart{{text: s}}
 	}
 	var ps []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type     string          `json:"type"`
+		Text     string          `json:"text"`
+		ImageURL json.RawMessage `json:"image_url"`
 	}
 	_ = decodeJSON(c, &ps)
 	out := make([]rPart, 0, len(ps))
 	for _, p := range ps {
-		out = append(out, rPart{text: p.Text, image: p.Type == "input_image" || p.Type == "input_file" || p.Type == "image_url"})
+		out = append(out, rPart{text: p.Text, image: p.Type == "input_image" || p.Type == "input_file" || p.Type == "image_url", src: p.ImageURL})
 	}
 	return out
 }
@@ -978,7 +987,7 @@ func (b *promptBuilder) chatCompletions(body []byte) bool {
 			}
 			for _, p := range parts {
 				if p.image {
-					b.add(PartFiles, "image", "image", imageTokens, imagePiece)
+					b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.src))
 					continue
 				}
 				b.userText(p.text)
@@ -988,7 +997,7 @@ func (b *promptBuilder) chatCompletions(body []byte) bool {
 			var texts []string
 			for _, p := range parts {
 				if p.image {
-					b.add(PartFiles, "image", "image", imageTokens, imagePiece)
+					b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.src))
 					continue
 				}
 				n += tokensOf(p.text)
@@ -1086,7 +1095,7 @@ func (b *promptBuilder) gemini(body []byte) bool {
 				}
 				b.result(id, rawTokens(p.FunctionResponse.Response), rawPiece("result", "", p.FunctionResponse.Response))
 			case len(p.InlineData) > 0 || len(p.FileData) > 0:
-				b.add(PartFiles, "image", "image", imageTokens, imagePiece)
+				b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.InlineData))
 			case c.Role == "model":
 				role := "assistant"
 				if p.Thought {
