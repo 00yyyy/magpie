@@ -4294,20 +4294,17 @@ async function whatsNewOnce() {
 }
 
 // openWhatsNew is Settings' way back to the notes: the current version's (or
-// those since the last update), after the waiting update's when u has one.
-// The notes that couldn't be had (the site failing, #661) say so, with a
-// retry and the release page, apart from a version that has none.
-async function openWhatsNew(u, b) {
+// those since the last update), after those of every release up to the
+// waiting update (pending), which the app puts first. The notes that
+// couldn't be had (the site failing, #661) say so, with a retry and the
+// release page, apart from a version that has none.
+async function openWhatsNew(b) {
   if (b) { b.disabled = true; b.classList.add("busy"); }
   const w = await api(updatePath("whatsnew?all=1")).catch(() => null);
   if (b) { b.disabled = false; b.classList.remove("busy"); }
-  const list = [...(w?.releases || [])];
-  if (u?.notes && u.latest && ["ready", "available", "downloading", "found"].includes(u.state) && !list.some((r) => r.version === u.latest)) {
-    list.unshift({ version: u.latest, notes: u.notes, url: u.url, pending: true });
-  }
-  const failed = !w || !!w.error;
+  const list = w?.releases || [];
   if (!list.length && !w?.current) return status(t("Couldn't load the release notes"), "err");
-  showWhatsNew(list, false, { failed, current: w?.current, url: w?.url, retry: () => openWhatsNew(u) });
+  showWhatsNew(list, false, { failed: !w || !!w.error, current: w?.current, url: w?.url, retry: () => openWhatsNew() });
 }
 
 // auto: shown by itself after an update, with "Don't show again today"
@@ -19611,7 +19608,7 @@ function renderSettings() {
   // has no notes
   if (/^v?\d+\.\d+\.\d+$/.test(s.version || "")) {
     const notes = el("button", "text", t("Open"));
-    notes.onclick = async () => openWhatsNew(await api(updatePath("update")).catch(() => null), notes);
+    notes.onclick = () => openWhatsNew(notes);
     row(t("What's new"), t("The release notes since the last update"), "", notes).classList.add("whatsnew-row");
   }
   // the header's Update pill, kept away for good or for one version; the
