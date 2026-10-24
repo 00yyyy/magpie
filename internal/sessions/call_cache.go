@@ -305,16 +305,16 @@ func readCalls(f file) *callFile {
 	if continued {
 		start = len(old.Calls)
 	}
-	line := claudeCallLine
+	line, thin := claudeCallLine, thinClaude
 	if f.agent == "codex" {
-		line = codexCallLine
+		line, thin = codexCallLine, nil
 	} else if r, ok := lineCallReaders[f.agent]; ok {
 		if st.Off == 0 {
 			r.begin(st, f)
 		}
-		line = r.line
+		line, thin = r.line, nil
 	}
-	off, err := scanAt(f.path, st.Off, func(b []byte) bool { return callHead(st, b) }, func(b []byte, start, end int64) bool {
+	off, err := scanThin(f.path, st.Off, func(b []byte) bool { return callHead(st, b) }, thin, func(b []byte, start, end int64) bool {
 		st.At, st.End = start, end
 		line(st, b)
 		return true
