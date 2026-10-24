@@ -1389,9 +1389,7 @@ func googleProvider(g googleAccount, plan string) Provider {
 		if err != nil {
 			return err
 		}
-		req.Body = io.NopCloser(bytes.NewReader(out))
-		req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(out)), nil }
-		req.ContentLength = int64(len(out))
+		SetBody(req, out)
 		req.Header.Set("Authorization", "Bearer "+tok)
 		req.Header.Set("User-Agent", g.app.userAgent(model))
 		req.Header.Del("Accept")
