@@ -1511,7 +1511,7 @@ func withoutItem(body []byte, id string) ([]byte, bool) {
 		return nil, false
 	}
 	q["input"], _ = json.Marshal(kept)
-	b, err := json.Marshal(q)
+	b, err := marshalJSON(q)
 	return b, err == nil
 }
 
@@ -2822,7 +2822,7 @@ func plainCompact(body []byte) []byte {
 		userMessage(codexCompactPrompt),
 	})
 	delete(q, "previous_response_id")
-	nb, err := json.Marshal(q)
+	nb, err := marshalJSON(q)
 	if err != nil {
 		return body
 	}
