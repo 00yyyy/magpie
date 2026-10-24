@@ -74,6 +74,8 @@ function serve(lang) {
 async function open(browser, lang, width, height) {
   const context = await browser.newContext({ viewport: { width, height } });
   const page = await context.newPage();
+  // the block grid, the look these cells are drawn in (the map is the default)
+  await page.addInitScript(() => { try { localStorage.setItem("magpie.ctxLook", "grid"); } catch {} });
   // folded is the reader's own choice, kept in magpie.ctxShut; set once, so a reload keeps what the page stores
   await page.addInitScript(() => { try { if (!sessionStorage.getItem("seeded")) { sessionStorage.setItem("seeded", "1"); localStorage.setItem("magpie.ctxShut", "1"); } } catch {} });
   page.setDefaultTimeout(5000);

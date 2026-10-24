@@ -117,7 +117,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const errors = [], asked = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang, asked));
-        await page.addInitScript(() => { try { if (!sessionStorage.getItem("set")) { localStorage.clear(); localStorage.setItem("magpie.usageTab", "context"); sessionStorage.setItem("set", "1"); } } catch {} });
+        await page.addInitScript(() => { try { if (!sessionStorage.getItem("set")) { localStorage.clear(); localStorage.setItem("magpie.usageTab", "context"); localStorage.setItem("magpie.ctxLook", "grid"); sessionStorage.setItem("set", "1"); } } catch {} });
         await page.goto("http://magpie.test/?view=usage");
         assert.equal(await page.locator("#usageTab button.on").innerText(), w.tab);
 
@@ -201,7 +201,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       if (p === "/context.js" || p === "/api/state") order.push(p);
       await base(r);
     });
-    await page.addInitScript(() => { try { localStorage.clear(); localStorage.setItem("magpie.usageTab", "context"); } catch {} });
+    await page.addInitScript(() => { try { localStorage.clear(); localStorage.setItem("magpie.usageTab", "context"); localStorage.setItem("magpie.ctxLook", "grid"); } catch {} });
     await page.goto("http://magpie.test/?view=usage");
     await page.locator(".ctx-agent", { hasText: "Codex" }).waitFor({ timeout: 2500 });
     assert.equal(asked[0], "7");
@@ -229,7 +229,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       if (new URL(r.request().url()).pathname === "/api/state") await historyDrawn;
       await base(r);
     });
-    await page.addInitScript(() => { try { localStorage.clear(); localStorage.setItem("magpie.usageTab", "context"); } catch {} });
+    await page.addInitScript(() => { try { localStorage.clear(); localStorage.setItem("magpie.usageTab", "context"); localStorage.setItem("magpie.ctxLook", "grid"); } catch {} });
     await page.goto("http://magpie.test/?view=usage");
     await page.waitForFunction(() => document.querySelectorAll(".ctx-agent").length === 2);
     drawn();
