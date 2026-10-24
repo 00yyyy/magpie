@@ -830,8 +830,7 @@ func (b *promptBuilder) responses(body []byte) bool {
 		b.userText(s)
 		return true
 	}
-	var items []json.RawMessage
-	_ = decodeJSON(req.Input, &items)
+	items, _ := inputList(req.Input)
 	for _, it := range items {
 		b.responsesItem(it)
 	}

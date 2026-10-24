@@ -556,6 +556,26 @@ func elementsOf(raw []byte) []json.RawMessage {
 	return out
 }
 
+// inputList is a request's input list, raw from a decoded body (so valid
+// JSON), for a reader that looks at its items and keeps none past its
+// return: elementsOf, so no item is copied. Decoding it as a
+// []json.RawMessage copied every item, since each is under a sixteenth of
+// the body (heldShareMost): 3.7 of the 20 MB a 680 KB Codex request
+// allocated went to such copies (#3383). ok is what that decode's error
+// was: false when the input is missing or neither a list nor null.
+func inputList(raw json.RawMessage) ([]json.RawMessage, bool) {
+	raw = trimJSON(raw)
+	switch {
+	case len(raw) == 0:
+		return nil, false
+	case raw[0] == '[':
+		return elementsOf(raw), true
+	case string(raw) == "null":
+		return nil, true
+	}
+	return nil, false
+}
+
 // skipJSONString is the end of the valid JSON string at i.
 func skipJSONString(data []byte, i int) int {
 	i++

@@ -597,8 +597,8 @@ func joinToolRuns(body []byte) []byte {
 	if decodeJSON(body, &q) != nil {
 		return body
 	}
-	var input []json.RawMessage
-	if decodeJSON(q["input"], &input) != nil {
+	input, isList := inputList(q["input"])
+	if !isList {
 		return body
 	}
 	type item struct {
@@ -699,8 +699,8 @@ func orphanedToolOutputs(body []byte) []byte {
 	if decodeJSON(body, &q) != nil {
 		return body
 	}
-	var input []json.RawMessage
-	if decodeJSON(q["input"], &input) != nil {
+	input, isList := inputList(q["input"])
+	if !isList {
 		return body
 	}
 	changed := false
@@ -793,8 +793,8 @@ func pairToolItems(body []byte) []byte {
 	if decodeJSON(body, &q) != nil {
 		return body
 	}
-	var input []json.RawMessage
-	if decodeJSON(q["input"], &input) != nil {
+	input, isList := inputList(q["input"])
+	if !isList {
 		return body
 	}
 	type item struct {
@@ -917,8 +917,8 @@ func withReasoningText(body []byte) []byte {
 	if decodeJSON(body, &q) != nil {
 		return body
 	}
-	var items []json.RawMessage
-	if decodeJSON(q["input"], &items) != nil {
+	items, isList := inputList(q["input"])
+	if !isList {
 		return body
 	}
 	changed := false

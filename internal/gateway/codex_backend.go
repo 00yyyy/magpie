@@ -504,19 +504,19 @@ func hasSealedAgentMessage(body []byte) bool {
 	if decodeJSON(body, &request) != nil {
 		return false
 	}
-	var items []json.RawMessage
-	if decodeJSON(request["input"], &items) != nil {
+	items, isList := inputList(request["input"])
+	if !isList {
 		return false
 	}
 	for _, raw := range items {
 		var item struct {
-			Type    string            `json:"type"`
-			Content []json.RawMessage `json:"content"`
+			Type    string          `json:"type"`
+			Content json.RawMessage `json:"content"`
 		}
 		if decodeJSON(raw, &item) != nil || item.Type != "agent_message" {
 			continue
 		}
-		for _, content := range item.Content {
+		for _, content := range elementsOf(trimJSON(item.Content)) {
 			var part struct {
 				Type             string `json:"type"`
 				EncryptedContent string `json:"encrypted_content"`

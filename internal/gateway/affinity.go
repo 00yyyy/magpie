@@ -801,8 +801,8 @@ func withoutRefused(key, who string, body []byte) ([]byte, bool) {
 	if decodeJSON(body, &q) != nil {
 		return nil, false
 	}
-	var items []json.RawMessage
-	if decodeJSON(q["input"], &items) != nil {
+	items, isList := inputList(q["input"])
+	if !isList {
 		return nil, false
 	}
 	kept := items[:0:0]
@@ -855,8 +855,8 @@ func withoutKinds(body []byte, kinds ...string) ([]byte, bool) {
 	if decodeJSON(body, &q) != nil {
 		return nil, false
 	}
-	var items []json.RawMessage
-	if decodeJSON(q["input"], &items) != nil {
+	items, isList := inputList(q["input"])
+	if !isList {
 		return nil, false
 	}
 	kept := items[:0:0]
