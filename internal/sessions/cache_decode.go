@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unique"
 	"unsafe"
 
 	"github.com/tidwall/gjson"
@@ -36,6 +37,8 @@ func decodeCache(b []byte, zone string) (map[string]*state, bool) {
 	one := func(i int) {
 		if json.Unmarshal(unsafe.Slice(unsafe.StringData(raws[i]), len(raws[i])), &parsed[i]) != nil {
 			bad.Store(true)
+		} else if parsed[i] != nil {
+			parsed[i].share()
 		}
 	}
 	if workers := min(runtime.GOMAXPROCS(0), 8, len(raws)/256); workers < 2 {
@@ -68,4 +71,23 @@ func decodeCache(b []byte, zone string) (map[string]*state, bool) {
 		files[k] = parsed[i] // a key given twice is its last, as Unmarshal has it
 	}
 	return files, true
+}
+
+// share has st's strings that many files repeat held once: an agent run
+// by a script gives each of its sessions the same prompt, and a long
+// history's 23.7k copies of one ~420-byte title, with its cwds and model
+// names, were 11 of the 54 MB its kept parses held.
+func (st *state) share() {
+	for _, s := range []*string{&st.Title, &st.Cwd, &st.First, &st.Named, &st.Model, &st.Provider, &st.MsgModel, &st.MsgDay, &st.CodexNickname} {
+		if *s != "" {
+			*s = unique.Make(*s).Value()
+		}
+	}
+	if id := st.CodexIdentity; id != nil {
+		for _, s := range []*string{&id.Role, &id.ParentSession, &id.RootSession} {
+			if *s != "" {
+				*s = unique.Make(*s).Value()
+			}
+		}
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unsafe"
 )
 
 // The kept file decoded on a few goroutines is what one json.Unmarshal of
@@ -52,5 +53,41 @@ func TestDecodeCacheIsUnmarshal(t *testing.T) {
 			gj, _ := json.Marshal(got)
 			t.Errorf("%s: got %v %.300s, want %v %.300s", name, ok, gj, wantOK, wj)
 		}
+	}
+}
+
+// A title, cwd or model that many kept files repeat is held once, not
+// once a file: 23.7k sessions a script ran with one prompt held 11 MB of
+// copies of it.
+func TestDecodeCacheSharesRepeats(t *testing.T) {
+	var b strings.Builder
+	fmt.Fprintf(&b, `{"version":%d,"zone":"z","files":{`, cacheVersion)
+	for i := range 2000 {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, `"/s/%d.jsonl":{"size":%d,"title":"重要执行方式 %d","cwd":"/w/p","model":"gpt-5.5","codex_identity":{"id":"c%d","role":"subagent"}}`, i, i, i%2, i)
+	}
+	b.WriteString(`}}`)
+	files, ok := decodeCache([]byte(b.String()), "z")
+	if !ok || len(files) != 2000 {
+		t.Fatalf("decoded %d files, %v", len(files), ok)
+	}
+	held := map[string]map[*byte]bool{}
+	for _, st := range files {
+		for name, s := range map[string]string{"title": st.Title, "cwd": st.Cwd, "model": st.Model, "role": st.CodexIdentity.Role} {
+			if held[name] == nil {
+				held[name] = map[*byte]bool{}
+			}
+			held[name][unsafe.StringData(s)] = true
+		}
+	}
+	for name, want := range map[string]int{"title": 2, "cwd": 1, "model": 1, "role": 1} {
+		if len(held[name]) != want {
+			t.Errorf("%s: %d copies held, want %d", name, len(held[name]), want)
+		}
+	}
+	if st := files["/s/3.jsonl"]; st.Title != "重要执行方式 1" || st.CodexIdentity.ID != "c3" {
+		t.Fatalf("file 3: %+v", st)
 	}
 }
