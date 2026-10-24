@@ -634,6 +634,11 @@ body.panel #agents > .row .ag-handle::before { left: -8px; }
 .ag-fix:active { transform: scale(.96); }
 .ag-fix:focus-visible { outline: 1.5px solid var(--drift); outline-offset: 1px; }
 .ag-fix.busy { pointer-events: none; opacity: .7; }
+/* a desktop app to restart for magpie's change (agent.AppBehind): the
+   row's waiting colour, not a fault's */
+.ag-fix.ag-restart { background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--amber); }
+.ag-fix.ag-restart:hover { background: color-mix(in srgb, var(--amber) 22%, transparent); }
+.ag-fix.ag-restart:focus-visible { outline-color: var(--amber); }
 /* the accounts that keep an agent going through magpie for failover (#1385) */
 .ag-acc { display: inline-flex; align-items: center; flex: none; height: 20px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--fg-2); font: inherit; font-size: 11.5px; line-height: 1; cursor: pointer; transition: background-color .15s, color .15s; }
 .ag-acc:hover { background: var(--pill); color: var(--fg); }
@@ -708,6 +713,9 @@ body.panel .ag-fix { position: absolute; left: 20px; top: calc(50% + 1px); width
 body.panel .ag-fix:hover { background: var(--drift); filter: brightness(1.08); }
 body.panel .ag-fix svg { width: 9px; height: 9px; }
 body.panel .ag-fix span { display: none; }
+/* the panel's Restart stays on its line, its word left to the hover */
+body.panel .ag-fix.ag-restart { position: static; width: auto; height: 18px; padding: 0 5px; background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--amber); box-shadow: none; }
+body.panel .ag-fix.ag-restart:hover { filter: none; background: color-mix(in srgb, var(--amber) 22%, transparent); }
 .row.drifted .field[data-key="model"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--drift) 38%, transparent); }
 
 /* the line over each kind of folded agent: hidden by hand, or nothing set */

@@ -1,6 +1,54 @@
 // The Usage page's code (client.js has its markup and hooks): run after
 // app.js, whose helpers and state it shares, and before start.js shows the
 // first page.
+let usageHidOpen = false; // the hidden agents shown under their line
+// A call the archive kept, by "<date>/<id>": read back when asked, and its
+// file downloaded, drawn again by redraw as it is read — under a request's
+// row on the Usage page, and under a Routing trace's (plugins/routing draws
+// it once this file has loaded; the Gateway page's recent calls show their
+// own bodies, and no longer the archive's copy as well).
+function archivePanel(name, id, redraw) {
+  const box = el("section", "call-archive");
+  const [date, aid] = name.split("/");
+  const got = archivedCalls.get(name);
+  const head = el("div", "call-body-head");
+  head.append(el("span", "call-body-label", t("Request archive")), el("code", "call-archive-id", name), el("span", "grow"));
+  box.append(head);
+  const dl = el("button", "text call-archive-dl", t("Download"));
+  dl.onclick = (ev) => { ev.stopPropagation(); downloadArchive(name, dl); };
+  if (!got || got.busy || got.error) {
+    const b = el("button", "text", t(got?.busy ? "Fetching…" : "Fetch from archive"));
+    b.disabled = !!got?.busy;
+    b.onclick = (ev) => {
+      ev.stopPropagation();
+      archivedCalls.set(name, { busy: true });
+      redraw();
+      api(`archive?date=${encodeURIComponent(date)}&id=${encodeURIComponent(aid)}`)
+        .then((a) => archivedCalls.set(name, a))
+        .catch((e) => archivedCalls.set(name, { error: t(e.message) }))
+        .finally(redraw);
+    };
+    head.append(b);
+    if (got?.error) box.append(el("div", "call-archive-err", got.error));
+    else head.append(dl); // one not in the bucket has nothing to download
+    return box;
+  }
+  head.append(el("span", "call-body-truncated call-archive-note", t("Secrets taken out")), dl);
+  if (got.large) {
+    box.append(el("p", "call-archive-big", t("This archive is {size}, too large to show here. Download it to read it.", { size: got.bytes > 0 ? fmtBytes(got.bytes) : t("very large") })));
+    return box;
+  }
+  const grid = el("div", "call-details");
+  grid.append(
+    headersPanel(t("Request Headers"), `${got.request.method || ""} ${got.request.path || ""}`.trim(), got.request.headers),
+    headersPanel(t("Response Headers"), got.response.status ? `HTTP ${got.response.status}` : "", got.response.headers),
+    archiveBodyPanel("Request Body", got.request, undefined, id + "|archive|req"),
+    archiveBodyPanel("Response Body", got.response, id + "|archive"),
+  );
+  box.append(grid);
+  return box;
+}
+
 const PERIODS = [["today", "Today"], ["7d", "7 days"], ["30d", "30 days"], ["all", "All"]];
 
 // The reader's time zone, which magpie reads the period's days, the chart's

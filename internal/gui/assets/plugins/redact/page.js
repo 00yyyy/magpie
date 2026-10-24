@@ -1,10 +1,18 @@
 // Insights › Masking's code (client.js has its markup and hooks): run after
-// app.js, whose masking helpers it shares (maskWho, maskTip, maskColor,
+// app.js, whose masking helpers it shares (maskTip, maskColor,
 // maskShape, maskValue: Settings' Try it and the masked calls' badges use
 // them too). What a placeholder stood for is in this magpie's memory alone,
 // never on disk, so after a restart it is gone; so is the text a request
 // went out with (/api/masking/sent), kept for the newest requests only.
 
+const stillMotion = calm;
+// the providers' names, read once when the page opened before any page
+// that loads them
+let maskProv = null, maskProvAsked = false;
+function maskWho(id, kind) {
+  const x = kind === "agent" ? state.agents?.find((a) => a.id === id) : (providers || maskProv)?.providers?.find((p) => p.id === id);
+  return { name: x?.name || id || t("Unknown"), icon: x?.icon };
+}
 // what a request was, beside a chat (gateway's noteMasked)
 const MASK_WHAT = { search: "Web search", image: "Image", video: "Video", decide: "System One", embeddings: "Embeddings", audio: "Audio" };
 // maskDayName: Today, Yesterday or the date a masked request went on

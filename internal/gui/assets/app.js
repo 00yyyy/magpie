@@ -67,7 +67,6 @@ let showAllAgents = false; // the agents no one has set anything on, folded away
 let showHiddenAgents = false; // under them, the ones hidden by hand: a fold of their own, shut until asked
 let period = "today"; // usage window
 let usage = null;   // last usage summary
-let usageHidOpen = false; // the Usage page's hidden agents shown under their line
 let pick = null; // { agent, field, options, items, cursor, anchor }
 let editing = null; // provider id being edited; { preset } or { custom: true } for a new one
 let draft = null; // the editor's working copy
@@ -610,6 +609,8 @@ function renderAgents() {
       row.classList.add("drifted");
       if (!kind) who.append(driftFix(a));
     }
+    // an app started before magpie's last change (the panel's row)
+    else if (!kind && a.appRestart) who.append(appRestart(a));
     // the CLI's version, and an update when one is out (#202); the panel's
     // name column has no room for it
     if (mode !== "panel") who.append(cliTag(a));
@@ -1330,6 +1331,7 @@ function connectLine(a, kind) {
     else if (src === "key") say(t("Not connected · now on an API key of its own"));
     else if (src.startsWith("providers:")) say(t("Not connected · now has {n} providers of its own", { n: src.slice(10) }));
     else say(t("Not connected · {agent} uses its own settings", { agent: a.name }));
+    if (a.appRestart) line.append(appRestart(a));
     return line;
   }
   if (a.native) {
@@ -1343,6 +1345,11 @@ function connectLine(a, kind) {
     return line;
   }
   line.classList.add("on");
+  if (a.appRestart) {
+    say(t("Connected · restart {agent} to use it", { agent: a.name }), "wait");
+    line.append(appRestart(a));
+    return line;
+  }
   if (staleNow(a)) {
     if (a.id === "claude") say(t("Connected · new sessions take it"));
     else {
@@ -1831,13 +1838,17 @@ function daemonRestart() {
   return go;
 }
 
+// asked first: what runs in the app stops
+const confirmRestart = (name) => confirmAction(t("Restart {agent}?", { agent: name }), t("magpie quits {agent} and opens it again, so it reads the new settings. Anything running in it stops.", { agent: name }), t("Restart"));
+
 // appReopen is the Restart beside the Codex app left on the old list: magpie
-// quits it, as ⌘Q does, and opens it again
+// asks, then quits it, as ⌘Q does, and opens it again
 function appReopen(bundle) {
   const go = el("button", "ag-quiet accent", t("Restart"));
   go.type = "button";
   go.title = bundle;
   go.onclick = async () => {
+    if (!(await confirmRestart(t("The Codex app")))) return;
     go.disabled = true;
     go.classList.add("busy");
     try {
@@ -1849,6 +1860,31 @@ function appReopen(bundle) {
       go.disabled = false;
       go.classList.remove("busy");
       status(e.message, "err");
+    }
+  };
+  return go;
+}
+
+// appRestart: a desktop app running on what it read before magpie's last
+// change (agent.AppBehind) is quit and opened again
+function appRestart(a) {
+  const go = el("button", "ag-fix ag-restart");
+  go.type = "button";
+  go.title = t("{agent} started {when}, before magpie's last change, and reads it only as it starts", { agent: a.name, when: ago(a.appRestart.since) });
+  go.setAttribute("aria-label", t("Restart {agent}", { agent: a.name }));
+  go.append(svg(REAPPLY, 11, 1.8), el("span", "", t("Restart")));
+  go.onclick = async (e) => {
+    e.stopPropagation();
+    if (!(await confirmRestart(a.name))) return;
+    go.disabled = true;
+    go.classList.add("busy");
+    try {
+      state = await api("agents/restart/" + a.id, {});
+      renderAgents();
+      status(t("{agent} restarted", { agent: a.name }));
+    } catch (err) {
+      if (go.isConnected) { go.disabled = false; go.classList.remove("busy"); }
+      status(tNotice(err.message), "err");
     }
   };
   return go;
@@ -7207,51 +7243,6 @@ function archiveBodyPanel(label, part, id, key = id) {
   return callBodyPanel(label, part.body, cut, id, key);
 }
 
-// A call the archive kept, by "<date>/<id>": read back when asked, and its
-// file downloaded, drawn again by redraw as it is read — under a request's
-// row on the Usage page (the Gateway page's recent calls show their own
-// bodies, and no longer the archive's copy as well).
-function archivePanel(name, id, redraw) {
-  const box = el("section", "call-archive");
-  const [date, aid] = name.split("/");
-  const got = archivedCalls.get(name);
-  const head = el("div", "call-body-head");
-  head.append(el("span", "call-body-label", t("Request archive")), el("code", "call-archive-id", name), el("span", "grow"));
-  box.append(head);
-  const dl = el("button", "text call-archive-dl", t("Download"));
-  dl.onclick = (ev) => { ev.stopPropagation(); downloadArchive(name, dl); };
-  if (!got || got.busy || got.error) {
-    const b = el("button", "text", t(got?.busy ? "Fetching…" : "Fetch from archive"));
-    b.disabled = !!got?.busy;
-    b.onclick = (ev) => {
-      ev.stopPropagation();
-      archivedCalls.set(name, { busy: true });
-      redraw();
-      api(`archive?date=${encodeURIComponent(date)}&id=${encodeURIComponent(aid)}`)
-        .then((a) => archivedCalls.set(name, a))
-        .catch((e) => archivedCalls.set(name, { error: t(e.message) }))
-        .finally(redraw);
-    };
-    head.append(b);
-    if (got?.error) box.append(el("div", "call-archive-err", got.error));
-    else head.append(dl); // one not in the bucket has nothing to download
-    return box;
-  }
-  head.append(el("span", "call-body-truncated call-archive-note", t("Secrets taken out")), dl);
-  if (got.large) {
-    box.append(el("p", "call-archive-big", t("This archive is {size}, too large to show here. Download it to read it.", { size: got.bytes > 0 ? fmtBytes(got.bytes) : t("very large") })));
-    return box;
-  }
-  const grid = el("div", "call-details");
-  grid.append(
-    headersPanel(t("Request Headers"), `${got.request.method || ""} ${got.request.path || ""}`.trim(), got.request.headers),
-    headersPanel(t("Response Headers"), got.response.status ? `HTTP ${got.response.status}` : "", got.response.headers),
-    archiveBodyPanel("Request Body", got.request, undefined, id + "|archive|req"),
-    archiveBodyPanel("Response Body", got.response, id + "|archive"),
-  );
-  box.append(grid);
-  return box;
-}
 
 // An agent's model field, and whether any of its options come from provider p.
 function modelField(a) {
@@ -22092,7 +22083,6 @@ let maskSum = null;          // the summary Insights › Masking read last: its 
 const maskValues = new Map(); // placeholder → what it stood for, as this magpie told it
 const maskKindName = (k) => MASK_KINDS[k] ? t(MASK_KINDS[k]) : k;
 const maskByName = (b) => MASK_BY[b] ? t(MASK_BY[b]) : b;
-const stillMotion = calm;
 // a kind's colour is its place in the summary's ranking, so the bar, the
 // legend, the chips and the records say a kind in one colour
 function maskColor(k) {
@@ -22105,13 +22095,6 @@ function maskShape(head, len) {
   head = head || "";
   const rest = Math.max(1, Math.min((len || 0) - [...head].length, 8));
   return head + "•".repeat(rest);
-}
-// the providers' names, read once when Settings opened before any page
-// that loads them
-let maskProv = null, maskProvAsked = false;
-function maskWho(id, kind) {
-  const x = kind === "agent" ? state.agents?.find((a) => a.id === id) : (providers || maskProv)?.providers?.find((p) => p.id === id);
-  return { name: x?.name || id || t("Unknown"), icon: x?.icon };
 }
 function maskDot(k) {
   const d = el("span", "mo-dotc");
