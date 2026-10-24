@@ -1742,8 +1742,17 @@ func borrowedEfforts(id string) []string {
 	}
 	// one newer than this machine's catalog: its maker's line's levels
 	// (gpt-6.1-sol, NextCommit on Discord)
-	e, _ := catalog.KinEfforts(makerCatalogs(), id)
-	return e
+	if e, ok := catalog.KinEfforts(makerCatalogs(), id); ok {
+		return e
+	}
+	// a proxy's variant of a known model, named for the level or speed
+	// it is served at (CLIProxyAPI's gemini-3.8-flash-high,
+	// claude-opus-5-5-high, grok-3-mini-fast; nianshou5 on Discord): the
+	// model's own levels, which the proxy fits a request's effort to
+	if base, ok := catalog.Unsuffixed(id); ok {
+		return borrowedEfforts(base)
+	}
+	return nil
 }
 
 // makerCatalogs are the models.dev ids of the vendors among the presets
