@@ -752,7 +752,7 @@ function renderAgents() {
       fold.classList.toggle("open", showAllAgents);
       inner.inert = !showAllAgents;
       labelFor();
-      if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (!calm()) {
         label.animate([{ opacity: 0, transform: "translateY(3px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: "cubic-bezier(.22, 1, .36, 1)" });
       }
       if (showAllAgents) unrollInView(fold, more, e);
@@ -1395,7 +1395,7 @@ function expandLink(a) {
 // sheet slides a row's opened part open or shut, as a sheet moves on iOS:
 // its height on iOS's own curve, what is in it fading in a little below
 function sheet(box, open, done) {
-  if (!box || !box.animate || matchMedia("(prefers-reduced-motion: reduce)").matches) { done?.(); return; }
+  if (!box || !box.animate || calm()) { done?.(); return; }
   const cs = getComputedStyle(box);
   const full = { height: box.offsetHeight + "px", paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, marginTop: cs.marginTop, marginBottom: cs.marginBottom, borderTopWidth: cs.borderTopWidth, opacity: 1 };
   const none = { height: "0px", paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: "0px", borderTopWidth: "0px", opacity: 0 };
@@ -3964,7 +3964,7 @@ function fit(extra = 0, glide) {
   const h = $(".top").offsetHeight + $("#ptabs").offsetHeight + tallest + $(".foot").offsetHeight + 4;
   if (h === fit.last) return;
   fit.last = h;
-  const still = !glide || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const still = !glide || calm();
   api("window/fit?h=" + h + (still ? "" : "&ms=" + glide.ms + "&ease=" + glide.ease), {});
 }
 
@@ -4963,7 +4963,7 @@ function switchPickerGroup(id) {
 
   const list = $("#list");
   pick.groupAnimation?.cancel();
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduced = calm();
   if (reduced) { filter(); return; }
   const direction = to >= from ? 1 : -1;
   const token = (pick.groupTransition || 0) + 1;
@@ -5513,7 +5513,7 @@ async function setPick(agent, field, value, opt) {
 // popGhost leaves a likeness of the picker where it was, to fade and sink
 // away while the real one is already put back for its next opening.
 function popGhost(pop) {
-  if (pop.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (pop.hidden || calm()) return;
   const g = pop.cloneNode(true);
   g.removeAttribute("id");
   g.querySelectorAll("[id]").forEach((e) => e.removeAttribute("id"));
@@ -8513,7 +8513,8 @@ const SPRING = CSS.supports?.("animation-timing-function", "linear(0, 1)")
   ? "linear(0, 0.0203, 0.0723, 0.1448, 0.2292, 0.3188, 0.4086, 0.4951, 0.576, 0.6498, 0.7157, 0.7735, 0.8232, 0.8654, 0.9005, 0.9293, 0.9525, 0.9708, 0.9849, 0.9956, 1.0033, 1.0087, 1.0122, 1.0142, 1.015, 1.0151, 1.0146, 1.0136, 1.0124, 1.0111, 1.0097, 1.0084, 1.0071, 1.0059, 1.0049, 1.0039, 1.0031, 1.0024, 1.0018, 1.0013, 1)"
   : "cubic-bezier(.2, .9, .25, 1.02)";
 const IOS_EASE = "cubic-bezier(.32, .72, 0, 1)";
-const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+// a declaration, so code above it can ask too
+function calm() { return matchMedia("(prefers-reduced-motion: reduce)").matches; }
 // what was last pressed, and a way to find it again once re-rendered
 let pressed = null;
 document.addEventListener("pointerdown", (e) => {
@@ -15297,7 +15298,7 @@ function unrollSheet(view, sheet, e) {
   // can start to move: from there the view goes down as it grows
   const x0 = Math.max(0, h - (room - from));
   const go = scrollOnPurpose(e, ROW_OPEN.ms + 300); // opened by a click, not by code
-  if (!h || matchMedia("(prefers-reduced-motion: reduce)").matches) { if (go) view.scrollTop = to; return; }
+  if (!h || calm()) { if (go) view.scrollTop = to; return; }
   const pad = getComputedStyle(sheet);
   sheet.style.overflow = "hidden";
   const grow = sheet.animate([
@@ -15356,7 +15357,7 @@ function unrollInView(fold, button, e) {
 // rollUpSheet closes it the other way, quicker, and then does what closing
 // it does.
 function rollUpSheet(sheet, then) {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return then();
+  if (calm()) return then();
   const pad = getComputedStyle(sheet);
   sheet.style.overflow = "hidden";
   const a = sheet.animate([
@@ -22028,7 +22029,7 @@ let maskSum = null;          // the summary Insights › Masking read last: its 
 const maskValues = new Map(); // placeholder → what it stood for, as this magpie told it
 const maskKindName = (k) => MASK_KINDS[k] ? t(MASK_KINDS[k]) : k;
 const maskByName = (b) => MASK_BY[b] ? t(MASK_BY[b]) : b;
-const stillMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const stillMotion = calm;
 // a kind's colour is its place in the summary's ranking, so the bar, the
 // legend, the chips and the records say a kind in one colour
 function maskColor(k) {
@@ -23830,7 +23831,7 @@ if (mode !== "window" || !document.body.classList.contains("linux")) $("#winclos
 // when the pointer comes over it.
 function wag() {
   const logo = document.querySelector(".brand .logo");
-  if (!logo || logo.classList.contains("wag") || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!logo || logo.classList.contains("wag") || calm()) return;
   logo.classList.add("wag");
   logo.querySelector(".tail").addEventListener("animationend", () => logo.classList.remove("wag"), { once: true });
 }
@@ -24205,7 +24206,7 @@ function navSubs() {
 // the sidebar's lists open and fold the way iOS's do: a spring that
 // starts quick and settles slowly, the rows coming in one after another
 var NAV_EASE = "cubic-bezier(.32, .72, 0, 1)";
-const navCalm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const navCalm = calm;
 // the selection is one shape that slides to the row picked
 function navSubMark(box, glide) {
   const hl = box.querySelector(".nav-hl"), cur = box.querySelector(".nav-s.cur");
