@@ -582,6 +582,29 @@ function routingPage(part) {
   // an agent's subagents that magpie put a subagent on in its place
   const wentOn = (r) => (r.subagent && !r.subagent.kept ? r.subagent.to : r.model);
 
+  // the routing of the group x's place is in: the innermost group in the
+  // group (via), else the group asked for; "" when no group was
+  const placeRouting = (r, x) => {
+    const via = x.via || [];
+    return via.length ? r.group?.subs?.find((s) => s.id === via[via.length - 1])?.routing || "" : r.group?.routing || "";
+  };
+  // a group routed in order or by weight tries each member whole, in its
+  // place, over its own accounts or keys as its provider routes them
+  // (planLevel): its members aren't weighed against each other
+  const wholeMembers = (r, x) => !!r.group && ["order", "weight"].includes(placeRouting(r, x));
+  // weighedWith is the rows x was weighed against, x among them: in a
+  // group routed in order or by weight, its own member's; else every one
+  // in its place (the group's own, or one group in it). A fallback is
+  // weighed with its own provider's alone (plan). bitssly on X: an In
+  // order group said its later members, whose allowance isn't known, went
+  // after the first because the first's was
+  function weighedWith(r, x) {
+    const via = (y) => (y.via || []).join(">");
+    const whole = wholeMembers(r, x);
+    return r.order.filter((y) => !!y.fallback === !!x.fallback && via(y) === via(x)
+      && (!(x.fallback || whole) || (y.provider === x.provider && y.model === x.model && (y.fixed || "") === (x.fixed || "") && !!y.fast === !!x.fast)));
+  }
+
   // why routing put the first where it did
   function firstWhy(r) {
     const f = r.order[0];
@@ -598,6 +621,17 @@ function routingPage(part) {
     if (f.fallback) {
       const name = r.order.find((x) => !x.fallback)?.name || r.provider;
       return t("{name} is resting, so its fallback {fb} goes first.", { name, fb: `${f.provider}/${f.model}` });
+    }
+    if (wholeMembers(r, f)) {
+      // first as the group's member: by its place, or the round's pick;
+      // weighed only against its own member's others, if any
+      const own = weighedWith(r, f);
+      if (own.length > 1) return firstWhy({ ...r, order: own, group: null });
+      if (placeRouting(r, f) === "weight") return t("By weight: it's {who}'s share — each model takes requests as the weight set beside it says.", { who: w });
+      const ahead = r.order.filter((x) => x !== f && x.rest).map(who);
+      return ahead.length
+        ? t("In order: with {rested} resting after a failure, {who} is the first that can answer.", { rested: ahead.join(", "), who: w })
+        : t("In order: {who} is first, and answers everything while it can.", { who: w });
     }
     const peers = r.order.filter((x) => x !== f && !x.fallback && !x.rest);
     const someKnown = r.order.some((x) => x.known);
@@ -707,14 +741,15 @@ function routingPage(part) {
       if (p.byFolder) out[out.length - 1] += " " + (p.folder ? t("The agent works in {folder}.", { folder: p.folder }) : t("The agent didn't say which folder it works in."));
     }
     const smart = (x) => !x.routing && (x.kind === "account" || x.known);
-    const someKnown = r.order.some((x) => x.known);
+    // weighed with one known: its place among them is what Smart says
+    const someKnown = (x) => weighedWith(r, x).some((y) => y !== x && y.known);
     const f0 = r.order[0];
     for (const x of r.order.slice(1)) {
       // behind the first by a group's weights or its order, which take
       // each member whole: not by what x has left (Creat.wu: a group in
       // a group by weight, its accounts at 91%, read as passed over)
       const by = !x.rest && !x.sunk && f0 ? memberSplit(r, f0, x) : null;
-      if (by && smart(x) && (x.known ? group(x) === "low" : someKnown)) {
+      if (by && smart(x) && (x.known ? group(x) === "low" : someKnown(x))) {
         if (!told.has(by.member)) {
           told.add(by.member);
           out.push(by.routing === "weight"
@@ -726,10 +761,10 @@ function routingPage(part) {
       if (x.sunk && !x.rest) out.push(t("{who} was rate limited at {time} while it had quota left, so it went to the back: it comes round again once those ahead of it are rate limited in turn.", { who: who(x), time: clock(x.sunk) }));
       else if (x.rest) out.push(t("{who} is resting — {why}, {when} — so it waits at the back.", { who: who(x), why: `${x.rest.status} · ${failWord(x.rest.why)}`, when: restWhen(x.rest, at(r.time)) }));
       else if (smart(x) && x.known && group(x) === "spent" && x.credits) out.push(t("{who} is at {n} of its allowance but goes on on its credits — ahead of those used up with nothing to go on with, after those with allowance left.", { who: who(x), n: pct(x.used) }));
-      else if (smart(x) && x.known && group(x) === "spent") out.push(t("{who} is at {n} — all but used up, it answers only when nothing else can.", { who: who(x), n: pct(x.used) }));
-      else if (smart(x) && x.known && group(x) === "low") out.push(t("{who} is at {n} — kept for when the others can't.", { who: who(x), n: pct(x.used) }));
-      else if (smart(x) && x.learns && someKnown) out.push(t("{who}: what it has left isn't known yet, and its answer tells, so it goes before those known.", { who: who(x) }));
-      else if (smart(x) && !x.known && someKnown) out.push(t("{who}: what it has left isn't known yet, so it goes after those known.", { who: who(x) }));
+      else if (smart(x) && x.known && group(x) === "spent" && weighedWith(r, x).length > 1) out.push(t("{who} is at {n} — all but used up, it answers only when nothing else can.", { who: who(x), n: pct(x.used) }));
+      else if (smart(x) && x.known && group(x) === "low" && weighedWith(r, x).length > 1) out.push(t("{who} is at {n} — kept for when the others can't.", { who: who(x), n: pct(x.used) }));
+      else if (smart(x) && x.learns && someKnown(x)) out.push(t("{who}: what it has left isn't known yet, and its answer tells, so it goes before those known.", { who: who(x) }));
+      else if (smart(x) && !x.known && someKnown(x)) out.push(t("{who}: what it has left isn't known yet, so it goes after those known.", { who: who(x) }));
     }
     const pooled = r.order.find((x) => !x.aside && x.kind === "key");
     for (const x of r.order.filter((x) => x.aside)) out.push(t("{who} is made for {api}, not {other} as the keys routed over are, so it isn't one of them: it's tried after them.", { who: who(x), api: API[x.speaks] || x.speaks || t("any API"), other: API[pooled?.speaks] || pooled?.speaks || t("any API") }));

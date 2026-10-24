@@ -1521,7 +1521,8 @@ each of these groups ordered by the share used.
   left end first goes first. The daily Free Plan credits aren't counted,
   since they end at the same midnight on every account. A Claude account
   magpie knows nothing of yet goes first once, to learn what it has left
-  from the answer; any other unknown account goes after those known.
+  from the answer; any other unknown account goes after those known,
+  and is still tried when they fail, ahead of any at 90% or more.
   An account with a month beside its week (Factory) goes by its month:
   when the month holds less than its weeks add up to (Factory's, by
   one user's readings, about two weeks' worth), what a week leaves isn't
@@ -1530,7 +1531,12 @@ each of these groups ordered by the share used.
   on the Routing page says the fullest window's share with when that
   window renews: "32% used · renews in 3 days" is the week's.
 - **In order**: the accounts in their order. The first takes every request
-  until it is used up (100%) or fails.
+  until it is used up (100%) or fails. A routing group set In order tries
+  its members in the order given, whatever is known of what each has
+  left: a member whose allowance isn't known isn't moved behind one whose
+  is. Each member's own accounts go as its provider routes them, and the
+  Routing page says an account went after those known only of one
+  weighed against a known account of the same member.
 - **In turn**: each turn of a conversation goes to the next account. A new
   conversation goes to the account the fewest other conversations of the
   last 30 minutes are on.
