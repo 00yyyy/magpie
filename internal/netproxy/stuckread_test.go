@@ -188,3 +188,21 @@ func TestSystemProxyToolThatHangsIsEnded(t *testing.T) {
 		t.Fatalf("a tool that never answered held the read %v", took)
 	}
 }
+
+// A read that answers within readWait is what the request waiting for it
+// goes through: magpie started where only the system's proxy reaches the
+// vendors sends its first requests through it, not direct.
+func TestQuickSystemProxyReadIsWaitedFor(t *testing.T) {
+	_, answers := holdReads(t, Proxy{}, time.Time{}, 5*time.Second)
+	got := make(chan Proxy, 1)
+	go func() { got <- System() }()
+	answers <- readAnswer{Proxy{URL: "http://127.0.0.1:7890"}, true}
+	select {
+	case p := <-got:
+		if p.URL != "http://127.0.0.1:7890" {
+			t.Fatalf("the first read answered at once, but the request waiting for it took %+v", p)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("a request still waits on a read that answered")
+	}
+}
