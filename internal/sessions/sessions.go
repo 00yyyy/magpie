@@ -753,9 +753,10 @@ func loadCache() {
 	cacheGeneration++
 	cache = map[string]*state{}
 	saved() // the kept file as the last save left it
-	var c cacheFile
-	if b, err := os.ReadFile(CachePath()); err == nil && json.Unmarshal(b, &c) == nil && c.Version == cacheVersion && c.Zone == z && c.Files != nil {
-		cache = c.Files
+	if b, err := os.ReadFile(CachePath()); err == nil {
+		if files, ok := decodeCache(b, z); ok {
+			cache = files
+		}
 	}
 }
 
