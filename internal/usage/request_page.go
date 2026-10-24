@@ -720,6 +720,9 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 			gateways = append(gateways, c)
 		}
 	}
+	if c := probeChunk(snapshot.probes, gatewaySince); c != nil {
+		gateways = append(gateways, c) // listed, never counted (SourceProbe)
+	}
 	on := map[string]bool{}
 	var chunks []*rowChunk
 	var resolver *sessionResolver
@@ -1314,6 +1317,9 @@ func buildRequestBlocksOf(p Period, f Filter, offset, limit int, now time.Time, 
 		if r.Provider != "" && !providers[r.Provider] {
 			providers[r.Provider] = true
 		}
+		// a call turned away, and a request magpie sent on its own
+		// (SourceProbe), are listed and counted in no total
+		uncounted := r.IsRejected() || r.IsProbe()
 		keep := f.keepsRow(r)
 		if keep {
 			out.Total++
@@ -1325,20 +1331,20 @@ func buildRequestBlocksOf(p Period, f Filter, offset, limit int, now time.Time, 
 			}
 		}
 		var d Totals
-		if !r.IsRejected() {
+		if !uncounted {
 			d.addRow(*r)
 			if keep {
 				out.Sum.plus(&d)
 			}
+			addCallerRow(callers, r, &d)
+			addAccountRow(accounts, r, &d)
 		}
-		addCallerRow(callers, r, &d)
-		addAccountRow(accounts, r, &d)
 		// The two sources are counted with the Via pick cleared, as the
 		// dimension groups above are: the cells are what the reader
 		// switches between, so each must go on saying its own number
 		// while another is picked, or one of them would read 0 and
 		// there would be no way back.
-		if !r.IsRejected() && viaFilter.keepsRow(r) {
+		if !uncounted && viaFilter.keepsRow(r) {
 			switch r.Source {
 			case "log":
 				out.Direct.plus(&d)
@@ -1348,7 +1354,7 @@ func buildRequestBlocksOf(p Period, f Filter, offset, limit int, now time.Time, 
 				out.Through.plus(&d)
 			}
 		}
-		if r.IsRejected() {
+		if uncounted {
 			return
 		}
 		if keep || f.Day != "" && chartFilter.keepsRow(r) {
