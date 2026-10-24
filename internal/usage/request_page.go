@@ -403,7 +403,17 @@ type chunkRows struct {
 	buf     []packedRow
 	strs    []string
 	shapes  [][rowTexts]uint32
+	// lent: the strings are of the decoded block, not a copy of them, and
+	// the next chunk is decoded over them. For a pass that keeps nothing of
+	// a row past the next chunk, and clones a string it keeps: the passes
+	// that pair a page's calls copied every chunk's strings five times,
+	// ~250 MB of a warm start's page (#3493).
+	lent    bool
+	decoded []byte
 }
+
+// lentRows is a chunkRows whose strings are lent (chunkRows.lent).
+func lentRows() chunkRows { return chunkRows{lent: true} }
 
 // of is c's rows to read. What the page set on c since (a Codex actor or
 // compaction, the identities) is read through c.
@@ -412,7 +422,11 @@ func (r *chunkRows) of(c *rowChunk) *rowChunk {
 		return c
 	}
 	if r.c != c {
-		open := c.unpackReusing(r.buf, r.strs, r.shapes)
+		var lent *[]byte
+		if r.lent {
+			lent = &r.decoded
+		}
+		open := c.unpackReusing(r.buf, r.strs, r.shapes, lent)
 		if open == nil { // never written so: pack wrote it in this process
 			open = &rowChunk{Source: c.Source, Computer: c.Computer}
 		}
@@ -1091,7 +1105,7 @@ func (idx *requestIndex) trim(bound int64) {
 func visibleLocal(chunks []*rowChunk) map[rowRef]bool {
 	duplicates := map[rowRef]bool{}
 	seen := map[string]bool{}
-	var rows chunkRows
+	rows := lentRows() // a kept message id is cloned
 	for _, c := range chunks {
 		open := rows.of(c)
 		for i := range open.Rows {
@@ -1183,7 +1197,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 		}
 	}
 	byRequest := map[string][]timedRef{}
-	var rows chunkRows
+	rows := lentRows() // a kept request id is cloned; a key is looked up
 	for _, c := range chunks {
 		open := rows.of(c)
 		for i := range open.Rows {
