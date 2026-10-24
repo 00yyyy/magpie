@@ -14,7 +14,7 @@ func sandbox(t *testing.T, now time.Time) string {
 	oldDir, oldClock, oldOwn := Dir, clock, ownTest
 	Dir, clock, ownTest = func() string { return dir }, func() time.Time { return now }, true
 	store.mu.Lock()
-	store.days, store.snips, store.last, store.pruned = nil, nil, 0, time.Time{}
+	store.days, store.snips, store.sent, store.sentBytes, store.last, store.pruned = nil, nil, nil, 0, 0, time.Time{}
 	store.mu.Unlock()
 	t.Cleanup(func() { Dir, clock, ownTest = oldDir, oldClock, oldOwn })
 	return dir

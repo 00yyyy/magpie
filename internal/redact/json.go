@@ -463,7 +463,10 @@ func asJSON(key, eventType string) bool {
 }
 
 // RestoreJSON puts the values back in a response body.
-func RestoreJSON(body []byte) []byte {
+func RestoreJSON(body []byte) []byte { return restoreJSON(body, nil) }
+
+// restoreJSON is RestoreJSON, counting in put as restore does.
+func restoreJSON(body []byte, put map[string]int) []byte {
 	if !bytes.Contains(body, []byte("{{")) {
 		return body
 	}
@@ -472,10 +475,10 @@ func RestoreJSON(body []byte) []byte {
 		if path == "type" {
 			typ = s
 		}
-		return Restore(s, asJSON(key, typ))
+		return restore(s, asJSON(key, typ), put)
 	})
 	if !ok {
-		return []byte(Restore(string(body), false))
+		return []byte(restore(string(body), false, put))
 	}
 	return out
 }
