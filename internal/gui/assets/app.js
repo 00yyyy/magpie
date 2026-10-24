@@ -4365,13 +4365,34 @@ async function whatsNewOnce() {
 // waiting update (pending), which the app puts first. The notes that
 // couldn't be had (the site failing, #661) say so, with a retry and the
 // release page, apart from a version that has none.
-async function openWhatsNew(b) {
+// last: the range picked (wnRange), "" since the last update; a failed ask
+// keeps the notes last shown (wnKept).
+let wnKept = null;
+async function openWhatsNew(b, last = "") {
   if (b) { b.disabled = true; b.classList.add("busy"); }
-  const w = await api(updatePath("whatsnew?all=1")).catch(() => null);
+  const w = await api(updatePath("whatsnew?all=1" + (last && "&last=" + last))).catch(() => null);
   if (b) { b.disabled = false; b.classList.remove("busy"); }
-  const list = w?.releases || [];
+  let list = w?.releases || [], failed = !w || !!w.error;
+  if (!failed) wnKept = list;
+  else if (!list.length && wnKept) list = wnKept;
   if (!list.length && !w?.current) return status(t("Couldn't load the release notes"), "err");
-  showWhatsNew(list, false, { failed: !w || !!w.error, current: w?.current, url: w?.url, retry: () => openWhatsNew() });
+  showWhatsNew(list, false, { failed, current: w?.current, url: w?.url, last, retry: () => openWhatsNew(null, last) });
+}
+
+// wnRange is Settings' pick of which notes (Linka): since the last update,
+// or this version and 10, 20, 50 or 100 before it
+function wnRange(last) {
+  const name = (v) => v ? t("This version and {n} before", { n: v }) : t("Since the last update");
+  const b = el("button", "sess-pick wn-range");
+  b.type = "button";
+  b.setAttribute("aria-haspopup", "menu");
+  b.append(el("span", "", name(last)), svg(CHEV, 11, 1.6));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, ["", "10", "20", "50", "100"].map((v) => ({ v, name: name(v), note: "", literalName: true })), last, (v) => v !== last && openWhatsNew(b, v), "Release notes shown", "sess-menu", "right");
+  };
+  return b;
 }
 
 // auto: shown by itself after an update, with "Don't show again today"
@@ -4383,6 +4404,7 @@ function showWhatsNew(releases, auto, more = {}) {
   const ed = el("div", "editor whatsnew");
   const head = el("div", "ehead");
   head.append(el("b", "", t("What's new in {v}", { v: "v" + (releases[0]?.version || more.current) })));
+  if (!auto) head.append(el("span", "grow"), wnRange(more.last || ""));
   ed.append(head);
   for (const r of releases) {
     const sec = el("section", "wn-rel");
@@ -4410,7 +4432,7 @@ function showWhatsNew(releases, auto, more = {}) {
     }
     if (more.url) acts.append(noteLink(t("Open the release page"), more.url));
     sec.append(h, p, acts);
-    ed.append(sec);
+    head.after(sec); // above the notes kept from before
   }
   const bar = el("div", "bar");
   const ok = el("button", "text primary", t("Close"));
@@ -7187,62 +7209,6 @@ function renderArchive() {
     err.title = t(a.bucket ? "Last upload failed: {e}" : "Last save failed: {e}", { e: a.error });
   } else err?.remove();
 }
-
-// What was read back from the archive, by "<date>/<id>": the archive's
-// copy, or {busy} while it is read, or {error}.
-const archivedCalls = new Map();
-
-function headersPanel(label, first, headers) {
-  const panel = el("section", "call-body");
-  const head = el("div", "call-body-head");
-  const lines = [first, ...Object.keys(headers || {}).sort().flatMap((k) => headers[k].map((v) => `${k}: ${v}`))].filter(Boolean);
-  head.append(el("span", "call-body-label", label), el("span", "grow"), copyBtn(lines.join("\n"), label));
-  const pre = el("pre");
-  pre.append(el("code", "", lines.join("\n")));
-  panel.append(head, pre);
-  return panel;
-}
-
-// The archived file, whole, however large: to the browser in magpie web,
-// to Downloads in the app (#447).
-async function downloadArchive(name, b) {
-  const [date, aid] = name.split("/");
-  const q = `date=${encodeURIComponent(date)}&id=${encodeURIComponent(aid)}`;
-  if (web) {
-    const a = el("a");
-    a.href = "/api/archive/file?" + q;
-    a.download = "";
-    a.click();
-    return;
-  }
-  b.classList.add("busy");
-  b.disabled = true;
-  try {
-    const r = await api("archive/export?" + q, {});
-    status(t("Saved to {path}", { path: r.path }), "ok");
-  } catch (e) {
-    status(t(e.message), "err");
-  } finally {
-    b.classList.remove("busy");
-    b.disabled = false;
-  }
-}
-
-// one body read back from the archive: shown, or, past 256 KB, only its
-// size — the server leaves it out — for the file to be downloaded whole
-function archiveBodyPanel(label, part, id, key = id) {
-  if (part.omitted) {
-    const panel = el("section", "call-body");
-    const head = el("div", "call-body-head");
-    head.append(el("span", "call-body-label", t(label)), el("span", "call-body-count", fmtBytes(part.size)));
-    panel.append(head, el("p", "call-archive-big", t("Too long to show here. Download the archive to read it whole.")));
-    return panel;
-  }
-  // cut where the archive stops: its limit, or 256 KB in one from before #447
-  const cut = part.truncated && (part.size ? t("first {n} of {size}", { n: fmtBytes(new Blob([part.body]).size), size: fmtBytes(part.size) }) : true);
-  return callBodyPanel(label, part.body, cut, id, key);
-}
-
 
 // An agent's model field, and whether any of its options come from provider p.
 function modelField(a) {

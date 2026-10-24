@@ -2,6 +2,62 @@
 // app.js, whose helpers and state it shares, and before start.js shows the
 // first page.
 let usageHidOpen = false; // the hidden agents shown under their line
+
+// What was read back from the archive, by "<date>/<id>": the archive's
+// copy, or {busy} while it is read, or {error}.
+const archivedCalls = new Map();
+
+function headersPanel(label, first, headers) {
+  const panel = el("section", "call-body");
+  const head = el("div", "call-body-head");
+  const lines = [first, ...Object.keys(headers || {}).sort().flatMap((k) => headers[k].map((v) => `${k}: ${v}`))].filter(Boolean);
+  head.append(el("span", "call-body-label", label), el("span", "grow"), copyBtn(lines.join("\n"), label));
+  const pre = el("pre");
+  pre.append(el("code", "", lines.join("\n")));
+  panel.append(head, pre);
+  return panel;
+}
+
+// The archived file, whole, however large: to the browser in magpie web,
+// to Downloads in the app (#447).
+async function downloadArchive(name, b) {
+  const [date, aid] = name.split("/");
+  const q = `date=${encodeURIComponent(date)}&id=${encodeURIComponent(aid)}`;
+  if (web) {
+    const a = el("a");
+    a.href = "/api/archive/file?" + q;
+    a.download = "";
+    a.click();
+    return;
+  }
+  b.classList.add("busy");
+  b.disabled = true;
+  try {
+    const r = await api("archive/export?" + q, {});
+    status(t("Saved to {path}", { path: r.path }), "ok");
+  } catch (e) {
+    status(t(e.message), "err");
+  } finally {
+    b.classList.remove("busy");
+    b.disabled = false;
+  }
+}
+
+// one body read back from the archive: shown, or, past 256 KB, only its
+// size — the server leaves it out — for the file to be downloaded whole
+function archiveBodyPanel(label, part, id, key = id) {
+  if (part.omitted) {
+    const panel = el("section", "call-body");
+    const head = el("div", "call-body-head");
+    head.append(el("span", "call-body-label", t(label)), el("span", "call-body-count", fmtBytes(part.size)));
+    panel.append(head, el("p", "call-archive-big", t("Too long to show here. Download the archive to read it whole.")));
+    return panel;
+  }
+  // cut where the archive stops: its limit, or 256 KB in one from before #447
+  const cut = part.truncated && (part.size ? t("first {n} of {size}", { n: fmtBytes(new Blob([part.body]).size), size: fmtBytes(part.size) }) : true);
+  return callBodyPanel(label, part.body, cut, id, key);
+}
+
 // A call the archive kept, by "<date>/<id>": read back when asked, and its
 // file downloaded, drawn again by redraw as it is read — under a request's
 // row on the Usage page, and under a Routing trace's (plugins/routing draws
