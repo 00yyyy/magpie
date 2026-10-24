@@ -560,8 +560,7 @@ type requestState struct {
 }
 
 func readRequestState(now time.Time) requestState {
-	sources := sessions.CallSources()
-	codexIdentities := sessions.CodexIdentities()
+	sources, codexIdentities := sessions.CallSourcesAndCodexIdentities()
 	slices.SortFunc(sources, func(a, b sessions.CallSource) int {
 		if n := a.Modified.Compare(b.Modified); n != 0 {
 			return n
