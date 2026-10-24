@@ -18250,7 +18250,7 @@ function quotaWindows(sub) {
     n.title = w.historyMissing ? text : text + "\n" + t(quotaLeft ? "Show how much of each window is used" : "Show how much of each window is left");
     n.disabled = !!w.historyMissing;
     n.onclick = () => setQuotaLeft(!quotaLeft);
-    labels.append(el("span", "", t(w.name)), n);
+    labels.append(el("span", "quota-name", t(w.name)), n);
     const track = el("div", "quota-track");
     const fill = el("i");
     fill.style.width = w.historyMissing ? "0%" : `${quotaFill(w)}%`;
