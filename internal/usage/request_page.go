@@ -418,7 +418,11 @@ func recordHash(path string, n int64) string {
 // requestState is what the calls read at now depend on: the gateway log's
 // snapshot, the agents' call files, other computers' days, Codex's thread
 // identities and what prices and names a call. A change to meta drops the
-// request index's chunks; a change to key, its pages.
+// request index's chunks; a change to key, its pages. Codex's thread
+// identities are in key alone: a chunk's rows don't hold them, the page
+// gives them to its rows as it is built, and every new Codex thread, a
+// subagent's too, dropped every chunk, so the next page read the whole
+// history again (#3493).
 type requestState struct {
 	sources         []sessions.CallSource
 	codexIdentities map[string]sessions.CodexIdentity
@@ -444,7 +448,7 @@ func readRequestState(now time.Time) requestState {
 	cfg := settings.Load()
 	prices, _ := json.Marshal(cfg.ModelPrices)
 	wires, _ := json.Marshal(cfg.ModelWires)
-	meta := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s", ids, codexIdentityKey, renamed, prices, wires, statKey(provider.Path()), statKey(catalog.CachePath()), clientAgentsKey())
+	meta := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s", ids, renamed, prices, wires, statKey(provider.Path()), statKey(catalog.CachePath()), clientAgentsKey())
 	h := sha256.New()
 	for _, current := range provider.All() {
 		fmt.Fprintf(h, "%q:%q:%v:%t:%t:%t;", current.ID, current.Where(), current.Catalogs(), current.IsPlugin(), current.Account == nil, current.Key != "")
@@ -462,6 +466,7 @@ func readRequestState(now time.Time) requestState {
 	h.Reset()
 	snapshot := readLogSnapshot()
 	fmt.Fprint(h, meta, snapshot.version, now.In(time.Local).Format("2006-01-02 MST"))
+	h.Write(codexIdentityKey)
 	for _, s := range sources {
 		fmt.Fprintf(h, "%s:%d:%d;", s.Path, s.Size, s.Modified.UnixNano())
 	}
