@@ -4042,6 +4042,8 @@ async function load(again) {
     // does: drawn again only on a change, with no skeleton between; on the
     // Overview, where the allowances are, that is opening them (#1588)
     if (view === "usage") await magpie.call("usage", "refresh", again);
+    // the Masking page names agents and providers from what came back
+    if (view === "masking") await magpie.call("masking", "refresh", again);
     // so is an open sync form (WebDAV, export, import): its passwords are
     // never sent back, so a rebuild would empty it
     if (view === "settings" && !syncOpen) await loadSettings();
@@ -21857,7 +21859,7 @@ async function discoveryOffWarning() {
 // renderRedact: what the gateway masks before a request goes to a vendor —
 // secrets, personal data, the user's own words — and puts back in what the
 // vendor answers. The page says it in three parts under what masking did
-// (renderMaskObs): how it is found (the local model first, then the
+// (Insights › Masking): how it is found (the local model first, then the
 // rules), what to mask, what is shared.
 function renderRedact(s, keep) {
   const box = $("#redactList"), find = $("#findList"), share = $("#shareList");
@@ -21929,7 +21931,13 @@ function renderRedact(s, keep) {
   // rides on that event: nothing goes without it
   if (!s.noStats) rowIn(share, t("Share the agents, providers and models I use"), t("Sent with that event, by magpie's own ids, with how many of each, and how often each partner was shown, opened and added; a provider you added yourself is only “custom”. No names, addresses, accounts, keys or usage"),
     onOff(!s.noUsageStats, (on) => savePrefs({ ...keep, noUsageStats: !on })));
-  renderMaskObs(s);
+  // what masking did is a page of its own, Insights › Masking
+  if (!featureHides($('#nav button[data-view="masking"]'))) {
+    const open = el("button", "", t("Open"));
+    open.type = "button";
+    open.onclick = () => openMaskRecord(0);
+    box.prepend(rowIn(box, t("What was masked"), t("Each request masking changed, what the vendor saw, and how, on Insights › Masking"), open));
+  }
 }
 
 // privacyModelRow: the local masking model (internal/pii), downloaded when
@@ -22016,13 +22024,7 @@ const MASK_BY = { rule: "Rules", yours: "Your rules", word: "Your words", model:
 const MASK_WHAT = { search: "Web search", image: "Image", video: "Video", decide: "System One", embeddings: "Embeddings", audio: "Audio" };
 const SHIELD = "M8 1.8 13 3.6v4.1c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5V3.6Z";
 const PLACEHOLDER = /\{\{[^{}\s]{1,64}\}\}/g;
-let maskS = null;            // the settings the card was drawn with
-let maskSum = null, maskSumDays = 0, maskAt = 0, maskBusy = null, maskBusyDays = 0;
-let maskDays = 7;            // the card's span, kept per machine
-try { if (localStorage.getItem("magpie.maskDays") === "30") maskDays = 30; } catch {}
-let maskDrawn = "";          // what the card says, so a redraw that changes nothing is skipped
-let maskView = null;         // the records, while they are open
-let maskSaw = null, maskSawAt = 0, maskSawBusy = false; // the newest records, for the lines the vendor saw
+let maskSum = null;          // the summary Insights › Masking read last: its kinds' colours
 const maskValues = new Map(); // placeholder → what it stood for, as this magpie told it
 const maskKindName = (k) => MASK_KINDS[k] ? t(MASK_KINDS[k]) : k;
 const maskByName = (b) => MASK_BY[b] ? t(MASK_BY[b]) : b;
@@ -22110,235 +22112,12 @@ function maskTipOn(anchor, v) {
   anchor.onmouseleave = anchor.onblur = maskTipOff;
 }
 
-// maskLoad reads the summary for the days shown, when what is kept is
-// older than 10s or for other days; forced, it reads again whatever is kept
-function maskLoad(force) {
-  const days = maskDays;
-  if (maskBusy && maskBusyDays === days) return maskBusy;
-  if (!force && maskSum && maskSumDays === days && Date.now() - maskAt < 10000) return null;
-  maskBusyDays = days;
-  const p = maskBusy = api("masking/summary?days=" + days).then((sum) => {
-    if (days !== maskDays) return;
-    maskSum = { days: [], kinds: [], agents: [], providers: [], values: [], by: {}, n: 0, distinct: 0, requests: 0, ...(sum || {}) };
-    maskSumDays = days;
-    maskAt = Date.now();
-  }).catch(() => {}).finally(() => { if (maskBusy === p) maskBusy = null; });
-  return p;
-}
-
-// renderMaskObs draws the card with the summary kept, and again when a
-// fresh one is in
-function renderMaskObs(s) {
-  maskS = s;
-  if (!providers && !maskProvAsked) {
-    maskProvAsked = true;
-    api("providers").then((r) => { maskProv = r; drawMaskObs(); if (maskView) drawMaskRecs(); }).catch(() => { maskProvAsked = false; });
-  }
-  if (maskView && maskView.lang !== document.documentElement.lang) drawMaskRecs();
-  drawMaskObs();
-  maskLoad()?.then(drawMaskObs);
-}
-// while Privacy is on screen the card keeps up with requests as they go
-setInterval(() => {
-  if (view !== "settings" || setShown !== "privacy" || document.hidden || !maskS) return;
-  maskLoad(true)?.then(drawMaskObs);
-  if (maskView && !maskView.busy) maskRefreshRecs();
-}, 15000);
-
-function drawMaskObs() {
-  const box = $("#maskObs");
-  if (!box || !maskS) return;
-  const s = maskS;
-  const sum = maskSumDays === maskDays ? maskSum : null;
-  const on = !!(s.redact || s.redactPersonal);
-  if (sum?.requests) maskSawLoad();
-  const saw = maskSawLines();
-  const key = JSON.stringify([document.documentElement.lang, maskDays, on, sum, saw?.texts, state.agents?.length, (providers || maskProv)?.providers?.length]);
-  if (key === maskDrawn && box.firstChild) return;
-  maskDrawn = key;
-  // it moves when it first has numbers to say, and for other days: not
-  // on every poll
-  const move = !!sum && box.dataset.drawn !== String(maskDays) && !stillMotion();
-  if (sum) box.dataset.drawn = String(maskDays);
-  maskTipOff();
-  box.replaceChildren();
-  box.classList.toggle("off", !on);
-
-  const head = el("div", "mo-head");
-  const words = el("div", "mo-title");
-  words.append(el("div", "mo-name", t("Kept from vendors")),
-    el("div", "mo-sub", on ? t("Masked on this computer before each request left it, and put back in each answer") : t("Masking is off: requests go to vendors as they are")));
-  head.append(words, el("span", "grow"));
-  if (sum?.requests || maskDays === 30) head.append(segs([["7", t("7 days")], ["30", t("30 days")]], String(maskDays), (v) => {
-    maskDays = +v;
-    try { localStorage.setItem("magpie.maskDays", v); } catch {}
-    maskLoad(true)?.then(drawMaskObs);
-  }));
-  box.append(head);
-  if (!sum) {
-    const sk = el("div", "mo-hero");
-    sk.append(el("span", "skeleton mo-sk-num"), el("span", "skeleton mo-sk-chart"));
-    box.append(sk);
-    return;
-  }
-  if (!sum.requests && !on) {
-    box.append(el("div", "mo-empty", t("Turn on Mask secrets or Mask personal data below, and what is kept from vendors shows here, request by request")));
-    return;
-  }
-
-  // the number in full; beside it what makes it up, and the days
-  const hero = el("div", "mo-hero"), count = el("div", "mo-count");
-  const num = el("div", "mo-num", sum.n.toLocaleString(intlLang()));
-  const unit = el("div", "mo-unit", t(sum.n === 1 ? "value masked" : "values masked"));
-  unit.append(el("span", "", t(maskDays === 30 ? "30 days" : "7 days")));
-  count.append(num, unit);
-  const stats = el("div", "mo-stats");
-  const stat = (label, n) => { const r = el("div", "mo-stat"); r.append(el("span", "", label), el("b", "", fmtN(n))); stats.append(r); };
-  if (sum.requests) {
-    stat(t("Different values"), sum.distinct);
-    stat(t("Requests"), sum.requests);
-    if (sum.blocked) stat(t("Held back"), sum.blocked);
-    if (sum.warned) stat(t("Sent as written"), sum.warned);
-  } else stats.append(el("div", "mo-stat", t("Nothing yet in these days")));
-  const chart = el("div", "mo-days");
-  stats.append(chart);
-  hero.append(count, stats);
-  box.append(hero);
-  maskStrip(chart, sum.days, move);
-  if (move && sum.n) maskCountUp(num, sum.n);
-  if (!sum.requests) {
-    box.append(el("div", "mo-empty", t("A request that carries a key, a password or personal data shows here as it goes")));
-    return;
-  }
-
-  // agents, this computer, providers; then the newest request
-  if (sum.agents.length && sum.providers.length) box.append(maskFlow(sum, move));
-  if (saw) box.append(maskSawPane(saw, move));
-
-  // what was kept and what found it; beside them the values masked most
-  const low = el("div", "mo-low"), ledger = el("div", "mo-ledger");
-  if (sum.kinds.length) {
-    const top = sum.kinds.slice(0, 6), rest = sum.kinds.slice(6);
-    const rows = top.map((k) => ({ n: k.n, label: maskKindName(k.name), open: { kind: k.name }, tip: t("Show the requests with {kind}", { kind: maskKindName(k.name) }) }));
-    if (rest.length) rows.push({ n: rest.reduce((a, k) => a + k.n, 0), label: t("Other") });
-    ledger.append(maskLedger(t("What was kept"), "kind", rows));
-  }
-  const by = Object.keys(MASK_BY).filter((b) => sum.by?.[b]).map((b) => ({ n: sum.by[b], label: maskByName(b), open: { by: b }, model: b === "model",
-    tip: b === "model" ? t(sum.by.model === 1 ? "1 value found by the local model, which no rule recognises" : "{n} values found by the local model, which no rule recognises", { n: fmtN(sum.by.model) }) : "" }));
-  if (by.length) ledger.append(maskLedger(t("Found by"), "by", by));
-  low.append(ledger);
-  if (sum.values.length) {
-    const sec = el("div", "mo-top"), lh = el("div", "mo-lh");
-    lh.append(el("span", "label", t("Masked most")), el("span", "grow"), el("span", "mo-hint", t("Point at one to see what it was")));
-    const wrap = el("div", "mo-values"), max = sum.values[0].n || 1;
-    for (const [i, v] of sum.values.slice(0, 8).entries()) {
-      const c = el("button", "mo-val"), sh = maskShape(v.head, v.len), bar = el("span", "bar"), f = el("i");
-      c.type = "button";
-      c.setAttribute("aria-label", maskKindName(v.kind) + " " + sh);
-      f.style.width = Math.max(3, (100 * v.n) / max) + "%";
-      bar.append(f);
-      c.append(el("span", "i", String(i + 1).padStart(2, "0")), el("span", "sh", sh), el("span", "by", maskByName(v.by)), bar, el("span", "x", fmtN(v.n)));
-      maskTipOn(c, { p: v.p, kind: v.kind, by: v.by, meta: t(v.requests === 1 ? "In 1 request, {when}" : "In {n} requests, most recently {when}", { n: fmtN(v.requests), when: ago(v.last) }) });
-      c.onclick = () => maskOpenRecords({ kind: v.kind });
-      wrap.append(c);
-    }
-    sec.append(lh, wrap);
-    low.append(sec);
-  }
-  box.append(low);
-
-  const foot = el("div", "mo-foot");
-  foot.append(el("span", "mo-note", t("Kept on this computer for 30 days, without the values themselves")));
-  const open = el("button", "text mo-open");
-  open.append(el("span", "", t("View records")), svg(CHEV_R, 11, 1.7));
-  open.onclick = () => maskOpenRecords({});
-  foot.append(open);
-  box.append(foot);
-  // each part rises out of a blur
-  if (move) for (const [i, n] of [...box.children].slice(1).entries()) n.animate([{ opacity: 0, transform: "translateY(8px)", filter: "blur(6px)" }, {}], { duration: 1100, delay: i * 120, easing: "cubic-bezier(.2, .7, .1, 1)", fill: "backwards" });
-}
-
-function maskCountUp(node, n) {
-  const start = performance.now(), ms = 1100;
-  const step = (now) => {
-    if (!node.isConnected) return;
-    const p = Math.min(1, (now - start) / ms);
-    const e = p === 1 ? 1 : 1 - Math.pow(2, -10 * p);
-    node.textContent = Math.round(n * e).toLocaleString(intlLang());
-    if (p < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-}
-
-// maskStrip: the values masked each day, a bar a day on a hairline, today
-// in the accent; the day pointed at said over it
-function maskStrip(box, days, move) {
-  const total = days.reduce((a, d) => a + d.n, 0);
-  box.setAttribute("role", "img");
-  box.setAttribute("aria-label", t("{n} values masked over {days} days", { n: fmtN(total), days: days.length }));
-  if (!days.length) return;
-  const max = Math.max(1, ...days.map((d) => d.n));
-  const bars = el("div", "mo-bars" + (days.length > 14 ? " many" : ""));
-  const tip = el("div", "mo-ctip");
-  tip.hidden = true;
-  const fmt = (d) => d === days.at(-1).day ? t("Today") : new Date(d + "T00:00").toLocaleDateString(intlLang(), { month: "short", day: "numeric" });
-  days.forEach((d, i) => {
-    const b = el("span", "mo-day" + (i === days.length - 1 ? " now" : "") + (d.n ? "" : " zero"));
-    const f = el("i");
-    if (d.n) f.style.height = Math.max(5, (100 * d.n) / max) + "%";
-    b.append(f);
-    b.onpointerenter = () => {
-      tip.hidden = false;
-      tip.textContent = `${fmt(d.day)} · ${t(d.n === 1 ? "1 value masked" : "{n} values masked", { n: fmtN(d.n) })} · ${t(d.requests === 1 ? "1 request" : "{n} requests", { n: fmtN(d.requests) })}`;
-      const w = tip.offsetWidth, W = box.clientWidth, x = b.offsetLeft + b.offsetWidth / 2;
-      tip.style.left = Math.max(w / 2, Math.min(x, W - w / 2)) + "px";
-    };
-    b.onpointerleave = () => { tip.hidden = true; };
-    if (move && d.n) f.animate([{ transform: "scaleY(0)" }, { transform: "none" }], { duration: 760, delay: 160 + (i * 520) / days.length, easing: "cubic-bezier(.32, .72, 0, 1)", fill: "backwards" });
-    bars.append(b);
-  });
-  const axis = el("div", "mo-axis");
-  axis.append(el("span", "", fmt(days[0].day)), el("span", "", fmt(days.at(-1).day)));
-  box.append(bars, axis, tip);
-}
-
-// maskLedger: a column of the breakdown; a row opens its records
-function maskLedger(title, kind, rows) {
-  const col = el("div", "mo-ledg " + kind);
-  col.append(el("div", "label", title));
-  for (const r of rows) {
-    const b = el("button", "mo-row" + (r.model ? " model" : ""));
-    b.type = "button";
-    b.append(el("span", "nm", r.label), el("b", "", fmtN(r.n)));
-    if (r.open) {
-      if (r.tip) b.title = r.tip;
-      b.onclick = () => maskOpenRecords(r.open);
-    } else b.disabled = true;
-    col.append(b);
-  }
-  return col;
-}
-
 // maskSnipTexts: a record's lines around its values, each piece of text
 // once where values side by side share it
 function maskSnipTexts(r) {
   const core = (x) => x.replace(/^…|…$/g, "");
   const all = [...new Set(Object.values(r.snips || {}))];
   return all.filter((x, i) => !all.some((y, j) => j != i && (y.length > x.length || y.length == x.length && j < i) && y.includes(core(x))));
-}
-// the newest records, read again with the summary; their lines live in
-// memory only, so there are none after a restart
-function maskSawLoad() {
-  if (maskSawBusy || Date.now() - maskSawAt < 14000) return;
-  maskSawBusy = true;
-  api("masking/records?limit=12").then((r) => { maskSaw = r?.records || []; })
-    .catch(() => {})
-    .finally(() => { maskSawBusy = false; maskSawAt = Date.now(); drawMaskObs(); });
-}
-// the newest record with lines, up to three of them
-function maskSawLines() {
-  const r = (maskSaw || []).find((r) => maskSnipTexts(r).length);
-  return r && { r, texts: maskSnipTexts(r).slice(0, 3).map((x) => x.replace(/\s+/g, " ")), info: new Map((r.values || []).map((x) => [x.p, x])) };
 }
 // maskPlace: a placeholder as the text carried it, in its kind's colour,
 // what it stood for shown while pointed at
@@ -22350,342 +22129,6 @@ function maskPlace(cls, p, x) {
   maskTipOn(mark, { p, kind, by: x?.b || "known" });
   return mark;
 }
-// maskSawPane: the newest request's lines as the vendor got them, or as
-// written here, each value read from this magpie's memory when asked
-function maskSawPane(saw, move) {
-  const pane = el("div", "mo-saw"), r = saw.r;
-  const h = el("div", "mo-lh");
-  h.append(el("span", "label", t("Latest request")), el("span", "mo-hint", [maskWho(r.agent, "agent").name + " → " + maskWho(r.provider, "provider").name, ago(r.t), t(r.n === 1 ? "1 value masked" : "{n} values masked", { n: fmtN(r.n) })].join(" · ")), el("span", "grow"));
-  const body = el("div", "mo-lines");
-  const fill = (here) => {
-    maskTipOff();
-    body.replaceChildren();
-    let k = 0;
-    for (const text of saw.texts) {
-      const s = el("div", "mo-snip");
-      let at = 0;
-      for (const m of text.matchAll(PLACEHOLDER)) {
-        s.append(document.createTextNode(text.slice(at, m.index)));
-        let mark;
-        if (here) {
-          mark = el("span", "mo-orig", m[0]);
-          maskValue(m[0]).then((v) => { if (v === null) mark.classList.add("gone"); else mark.textContent = v; });
-        } else {
-          mark = maskPlace("mo-ph", m[0], saw.info.get(m[0]));
-          // a marker drawn over the value, then lifted
-          const ink = { backgroundColor: "var(--accent)", color: "transparent" };
-          if (move) mark.animate([{ clipPath: "inset(0 100% 0 0)", ...ink }, { clipPath: "inset(0)", ...ink, offset: .55 }, { clipPath: "inset(0)" }],
-            { duration: 900, delay: 900 + k++ * 180, easing: "cubic-bezier(.65, 0, .35, 1)", fill: "backwards" });
-        }
-        s.append(mark);
-        at = m.index + m[0].length;
-      }
-      s.append(document.createTextNode(text.slice(at)));
-      body.append(s);
-    }
-    move = false;
-  };
-  h.append(segs([["v", t("What the vendor saw")], ["h", t("As written here")]], "v", (v) => fill(v === "h")));
-  fill(false);
-  pane.append(h, body);
-  return pane;
-}
-
-// maskFlow: hairlines from the agents into this computer, uneven as
-// written, and out of it to the providers, even as placeholders
-function maskFlow(sum, move) {
-  const sec = el("div", "mo-sec mo-fl"), flow = el("div", "mo-flow");
-  const side = (list, kind) => {
-    const shown = list.slice(0, 4), rest = list.slice(4);
-    const rows = shown.map((x) => ({ id: x.name, n: x.n, ...maskWho(x.name, kind) }));
-    if (rest.length) rows.push({ id: "", n: rest.reduce((a, x) => a + x.n, 0), name: t("{n} more", { n: rest.length }) });
-    const col = el("div", "mo-col " + kind);
-    for (const r of rows) {
-      const b = el("button", "mo-node");
-      b.type = "button";
-      b.append(el("span", "nm", r.name), el("span", "ct", fmtN(r.n)));
-      if (r.id) {
-        b.title = t("Show what {name} sent masked", { name: r.name });
-        b.onclick = () => maskOpenRecords({ [kind]: r.id });
-      } else b.disabled = true;
-      col.append(b);
-    }
-    return [col, rows];
-  };
-  const [from, fromRows] = side(sum.agents, "agent");
-  const [to, toRows] = side(sum.providers, "provider");
-  const mid = el("div", "mo-mid");
-  const rowH = 48, H = Math.max(fromRows.length, toRows.length, 2) * rowH;
-  const max = Math.max(...fromRows.map((r) => r.n), ...toRows.map((r) => r.n), 1);
-  const hub = el("span", "mo-hub");
-  hub.append(svg(SHIELD, 16, 1.3));
-  // drawn in the middle's own pixels on each resize: a stretched viewBox
-  // would bend the hairlines
-  const s = sv("svg", { "aria-hidden": "true" });
-  let drawnW = 0;
-  const draw = () => {
-    const W = Math.round(mid.clientWidth);
-    if (!W || W === drawnW) return;
-    drawnW = W;
-    s.setAttribute("viewBox", `0 0 ${W} ${H}`);
-    s.replaceChildren();
-    const m = W / 2, still = stillMotion(), lines = [];
-    const add = (tag, a, to = s) => { const n = sv(tag, a); to.append(n); return n; };
-    const curve = (x0, y0, x1, y1) => `M${x0},${y0}C${(x0 + x1) / 2},${y0} ${(x0 + x1) / 2},${y1} ${x1},${y1}`;
-    const bundle = (rows, out) => {
-      const ks = rows.map((r) => Math.max(1, Math.round(24 * r.n / max))), all = ks.reduce((a, k) => a + k, 0);
-      let j = 0, rnd = out ? 11 : 7;
-      rows.forEach((r, i) => {
-        const y = (H - rows.length * rowH) / 2 + (i + .5) * rowH;
-        for (let q = 0; q < ks[i]; q++, j++) {
-          const at = all > 1 ? H * (.2 + .6 * j / (all - 1)) : H / 2;
-          rnd = (rnd * 16807) % 2147483647;
-          const end = y + (q - (ks[i] - 1) / 2) * 1.6 + (out ? 0 : (rnd % 30 - 15) / 10);
-          const d = out ? curve(m, at, W, end) : curve(0, end, m, at);
-          lines.push(add("path", { d, pathLength: 1, class: "mo-th" + (out ? " out" : "") + (ks[i] === 1 ? " one" : ""), "stroke-opacity": ks[i] === 1 ? (out ? .8 : .4) : out ? .42 : .07 + (rnd % 20) / 100 }));
-          // a value goes in round, a placeholder out square
-          if (q === ks[i] >> 1 && !still) for (let k = 0, dots = 1 + Math.round(2 * r.n / max); k < dots; k++) {
-            const dur = 1.7 + i * .5, begin = (out ? dur : 0) + k * 2 * dur / dots + "s";
-            const z = out ? 1.8 : 1.7, dot = add("rect", { x: -z, y: -z, width: 2 * z, height: 2 * z, rx: out ? .6 : z, class: "mo-dot" + (out ? " out" : "") });
-            const a = { dur: dur + "s", begin, repeatCount: "indefinite" };
-            add("animateMotion", { path: d, ...a }, dot);
-            add("animate", { attributeName: "opacity", values: "0;1;1;0", keyTimes: "0;.1;.85;1", ...a }, dot);
-          }
-        }
-      });
-    };
-    bundle(fromRows, false);
-    bundle(toRows, true);
-    // this computer: a ticked line, and a mark going down it
-    add("line", { x1: m, y1: 0, x2: m, y2: H, class: "mo-mem" });
-    for (let y = 0; y <= H; y += 19) add("line", { x1: m - 3, y1: y, x2: m + 3, y2: y, class: "mo-tick" });
-    if (!still) add("rect", { x: m - 1, y: 0, width: 2, height: 22, rx: 1, class: "mo-scan" }).style.setProperty("--h", H - 22 + "px");
-    // drawn in once, the way in first
-    if (move) lines.forEach((p) => {
-      p.animate([{ strokeDashoffset: 1 }, {}], { duration: 2400, delay: p.classList.contains("out") ? 700 : 300, easing: "cubic-bezier(.3, .6, .1, 1)", fill: "backwards" });
-    });
-    move = false;
-  };
-  mid.append(s, hub);
-  flow.style.height = H + "px";
-  flow.append(from, mid, to);
-  new ResizeObserver(draw).observe(mid);
-  sec.append(flow, el("div", "mo-cap", t("Masked here, on this computer")));
-  return sec;
-}
-
-// ---- the records: each request masking changed, newest first ----
-function maskOpenRecords(filter, focus) {
-  maskTipOff();
-  maskView = { filter: { kind: "", by: "", agent: "", provider: "", ...filter }, records: [], more: false, busy: true, open: new Set(), focus: focus || 0, one: null, lang: "" };
-  $("#setPage-privacy").classList.add("recs");
-  drawMaskRecs();
-  maskFetchRecs();
-  if (focus) api("masking/record?key=" + focus)
-    .then((r) => { if (maskView?.focus === focus) { maskView.one = r; maskView.open.add(focus); drawMaskRecs(); } })
-    .catch(() => { if (maskView?.focus === focus) { maskView.one = false; drawMaskRecs(); } });
-}
-function maskCloseRecords() {
-  maskTipOff();
-  maskView = null;
-  $("#setPage-privacy").classList.remove("recs");
-  const box = $("#maskRecs");
-  box.hidden = true;
-  box.replaceChildren();
-}
-function maskQuery(before) {
-  const q = new URLSearchParams({ limit: "40" });
-  if (before) q.set("before", before);
-  for (const [k, v] of Object.entries(maskView.filter)) if (v) q.set(k, v);
-  return "masking/records?" + q;
-}
-function maskFetchRecs(more) {
-  const v = maskView;
-  v.busy = true;
-  v.error = "";
-  if (more) drawMaskRecs();
-  api(maskQuery(more ? v.records.at(-1)?.key : 0))
-    .then((r) => {
-      if (maskView !== v) return;
-      const got = r?.records || [];
-      v.records = more ? [...v.records, ...got] : got;
-      v.more = !!r?.more;
-    })
-    .catch((e) => { if (maskView === v) v.error = e.message; })
-    .finally(() => { if (maskView === v) { v.busy = false; drawMaskRecs(); } });
-}
-// new records come in over the ones shown, which keep their place
-function maskRefreshRecs() {
-  const v = maskView;
-  if (!v.records.length) return maskFetchRecs();
-  api(maskQuery(0)).then((r) => {
-    if (maskView !== v || !v.records.length) return;
-    const fresh = (r?.records || []).filter((x) => x.key > v.records[0].key);
-    if (fresh.length) { v.records = [...fresh, ...v.records]; drawMaskRecs(); }
-  }).catch(() => {});
-}
-
-function drawMaskRecs() {
-  const v = maskView, box = $("#maskRecs");
-  if (!v || !box) return;
-  v.lang = document.documentElement.lang;
-  maskTipOff();
-  box.hidden = false;
-  box.replaceChildren();
-  const head = el("div", "mr-head");
-  const back = el("button", "text mr-back");
-  back.type = "button";
-  back.append(svg("m9.5 4.5-3 3.5 3 3.5", 12, 1.7), el("span", "", t("Privacy")));
-  back.onclick = maskCloseRecords;
-  head.append(back, el("span", "mr-title", t("What was masked")));
-  box.append(head);
-
-  const sum = maskSum || {};
-  const bar = el("div", "mr-filters");
-  const pick = (key, all, title, opts) => {
-    const b = el("button", "sess-pick");
-    b.type = "button";
-    if (v.filter[key] && !opts.some((o) => o.v === v.filter[key])) opts.unshift({ v: v.filter[key], name: v.filter[key] });
-    sessPick(b, all, v.filter[key], opts, title, (val) => {
-      v.filter[key] = val || "";
-      v.focus = 0;
-      v.one = null;
-      maskFetchRecs();
-    });
-    if (v.filter[key]) b.firstChild.textContent = opts.find((o) => o.v === v.filter[key])?.name || v.filter[key];
-    bar.append(b);
-  };
-  pick("kind", "Every kind", "Kind", (sum.kinds || []).map((k) => ({ v: k.name, name: maskKindName(k.name) })));
-  pick("by", "Found by anything", "Found by", Object.keys(sum.by || {}).filter((b) => sum.by[b]).map((b) => ({ v: b, name: maskByName(b) })));
-  pick("agent", "Every agent", "Agent", (sum.agents || []).map((a) => ({ v: a.name, name: maskWho(a.name, "agent").name })));
-  pick("provider", "Every provider", "Provider", (sum.providers || []).map((p) => ({ v: p.name, name: maskWho(p.name, "provider").name })));
-  box.append(bar);
-
-  // the request a badge was clicked on, first and open
-  if (v.focus) {
-    const h = el("div", "row-head");
-    h.append(el("span", "label", t("This request")));
-    const list = el("div", "list mr-group");
-    if (v.one) list.append(maskRecordRow(v.one, v));
-    else list.append(el("div", "mr-none", v.one === false ? t("This request's record is gone: records are kept for 30 days") : t("Loading…")));
-    box.append(h, list);
-  }
-  if (v.error) box.append(el("div", "mr-none err", t(v.error)));
-  else if (!v.records.length) {
-    if (!v.busy) box.append(el("div", "mr-none", Object.values(v.filter).some(Boolean) ? t("Nothing masked matches these filters") : t("Nothing masked yet")));
-    else if (!v.focus) box.append(el("div", "mr-none", t("Loading…")));
-  }
-  let day = "", list = null;
-  for (const r of v.records) {
-    if (r.key === v.focus && v.one) continue;
-    const d = new Date(r.t).toDateString();
-    if (d !== day) {
-      day = d;
-      const h = el("div", "row-head");
-      h.append(el("span", "label", maskDayName(r.t)));
-      list = el("div", "list mr-group");
-      box.append(h, list);
-    }
-    list.append(maskRecordRow(r, v));
-  }
-  if (v.more) {
-    const more = el("button", "text mr-more", v.busy ? t("Loading…") : t("Load more"));
-    more.disabled = v.busy;
-    more.onclick = () => maskFetchRecs(true);
-    box.append(more);
-  }
-}
-
-function maskRecordRow(r, v) {
-  const item = el("div", "mr-item");
-  const row = el("button", "mr-row");
-  row.type = "button";
-  const chev = el("span", "mr-chev");
-  chev.append(svg(CHEV_R, 11, 1.6));
-  const when = el("span", "mr-time", new Date(r.t).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }));
-  const route = el("span", "mr-route");
-  const a = maskWho(r.agent, "agent"), p = maskWho(r.provider, "provider");
-  if (r.agent) {
-    if (a.icon) route.append(icon(a.icon));
-    route.append(el("span", "who", a.name), el("span", "arrow", "→"));
-  }
-  if (p.icon && r.provider) route.append(icon(p.icon));
-  route.append(el("span", "who", r.provider ? p.name : t("A vendor")));
-  if (r.model) route.append(el("span", "model", "· " + r.model));
-  if (r.blocked) route.append(el("span", "what held", t("Held back")));
-  else if (r.what && r.what !== "chat") route.append(el("span", "what", MASK_WHAT[r.what] ? t(MASK_WHAT[r.what]) : r.what));
-  const kinds = el("span", "mr-kinds");
-  const by = {};
-  for (const x of r.values || []) by[x.k] = (by[x.k] || 0) + (x.n || 1);
-  const ranked = Object.entries(by).sort((x, y) => y[1] - x[1]);
-  for (const [k, n] of ranked.slice(0, 3)) {
-    const c = el("span", "mr-kind");
-    c.append(maskDot(k), el("span", "", maskKindName(k)), el("b", "", "×" + fmtN(n)));
-    kinds.append(c);
-  }
-  if (ranked.length > 3) kinds.append(el("span", "mr-kind more", "+" + (ranked.length - 3)));
-  const n = el("span", "mr-n", fmtN(r.n));
-  n.title = t(r.n === 1 ? "1 value masked" : "{n} values masked", { n: fmtN(r.n) });
-  row.append(chev, when, route, kinds, n);
-  item.append(row);
-  const set = (open) => {
-    item.classList.toggle("open", open);
-    row.setAttribute("aria-expanded", String(open));
-  };
-  set(v.open.has(r.key));
-  if (v.open.has(r.key)) item.append(maskRecordBody(r));
-  row.onclick = () => {
-    const open = !v.open.has(r.key);
-    if (open) v.open.add(r.key); else v.open.delete(r.key);
-    set(open);
-    maskTipOff();
-    const had = item.querySelector(".mr-body");
-    if (!open) { if (had) sheet(had, false, () => had.remove()); return; }
-    had?.remove();
-    const body = maskRecordBody(r);
-    item.append(body);
-    sheet(body, true);
-  };
-  return item;
-}
-
-// maskRecordBody: each value the request had masked, and the text around
-// it as the vendor saw it, each placeholder showing what it was while it is
-// pointed at
-function maskRecordBody(r) {
-  const body = el("div", "mr-body");
-  const vals = el("div", "mr-vals");
-  for (const x of r.values || []) {
-    const line = el("div", "mr-val");
-    const shape = el("span", "mr-shape" + (x.known ? " known" : ""), maskShape(x.h, x.l));
-    if (x.known) {
-      shape.tabIndex = 0;
-      maskTipOn(shape, { p: x.p, kind: x.k, by: x.b });
-    }
-    line.append(maskDot(x.k), el("span", "mr-k", maskKindName(x.k)), shape, el("span", "mr-by" + (x.b === "model" ? " model" : ""), maskByName(x.b)));
-    if (x.n > 1) line.append(el("span", "mr-x", "×" + fmtN(x.n)));
-    if (x.a === "warn") line.append(el("span", "mr-act warn", t("Sent as written")));
-    else if (x.a === "block") line.append(el("span", "mr-act block", t("Held back")));
-    vals.append(line);
-  }
-  body.append(vals);
-  const snips = maskSnipTexts(r).map((x) => [, x]);
-  if (!snips.length) body.append(el("div", "mr-note", t("The text around them was kept in memory only, and magpie has restarted since")));
-  const info = new Map((r.values || []).map((x) => [x.p, x]));
-  for (const [, text] of snips) {
-    const s = el("div", "mr-snip");
-    let at = 0;
-    for (const m of text.matchAll(PLACEHOLDER)) {
-      s.append(document.createTextNode(text.slice(at, m.index)));
-      s.append(maskPlace("mr-ph", m[0], info.get(m[0])));
-      at = m.index + m[0].length;
-    }
-    s.append(document.createTextNode(text.slice(at)));
-    body.append(s);
-  }
-  return body;
-}
-
 // maskedBadge: what masking swapped in one request (gateway's Masked), for
 // Recent calls and the Routing page; it opens that request's record
 function maskedBadge(m) {
@@ -22703,11 +22146,11 @@ function maskedBadge(m) {
   b.onkeydown = (e) => e.stopPropagation(); // Enter on it isn't the row's
   return b;
 }
+// openMaskRecord: Insights › Masking, on request key when there is one; the
+// tray panel opens the window on it
 function openMaskRecord(key) {
-  openSettings();
-  if (mode !== "window") return;
-  setSetTab("privacy", true);
-  maskOpenRecords({}, key);
+  if (mode !== "window") return void api("window/main?view=masking" + (key ? "&key=" + key : ""), {}).catch(() => {});
+  show("masking").then((went) => { if (went !== false && key && view === "masking") magpie.call("masking", "focus", key); });
 }
 
 function renderOTel(s, keep) {
