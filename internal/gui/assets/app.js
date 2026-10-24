@@ -3979,16 +3979,22 @@ if (mode === "window") {
 // extra is room about to be taken (or given back), e.g. by agents unrolling;
 // glide moves the panel's edge there over time instead of at once.
 // The panel is as tall as its tallest tab, not the one showing, so it keeps
-// its height as the tabs change and a shorter tab leaves room below (#124):
-// every tab is laid out at once for the measure, before anything is drawn.
+// its height as the tabs change and a shorter tab leaves room below (#124).
+// Each tab counts its view's padding and margins too (sections alone left
+// a scrollbar), all laid out at once: hiding the open tab ends its motion.
 function fit(extra = 0, glide) {
   if (mode !== "panel") return;
-  const body = document.body, tab = body.dataset.ptab;
+  const body = document.body, view = $("#view-agents"), tab = body.dataset.ptab, vs = getComputedStyle(view);
   delete body.dataset.ptab;
-  // extra is only ever the agents' (a row opening, the scroll unrolling)
-  const tallest = Math.max($("#agents").offsetHeight + extra, $("#panelQuota").offsetHeight, $("#panelRouting").offsetHeight, $("#panelUsage").offsetHeight);
+  const need = { agents: extra, usage: 0, stats: 0, routing: 0 };
+  for (const c of view.children) {
+    const cs = getComputedStyle(c), px = cs.display === "none" ? 0 : c.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+    const only = { agentsLead: "agents", agents: "agents", panelQuota: "usage", panelUsage: "stats", panelRouting: "routing" }[c.id];
+    for (const t in need) if (!only || only === t) need[t] += px;
+  }
+  let h = body.clientHeight - view.offsetHeight + parseFloat(vs.paddingTop) + parseFloat(vs.paddingBottom) + Math.max(...Object.values(need));
   if (tab) body.dataset.ptab = tab;
-  const h = $(".top").offsetHeight + $("#ptabs").offsetHeight + tallest + $(".foot").offsetHeight + 4;
+  h = Math.ceil(h);
   if (h === fit.last) return;
   fit.last = h;
   const still = !glide || calm();

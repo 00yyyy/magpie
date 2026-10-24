@@ -6458,7 +6458,7 @@ function routingPage(part) {
     if (picks) out.push(picks);
     if (!offMsg && loaded && rs.length) out.push(pStage);
     if (offMsg) out.push(el("p", "pr-none", t(offMsg)));
-    else if (!loaded) for (let i = 0; i < 3; i++) out.push(el("span", "skeleton pr-sk-row"));
+    else if (!loaded) out.push(...pGhost());
     else if (!rs.length) {
       const p = el("div", "pr-none");
       p.append(el("b", "", t("No request yet")), t("Every request an agent sends to magpie shows up here, routed for real."));
@@ -6473,6 +6473,28 @@ function routingPage(part) {
     pDraw();
     pWake();
     fit();
+  }
+  // pGhost holds the tab's place while the trace is on its way: the stage
+  // and P_ROWS requests, laid out as they will be and drawn as skeletons,
+  // so the panel, fitted to its tallest tab, doesn't grow when they come
+  // (CyberCaius on Discord). A shorter skeleton had the panel grow on the
+  // first open, and a scrollbar show till it did.
+  function pGhost() {
+    const stage = el("div", "skeleton pr-ghost");
+    stage.append(el("div", "pr-stage"));
+    const list = el("div", "pr-list");
+    for (let i = 0; i < P_ROWS; i++) {
+      const row = el("span", "pr-req");
+      const asked = el("span", "pr-a");
+      asked.append(el("span", "pr-who", "\u00a0"), el("code", "m", "\u00a0"));
+      const line = el("span", "pr-line");
+      line.append(el("span", "pr-to", "\u00a0"), el("span", "meta", "\u00a0"));
+      row.append(asked, el("span", "at", "\u00a0"), line);
+      list.append(row);
+    }
+    const rows = el("div", "skeleton pr-ghost");
+    rows.append(list);
+    return [stage, rows];
   }
   // a Manual group's model, switched here as its card's radios do (#2489,
   // Jerell.OvO on Discord): CC Switch's one provider on at a time, from
@@ -6582,5 +6604,8 @@ function routingPage(part) {
   new ResizeObserver(fitSoon).observe(box);
   words();
   start();
+  // the tray panel's line of today's totals is asked for at once, not
+  // after the trace's first answer, which it doesn't need (CyberCaius)
+  if (pBox) loadToday();
   poll();
 }

@@ -4073,7 +4073,8 @@ body.window .row.agent.gone > .ag-conn { margin-left: auto; }
 .guide-more { color: var(--muted); font-size: 12px; }
 body.panel .guide { padding: 10px 12px 4px; border-radius: 10px; }
 body.panel .guide-step { gap: 10px; padding: 8px 0; }
-body.panel:not([data-ptab="agents"]) #agentsLead { display: none; }
+/* no tab is fit()'s measure, every section shown */
+body.panel[data-ptab]:not([data-ptab="agents"]) #agentsLead { display: none; }
 /* the first line keeps its place opened: a line of its own height, the
    row not centring what it holds; no gap between its lines, which the
    opened part couldn't fold away: it starts where the shut row ended */
