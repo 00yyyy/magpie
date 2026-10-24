@@ -402,6 +402,13 @@ type Usage struct {
 
 // billed is what the request is billed for: its own count, and what it
 // counted of earlier ones (Deferred).
+// cacheNotCounted is whether the vendor counted no cache for this usage:
+// it said so (cacheUnknown) and no try of it reported a cache token. The
+// Routing page and the ledger leave such a prompt out of a hit rate (#3464).
+func (u Usage) cacheNotCounted() bool {
+	return u.cacheUnknown && u.CacheRead+u.CacheWrite == 0
+}
+
 func (u Usage) billed() Usage {
 	if d := u.Deferred; d != nil {
 		u.Input += d.Input

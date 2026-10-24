@@ -473,8 +473,9 @@ function renderUsage() {
   // them), so what was written counts in the prompt too: left out, a prompt
   // written to the cache again at every turn showed a rate near 100%. The
   // written count is secondary and only fits in the tooltip.
-  const promptTokens = u.input + u.cache_read + u.cache_write;
-  const hit = u.cache_read && promptTokens ? t("hit rate {p}", { p: Math.round(100 * u.cache_read / promptTokens) + "%" }) : "";
+  // a vendor that counts no cache (cache_unknown) is left out (#3464)
+  const hitRate = cacheHitOf(u);
+  const hit = u.cache_read && hitRate !== null ? t("hit rate {p}", { p: Math.round(100 * hitRate) + "%" }) : "";
   tile(fmtN(u.cache_read), t("cache read"), hit, u.cache_write ? t("{n} written", { n: fmtN(u.cache_write) }) + cacheTTLs(u, fmtN) : "");
   tile(fmtN(u.reasoning), t("reasoning"), t("inside output"));
   tile(String(u.calls), t(u.calls === 1 ? "call" : "calls"), [u.errors ? t("{n} failed", { n: u.errors }) : "", u.retried ? t("{n} answered on a retry", { n: u.retried }) : "", u.unpriced ? t("{n} unpriced", { n: u.unpriced }) : ""].filter(Boolean).join(" · "), u.unpriced ? unpricedCallsWhy(u.unpriced) : "");
@@ -547,8 +548,8 @@ function renderUsage() {
       const num = el("div", "num");
       // how much of its prompt came from the cache, counted as the cache
       // read tile counts it (#925)
-      const prompt = g.input + g.cache_read + (g.cache_write || 0);
-      const hit = g.cache_read && prompt ? " · " + t("hit rate {p}", { p: Math.round(100 * g.cache_read / prompt) + "%" }) : "";
+      const hitRate = cacheHitOf(g);
+      const hit = g.cache_read && hitRate !== null ? " · " + t("hit rate {p}", { p: Math.round(100 * hitRate) + "%" }) : "";
       num.append(el("b", "", fmtN(usageTokens(g))), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "") + hit));
       r.append(num);
       r.append(el("div", "cost", fmtCost(g) ? "≈" + fmtCost(g) : ""));
@@ -938,7 +939,7 @@ function ledDetail(r, cols) {
   // whole of it, where the row's cache columns are out of sight (#1839).
   // In leaves the cache out, as Anthropic counts it.
   if (r.in || r.out || r.cache_read || r.cache_write || !ledFailed_(r)) {
-    add("Tokens", t("{i} in · {o} out · {r} cache read · {w} cache creation", { i: ledNum(r.in || 0), o: ledNum(r.out || 0), r: ledNum(r.cache_read || 0), w: ledNum(r.cache_write || 0) }) + cacheTTLs(r, ledNum), "led-tokens");
+    add("Tokens", t("{i} in · {o} out · {r} cache read · {w} cache creation", { i: ledNum(r.in || 0), o: ledNum(r.out || 0), r: ledNum(r.cache_read || 0), w: ledNum(r.cache_write || 0) }) + cacheTTLs(r, ledNum) + (r.cache_unknown ? " · " + t("The vendor doesn't count the cache") : ""), "led-tokens");
   }
   if (ledRowSpeed(r)) add("Speed", t("{n} tok/s", { n: ledNum(Math.round(ledRowSpeed(r))) }));
   else if (ledFloorSpeed(r)) add("Speed", "≥" + t("{n} tok/s", { n: ledNum(Math.round(ledFloorSpeed(r))) }));
@@ -1123,8 +1124,8 @@ function renderLedgerDash(l) {
   dash.hidden = !l.total && !l.day;
   if (dash.hidden) return;
   const total = allTokens(l);
-  const prompt = l.input + l.cache_write + l.cache_read;
-  const rate = prompt ? l.cache_read / prompt : 0;
+  // of the calls whose vendor counted the cache: none when no call's was (#3464)
+  const rate = cacheHitOf(l);
   const strip = $("#ledKpi");
   strip.replaceChildren();
   const block = (label, value, sub, cls, title) => {
@@ -1165,9 +1166,9 @@ function renderLedgerDash(l) {
   if (l.retried) strip.lastChild.append(jumps(jump(t("{n} answered on a retry", { n: ledNum(l.retried) }), "retried", t("Show only the requests answered on a retry"))));
   const c = fmtCost(l);
   block("Cost", c ? "≈" + c : "—", line(l.unpriced ? t(l.unpriced === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n: l.unpriced }) : t("effective prices")), c ? "cost" : "");
-  const hit = block("Cache hit rate", (100 * rate).toFixed(1) + "%", null, "", t("The share of the prompt read from the cache"));
+  const hit = block("Cache hit rate", rate === null ? "—" : (100 * rate).toFixed(1) + "%", cacheLeftOut(l) ? line(cacheLeftOut(l)) : null, "", t("The share of the prompt read from the cache"));
   const meter = el("div", "meter"), fill = el("i");
-  fill.style.width = (100 * rate).toFixed(1) + "%";
+  fill.style.width = (100 * (rate || 0)).toFixed(1) + "%";
   meter.append(fill);
   hit.append(meter);
   // how fast the streamed replies wrote, and how long they took to begin (#860):
@@ -1771,7 +1772,7 @@ function renderLedger() {
     // are the rows the filter keeps, so with one source picked the total cell
     // would read that one's figures under the whole period's count
     const all = {};
-    for (const k of ["calls", "errors", "input", "output", "cache_read", "cache_write", "cost", "timed", "ttft_ms", "decode_ms", "decode_out"]) {
+    for (const k of ["calls", "errors", "input", "output", "cache_read", "cache_write", "cache_unknown", "cache_unknown_calls", "cost", "timed", "ttft_ms", "decode_ms", "decode_out"]) {
       all[k] = (thru[k] || 0) + (dir[k] || 0) + (rep[k] || 0);
     }
     const tile = (b, label, calls, tot, pick) => {
@@ -1932,8 +1933,12 @@ function renderLedger() {
     td(r.effort || "—", r.effort ? "" : "faint");
     td(ledNum(r.in), "n");
     td(ledNum(r.out), "n", r.reasoning ? t("{n} reasoning, inside output", { n: ledNum(r.reasoning) }) : "");
-    td(ledNum(r.cache_write), "n" + (r.cache_write ? "" : " faint"), cacheTTLs(r, ledNum).replace(/^ · /, ""));
-    td(ledNum(r.cache_read), "n" + (r.cache_read ? "" : " faint"));
+    // a vendor that counts no cache wrote and read none we know of, not 0 (#3464)
+    if (r.cache_unknown) for (let i = 0; i < 2; i++) td("—", "n faint", t("The vendor doesn't count the cache"));
+    else {
+      td(ledNum(r.cache_write), "n" + (r.cache_write ? "" : " faint"), cacheTTLs(r, ledNum).replace(/^ · /, ""));
+      td(ledNum(r.cache_read), "n" + (r.cache_read ? "" : " faint"));
+    }
     const cost = td(r.priced ? "≈" + fmtCost({ cost: r.cost, unpriced: 0 }) : "—", "n cost" + (r.priced ? "" : " faint"), r.priced ? (r.pricing_model ? t("API price reference") + ": " + r.pricing_model : "") : t("No known price for this model"));
     if (r.priced && r.pricing_model) {
       const reference = el("div", "price-reference", t("Price reference: {model}", { model: r.pricing_model }));

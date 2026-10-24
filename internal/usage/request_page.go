@@ -96,6 +96,10 @@ const rowOwnCost = 256
 // Record.Credits again.
 const rowCredits = 4096
 
+// rowCacheUnknown is the Flags bit of Record.CacheUnknown: its vendor
+// counted no cache (#3464).
+const rowCacheUnknown = 8192
+
 type rowChunk struct {
 	Archive   []byte
 	Locations []*time.Location
@@ -237,6 +241,9 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	if r.Routed {
 		p.Flags |= 32
 	}
+	if r.CacheUnknown {
+		p.Flags |= rowCacheUnknown
+	}
 	if failed {
 		p.Flags |= 16
 	}
@@ -276,7 +283,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 }
 func (c *rowChunk) row(i int) Row {
 	p := &c.Rows[i]
-	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time, Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: p.Millis, TTFT: p.TTFT, FirstText: p.FirstText, FirstReasoning: p.FirstReasoning, ReasoningHidden: p.Flags&rowReasoningHidden != 0, Sent: p.Sent, Flow: p.Flow, Own: p.Own, Retried: p.Retried, Queued: p.Queued, Status: int(p.Status), Tries: int(p.Tries), HandedOn: p.Flags&rowHandedOn != 0, Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
+	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time, Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: p.Millis, TTFT: p.TTFT, FirstText: p.FirstText, FirstReasoning: p.FirstReasoning, ReasoningHidden: p.Flags&rowReasoningHidden != 0, CacheUnknown: p.Flags&rowCacheUnknown != 0, Sent: p.Sent, Flow: p.Flow, Own: p.Own, Retried: p.Retried, Queued: p.Queued, Status: int(p.Status), Tries: int(p.Tries), HandedOn: p.Flags&rowHandedOn != 0, Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
 	if p.Flags&rowCredits != 0 {
 		credits := p.Credits
 		r.Credits = &credits
@@ -299,6 +306,9 @@ func (c *rowChunk) row(i int) Row {
 	}
 	if r.Swapped && p.Flags&swapKnown == 0 && (SameSpelled(r.Model, r.Served) || ServingName(r.Model, r.Served) || RelayRenamed(r.Model, r.Served)) {
 		r.Swapped = false // kept before a name spelled otherwise, a vendor's serving name or a relay's rename was the same
+	}
+	if r.cacheNotCounted() {
+		r.CacheUnknown = true // kept before its plugin said its vendor counts no cache
 	}
 	if r.Source == SourceReported {
 		r.Record.Source = SourceReported
