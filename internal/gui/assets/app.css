@@ -1226,7 +1226,7 @@ body.window .field.solo { grid-column: auto; }
 .led-style .opt { display: inline-flex; align-items: center; padding: 0 6px; }
 .led-style .opt svg { display: block; }
 .led-chart g.ln { fill: none; stroke-linecap: round; stroke-linejoin: round; transition: opacity .12s; }
-.led-chart g.ln .line { stroke-width: 1.6; }
+.led-chart g.ln .line { stroke-width: 1.8; }
 .led-chart g.ln .line.all { stroke-width: 1.2; stroke-dasharray: 3 3; }
 .led-chart g.ln .band { stroke: none; fill-opacity: .14; }
 .led-chart .led-day { cursor: pointer; outline: none; }
