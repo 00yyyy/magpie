@@ -377,7 +377,27 @@ type requestIndex struct {
 	// for it rather than reading the whole history beside it (a refresh
 	// pressed while a 750k-call All was still being read, Vantiboo1ean)
 	flights map[flightKey]*pageFlight
+	// heats are the heatmap's last pages, kept while the agents' session
+	// files are all that changed (heatFresh)
+	heats map[pageKey]heatPage
 }
+
+// heatPage is a heatmap's page, of the gateway log's snapshot version,
+// worked out at.
+type heatPage struct {
+	page    RequestPage
+	version uint64
+	at      time.Time
+}
+
+// heatFresh is how long a heatmap is kept while only the agents' session
+// files change. A live agent writes its session file all the time, so the
+// page's key changed for every ask, and the Requests tab's refresh worked
+// out a year of calls again each time: seconds of CPU over a long history
+// (#3493). A year's calendar is the same a few seconds on; a change to
+// what prices or names a call, or a call through magpie, is still shown at
+// once.
+var heatFresh = 30 * time.Second
 
 // building, in tests, is told each time a page is worked out.
 var building func()
@@ -505,6 +525,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 		idx.root, idx.meta = root, meta
 		idx.chunks = map[string]*rowChunk{}
 		idx.pages = nil
+		idx.heats = nil
 		idx.key = ""
 	}
 	if idx.key != key {
@@ -516,6 +537,11 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 		idx.Unlock()
 		return page
 	}
+	if h, ok := idx.heats[q]; ok && h.version == version && time.Since(h.at) < heatFresh {
+		idx.Unlock()
+		return h.page
+	}
+	began := time.Now()
 	fk := flightKey{key, q}
 	if fl := idx.flights[fk]; fl != nil {
 		idx.Unlock()
@@ -704,6 +730,12 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 		shared.pages = map[pageKey]RequestPage{}
 	}
 	shared.pages[q] = page
+	if p == heatmapPeriod {
+		if shared.heats == nil || len(shared.heats) >= 16 {
+			shared.heats = map[pageKey]heatPage{}
+		}
+		shared.heats[q] = heatPage{page: page, version: version, at: began}
+	}
 	// The session files' chunks are bounded; the gateway's index is not
 	// counted here, as it is kept whatever its size (log_index.go).
 	var bytes int64
@@ -1021,6 +1053,20 @@ func buildRequestBlocksWithCodex(p Period, f Filter, offset, limit int, now time
 		}
 	}
 	out := RequestPage{Rows: []Row{}, Agents: []string{}, Providers: []string{}, Purposes: []string{}, By: map[string][]Share{}}
+	chartFilter := f
+	chartFilter.Day = ""
+	// The heatmap's page is only its days, all HeatmapOf reads: over its
+	// year the groups, shares and series below took seconds a call (#3493).
+	if p == heatmapPeriod {
+		out.Heat = heatmapOf(since, now, func(add func(Row)) {
+			visit(func(_ rowRef, r Row) {
+				if chartFilter.keepsRow(r) {
+					add(r)
+				}
+			})
+		})
+		return out
+	}
 	agents, providers := map[string]bool{}, map[string]bool{}
 	kinds := map[string]bool{}
 	callers := map[string]*Group{}
@@ -1046,13 +1092,11 @@ func buildRequestBlocksWithCodex(p Period, f Filter, offset, limit int, now time
 		take = offset + min(limit, maxRows-offset)
 	}
 	selected := newestHeap{}
-	chartFilter := f
-	chartFilter.Day = ""
 	// the two source cells' own numbers, counted without the source pick
 	viaFilter := f
 	viaFilter.Through = ""
 	var first time.Time
-	// the rows the chart and the heatmap count, kept as the first pass
+	// the rows the chart counts, kept as the first pass
 	// finds them so that theirs needn't read every row of the period again
 	var charted []rowRef
 	visit(func(ref rowRef, r Row) {
@@ -1219,13 +1263,6 @@ func buildRequestBlocksWithCodex(p Period, f Filter, offset, limit int, now time
 			part.add(r)
 			pt.By[d][k] = part
 		}
-	}
-	if p == heatmapPeriod {
-		out.Heat = heatmapOf(since, now, func(add func(Row)) {
-			for _, ref := range charted {
-				add(ref.row())
-			}
-		})
 	}
 	// Match LedgerSeries's top-24 selection on the filtered data, not facets.
 	for _, d := range Dimensions {
