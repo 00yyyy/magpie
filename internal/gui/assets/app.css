@@ -1022,16 +1022,19 @@ body.window .field.solo { grid-column: auto; }
 .quota-read { flex-basis: 100%; margin-top: 2px; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .quota-windows + .quota-read, .quota-balance + .quota-read { margin-top: 8px; }
 .quota-read.stale { color: var(--amber); }
-/* a card's own refresh, left of when it was read (or of why it couldn't
-   be), opening as the card is hovered: at rest the line starts where the
-   card's other lines do (#840) */
+/* a card's own refresh, right after when it was read (or why it couldn't
+   be), opening as the card is hovered. At rest it takes no room, so the
+   line starts where the card's others do (#840); it opens rightward, so
+   the text before it never moves. Opening left of the text pushed
+   "Updated …" right on every hover, and the card's 12px padding has no
+   room for it to hang into. */
 .quota-refresh { display: inline-grid; place-items: center; width: 0; margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--faint); vertical-align: baseline; opacity: 0; overflow: hidden; cursor: pointer; transition: width .12s, margin .12s, opacity .12s; }
 /* Inherited text supplies the inline baseline; the icon shares its centered cell. */
 .quota-refresh::before { content: "\00a0"; grid-area: 1 / 1; }
 .quota-refresh svg { grid-area: 1 / 1; }
-.subscription-card:hover .quota-refresh, .pq-card:hover .quota-refresh, .quota-refresh.busy, .quota-refresh.kept { width: 14px; margin: 0 3px 0 -2px; opacity: 1; }
+.subscription-card:hover .quota-refresh, .pq-card:hover .quota-refresh, .quota-refresh.busy, .quota-refresh.kept { width: 14px; margin: 0 -2px 0 3px; opacity: 1; }
 /* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
-.quota-refresh:focus-visible { width: 14px; margin: 0 3px 0 -2px; opacity: 1; }
+.quota-refresh:focus-visible { width: 14px; margin: 0 -2px 0 3px; opacity: 1; }
 .quota-refresh:hover { color: var(--fg); background: var(--pill-hover); }
 .quota-refresh.busy { cursor: default; }
 .quota-refresh.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; }
@@ -1039,7 +1042,7 @@ body.window .field.solo { grid-column: auto; }
    Usage page's draw the same account) turns by itself */
 .quota-refresh.spun svg > * { animation: spin .8s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .quota-refresh.spun svg > * { animation: none; } }
-@media (hover: none) { .quota-refresh { width: 14px; margin: 0 3px 0 -2px; opacity: 1; } }
+@media (hover: none) { .quota-refresh { width: 14px; margin: 0 -2px 0 3px; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .quota-refresh { transition: none; } }
 .skeleton { display: block; border-radius: 5px; background: linear-gradient(90deg, var(--skel, var(--pill)) 25%, var(--skel-hi, var(--pill-hover)) 45%, var(--skel, var(--pill)) 65%); background-size: 240% 100%; animation: skeleton-shift 1.4s ease-in-out infinite; }
 @keyframes skeleton-shift { from { background-position: 100% 0; } to { background-position: -100% 0; } }
@@ -1912,14 +1915,14 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-bals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .pq-card.bal { grid-template-columns: minmax(0, 1fr); }
 .pq-bn { display: flex; align-items: center; gap: 6px; }
-.pq-bn > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pq-bn > span:not(.ic) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pq-bn .ic { width: 14px; height: 14px; flex: none; }
-/* the card's own refresh before the logo: closed, the row's gap closed with
-   it; open, as wide as on the Usage page (#840) */
-.pq-bn > .quota-refresh { margin-right: -6px; }
-.pq-card:hover .pq-bn > .quota-refresh, .pq-bn > .quota-refresh.busy { margin: 0 -3px 0 -2px; }
-.pq-bn > .quota-refresh:focus-visible { margin: 0 -3px 0 -2px; }
-@media (hover: none) { .pq-bn > .quota-refresh { margin: 0 -3px 0 -2px; } }
+/* the card's own refresh after the name: closed, the row's gap closed
+   with it; open, as wide as on the Usage page (#840) */
+.pq-bn > .quota-refresh { flex: none; margin-left: -6px; }
+.pq-card:hover .pq-bn > .quota-refresh, .pq-bn > .quota-refresh.busy { margin: 0 -2px 0 -3px; }
+.pq-bn > .quota-refresh:focus-visible { margin: 0 -2px 0 -3px; }
+@media (hover: none) { .pq-bn > .quota-refresh { margin: 0 -2px 0 -3px; } }
 .pq-amt { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); font-variant-numeric: tabular-nums; }
 /* a balance field's several amounts on a balance's card (#420) */
 .pq-lead { display: flex; align-items: baseline; gap: 6px; min-width: 0; }

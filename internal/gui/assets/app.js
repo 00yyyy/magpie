@@ -17134,7 +17134,7 @@ function panelBalances(bals) {
     card.title = [q.name, q.user].filter(Boolean).join(" · ");
     // whose balance, at a glance: the provider's logo before its name
     const who = el("span", "pq-sub pq-bn");
-    who.append(quotaRefresh(q), icon(q.icon || "generic"), el("span", "", q.name));
+    who.append(icon(q.icon || "generic"), el("span", "", q.name), quotaRefresh(q));
     card.append(who);
     // a balance field with several amounts: the first as the figure,
     // the others each a quiet line, a percent a meter (#420); what the
@@ -17269,7 +17269,7 @@ function panelQuotaCard(q) {
   if (q.error) {
     card.classList.add("err");
     const why = el("span", "pq-sub err", quotaError(q.error, q));
-    why.prepend(quotaRefresh(q));
+    why.append(quotaRefresh(q));
     card.append(why);
     card.title += "\n" + q.error;
     return card;
@@ -17283,7 +17283,7 @@ function panelQuotaCard(q) {
   const fam = familyWindows(q.windows.filter((w) => !w.unlimited));
   if (!fam.length && q.windows.some((w) => w.unlimited)) {
     const sub = el("span", "pq-sub", t("Unlimited"));
-    sub.prepend(quotaRefresh(q));
+    sub.append(quotaRefresh(q));
     card.append(sub);
     if (balance) card.append(balance);
     return card;
@@ -17310,7 +17310,7 @@ function panelQuotaCard(q) {
   const pace = line ? quotaEtaText(line, Date.now()) : "";
   if (pace) sub.append(el("span", "pq-pace", " · " + pace));
   // the card's own refresh, as on the Usage page: shown as it's hovered
-  sub.prepend(quotaRefresh(q));
+  sub.append(quotaRefresh(q));
   card.append(sub);
   const rings = el("span", "pq-rings");
   for (const w of ws) {
@@ -18030,7 +18030,7 @@ function readWhen(q, refresh = false) {
     s.append(when);
     s.title = new Date(q.readAt).toLocaleString(intlLang());
   } else return null;
-  if (refresh) s.prepend(quotaRefresh(q));
+  if (refresh) s.append(quotaRefresh(q));
   return s;
 }
 setInterval(() => {
@@ -18226,8 +18226,6 @@ function quotaWindows(sub) {
   const failed = () => {
     const e = el("div", "subscription-error", quotaError(sub.error, sub));
     e.title = sub.error;
-    // read again from here too: a failed reading is the one most wanted
-    e.prepend(quotaRefresh(sub));
     // one click away: the access key a plan needs (#1821), or the
     // vendor's page for a balance it tells no key (seeAt, Zen's console)
     const key = sub.needsAccessKey && sub.provider;
@@ -18237,6 +18235,8 @@ function quotaWindows(sub) {
       go.onclick = (ev) => { ev.stopPropagation(); key ? openProvider(sub.provider) : api("open", { url: sub.seeAt }).catch(() => {}); };
       e.append(" ", go);
     }
+    // read again from here too: a failed reading is the one most wanted
+    e.append(quotaRefresh(sub));
     return e;
   };
   if (sub.balance && !sub.windows?.length) {
