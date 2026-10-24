@@ -20956,7 +20956,11 @@ function renderAgentPrefs() {
   };
   const asyncRow = el("div", "compact-at");
   asyncRow.append(asyncSegs, asyncNum);
-  $("#codexAsyncSegs").replaceChildren(asyncRow);
+  // a Codex here before 0.163, or of no known version (codexAsyncHeld)
+  const held = s.codexAsyncCompact && s.codexAsyncHeld || [], box = el("div");
+  box.append(asyncRow);
+  if (held.length) box.append(el("div", "hint codex-async-held", t("{who}: the share needs Codex 0.163 or later; until it's updated magpie writes only async_compaction = true, at 65%", { who: held.map((r) => t({ app: "Codex app", ide: "Codex editor extension", wsl: "Codex in WSL" }[r.kind] || "Codex CLI") + (r.version ? " " + r.version : "")).join(", ") })));
+  $("#codexAsyncSegs").replaceChildren(box);
   renderCodexTitles(s);
   renderCodexDescriptions(s);
   renderCodexPredictions(s);

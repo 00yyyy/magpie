@@ -469,6 +469,10 @@ type settingsJSON struct {
 	// the ChatGPT accounts signed in, each of which can have a daily
 	// warm-up time of its own (#957)
 	CodexUsers []string `json:"codexUsers,omitempty"`
+	// the Codexes here that kept the background compaction's table (and
+	// its share) out of the config at the last sync: too old for it
+	// (before 0.163.0-alpha.8), or of no known version (codex_async.go)
+	CodexAsyncHeld []agent.CodexReader `json:"codexAsyncHeld,omitempty"`
 	// whether a WorkBuddy (China) account is signed in, and each one's
 	// last daily check-in
 	WorkBuddy         bool                        `json:"workbuddy"`
@@ -640,6 +644,7 @@ func settingsState() settingsJSON {
 	}
 	s.CodexWarmed, s.ClaudeWarmed = latest(provider.CodexWarmed()), latest(provider.ClaudeWarmed())
 	s.CodexUsers = codexUsers()
+	s.CodexAsyncHeld = agent.CodexAsyncHeld()
 	s.WorkBuddy, s.WorkBuddyCheckins = provider.HasWorkBuddy(), provider.WorkBuddyCheckins()
 	s.Trae, s.TraeCheckins = provider.HasTrae(), provider.TraeCheckins()
 	s.MiniMax, s.MiniMaxCheckins = provider.HasMiniMax(), provider.MiniMaxCheckins()

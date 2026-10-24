@@ -432,7 +432,8 @@ func codexIn(at place) *Agent {
 	// where Codex is routed through magpie, taken back where it isn't
 	asyncCompaction := func(routed bool) error {
 		s := settings.Load()
-		return codexAsyncSync(path, at.key("codex.async"), routed, s.CodexAsyncCompact, s.CodexAsyncCompactPercent)
+		on := s.CodexAsyncCompact && routed
+		return codexAsyncSync(path, at.key("codex.async"), routed, s.CodexAsyncCompact, s.CodexAsyncCompactPercent, on && codexAsyncTableOK(at))
 	}
 	// keptBearerToken is the table's bearer token when it is one the
 	// gateway takes: a caller key of the gateway's own the user put in
