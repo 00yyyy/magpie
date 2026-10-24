@@ -5123,6 +5123,10 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r := *req
 			r.LoadedInPlace, req = want, &r
 		}
+		if req.OwnEffort && req.Effort != "" && !s.fits(p.ID, ownEffortField(model), to) {
+			r := *req
+			r.Effort, req = "", &r
+		}
 		if offEffort(req.Effort) && !s.fits(p.ID, offRefused(model), to) {
 			r := *req
 			r.Effort, req = onEffort(p, model), &r
@@ -5395,6 +5399,24 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			} else {
 				r := *req
 				r.Effort, req = onEffort(p, model), &r
+				continue
+			}
+		}
+		if req.OwnEffort {
+			if refused, value := ownEffortRefused(res.StatusCode, b, req.Effort); refused {
+				// the effort magpie added for auto mode's classifier
+				// (fitAutoModeClassifier) turned away: none, by a model
+				// that reasons, is asked again at low; any other refusal,
+				// the field's, without it, as before. Remembered either way
+				r := *req
+				if value && offEffort(req.Effort) {
+					s.markUnfit(p.ID, offRefused(model), to)
+					r.Effort = onEffort(p, model)
+				} else {
+					s.markUnfit(p.ID, ownEffortField(model), to)
+					r.Effort = ""
+				}
+				req = &r
 				continue
 			}
 		}
