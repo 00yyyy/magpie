@@ -388,6 +388,7 @@ function renderAgentsLoading() {
 let agentArranging = false, agentRenderPending = false;
 function renderAgents() {
   renderCodexMemories(); // the Codex sheet's row is the same field
+  renderCodexSubagentModel(); // and this one
   if (agentArranging) { agentRenderPending = true; return; }
   if (unhideCleared()) return; // it renders again with the hiding dropped
   const page = $("#view-agents");
@@ -422,7 +423,7 @@ function renderAgents() {
     // user's own)
     // nor Aside's account with one account only (#1499)
     const none = (f) => (f.key === "effort" || f.key === "ultracode" || f.label === "subagents" || f.label === SUB_EFFORT || f.label === SUB_MODEL || f.label === AUTO_MODE || f.label === MEMORIES || f.label === "sign-in" || f.key === "small" || asideAccount(a, f)) && !f.options.length && !f.value;
-    const shownFields = a.fields.filter((f) => !grouped(a, f) && !none(f));
+    const shownFields = a.fields.filter((f) => !grouped(a, f) && !none(f) && !codexOwnSub(a, f));
     const tiers = tierMenu(a);
     if (tiers) shownFields.push(tiers);
     const sorted = shownFields.sort((x, y) => wide(y) - wide(x) || extra(x) - extra(y));
@@ -3743,6 +3744,30 @@ const LEAD_PICKS = "Codex's lead may name another model for a subagent; set the 
 // its pick, not "same as model" (KorenKrita on Discord)
 const CLAUDE_PICKS = "Claude Code's lead, or a subagent's own definition, may name a model or tier for it; a model set here is for the subagents that name none";
 const claudePicks = (a, f) => leadPicks(a, f) && a.id === "claude";
+// Codex had two squares for its subagents' model, the subagents one above
+// and the subagent model, and nobody could tell them apart (the owner): the
+// card shows the subagent model alone, saying plainly what each choice
+// does. A pick there takes away [agents] default_subagent_model too (the
+// backend), and one left in the config is said on it until then. With no
+// model of magpie's to pick there, Codex's own square stays.
+const codexSub = (a) => a.id.split("@wsl:")[0] === "codex" && a.fields.some((f) => f.label === SUB_MODEL && (f.options.length || f.value));
+const codexOwnSub = (a, f) => f.label === "subagents" && codexSub(a);
+const SAME_AS_LEAD = "Same as the lead";
+const SUB_MODEL_UNSET = "Each subagent runs on the lead's model ({model}), or on another the lead picks for it. Pick a model here to put every subagent on it.";
+const SUB_MODEL_UNSET_PLAIN = "Each subagent runs on the lead's model, or on another the lead picks for it. Pick a model here to put every subagent on it.";
+const SUB_MODEL_SET = "Every subagent runs on this model, whatever the lead asks for.";
+const SUB_MODEL_OLD = "Codex's config still starts subagents on {model} when the lead names none; picking here replaces it.";
+// codexSubSaid: what Codex's subagent model is, in words: its value, and a
+// line on what it does
+function codexSubSaid(a, f) {
+  const opt = optionFor(f, f.value);
+  const main = a.fields.find((x) => x.key === "model");
+  const lead = main && (optionFor(main, main.value)?.label || main.value);
+  const old = a.fields.find((x) => x.label === "subagents")?.value;
+  const name = f.value ? opt?.label || f.value : t(SAME_AS_LEAD);
+  const line = f.value ? t(SUB_MODEL_SET) : (lead ? t(SUB_MODEL_UNSET, { model: lead }) : t(SUB_MODEL_UNSET_PLAIN)) + (old ? "\n" + t(SUB_MODEL_OLD, { model: optionFor(a.fields.find((x) => x.label === "subagents"), old)?.label || old }) : "");
+  return { name, line, old, lead };
+}
 const extra = (f) => f.key === "tiers" || FOLLOWS_MODEL.includes(f.label) || f.label === "sign-in" || f.key === "ultracode" || f.label === SUB_EFFORT || f.label === SUB_MODEL || f.label === AUTO_MODE || f.label === MEMORIES;
 const EXTRA_GLYPH = {
   subagents: "M4.5 2.75v10.5M4.5 9.25c0-2.2 1.6-3.75 3.9-3.75h3.35M9.9 3.6l1.9 1.9-1.9 1.9",
@@ -3766,11 +3791,13 @@ const EXTRA_GLYPH = {
 const MEMORIES_DEFAULT = "Codex's own: gpt-5.6-terra, threads summed up with gpt-5.6-luna";
 function extraField(a, f) {
   if (f.key === "ultracode") return ultracodeToggle(a, f);
-  const set = !!(f.value || f.custom);
+  const said = f.label === SUB_MODEL && codexSub(a) ? codexSubSaid(a, f) : null;
+  const set = !!(f.value || f.custom || said?.old);
   const b = el("button", "field extra" + (set ? " set" : ""));
   b.append(svg(EXTRA_GLYPH[f.label] || EXTRA_GLYPH.tiers, 13, 1.5));
   const opt = optionFor(f, f.value);
-  b.title = f.label === SUB_EFFORT ? subEffortTitle(a, f, opt) : f.menu ? menuTitle(f)
+  b.title = said ? t("{label}: {value}", { label: t(f.label), value: said.name }) + "\n" + said.line
+    : f.label === SUB_EFFORT ? subEffortTitle(a, f, opt) : f.menu ? menuTitle(f)
     : t("{label}: {value}", { label: f.label === MEMORIES ? t("Codex memories model") : t(f.label), value: t(opt?.label || f.value || (f.label === MEMORIES ? MEMORIES_DEFAULT : f.label === SUB_MODEL ? "the model the lead asks for" : f.label === AUTO_MODE ? AUTO_MODE_UNSET : leadPicks(a, f) ? "the lead's pick, else same as model" : "same as model")) }) + (opt?.note && !FOLLOWS_MODEL.includes(f.label) ? "\n" + t(opt.note) : "") + (leadPicks(a, f) ? "\n" + t(claudePicks(a, f) ? CLAUDE_PICKS : LEAD_PICKS) : "");
   b.setAttribute("aria-label", b.title);
   b.dataset.key = f.key;
@@ -4643,6 +4670,10 @@ function openPicker(agent, field, anchor, ev, only) {
       : main && leadPicks(agent, field) ? { value: "", label: t("Lead's pick"), note: t("{model} unless the lead names another", { model: mainName }), icon: optionFor(main, main.value)?.icon, reset: true }
       : main ? { value: "", label: t("Same as model"), note: mainName, icon: optionFor(main, main.value)?.icon, reset: true }
       : { value: "", label: t("Not set"), note: t("a Claude model of the tier, else the chat's model"), icon: agent.icon, reset: true });
+  } else if (field.label === SUB_MODEL && codexSub(agent) && !options.some((o) => o.value === "")) {
+    const said = codexSubSaid(agent, { ...field, value: "" });
+    const main = agent.fields.find((f) => f.key === "model");
+    options.unshift({ value: "", label: t(SAME_AS_LEAD), note: said.lead ? t("{model}, or another the lead picks for a subagent", { model: said.lead }) : t("the lead's model, or another the lead picks for a subagent"), icon: (main && optionFor(main, main.value)?.icon) || agent.icon, reset: true });
   } else if (!only && !field.menu && !field.onPick && !options.some((o) => o.value === "")) {
     // Pi has no default model of its own: with none set it takes the first
     // provider signed in, in its own order, so Default is no fixed model
@@ -20856,7 +20887,7 @@ function renderAlerts(s, keep) {
 // in Settings, apart from the agents they set (the owner, 10-20); Long
 // conversations is Codex's and Claude Code's both, in each one's sheet.
 const AGENT_PREFS = {
-  codex: ["codexAgentsV1Row", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"],
+  codex: ["codexAgentsV1Row", "codexSubagentModelRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"],
   claude: ["fullContextRow"],
 };
 const agentPrefsOf = (a) => gatewayMode ? null : AGENT_PREFS[a.id.split("@wsl:")[0]];
@@ -20963,6 +20994,7 @@ function renderAgentPrefs() {
   renderCodexPredictions(s);
   renderCodexAutoReview(s);
   renderCodexMemories();
+  renderCodexSubagentModel();
 }
 
 // renderAgentPrefLinks: Settings' search still finds the settings an agent's
@@ -20980,7 +21012,7 @@ function renderAgentPrefLinks() {
   else if (loose.parentElement === box.parentElement) $("#agentPrefRows").append(loose);
   for (const r of agentPrefRowEls) {
     const agents = state.agents.filter((a) => agentPrefsOf(a)?.includes(r.id) && !a.id.includes("@wsl:"));
-    if (!agents.length || (r.id === "codexMemoriesRow" && r.hidden)) continue;
+    if (!agents.length || ((r.id === "codexMemoriesRow" || r.id === "codexSubagentModelRow") && r.hidden)) continue;
     const row = el("div", "row pref agent-pref-link");
     const who = el("div", "who");
     const name = r.querySelector(".name");
@@ -21133,6 +21165,31 @@ function renderCodexMemories() {
   else b.append(icon("openai"), el("span", "", t("Codex’s own pick")));
   b.onclick = (ev) => openPicker(a, f, b, ev);
   $("#codexMemoriesPick").replaceChildren(b);
+}
+
+// renderCodexSubagentModel: Codex's subagent model in its sheet, a row with
+// a name, as the memories one is: the card's square alone is easy to miss.
+// The same field and picker, so the row and the square are one setting.
+// It says its name alone, its button the choice, Same as the lead or the
+// model; what that does is the row's title.
+function renderCodexSubagentModel() {
+  homeAgentPrefRows();
+  const row = $("#codexSubagentModelRow");
+  if (!row) return;
+  const a = state.agents.find((x) => x.id === "codex");
+  const f = a?.fields?.find((x) => x.label === SUB_MODEL);
+  row.hidden = gatewayMode || !f || (!f.options.length && !f.value);
+  if (row.hidden) return;
+  const said = codexSubSaid(a, f);
+  const main = a.fields.find((x) => x.key === "model");
+  const b = el("button", "rt-cond on");
+  b.type = "button";
+  b.setAttribute("aria-label", t("Codex subagent model"));
+  b.append(icon((f.value ? optionFor(f, f.value)?.icon : main && optionFor(main, main.value)?.icon) || "generic"), el("span", "", said.name));
+  b.onclick = (ev) => openPicker(a, f, b, ev);
+  $("#codexSubagentModelPick").replaceChildren(b);
+  b.title = said.line;
+  row.querySelector(".who").title = said.line;
 }
 
 // renderImages: the model that describes images to a model that can't see

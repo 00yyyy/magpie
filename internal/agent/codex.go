@@ -1551,10 +1551,28 @@ func codexIn(at place) *Agent {
 				// is offered (#1633: a lead on a chat provider, its
 				// subagents wanted there too); a subagent whose task a
 				// ChatGPT-backed lead sealed stays on the model asked for
-				// unless the one set is a ChatGPT account's (the gateway)
+				// unless the one set is a ChatGPT account's (the gateway).
+				// It is the one setting for the subagents' model the GUI
+				// shows: beside the subagents one above, the two read alike
+				// and nobody could tell them apart (the owner). So a pick
+				// here, Default too, takes away [agents]
+				// default_subagent_model, and Default is then the lead's
+				// model or the one it names, as it says
 				Key: "subagent_model", Label: "subagent model", Quiet: true,
 				Get: provider.CodexSubagentModel,
-				Set: provider.SetCodexSubagentModel,
+				Set: func(v string) error {
+					m, err := subagent()
+					if err != nil {
+						return err
+					}
+					if err := provider.SetCodexSubagentModel(v); err != nil || m == "" {
+						return err
+					}
+					if err := edit.DelTOMLKey(path, "agents", "default_subagent_model"); err != nil {
+						return err
+					}
+					return dropSubEffort()
+				},
 				Options: func(map[string]string) []Option {
 					var out, groups []Option
 					for _, e := range provider.CodexSubagentModels() {
