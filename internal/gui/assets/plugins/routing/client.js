@@ -651,9 +651,38 @@ function routingPage(part) {
     return t("{who} goes first, in the order given: when its allowance renews isn't known.", { who: w });
   }
 
+  // memberSplit: the group that put x behind f, when it is one that takes
+  // its members whole (by weight, in order) and f and x are of different
+  // members of it — with the names of those members and the group; null
+  // when they are of one member, or of a group that pools its members'
+  // accounts (Smart and the rest), where what x has left is why
+  function memberSplit(r, f, x) {
+    if (!r.group) return null;
+    const fv = f.via || [], xv = x.via || [];
+    const subOf = (id) => r.group.subs?.find((s) => s.id === id);
+    const at = (w, v, i) => i < v.length ? "group/" + v[i] : `${w.provider}/${w.model}${w.fixed ? ":" + w.fixed : ""}`;
+    const named = (w, v, i) => i < v.length ? subOf(v[i])?.name || v[i] : w.name || w.provider;
+    let g = r.group;
+    for (let i = 0; i <= Math.max(fv.length, xv.length); i++) {
+      const a = at(f, fv, i), b = at(x, xv, i);
+      if (a !== b) {
+        const routing = g?.routing || "";
+        if (routing !== "weight" && routing !== "order") return null;
+        // the first there by the round's pick, or by the order, not kept
+        // on for its conversation or sent there by a rule
+        if (routing === "weight" ? !f.turn : r.affinity?.kept || r.rule && !r.rule.bare) return null;
+        return { routing, member: named(x, xv, i), first: named(f, fv, i), group: g.name || g.id };
+      }
+      if (i >= fv.length || i >= xv.length) return null; // one member
+      g = subOf(fv[i]);
+    }
+    return null;
+  }
+
   // asides: the others' places, where they say something
   function asides(r) {
     const out = [];
+    const told = new Set(); // the members told as behind by weight or order
     const aff = affWhy(r, true) ? null : affWhy(r, false);
     if (aff) out.push(aff);
     const cls = classWhy(r.rule);
@@ -676,7 +705,21 @@ function routingPage(part) {
     }
     const smart = (x) => !x.routing && (x.kind === "account" || x.known);
     const someKnown = r.order.some((x) => x.known);
+    const f0 = r.order[0];
     for (const x of r.order.slice(1)) {
+      // behind the first by a group's weights or its order, which take
+      // each member whole: not by what x has left (Creat.wu: a group in
+      // a group by weight, its accounts at 91%, read as passed over)
+      const by = !x.rest && !x.sunk && f0 ? memberSplit(r, f0, x) : null;
+      if (by && smart(x) && (x.known ? group(x) === "low" : someKnown)) {
+        if (!told.has(by.member)) {
+          told.add(by.member);
+          out.push(by.routing === "weight"
+            ? t("{member} isn't passed over for being near its limit: by weight this request was {first}'s share, and {member} takes its own share of the requests while it can answer.", { member: by.member, first: by.first })
+            : t("{member} isn't passed over for being near its limit: it comes after {first} in {group}'s order.", { member: by.member, first: by.first, group: by.group }));
+        }
+        continue;
+      }
       if (x.sunk && !x.rest) out.push(t("{who} was rate limited at {time} while it had quota left, so it went to the back: it comes round again once those ahead of it are rate limited in turn.", { who: who(x), time: clock(x.sunk) }));
       else if (x.rest) out.push(t("{who} is resting — {why}, {when} — so it waits at the back.", { who: who(x), why: `${x.rest.status} · ${failWord(x.rest.why)}`, when: restWhen(x.rest, at(r.time)) }));
       else if (smart(x) && x.known && group(x) === "spent" && x.credits) out.push(t("{who} is at {n} of its allowance but goes on on its credits — ahead of those used up with nothing to go on with, after those with allowance left.", { who: who(x), n: pct(x.used) }));
