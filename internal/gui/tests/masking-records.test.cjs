@@ -1,8 +1,9 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Insights › Masking: a short card of what masking kept from vendors (the
-// number, the days, agents to providers through magpie's bird) over the
-// requests it changed, by day, narrowed by facets, agents and providers,
-// or the values masked most. A request opens on its steps, its text as
+// number, the days, agents to providers, each with its logo, through
+// magpie's bird in the middle of its ring) over the requests it changed,
+// by day, narrowed by facets, agents and providers, or the values masked
+// most. A request opens on its steps, its text as
 // written here, as the vendor got it or side by side (only the parts
 // masking changed, the rest folded) and how each value was masked; picking
 // a value lights its places. A request held back says why and offers to
@@ -71,7 +72,7 @@ function serve(lang, sum, asked, opts = {}) {
     const json = (data) => route.fulfill({ json: data });
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
-    if (url.pathname === "/api/state") return json({ agents: [{ id: "claude", name: "Claude Code", icon: "claude", fields: [] }, { id: "codex", name: "Codex", icon: "codex", fields: [] }], profiles: [], settings });
+    if (url.pathname === "/api/state") return json({ agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", fields: [] }, { id: "codex", name: "Codex", icon: "codex-color", fields: [] }], profiles: [], settings });
     if (url.pathname === "/api/settings") {
       if (req.method() === "POST") { asked.push("settings " + req.postData()); Object.assign(settings, JSON.parse(req.postData())); }
       return json(settings);
@@ -183,6 +184,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await card.locator(".msk-hub use").getAttribute("href"), "#bird");
         const hub = await card.locator(".msk-hub").boundingBox(), mid = await card.locator(".mo-mid").boundingBox();
         assert(Math.abs(hub.x + hub.width / 2 - (mid.x + mid.width / 2)) < 1.5, "the bird sits on the centre line");
+        // and in the middle of its ring (the lines' svg rule once pinned it
+        // to the ring's top left)
+        const bird = await card.locator(".msk-hub svg").boundingBox();
+        assert(Math.abs(bird.x + bird.width / 2 - (hub.x + hub.width / 2)) < 1 && Math.abs(bird.y + bird.height / 2 - (hub.y + hub.height / 2)) < 1, "the bird in the middle of its ring");
+        // each agent and provider with its logo, on the side the lines are
+        assert.deepEqual(await card.locator(".mo-node .ic").evaluateAll((ns) => ns.map((n) => n.dataset.icon)), ["claudecode-color", "codex-color", "anthropic", "openai"]);
+        const agentNode = card.locator(".mo-col.agent .mo-node").first(), provNode = card.locator(".mo-col.provider .mo-node").first();
+        assert((await agentNode.locator(".ic").boundingBox()).x > (await agentNode.locator(".nm").boundingBox()).x, "an agent's logo after its name");
+        assert((await provNode.locator(".ic").boundingBox()).x < (await provNode.locator(".nm").boundingBox()).x, "a provider's logo before its name");
         assert.match(await card.locator(".mo-cap").textContent(), /magpie/);
         assert.equal(await page.evaluate(() => [...document.querySelectorAll("#maskCard, #maskCard *")].some((n) => /gradient/.test(getComputedStyle(n).backgroundImage))), false, "flat: no gradient");
         // short: the list starts in the first screen
