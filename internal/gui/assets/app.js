@@ -13149,8 +13149,10 @@ function renderAccounts(a, p) {
     box.append(only);
     list.append(box);
   }
-  if (a.agent === "codex" && providers?.codexDaemon) list.append(renderCodexDaemon(providers.codexDaemon));
-  if (a.agent === "codex" && providers?.codexApp) list.append(renderCodexApp(providers.codexApp));
+  const pv = a.agent === "codex" ? providers || {} : {};
+  if (pv.codexDaemon) list.append(renderCodexDaemon(pv.codexDaemon));
+  if (pv.codexApp) list.append(renderCodexApp(pv.codexApp));
+  if (pv.codexAppOut) list.append(renderCodexAppOut(pv.codexAppOut));
   if (signing?.agent === a.agent) list.append(renderSigning(sub));
   else {
     const add = el("button", "acc add");
@@ -13178,12 +13180,8 @@ function renderAccounts(a, p) {
 // on the account before (user) until it restarts. magpie doesn't restart it
 // unasked: that ends the Codex sessions running on it.
 function renderCodexDaemon(user) {
-  const box = el("div", "signing daemon");
-  box.append(el("span", "mark", "!"));
-  const tt = el("span", "tt");
-  tt.append(el("span", "n", t("Codex's background service is still signed in as {user}", { user })),
-    el("span", "s", t("Restart it to use the new account. Running Codex sessions will be interrupted.")));
-  box.append(tt);
+  const box = codexNote("", t("Codex's background service is still signed in as {user}", { user }),
+    t("Restart it to use the new account. Running Codex sessions will be interrupted."));
   const later = el("button", "text", t("Later"));
   later.onclick = () => accountAction("codex/daemon/dismiss", {});
   const go = el("button", "text primary", t("Restart"));
@@ -13198,16 +13196,29 @@ function renderCodexDaemon(user) {
 // that account's limits and, once they are spent, sends in no thread. Only
 // quitting and opening it again moves it; magpie doesn't quit it unasked.
 function renderCodexApp(user) {
-  const box = el("div", "signing daemon");
-  box.append(el("span", "mark", "!"));
-  const tt = el("span", "tt");
-  tt.append(el("span", "n", t("The Codex app is still signed in as {user}", { user })),
-    el("span", "s", t("It shows that account's usage limits until it is quit and opened again. Quit it and open it again to use the new account.")));
-  box.append(tt);
+  const box = codexNote("", t("The Codex app is still signed in as {user}", { user }),
+    t("It shows that account's usage limits until it is quit and opened again. Quit it and open it again to use the new account."));
   const ok = el("button", "text", t("Got it"));
   ok.onclick = () => accountAction("codex/daemon/dismiss-app", {});
   box.append(ok);
   return box;
+}
+
+// codexNote: a Codex notice's box, its line (n) and what to do (s).
+function codexNote(cls, n, s) {
+  const box = el("div", "signing daemon" + cls), tt = el("span", "tt");
+  tt.append(el("span", "n", n), el("span", "s", s));
+  box.append(el("span", "mark", "!"), tt);
+  return box;
+}
+
+// renderCodexAppOut: the account the Codex app is on ran out, which greys
+// its Send for magpie's models too till it reopens: magpie reopens it on
+// macOS once idle (reopening), else the user does.
+function renderCodexAppOut(out) {
+  return codexNote(" app-out", t("The Codex app can't send on {user}'s used-up account", { user: out.user }), out.reopening
+  ? t("magpie serves its turns now, but the app reads that only as it opens. magpie quits it and opens it again once no turn is running.")
+  : t("magpie serves its turns now, but the app reads that only as it opens. Quit it and open it again to send."));
 }
 
 // Accounts brought in from another tool's export instead of signing in
