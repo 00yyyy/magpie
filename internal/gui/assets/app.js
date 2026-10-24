@@ -21834,9 +21834,8 @@ async function discoveryOffWarning() {
 // renderRedact: what the gateway masks before a request goes to a vendor —
 // secrets, personal data, the user's own words — and puts back in what the
 // vendor answers. The page says it in three parts under what masking did
-// (renderMaskObs): what to mask, how it is found (the rules always, the
-// local model beside them: layered, not one or the other) and what is
-// shared.
+// (renderMaskObs): how it is found (the local model first, then the
+// rules), what to mask, what is shared.
 function renderRedact(s, keep) {
   const box = $("#redactList"), find = $("#findList"), share = $("#shareList");
   box.replaceChildren();
@@ -21892,13 +21891,13 @@ function renderRedact(s, keep) {
   renderRedactRules(s, row);
   renderMaskActions(s);
   renderMaskTry(s);
-  // how it is found: the rules on every request that masks anything, and
-  // the local model on top of them, for what no pattern can tell
+  // how it is found: the local model, for what no pattern can tell, over
+  // the rules on every request that masks anything
   const masking = s.redact || s.redactPersonal;
   const why = t("Turn on Mask secrets or Mask personal data first");
+  privacyModelRow(find, masking ? "" : why);
   const always = el("span", "static-pill" + (masking ? " on" : ""), masking ? t("Always on") : t("Off"));
   rowIn(find, t("Rules"), masking ? t("Keys, tokens, emails and numbers whose checksum adds up: patterns that are certain, checked on every request") : why, always).id = "maskRulesRow";
-  privacyModelRow(find, masking ? "" : why);
   // Routing's and Usage's Hide accounts, here too, where privacy is looked for
   if (window.hideAccounts) rowIn(share, t("Hide accounts"), t("Email addresses and account names on Usage and Routing are blurred, for a screenshot to share"),
     onOff(window.hideAccounts.on(), (on) => { window.hideAccounts.set(on); renderSettings(); }));
@@ -21919,11 +21918,12 @@ function privacyModelRow(box, why) {
   const r = el("div", "row pref" + (why ? " pm-wait" : ""));
   r.id = "privacyModelRow";
   box.append(r);
+  const name = () => { const n = el("div", "name", t("Find with a local model")); n.append(el("span", "badge new", t("New"))); return n; };
   // nothing is masked: the model has nothing to find more of
   if (why) {
     clearTimeout(pmTimer);
     const who = el("div", "who");
-    who.append(el("div", "name", t("Find with a local model")), el("div", "sub", why));
+    who.append(name(), el("div", "sub", why));
     r.append(who);
     return;
   }
@@ -21931,7 +21931,7 @@ function privacyModelRow(box, why) {
   const draw = (m) => {
     if (!r.isConnected) return;
     const who = el("div", "who"), val = el("div", "val");
-    who.append(el("div", "name", t("Find with a local model")), el("div", "sub", pmSub(m)));
+    who.append(name(), el("div", "sub", pmSub(m)));
     if (m?.supported || m?.installed) {
       if (m.downloading) {
         const c = el("button", "text", t("Cancel"));

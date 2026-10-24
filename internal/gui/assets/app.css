@@ -3248,6 +3248,7 @@ body:not(.side-nav) #view-settings .set-head.stuck::before { box-shadow: 0 1px 0
 .static-pill { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 7px; font-size: 12px; color: var(--muted); background: var(--pill); white-space: nowrap; }
 .static-pill.on { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
 #privacyModelRow.pm-wait .name { color: var(--muted); }
+#privacyModelRow .badge.new { margin-left: 7px; background: var(--accent-soft); color: var(--accent); }
 
 /* Privacy › what masking kept from vendors (renderMaskObs): a quiet card
    over the switches, in the other cards' own colour. Flat only: no
