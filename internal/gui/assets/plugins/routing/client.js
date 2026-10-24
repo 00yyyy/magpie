@@ -2361,11 +2361,27 @@ function routingPage(part) {
   // for: a vendor serving a cheaper model in its place, which only the
   // reply's model field tells (its dated name is the same model)
   function swapTag(tr, short) {
-    const k = el("span", "swap", short ? t("served {served}", { served: tr.served }) : t("requested {sent} · served {served}", { sent: tr.model, served: tr.served }));
+    const route = clineRoute(tr);
+    const k = el("span", "swap", short ? t(route ? "ClinePass route {served}" : "served {served}", { served: tr.served })
+      : t(route ? "requested {sent} · ClinePass route {served}" : "requested {sent} · served {served}", { sent: tr.model, served: tr.served }));
     k.title = swapWhy(tr);
     return k;
   }
-  const swapWhy = (tr) => t("The vendor was asked for {sent}, but its reply says {served} answered: likely another model. The same model under a dated name or spelled otherwise isn't marked.", { sent: tr.model, served: tr.served });
+  // ClinePass names a reply by the route it picked (its VMC,
+  // vmc/deepseek-v4p1-flash-1017-contributor-fallbacks), not by a model:
+  // such a reply is said as its route, with what was asked of it and
+  // whether it said who answered (zRain on Discord, 10-24). pin is the
+  // provider the try asked for; a Usage row doesn't keep it (pinUnknown).
+  const clineRoute = (tr) => /^vmc\//.test(tr.served || "") && /(^|\/)cline-pass\//.test(tr.model || "");
+  function swapWhy(tr, o = {}) {
+    if (!clineRoute(tr)) return t("The vendor was asked for {sent}, but its reply says {served} answered: likely another model. The same model under a dated name or spelled otherwise isn't marked.", { sent: tr.model, served: tr.served });
+    const s = t("ClinePass answered {sent} through {served}, a route it picks itself: the name is the route's, not another model's.", { sent: tr.model, served: tr.served });
+    if (tr.upstream) return s + " " + t("Its reply says {upstream} answered.", { upstream: tr.upstream });
+    if (o.pinUnknown) return s + " " + t("Its reply didn't say which provider answered.");
+    if (tr.pin) return s + " " + t("{pin} was asked for, but its reply didn't say which provider answered, so whether ClinePass kept to it is unknown.", { pin: tr.pin });
+    const tick = /(^|\/)cline-pass\/(deepseek|glm)/i.test(tr.model) ? " " + t("To ask for the maker's own API, tick “{tick}” in the provider's settings.", { tick: t("DeepSeek and GLM models only from their makers' own APIs") }) : "";
+    return s + " " + t("No provider was asked for, and its reply didn't say which one answered.") + tick;
+  }
   window.swapWhy = swapWhy; // the Usage page's Requests say it too
   // a try that asked a remote magpie for one of its routing groups: the
   // reply names the member the group routed to, which is the group

@@ -348,6 +348,9 @@ type Try struct {
 	// Upstream: the provider an aggregator said answered behind it
 	// (OpenRouter's DeepInfra, Novita …)
 	Upstream string `json:"upstream,omitempty"`
+	// Pin: the upstream the try asked the Cline API to serve it from
+	// (provider.ClinePassAsked), "" when it asked for none
+	Pin string `json:"pin,omitempty"`
 	// Tier: the service tier it went out at, once a fast pick or an
 	// account without Ultrafast had changed it; TierServed: the one its
 	// reply said it ran at, when it said one (#1784)

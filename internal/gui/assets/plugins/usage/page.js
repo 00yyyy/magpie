@@ -811,7 +811,7 @@ function ledServed(r) {
   }
   if (!r.swapped) return el("span", "model-value", r.served);
   const k = el("span", "swap", r.served);
-  k.title = window.swapWhy ? window.swapWhy({ model: r.model, served: r.served }) : "";
+  k.title = window.swapWhy ? window.swapWhy({ model: r.model, served: r.served, upstream: r.upstream }, { pinUnknown: true }) : "";
   return k;
 }
 
