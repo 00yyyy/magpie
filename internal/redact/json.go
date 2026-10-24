@@ -214,7 +214,13 @@ func walk(b []byte, fn func(path, key, s string) string) (out []byte, ok bool) {
 		return b, true
 	}
 	w.out.Write(b[w.last:])
-	return w.out.Bytes(), true
+	out = w.out.Bytes()
+	if cap(out)-len(out) > len(out)/8 {
+		// placeholders longer than what they stand for grew it past the
+		// room made for it: held as it is, a doubled buffer (#3383)
+		out = bytes.Clone(out)
+	}
+	return out, true
 }
 
 type walker struct {
@@ -324,6 +330,12 @@ func (w *walker) value(i int, path, key string) (int, bool) {
 			return i, false
 		}
 		if t := w.fn(path, key, s); t != s {
+			if w.out.Cap() == 0 {
+				// the masked body is about the body's size: grown by
+				// doubling, its buffer was up to twice that, held as the
+				// request's body while it streams (#3383)
+				w.out.Grow(len(w.in) + len(w.in)/16 + 64)
+			}
 			w.out.Write(w.in[w.last:i])
 			w.out.WriteByte('"')
 			w.out.WriteString(jsonEscape(t))
