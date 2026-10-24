@@ -111,7 +111,9 @@ func TestAutoModeClassifierOnAReasoningModel(t *testing.T) {
 // conversation's own turn is left alone.
 func TestAutoModeClassifierOnlyTheClassifier(t *testing.T) {
 	f := &fake{t: t, reply: sse(
-		`event: response.completed` + "\n" + `data: {"type":"response.completed","response":{"id":"r1","model":"m1","status":"completed","usage":{"input_tokens":4,"output_tokens":2}}}`)}
+		`event: response.created`+"\n"+`data: {"type":"response.created","response":{"id":"r1","model":"m1","usage":{"input_tokens":0,"output_tokens":0}}}`,
+		`event: response.output_text.delta`+"\n"+`data: {"type":"response.output_text.delta","delta":"<block>no"}`,
+		`event: response.completed`+"\n"+`data: {"type":"response.completed","response":{"id":"r1","model":"m1","status":"completed","usage":{"input_tokens":4,"output_tokens":2}}}`)}
 	setup(t, provider.Responses, f)
 	if code, body := post(t, "/v1/messages", autoModeAsk("m1")); code != 200 {
 		t.Fatalf("%d %s", code, body)
@@ -982,5 +984,54 @@ func TestAutoModeClassifierEffortRefusedGoesWithout(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// CyberCaius on Discord: after a switch in /model, the first auto mode
+// classifier request went to the model before it. Claude Code names its
+// sonnet tier for the classifier, and that tier followed the old main
+// model until magpie moved it. The classifier goes to the model the tier
+// follows now (ClassifierStandIn); a turn of the conversation naming the
+// same model, another session still on it, goes as asked.
+func TestAutoModeClassifierFollowsTheSwitchedModel(t *testing.T) {
+	setHome(t, t.TempDir())
+	f := &fake{t: t, reply: sse(
+		`event: response.created`+"\n"+`data: {"type":"response.created","response":{"id":"r1","model":"m1","usage":{"input_tokens":0,"output_tokens":0}}}`,
+		`event: response.output_text.delta`+"\n"+`data: {"type":"response.output_text.delta","delta":"<block>no"}`,
+		`event: response.completed`+"\n"+`data: {"type":"response.completed","response":{"id":"r1","model":"m1","status":"completed","usage":{"input_tokens":4,"output_tokens":2}}}`)}
+	setup(t, provider.Responses, f)
+	p, _ := provider.Find("fake")
+	p.Models = []string{"m1", "m2"}
+	if err := provider.Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	var asked []string
+	ClassifierStandIn = func(agent, model string) string {
+		asked = append(asked, agent+" "+model)
+		if model == "fake/m1" {
+			return "fake/m2"
+		}
+		return ""
+	}
+	t.Cleanup(func() { ClassifierStandIn = nil })
+	send := func(body string) {
+		t.Helper()
+		f.got = nil
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body))
+		req.Header.Set("User-Agent", "claude-cli/2.1.310 (external, cli)")
+		req.Header.Set("x-api-key", Token+"-claude")
+		New().Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%d %s", rec.Code, rec.Body.String())
+		}
+	}
+	send(autoModeAsk("fake/m1"))
+	if got := modelOf(f.got); got != "m2" {
+		t.Fatalf("the classifier went to %q, want the switched-to m2 (asked %v)", got, asked)
+	}
+	send(`{"model":"fake/m1","max_tokens":64,"messages":[{"role":"user","content":"hi"}],"tools":[{"name":"Bash","input_schema":{"type":"object"}}]}`)
+	if got := modelOf(f.got); got != "m1" {
+		t.Fatalf("a conversation's turn went to %q, want m1 as asked", got)
 	}
 }

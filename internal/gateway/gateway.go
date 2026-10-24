@@ -1733,7 +1733,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		return m
 	}
-	if m := claudeTierStandIn(r, agent, asked); m != "" {
+	if m := classifierStandIn(agent, from, asked, body); m != "" {
+		// Claude Code's auto mode classifier on its sonnet tier, which
+		// follows a main model /model has moved: the model it moved to
+		asked = grouped(at(m))
+	} else if m := claudeTierStandIn(r, agent, asked); m != "" {
 		// Claude Code (or a wrapper, T3 Code) naming one of Anthropic's
 		// models by its full id: the model it is set to use for that tier,
 		// whether or not magpie serves the id too

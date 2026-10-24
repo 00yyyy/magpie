@@ -206,11 +206,7 @@ func ownEffortRefused(status int, body []byte, sent string) (refused, value bool
 // an Anthropic endpoint as it was sent: a model that isn't Claude gets the
 // room to reason in. The rest of the body is left alone.
 func autoModeClassifierBody(model string, body []byte) []byte {
-	if anthropicModel.MatchString(model) || !bytes.Contains(body, []byte("<transcript>")) || !bytes.Contains(body, []byte("<block>")) && !bytes.Contains(body, []byte("<severity>")) {
-		return body
-	}
-	req, err := parseAnthropic(body)
-	if err != nil || !autoModeClassifier(req) {
+	if anthropicModel.MatchString(model) || !autoModeClassifierAsk(body) {
 		return body
 	}
 	asked := gjson.GetBytes(body, "max_tokens").Int()
@@ -218,4 +214,35 @@ func autoModeClassifierBody(model string, body []byte) []byte {
 		return body
 	}
 	return withFields(body, map[string]any{"max_tokens": asked + classifierRoom})
+}
+
+// autoModeClassifierAsk reports whether body, a Messages API request, is
+// Claude Code's auto mode classifier asking about an action. The bytes
+// are looked at before the body is parsed: every request passes here.
+func autoModeClassifierAsk(body []byte) bool {
+	if !bytes.Contains(body, []byte("<transcript>")) || !bytes.Contains(body, []byte("<block>")) && !bytes.Contains(body, []byte("<severity>")) {
+		return false
+	}
+	req, err := parseAnthropic(body)
+	return err == nil && autoModeClassifier(req)
+}
+
+// ClassifierStandIn is the model Claude Code's auto mode classifier goes
+// to in place of the tier's it named, while that tier follows a main model
+// /model has moved since magpie wrote it; "" leaves it as asked. Set by
+// main (agent.ClassifierStandIn).
+var ClassifierStandIn func(agent, model string) string
+
+// classifierStandIn is ClassifierStandIn for a request Claude Code sent,
+// when it is the auto mode classifier: Claude Code names its sonnet tier
+// for it, not the session's model, so the first one after a switch in
+// /model went to the model before it until magpie moved the tier.
+func classifierStandIn(agent string, from provider.Protocol, asked string, body []byte) string {
+	if ClassifierStandIn == nil || agent != "claude" || from != provider.Anthropic || !autoModeClassifierAsk(body) {
+		return ""
+	}
+	if m := ClassifierStandIn(agent, asked); m != asked {
+		return m
+	}
+	return ""
 }
