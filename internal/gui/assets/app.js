@@ -4102,6 +4102,7 @@ function updatePath(p) {
 async function renderUpdateBadge() {
   const b = $("#update"), label = b.querySelector("span");
   const u = await api(updatePath("update")).catch(() => null);
+  if (u) updateLast = u;
   // pulling: a click is downloading it again, and restarts once it's in
   const pulling = !!u && !!b.dataset.pulling && ["checking", "downloading", "ready"].includes(u.state);
   if (b.dataset.pulling && !pulling) {
@@ -22808,17 +22809,22 @@ function renderLAN(s) {
 // The app checks and downloads on its own, so usually the row just offers
 // the restart; a check can also be asked for. That check leaves the button
 // where it is, dimmed, and a second click does nothing. A read still out
-// from before the answer is not drawn over it. A row drawn again reads the
-// current state, and keeps asking while a check or a download is under way.
-let updateBusy = false;
-const updateSeq = new WeakMap();
+// from before the answer is not drawn over it. A row drawn again draws the
+// last state at once, but in a check (#3469), and reads while a check or a
+// download is under way.
+let updateBusy = false, updateLast = null;
+const updateSeq = new WeakMap(), seqOf = (r) => updateSeq.get(r) || 0;
 
 async function renderUpdate(r, u) {
-  const seq = updateSeq.get(r) || 0;
+  const seq = seqOf(r);
   if (u == null) {
+    const early = !updateBusy && updateLast && !r.querySelector(".sub");
+    if (early) renderUpdate(r, updateLast);
     u = await api(updatePath("update")).catch(() => null);
-    if (!u || !r.isConnected || (updateSeq.get(r) || 0) !== seq) return;
+    if (!u || !r.isConnected || seqOf(r) !== seq) return;
+    if (early) updateSeq.set(r, seq + 1); // stops its timers
   } else if (!r.isConnected) return;
+  updateLast = u;
   const who = r.querySelector(".who"), val = r.querySelector(".val");
   const sub = who.querySelector(".sub") || who.appendChild(el("div", "sub"));
   sub.title = "";
@@ -22828,6 +22834,8 @@ async function renderUpdate(r, u) {
   const kept = val.querySelector("button.update-page");
   for (const b of val.querySelectorAll("button")) if (b !== kept) b.remove();
   let pageShown = false;
+  const open = () => (web ? window.open(u.url, "_blank", "noopener") : api("open", { url: u.url }).catch(() => {}));
+  const dim = () => { for (const b of val.querySelectorAll("button")) { b.disabled = true; b.classList.add("busy"); } };
   // where GitHub is slow to magpie, the update can be fetched in the
   // browser instead, through its own proxy or accelerator (PapainTea on X)
   const page = () => {
@@ -22836,7 +22844,7 @@ async function renderUpdate(r, u) {
     b.textContent = t("Open the release page");
     b.disabled = false; // a Check dims every button until its answer
     b.classList.remove("busy");
-    b.onclick = () => (web ? window.open(u.url, "_blank", "noopener") : api("open", { url: u.url }).catch(() => {}));
+    b.onclick = open;
     if (val.lastElementChild !== b) val.append(b);
     pageShown = true;
   };
@@ -22852,24 +22860,21 @@ async function renderUpdate(r, u) {
   const check = async () => {
     if (updateBusy) return;
     updateBusy = true;
-    const mine = (updateSeq.get(r) || 0) + 1;
+    const mine = seqOf(r) + 1;
     updateSeq.set(r, mine);
     sub.textContent = t("Checking for updates…");
-    for (const b of val.querySelectorAll("button")) {
-      b.disabled = true;
-      b.classList.add("busy");
-    }
+    dim();
     let next;
     try { next = await api(updatePath("update/check"), {}); }
     catch (e) { next = { state: "error", error: e.message }; }
     updateBusy = false;
-    if (!r.isConnected || (updateSeq.get(r) || 0) !== mine) return;
+    if (!r.isConnected || seqOf(r) !== mine) return;
     updateSeq.set(r, mine + 1); // the answer stands; a read still out is older
     renderUpdate(r, next);
   };
   const again = (ms) => {
-    const seen = updateSeq.get(r) || 0;
-    setTimeout(() => { if (r.isConnected && (updateSeq.get(r) || 0) === seen) renderUpdate(r); }, ms);
+    const seen = seqOf(r);
+    setTimeout(() => { if (r.isConnected && seqOf(r) === seen) renderUpdate(r); }, ms);
   };
   switch (u.state) {
     case "ready": {
@@ -22892,11 +22897,11 @@ async function renderUpdate(r, u) {
         btn(t("Restart now"), () => install("now"));
         btn(t("Cancel"), () => install("cancel"));
         // the wait ends in a restart: a read that finds no one is that
-        const seen = updateSeq.get(r) || 0;
+        const seen = seqOf(r);
         setTimeout(async () => {
-          if (!r.isConnected || (updateSeq.get(r) || 0) !== seen) return;
+          if (!r.isConnected || seqOf(r) !== seen) return;
           const n = await api(updatePath("update")).catch(() => null);
-          if (!r.isConnected || (updateSeq.get(r) || 0) !== seen) return;
+          if (!r.isConnected || seqOf(r) !== seen) return;
           if (!n) {
             sub.textContent = t("Restarting…");
             for (const b of val.querySelectorAll("button")) b.remove();
@@ -22910,7 +22915,7 @@ async function renderUpdate(r, u) {
       else if (busyNow) sub.textContent += " · " + busyNow;
       if (u.gaveUp) sub.classList.add("wraps");
       btn(t("Restart to update"), () => (u.error ? install() : confirmUpdate(u, () => install())));
-      if (u.error && u.url) btn(t("Download"), () => (web ? window.open(u.url, "_blank", "noopener") : api("open", { url: u.url })));
+      if (u.error && u.url) btn(t("Download"), open);
       break;
     }
     case "found": {
@@ -22963,10 +22968,11 @@ async function renderUpdate(r, u) {
           + (u.error ? " · " + u.error.replace("through the mirror " + u.mirror + ": ", "").replace(/^Get "[^"]*": /, "") : "");
         btn(t("Download from GitHub"), async () => {
           if (updateBusy) return;
-          for (const b of val.querySelectorAll("button")) { b.disabled = true; b.classList.add("busy"); }
+          dim();
           try {
             prefs = await writingPrefs(api("settings/update-mirror", { mirror: "" }));
             await api(updatePath("update/install"), installFrom());
+            updateLast = null;
             renderSettings(); // the source row says GitHub, this one the download
           } catch (e) {
             status(t(e.message), "err");
@@ -22987,7 +22993,7 @@ async function renderUpdate(r, u) {
         : t("{v} didn't start on this computer, so magpie stays on {cur}", { v: u.latest || b.version, cur: u.current }) + (b.error ? " · " + b.error : "");
       sub.title = b.error || u.error || "";
       sub.classList.add("wraps");
-      if (u.url) btn(t("Download"), () => (web ? window.open(u.url, "_blank", "noopener") : api("open", { url: u.url })));
+      if (u.url) btn(t("Download"), open);
       btn(t("Check"), check);
       break;
     }
