@@ -600,3 +600,40 @@ func TestPartnersKeepTheirLastTry(t *testing.T) {
 		t.Fatalf("the list fetched again after a failure wasn't logged:\n%s", logged.String())
 	}
 }
+
+// A partners.json that doesn't parse is read as no list and no Seen, and
+// every try now writes the file before it is sent (#3362). The first try,
+// offline too, wrote over it: the presets of partners no longer listed,
+// which providers added from them still use, were gone. It is kept aside
+// first, as lastgood keeps every file read as empty when it doesn't parse.
+func TestPartnersUnparsedFileKeptAside(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	resetPartners()
+	t.Cleanup(resetPartners)
+	bad := []byte(`{"at":"2026-10-20T15:40:31+08:00","seen":{"acme":{"id":"acme","name":"Acme AI","ch`)
+	if err := os.MkdirAll(filepath.Dir(partnerCacheFile()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(partnerCacheFile(), bad, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		http.Error(rw, "down", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("MAGPIE_PARTNERS", srv.URL)
+	fetchPartnersNow()
+
+	aside, _ := filepath.Glob(partnerCacheFile() + ".bad-*")
+	if len(aside) != 1 {
+		t.Fatalf("partners.json that didn't parse was written over with nothing kept aside (%v)", aside)
+	}
+	if b, err := os.ReadFile(aside[0]); err != nil || !bytes.Equal(b, bad) {
+		t.Fatalf("kept aside %q (%v), want the file as it was", b, err)
+	}
+	partnerMu.Lock()
+	defer partnerMu.Unlock()
+	if partnerState.Error == "" {
+		t.Fatalf("the failed try isn't recorded: %+v", partnerState)
+	}
+}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/source"
 )
 
@@ -296,6 +297,14 @@ func partnerError(err error) string {
 func savePartners() {
 	b, err := json.Marshal(partnerState)
 	if err != nil {
+		return
+	}
+	// loadPartners reads a file that doesn't parse as no list and no Seen:
+	// it is kept aside before it is written over, and not written over
+	// when it can't be read. Every try writes the file (Tried, #3362), so
+	// without this the first one, offline too, lost the presets of the
+	// partners no longer listed that providers added from them still use.
+	if lastgood.KeepUnparsed(partnerCacheFile(), lastgood.Into[partnerCache]) != nil {
 		return
 	}
 	_ = os.MkdirAll(filepath.Dir(partnerCacheFile()), 0o755)
