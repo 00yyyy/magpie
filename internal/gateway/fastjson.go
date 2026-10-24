@@ -38,7 +38,17 @@ import (
 // error, and what it leaves in dst, are encoding/json's own. So does a dst
 // that already holds something, which encoding/json decodes into in ways
 // of its own (a slice's old elements are decoded over, not replaced).
-func decodeJSON(data []byte, dst any) error {
+func decodeJSON(data []byte, dst any) error { return decodeJSONIn(data, dst, false) }
+
+// decodeJSONView is decodeJSON for a reader that keeps nothing it decodes
+// past its return and writes none of it: every raw value shares data's
+// bytes, capped, where decodeJSON copies what isn't a big share of a held
+// body. A body a route has rewritten is held by nobody, so each reader of
+// a rewritten Codex request copied its whole input to look at it: 1.4 of
+// the 16.4 MB a 680 KB request allocated (#3383).
+func decodeJSONView(data []byte, dst any) error { return decodeJSONIn(data, dst, true) }
+
+func decodeJSONIn(data []byte, dst any, share bool) error {
 	v := reflect.ValueOf(dst)
 	if v.Kind() != reflect.Pointer || v.IsNil() || !v.Elem().IsZero() {
 		return json.Unmarshal(data, dst)
@@ -60,7 +70,7 @@ func decodeJSON(data []byte, dst any) error {
 		// of the value's opening and its close.
 		return json.Unmarshal(append(data[:start+1:start+1], close), dst)
 	}
-	if err := fillJSONIn(trimJSON(data), v.Elem(), members); err != nil {
+	if err := fillJSONIn(trimJSON(data), v.Elem(), members, share); err != nil {
 		v.Elem().SetZero()
 		return json.Unmarshal(data, dst)
 	}
@@ -279,14 +289,15 @@ func (f *fastFields) field(key []byte) int {
 
 // fillJSON decodes raw, a whole valid JSON value, into v; errSlowJSON or
 // another error leaves it to encoding/json.
-func fillJSON(raw []byte, v reflect.Value) error { return fillJSONIn(raw, v, nil) }
+func fillJSON(raw []byte, v reflect.Value, share bool) error { return fillJSONIn(raw, v, nil, share) }
 
 // fillJSONIn is fillJSON with where raw's members are, when known
-// (longBody): a struct or map at raw's top is filled from them.
-func fillJSONIn(raw []byte, v reflect.Value, members []memberSpan) error {
+// (longBody): a struct or map at raw's top is filled from them. share
+// is decodeJSONView's: every raw value is raw's own bytes.
+func fillJSONIn(raw []byte, v reflect.Value, members []memberSpan, share bool) error {
 	t := v.Type()
 	if t == rawMessageType {
-		if inHeldBody(raw) {
+		if share || inHeldBody(raw) {
 			// the request's own body, which nothing writes to: shared,
 			// and capped so an append to it can't write over the body
 			v.SetBytes(raw[:len(raw):len(raw)])
@@ -312,7 +323,7 @@ func fillJSONIn(raw []byte, v reflect.Value, members []memberSpan) error {
 		if v.IsNil() {
 			v.Set(reflect.New(t.Elem()))
 		}
-		return fillJSONIn(raw, v.Elem(), members)
+		return fillJSONIn(raw, v.Elem(), members, share)
 	case reflect.String:
 		if null {
 			return nil
@@ -377,7 +388,7 @@ func fillJSONIn(raw []byte, v reflect.Value, members []memberSpan) error {
 				err = errSlowJSON // a key twice: encoding/json merges them
 				return false
 			}
-			err = fillJSON(val, v.Field(f.index[i]))
+			err = fillJSON(val, v.Field(f.index[i]), share)
 			return err == nil
 		})
 		return err
@@ -399,7 +410,7 @@ func fillJSONIn(raw []byte, v reflect.Value, members []memberSpan) error {
 		})
 		s := reflect.MakeSlice(t, len(elems), len(elems))
 		for i, el := range elems {
-			if err := fillJSON(el, s.Index(i)); err != nil {
+			if err := fillJSON(el, s.Index(i), share); err != nil {
 				return err
 			}
 		}
@@ -427,7 +438,7 @@ func fillJSONIn(raw []byte, v reflect.Value, members []memberSpan) error {
 				return false
 			}
 			el := reflect.New(t.Elem()).Elem()
-			if err = fillJSON(val, el); err != nil {
+			if err = fillJSON(val, el, share); err != nil {
 				return false
 			}
 			v.SetMapIndex(reflect.ValueOf(name), el)

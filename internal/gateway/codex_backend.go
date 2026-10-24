@@ -501,7 +501,7 @@ func leadFirst(scope, parent string, cands []candidate, pl planned) ([]candidate
 // fields (including ordinary model history) keep their existing handling.
 func hasSealedAgentMessage(body []byte) bool {
 	var request map[string]json.RawMessage
-	if decodeJSON(body, &request) != nil {
+	if decodeJSONView(body, &request) != nil {
 		return false
 	}
 	items, isList := inputList(request["input"])
@@ -513,7 +513,7 @@ func hasSealedAgentMessage(body []byte) bool {
 			Type    string          `json:"type"`
 			Content json.RawMessage `json:"content"`
 		}
-		if decodeJSON(raw, &item) != nil || item.Type != "agent_message" {
+		if decodeJSONView(raw, &item) != nil || item.Type != "agent_message" {
 			continue
 		}
 		for _, content := range elementsOf(trimJSON(item.Content)) {

@@ -798,7 +798,7 @@ func withoutRefused(key, who string, body []byte) ([]byte, bool) {
 		return nil, false
 	}
 	var q map[string]json.RawMessage
-	if decodeJSON(body, &q) != nil {
+	if decodeJSONView(body, &q) != nil {
 		return nil, false
 	}
 	items, isList := inputList(q["input"])
@@ -808,7 +808,7 @@ func withoutRefused(key, who string, body []byte) ([]byte, bool) {
 	kept := items[:0:0]
 	for _, it := range items {
 		var t sealedItem
-		if decodeJSON(it, &t) == nil && sealedKinds[t.Type] && t.Enc != "" && r.seals[sha256.Sum256([]byte(t.Enc))] {
+		if decodeJSONView(it, &t) == nil && sealedKinds[t.Type] && t.Enc != "" && r.seals[sha256.Sum256([]byte(t.Enc))] {
 			continue
 		}
 		kept = append(kept, it)
@@ -852,7 +852,7 @@ func withoutCompaction(body []byte) ([]byte, bool) {
 // types.
 func withoutKinds(body []byte, kinds ...string) ([]byte, bool) {
 	var q map[string]json.RawMessage
-	if decodeJSON(body, &q) != nil {
+	if decodeJSONView(body, &q) != nil {
 		return nil, false
 	}
 	items, isList := inputList(q["input"])
@@ -864,7 +864,7 @@ func withoutKinds(body []byte, kinds ...string) ([]byte, bool) {
 		var t struct {
 			Type string `json:"type"`
 		}
-		if decodeJSON(it, &t) == nil && slices.Contains(kinds, t.Type) {
+		if decodeJSONView(it, &t) == nil && slices.Contains(kinds, t.Type) {
 			continue
 		}
 		kept = append(kept, it)

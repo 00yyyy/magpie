@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -134,6 +136,10 @@ func fjCompare(t *testing.T, data []byte) {
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("%T %q:\n decodeJSON   %#v\n json.Unmarshal %#v", got, data, got, want)
 		}
+		view := mk()
+		if verr := decodeJSONView(data, view); (verr == nil) != (werr == nil) || !reflect.DeepEqual(view, want) {
+			t.Fatalf("%T %q:\n decodeJSONView %#v %v\n json.Unmarshal %#v %v", view, data, view, verr, want, werr)
+		}
 	}
 }
 
@@ -173,14 +179,45 @@ func TestDecodeJSONKeyTwice(t *testing.T) {
 	}
 	// the fast path's own refusal, which encoding/json then decodes
 	for _, s := range []string{`{"f66":"a","f66":"b"}`, `{"f3":"a","F3":"b"}`} {
-		if err := fillJSON([]byte(s), reflect.New(wide).Elem()); err != errSlowJSON {
+		if err := fillJSON([]byte(s), reflect.New(wide).Elem(), false); err != errSlowJSON {
 			t.Fatalf("%s: fillJSON %v, want errSlowJSON", s, err)
 		}
 	}
 	for _, s := range []string{`{"model":"a","model":"b"}`, `{"Model":"a","MODEL":"b"}`} {
-		if err := fillJSON([]byte(s), reflect.ValueOf(new(fjBody)).Elem()); err != errSlowJSON {
+		if err := fillJSON([]byte(s), reflect.ValueOf(new(fjBody)).Elem(), false); err != errSlowJSON {
 			t.Fatalf("%s: fillJSON %v, want errSlowJSON", s, err)
 		}
+	}
+}
+
+// decodeJSONView's raw values are the bytes it read, capped, however
+// small a share of them: a rewritten body, which nobody holds, is read
+// without a copy of its input.
+func TestDecodeJSONViewShares(t *testing.T) {
+	body := []byte(`{"model":"m","input":[{"type":"message","content":[{"type":"input_text","text":"hi"}]},{"type":"function_call_output","call_id":"c","output":"ok"}],"tools":[]}`)
+	var q map[string]json.RawMessage
+	if err := decodeJSONView(body, &q); err != nil {
+		t.Fatal(err)
+	}
+	var item struct {
+		Content json.RawMessage `json:"content"`
+	}
+	in := elementsOf(q["input"])
+	if err := decodeJSONView(in[0], &item); err != nil {
+		t.Fatal(err)
+	}
+	for name, raw := range map[string]json.RawMessage{"input": q["input"], "tools": q["tools"], "content": item.Content} {
+		i := bytes.Index(body, raw)
+		if i < 0 || unsafe.SliceData(raw) != unsafe.SliceData(body[i:]) || cap(raw) != len(raw) {
+			t.Fatalf("%s %s: not body's own bytes, capped", name, raw)
+		}
+	}
+	var copied map[string]json.RawMessage
+	if err := decodeJSON(body, &copied); err != nil {
+		t.Fatal(err)
+	}
+	if unsafe.SliceData(copied["tools"]) == unsafe.SliceData(body[bytes.Index(body, []byte(`[]`)):]) {
+		t.Fatal("decodeJSON shared a body nobody holds")
 	}
 }
 

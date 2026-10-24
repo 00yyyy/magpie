@@ -6667,7 +6667,7 @@ func conversationID(in http.Header, body []byte) string {
 		Contents json.RawMessage `json:"contents"`
 	}
 	// An undecodable body still gets an id: the hash of the whole body.
-	_ = decodeJSON(body, &m)
+	_ = decodeJSONView(body, &m)
 	// The turns are the body's own bytes, not a copy of each: this runs on
 	// every request, and a 1.5 MB conversation's copy was ~2.8 MB of each
 	// request's allocations (yg6888 on X).
@@ -6688,7 +6688,7 @@ func conversationID(in http.Header, body []byte) string {
 			Role string `json:"role"`
 		}
 		// Gemini treats an omitted role as user; Chat and Responses do not.
-		if decodeJSON(it, &r) == nil && (r.Role == "user" || (geminiContents && r.Role == "")) {
+		if decodeJSONView(it, &r) == nil && (r.Role == "user" || (geminiContents && r.Role == "")) {
 			first = it
 			break
 		}

@@ -594,7 +594,7 @@ func joinToolRuns(body []byte) []byte {
 		return body
 	}
 	var q map[string]json.RawMessage
-	if decodeJSON(body, &q) != nil {
+	if decodeJSONView(body, &q) != nil {
 		return body
 	}
 	input, isList := inputList(q["input"])
@@ -608,7 +608,7 @@ func joinToolRuns(body []byte) []byte {
 	}
 	items := make([]item, len(input))
 	for i, raw := range input {
-		if decodeJSON(raw, &items[i]) != nil {
+		if decodeJSONView(raw, &items[i]) != nil {
 			items[i] = item{}
 		}
 	}
@@ -696,7 +696,7 @@ func joinToolRuns(body []byte) []byte {
 // requiring paired outputs still need the delivered text, without a fake call ID.
 func orphanedToolOutputs(body []byte) []byte {
 	var q map[string]json.RawMessage
-	if decodeJSON(body, &q) != nil {
+	if decodeJSONView(body, &q) != nil {
 		return body
 	}
 	input, isList := inputList(q["input"])
@@ -717,7 +717,7 @@ func orphanedToolOutputs(body []byte) []byte {
 			CallID string          `json:"call_id"`
 			Output json.RawMessage `json:"output"`
 		}
-		if decodeJSON(raw, &item) != nil {
+		if decodeJSONView(raw, &item) != nil {
 			flush()
 			inCalls = false
 			out = append(out, raw)
@@ -790,7 +790,7 @@ func pairToolItems(body []byte) []byte {
 		return body
 	}
 	var q map[string]json.RawMessage
-	if decodeJSON(body, &q) != nil {
+	if decodeJSONView(body, &q) != nil {
 		return body
 	}
 	input, isList := inputList(q["input"])
@@ -804,7 +804,7 @@ func pairToolItems(body []byte) []byte {
 	items := make([]item, len(input))
 	answered := map[string]bool{}
 	for i, raw := range input {
-		if decodeJSON(raw, &items[i]) != nil {
+		if decodeJSONView(raw, &items[i]) != nil {
 			items[i] = item{}
 		}
 		if t := items[i].Type; (t == "function_call_output" || t == "custom_tool_call_output") && items[i].CallID != "" {
@@ -914,7 +914,7 @@ func withReasoningText(body []byte) []byte {
 		return body
 	}
 	var q map[string]json.RawMessage
-	if decodeJSON(body, &q) != nil {
+	if decodeJSONView(body, &q) != nil {
 		return body
 	}
 	items, isList := inputList(q["input"])
@@ -930,7 +930,7 @@ func withReasoningText(body []byte) []byte {
 			Summary []rText `json:"summary"`
 			Content []rText `json:"content"`
 		}
-		if decodeJSON(raw, &it) != nil {
+		if decodeJSONView(raw, &it) != nil {
 			continue
 		}
 		kinds[i] = stepKindOf(it.Type, it.Role)
@@ -946,7 +946,7 @@ func withReasoningText(body []byte) []byte {
 			b.WriteString(noReasoning)
 		}
 		var m map[string]json.RawMessage
-		if decodeJSON(raw, &m) != nil {
+		if decodeJSONView(raw, &m) != nil {
 			continue
 		}
 		m["content"], _ = json.Marshal([]map[string]string{{"type": "reasoning_text", "text": b.String()}})
