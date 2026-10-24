@@ -257,3 +257,45 @@ func TestClaudeFileReadOnAfterRestart(t *testing.T) {
 		}
 	}
 }
+
+// The Sessions list's own window is kept in sessions.json: after a restart a
+// grown Claude file is read on, and what it counts is what a read from the
+// start counts (#3493).
+func TestClaudeSummaryReadOnAfterRestart(t *testing.T) {
+	d := setupCalls(t)
+	path := filepath.Join(d.claude, "projects", "fixture", "session.jsonl")
+	const count = 3000
+	at := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	line := func(i int, id string, out int) string {
+		return string(claudeUsageLine(at.Add(time.Duration(i)*time.Second), id, "req-"+id, "m", Tokens{Input: 1, Output: out}, "", true))
+	}
+	lines := make([]string, count)
+	for i := range lines {
+		lines[i] = line(i, fmt.Sprint(i), 2)
+	}
+	writeLines(t, path, lines...)
+	List(0)
+	// a reparse from the start cannot know this marker: it proves the read
+	// after the restart went on from the kept parse
+	mu.Lock()
+	marked := *cache[path]
+	marked.Named = "read on marker"
+	cache[path] = &marked
+	saveCache()
+	mu.Unlock()
+	Reset()
+	appendText(t, path, line(count, "2990", 9)+"\n"+lines[count-1]+"\n"+line(count+1, "new", 2)+"\n")
+	got := List(0)
+	mu.Lock()
+	named := cache[path].Named
+	mu.Unlock()
+	if named != "read on marker" {
+		t.Fatal("the grown file was parsed again from its start")
+	}
+	Reset()
+	os.Remove(CachePath())
+	want := List(0)
+	if len(got) != 1 || len(want) != 1 || got[0].Input != want[0].Input || got[0].Output != want[0].Output || got[0].Input != count+1 || got[0].Output != 2*(count+1)+7 {
+		t.Fatalf("read on: %+v, from the start: %+v", got, want)
+	}
+}

@@ -23,13 +23,6 @@ type callRevisions struct {
 	Window      []claudeWindowEntry
 }
 
-// claudeWindowEntry is one contribution, oldest first, as the window's
-// eviction order has them.
-type claudeWindowEntry struct {
-	Key string
-	M   *claudeContribution
-}
-
 func callRevisionsPath(path string) string {
 	return strings.TrimSuffix(callCachePath(path), ".gob") + ".rev"
 }
@@ -42,11 +35,7 @@ func writeCallRevisions(st *callFile) {
 		_ = os.Remove(path)
 		return
 	}
-	r := callRevisions{Off: st.Off, ContentHash: st.ContentHash, CompactMs: st.CompactMs}
-	for e := st.Claude.recent.Front(); e != nil; e = e.Next() {
-		m := e.Value.(*claudeContribution)
-		r.Window = append(r.Window, claudeWindowEntry{m.key, m})
-	}
+	r := callRevisions{Off: st.Off, ContentHash: st.ContentHash, CompactMs: st.CompactMs, Window: st.Claude.window()}
 	var data bytes.Buffer
 	if gob.NewEncoder(&data).Encode(r) != nil {
 		return
@@ -79,24 +68,7 @@ func withCallRevisions(old *callFile) *callFile {
 	if gob.NewDecoder(bytes.NewReader(data)).Decode(&r) != nil || r.Off != old.Off || r.ContentHash != old.ContentHash {
 		return old
 	}
-	w := &claudeUsageState{Messages: map[string]map[string]*claudeContribution{}}
-	for _, e := range r.Window {
-		m := e.M
-		if m == nil {
-			return old
-		}
-		m.key = e.Key
-		m.weight = m.entryWeight()
-		m.node = w.recent.PushBack(m)
-		w.entries += m.weight
-		branches := w.Messages[e.Key]
-		if branches == nil {
-			branches = map[string]*claudeContribution{}
-			w.Messages[e.Key] = branches
-		}
-		branches[m.Request] = m
-	}
 	c := *old
-	c.Claude, c.CompactMs = w, r.CompactMs
+	c.Claude, c.CompactMs = claudeWindowOf(r.Window), r.CompactMs
 	return &c
 }
