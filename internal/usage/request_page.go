@@ -397,10 +397,12 @@ func rowsIn(c *rowChunk) int {
 // packed copies it keeps: ~100 MB of a start that peaked at 508 MB over
 // 420k calls. A packed chunk is decoded when a pass reaches it, into a
 // buffer the next one's decode reuses, and refs still name the packed
-// chunk.
+// chunk. Its strings' and shapes' slices are reused the same way.
 type chunkRows struct {
 	c, open *rowChunk
 	buf     []packedRow
+	strs    []string
+	shapes  [][rowTexts]uint32
 }
 
 // of is c's rows to read. What the page set on c since (a Codex actor or
@@ -410,12 +412,18 @@ func (r *chunkRows) of(c *rowChunk) *rowChunk {
 		return c
 	}
 	if r.c != c {
-		open := c.unpackInto(r.buf)
+		open := c.unpackReusing(r.buf, r.strs, r.shapes)
 		if open == nil { // never written so: pack wrote it in this process
 			open = &rowChunk{Source: c.Source, Computer: c.Computer}
 		}
 		if cap(open.Rows) > cap(r.buf) {
 			r.buf = open.Rows[:0]
+		}
+		if cap(open.Strings) > cap(r.strs) {
+			r.strs = open.Strings[:0]
+		}
+		if cap(open.Shapes) > cap(r.shapes) {
+			r.shapes = open.Shapes[:0]
 		}
 		r.c, r.open = c, open
 	}
