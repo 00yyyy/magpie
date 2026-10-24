@@ -33,7 +33,7 @@ var rowDecodes = sync.Pool{New: func() any { return new([]byte) }}
 var rowEncodes = sync.Pool{New: func() any { return new([2][]byte) }}
 
 func (c *rowChunk) pack() *rowChunk {
-	if c == nil || len(c.Rows) < 64 || len(c.Archive) != 0 {
+	if c == nil || len(c.Rows) == 0 || len(c.Archive) != 0 {
 		return c
 	}
 	encoded, locations := c.encode(func(encoded []byte) bool { return int64(len(encoded)) < c.Bytes })
