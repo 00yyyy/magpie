@@ -4746,7 +4746,7 @@ function routingPage(part) {
     }
     const m = withJS(GROUP_ROUTE_OPTS, g.routing).find(([id]) => id === (g.routing || "")) || ROUTE_OPTS[0];
     const tags = el("span", "tags");
-    tags.append(el("span", "tag", t(m[1])));
+    tags.append(routeTag(g, m));
     if (g.affinity) tags.append(el("span", "tag", t(AFF_OPTS.find(([id]) => id === g.affinity)?.[1] || "")));
     if (g.sink && sinkable(g.routing || "")) {
       const k = el("span", "tag sink", t("Rate limited to the back"));
@@ -4792,6 +4792,36 @@ function routingPage(part) {
       row.append(sw);
     }
     return row;
+  }
+  // routeTag: a group's routing on its row, a button that opens the
+  // routings the editor offers, the current one checked (MoChou, #3450).
+  // Picking one saves the group as the editor's Save would with only its
+  // routing changed: Manual keeps the pick it had, the gateway's first
+  // member when it had none (provider.cleanGroup), as the editor does.
+  function routeTag(g, m) {
+    const cur = g.routing || "";
+    const b = el("button", "tag rt-groute");
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-expanded", "false");
+    b.setAttribute("aria-label", t("Routing") + " · " + g.name + " · " + t(m[1]));
+    b.title = t("How {name} routes: click to change it", { name: g.name });
+    b.append(el("span", "", t(m[1])), svg(CHEV, 10, 1.8));
+    b.onclick = (e) => {
+      e.stopPropagation(); // the card opens the editor; this its routing
+      if (b.classList.contains("open")) return closeProtoMenu();
+      const opts = withJS(GROUP_ROUTE_OPTS, cur);
+      openProtoMenu(b, opts.map(([id, n]) => ({ v: id, name: n, note: "", title: GROUP_HINT[id] ? t(GROUP_HINT[id]) : modeOf(id)[1] })), cur, async (v) => {
+        closeProtoMenu();
+        if (v === cur || (groupDirty() && !(await confirmDiscard()))) return b.focus({ preventScroll: true });
+        const n = opts.find(([id]) => id === v)?.[1] || v;
+        await groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: v, pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink && sinkable(v), firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, unlists: !!g.unlists },
+          t("{name}: {routing}", { name: g.name, routing: t(n) }));
+        // the rows were drawn anew: the keyboard stays on this one's routing
+        gList.querySelector(`.rt-group[data-id="${CSS.escape(g.id)}"] .rt-groute`)?.focus({ preventScroll: true });
+      }, "Routing", "", "right");
+    };
+    return b;
   }
   // groupHandle is a group row's logos, which are also its handle, as an
   // agent row's logo is (#779): drag it to move the row, click it (or
