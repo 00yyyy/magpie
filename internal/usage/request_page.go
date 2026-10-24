@@ -570,12 +570,24 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 		chunks: maps.Clone(idx.chunks)}
 	shared.Unlock()
 	price := Pricer()
+	// Swapped's names are a few hundred pairs over thousands of files' calls,
+	// and its regexps were a third of reading them again (#3493)
+	swapped := map[[2]string]bool{}
 	priceRow := func(r Record, source string) Row {
 		sent := r.Model
 		if source == "" {
 			sent = provider.SentNameIn(cfg.ModelWires, r.Provider, r.Model, r.Effort)
 		}
-		row := Row{Record: r, Source: source, Swapped: r.Served != "" && Swapped(sent, r.Served), Routed: GroupRouted(sent, r.Served)}
+		row := Row{Record: r, Source: source, Routed: GroupRouted(sent, r.Served)}
+		if r.Served != "" {
+			k := [2]string{sent, r.Served}
+			s, ok := swapped[k]
+			if !ok {
+				s = Swapped(sent, r.Served)
+				swapped[k] = s
+			}
+			row.Swapped = s
+		}
 		if pr := price(r); pr != nil && r.Input+r.Output > 0 {
 			row.Priced = true
 			row.Cost = r.CostAt(*pr)
