@@ -365,6 +365,9 @@ type Usage struct {
 	// cacheCreationHasCounts describes the parsed update's own split.
 	// It is never accumulated from earlier usage.
 	cacheCreationHasCounts bool
+	// cacheUnknown: the reply said its vendor counts no cache tokens
+	// (a plugin's magpie_cache_unknown), so a CacheRead of 0 is not a miss
+	cacheUnknown bool
 
 	Reasoning int `json:"reasoning"`
 	// Served: the model the vendor's reply says answered, when it named
@@ -436,6 +439,7 @@ func (u *Usage) add(v Usage) {
 		u.CacheWrite1h = v.CacheWrite1h
 	}
 	u.cacheCreationReported = u.cacheCreationReported || v.cacheCreationReported
+	u.cacheUnknown = u.cacheUnknown || v.cacheUnknown
 	if v.Reasoning > 0 {
 		u.Reasoning = v.Reasoning
 	}

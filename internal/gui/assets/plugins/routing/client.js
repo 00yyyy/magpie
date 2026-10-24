@@ -370,7 +370,10 @@ function routingPage(part) {
     // Input excludes both cache tiers. Include writes in the denominator,
     // and every billable try, as the request's cost does. Older history
     // without the tiers cannot tell a hit rate, even when it has tokens.
+    // A vendor that counts no cache tokens (cache_unknown: Kiro tells
+    // credits only) has no hit rate, not 0%.
     for (const u of r.usage || []) {
+      if (u.cache_unknown) continue;
       read += u.cache_read || 0;
       prompt += (u.in || 0) + (u.cache_read || 0) + (u.cache_write || 0);
     }

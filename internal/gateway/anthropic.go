@@ -1299,6 +1299,11 @@ type aUsage struct {
 	// which Anthropic bills apart: 1.25× input for 5 minutes, 2× for an
 	// hour
 	CacheCreation *aCacheCreation `json:"cache_creation,omitempty"`
+	// CacheUnknown: a plugin's usage saying its vendor gave no cache
+	// counts (magpie_cache_unknown), so the zero above is not a miss:
+	// Kiro caches but tells only credits, never tokens (zeewell on X).
+	// It is read, never told: anthropic() leaves it false.
+	CacheUnknown bool `json:"magpie_cache_unknown,omitempty"`
 }
 
 type aCacheCreation struct {
@@ -1307,7 +1312,7 @@ type aCacheCreation struct {
 }
 
 func (u aUsage) usage() Usage {
-	out := Usage{Input: u.InputTokens, Output: u.OutputTokens, CacheRead: u.CacheReadInputTokens, CacheWrite: u.CacheCreationInputTokens}
+	out := Usage{Input: u.InputTokens, Output: u.OutputTokens, CacheRead: u.CacheReadInputTokens, CacheWrite: u.CacheCreationInputTokens, cacheUnknown: u.CacheUnknown}
 	if c := u.CacheCreation; c != nil {
 		out.cacheCreationReported = true
 		out.cacheCreationHasCounts = c.Ephemeral5m+c.Ephemeral1h > 0

@@ -153,6 +153,9 @@ type RouteUsage struct {
 	CacheRead  int    `json:"cache_read,omitempty"`
 	CacheWrite int    `json:"cache_write,omitempty"`
 	Reasoning  int    `json:"reasoning,omitempty"`
+	// CacheUnknown: the vendor counted no cache tokens, so the Routing
+	// page shows no hit rate rather than 0% (Kiro, zeewell on X)
+	CacheUnknown bool `json:"cache_unknown,omitempty"`
 }
 
 // PricingRecord lets the routing view reuse the ledger's effective prices.
@@ -886,5 +889,6 @@ func routeUsage(id, model string, u Usage) []RouteUsage {
 		return out
 	}
 	return append(out, RouteUsage{Provider: id, Model: model, Input: u.Input, Output: u.Output,
-		CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning})
+		CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning,
+		CacheUnknown: u.cacheUnknown && u.CacheRead+u.CacheWrite == 0})
 }
