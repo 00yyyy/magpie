@@ -22028,8 +22028,6 @@ const MASK_KINDS = {
 };
 // who found a value (redact.By*)
 const MASK_BY = { rule: "Rules", yours: "Your rules", word: "Your words", model: "Local model", known: "Seen before" };
-// what a request was, beside a chat (gateway's noteMasked)
-const MASK_WHAT = { search: "Web search", image: "Image", video: "Video", decide: "System One", embeddings: "Embeddings", audio: "Audio" };
 const SHIELD = "M8 1.8 13 3.6v4.1c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5V3.6Z";
 const PLACEHOLDER = /\{\{[^{}\s]{1,64}\}\}/g;
 let maskSum = null;          // the summary Insights › Masking read last: its kinds' colours
@@ -22061,13 +22059,6 @@ function maskDot(k) {
   const d = el("span", "mo-dotc");
   d.style.background = maskColor(k);
   return d;
-}
-function maskDayName(when) {
-  const d = new Date(when), now = new Date();
-  const days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 86400000);
-  if (days === 0) return t("Today");
-  if (days === 1) return t("Yesterday");
-  return d.toLocaleDateString(intlLang(), { weekday: "short", month: "short", day: "numeric" });
 }
 
 // maskValue: what placeholder p stood for, or null where this magpie no

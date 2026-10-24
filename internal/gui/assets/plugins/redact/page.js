@@ -5,6 +5,17 @@
 // never on disk, so after a restart it is gone; so is the text a request
 // went out with (/api/masking/sent), kept for the newest requests only.
 
+// what a request was, beside a chat (gateway's noteMasked)
+const MASK_WHAT = { search: "Web search", image: "Image", video: "Video", decide: "System One", embeddings: "Embeddings", audio: "Audio" };
+// maskDayName: Today, Yesterday or the date a masked request went on
+function maskDayName(when) {
+  const d = new Date(when), now = new Date();
+  const days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 86400000);
+  if (days === 0) return t("Today");
+  if (days === 1) return t("Yesterday");
+  return d.toLocaleDateString(intlLang(), { weekday: "short", month: "short", day: "numeric" });
+}
+
 // ---- the summary: over 7 or 30 days, kept per machine ----
 let maskSumDays = 0, maskAt = 0, maskBusy = null, maskBusyDays = 0;
 let maskDays = 7;
