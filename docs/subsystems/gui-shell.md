@@ -505,7 +505,18 @@ then calls `beginHandover` instead of the relaunch-after-exit. The steps:
 Two magpies never show at once. On a Mac the old one lets go of its
 instance lock before it gives the socket (`releaseInstance`), so the new
 one's `runningAlready` takes it, and once the ack comes the old one hides
-its menu bar icon, panel and window and leaves the Dock (`onHandedOver`).
+its menu bar icon, panel and window and leaves the Dock (`onHandedOver`,
+`leaveMenuBar`). AppKit keeps a status item's `setVisible:NO` in the
+app's defaults by its autosave name (`NSStatusItem VisibleCC Item-0` on
+macOS 26), which the new one's item and every later one start from, so
+the hide is forgotten once it is made (`forgetTrayHiddenLater`,
+[`trayshown_darwin.go`](../../internal/gui/trayshown_darwin.go)). From
+v0.1.1354 to v0.1.1367 it wasn't, and the icon stayed gone after the
+update, through a quit and reopen too (Mitsuha, audie). `bringTrayBack`
+forgets a kept hide once per computer before the tray is made, and a
+magpie handed over to by an older one forgets it again once that one has
+quit (`awaitExit`), unless a hide was kept when it started: one kept after
+the bring-back is the user's (`TestHandoverLeavesTheMenuBarIconForTheNextMagpie`).
 On Linux the D-Bus name Wails holds can't be let go, so the new one serves
 the gateway at once but waits for the old pid to end (`awaitExit`, at most
 `handedOffWait`, 16 minutes) before it makes its app and tray; the old one
