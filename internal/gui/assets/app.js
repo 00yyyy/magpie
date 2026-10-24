@@ -18334,47 +18334,6 @@ function ledCredits(x) {
 // an average first token is a fraction of a millisecond: whole ones under a
 // second, rounded first so 999.6 reads 1.0 s rather than 1000 ms
 const ledTook = (ms = 0) => (ms = Math.round(ms) || 0) < 1000 ? t("{n} ms", { n: ms }) : t("{n} s", { n: (ms / 1000).toFixed(ms < 10e3 ? 1 : 0) });
-const ledExpanded = new WeakSet();
-const LED_KINDS = { tool_use: "Tool call", tool_result: "Tool result", thinking: "Thinking", context: "Context", image: "Image" };
-const LED_ROLES = { user: "You", assistant: "Assistant", tool: "Tool" };
-
-// one thing said: who said it, and its words in a box; long ones show a part and
-// unroll, and reasoning and what the agent put in itself are folded; model,
-// when given, is said muted after it (a session's reader names the model
-// of each reply, #2253)
-function ledSaid(p, model) {
-  const head = el("div", "cx-h");
-  head.append(el("span", "cx-role " + p.role, t(LED_KINDS[p.kind] || LED_ROLES[p.role] || p.role)));
-  if (p.name) head.append(el("code", "cx-name", p.name));
-  if (model) {
-    const m = el("span", "cx-model", model);
-    m.title = t("Model") + ": " + model;
-    head.append(m);
-  }
-  const words = el("pre", "cx-t", p.text);
-  if (p.cut) words.append(el("em", "cx-cut", "\n" + t("… {n} more characters not shown", { n: ledNum(p.cut) })));
-  if (p.kind === "thinking" || p.kind === "context") {
-    const d = el("details", "cx-part fold");
-    const sum = el("summary");
-    sum.append(head);
-    d.append(sum, words);
-    return d;
-  }
-  const part = el("div", "cx-part");
-  part.append(head, words);
-  if (p.text.length > 700 || p.text.split("\n").length > 9) {
-    part.classList.toggle("clamp", !ledExpanded.has(p));
-    const more = el("button", "text cx-more", t(ledExpanded.has(p) ? "Collapse content" : "Show full content"));
-    more.type = "button";
-    more.onclick = () => {
-      const clamped = part.classList.toggle("clamp");
-      if (clamped) ledExpanded.delete(p); else ledExpanded.add(p);
-      more.textContent = t(clamped ? "Show full content" : "Collapse content");
-    };
-    part.append(more);
-  }
-  return part;
-}
 
 // a cost as an axis says it: the currency Settings picks, no more digits than it takes
 function ledMoney(v) {
