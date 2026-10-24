@@ -8632,8 +8632,11 @@ $("#modal").addEventListener("keydown", (e) => {
   e.preventDefault();
   (e.shiftKey ? last : first).focus();
 });
-// A dialog opens centred, then stays put while what it holds grows or
-// shrinks (a fold opening, an error line, a list filling): it holds the
+// A dialog opens centred, and stays centred while what it holds fills in
+// before the reader has done anything in it (a plugin's README loading
+// under a dialog opened short read as a dialog sat low, the owner 10-24).
+// From the reader's first press or key in it, it stays put while what it
+// holds grows or shrinks (a fold opening, an error line, a list filling): it holds the
 // place of whatever the reader last pressed or focused in it, and grows
 // and shrinks round that, down to the window's foot, where it stays and
 // its fields scroll as a full-height dialog's do. Where there is no
@@ -8645,7 +8648,7 @@ $("#modal").addEventListener("keydown", (e) => {
 // a cap on its height. A change made in the page is held before it is
 // drawn (a mutation's microtask); one that only resizes (an animation, the
 // window) a frame later, as an observer can't resize what it observes.
-const modalHold = { off: 0, at: null, y: 0, cap: null, capSet: "" };
+const modalHold = { off: 0, at: null, y: 0, cap: null, capSet: "", touched: false };
 // how far down the dialog an element sits, to the fraction of a pixel,
 // what moves it in an animation (a row coming in) left out. An element
 // that scales (a Copy button's pop, a segment pressed) is measured by its
@@ -8692,6 +8695,20 @@ function holdModal(later) {
   const want = modalHold.off + (y == null ? 0 : modalHold.y - y);
   const c = getComputedStyle(m), h = d.getBoundingClientRect().height;
   const space = m.clientHeight - parseFloat(c.paddingTop) - parseFloat(c.paddingBottom);
+  if (!modalHold.touched) {
+    // untouched: centred, as it opened, over what it holds now; measured
+    // by its layout, as content that comes while it opens is measured
+    // under the open's scale
+    modalHold.off = Math.max(0, (space - Math.min(d.offsetHeight, space)) / 2);
+    modalHold.cap = null;
+    // no cap from its place: capped by it, a dialog growing from short would
+    // take a frame a step to reach the middle
+    d.style.top = modalHold.off + "px";
+    d.style.maxHeight = "100%";
+    modalHold.capSet = "";
+    if (y != null) modalHold.y = modalDepth(modalHold.at, d) ?? y;
+    return;
+  }
   // grown to the window's foot it stays, capped there, its fields scrolling;
   // it moves up only for a window grown too short to show half of it
   modalHold.off = Math.max(0, Math.min(want, Math.max(space - h, modalHold.off), space / 2));
@@ -8714,7 +8731,9 @@ function holdModal(later) {
   new ResizeObserver(later).observe(d);
   new ResizeObserver(later).observe(m);
   new MutationObserver(() => holdModal()).observe(d, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "hidden", "open"] });
-  m.addEventListener("pointerdown", (e) => modalMark(e.target), true);
+  // the reader's own press or key: from here the dialog holds its place
+  m.addEventListener("pointerdown", (e) => { modalHold.touched = true; modalMark(e.target); }, true);
+  m.addEventListener("keydown", () => { modalHold.touched = true; }, true);
   m.addEventListener("focusin", (e) => modalMark(e.target), true);
   // a scroll moves the marked element, not the dialog
   m.addEventListener("scroll", () => modalMark(modalHold.at), true);
@@ -8761,6 +8780,7 @@ function openModal(content) {
     d.style.top = d.style.maxHeight = "";
     modalHold.off = d.offsetTop - parseFloat(getComputedStyle(m).paddingTop);
     modalHold.at = modalHold.cap = null;
+    modalHold.touched = false;
     m.classList.add("held");
     d.style.top = modalHold.off + "px";
     d.style.maxHeight = modalHold.capSet = modalCap();
