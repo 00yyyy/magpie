@@ -340,6 +340,7 @@ func appendRoute(routes []Route, line []byte) []Route {
 		return routes
 	}
 	r.routedAgain()
+	r.Prompt.skillsApart()
 	return append(routes, r)
 }
 
@@ -470,6 +471,7 @@ func HistoryRoute(id int64, day time.Time) (Route, bool) {
 					return true
 				}
 				found.routedAgain()
+				found.Prompt.skillsApart()
 				return false
 			})
 			if found.ID != 0 {

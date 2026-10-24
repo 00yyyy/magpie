@@ -7,14 +7,15 @@
 // page's Context tab scores each agent's use of its window, tags it, and
 // lists its sessions' fill request by request.
 (() => {
-  const PARTS = ["system", "tools", "memory", "files", "results", "chat"];
+  const PARTS = ["system", "tools", "skills", "memory", "files", "results", "chat"];
   const PART_NAMES = {
-    system: "System prompt", tools: "Tools", memory: "Memory",
+    system: "System prompt", tools: "Tools", skills: "Skills", memory: "Memory",
     files: "Files", results: "Tool results", chat: "Conversation",
   };
   const PART_NOTES = {
     system: "The agent's own instructions",
     tools: "The definitions of the tools it can call",
+    skills: "The skills it can load, by name and what each is for",
     memory: "Instruction files, memory and reminders",
     files: "Files it read, and images",
     results: "What the other tools it called returned",
@@ -972,13 +973,11 @@
     confirmAsk = ed;
     openModal(ed);
     $("#modal").classList.add("lib");
-    const gone = (list) => {
-      body.replaceChildren(el("p", "ctx-view-gone", t("This request's text is no longer kept: magpie keeps the text of the last {n} requests, in memory only, while it runs.", { n: list?.kept || 10 })));
-    };
+    const gone = (n) => el("p", "ctx-view-gone", t("This request's text is no longer kept: magpie keeps the text of the last {n} requests, in memory only, while it runs.", { n }));
     let list;
     try { list = await readText(id, kind); } catch (err) { body.replaceChildren(el("p", "ctx-view-gone", err.message)); return; }
     if (confirmAsk !== ed) return;
-    if (!list) return gone();
+    if (!list) return body.replaceChildren(gone(10));
     const items = list.items || [];
     total.textContent = fmtK(items.reduce((s, it) => s + it.tokens, 0)) + " " + t("tokens");
     const note = el("p", "ctx-view-note", t("As magpie sent it, masked where masking is on. Kept in memory for the last {n} requests only.", { n: list.kept }));
@@ -1008,7 +1007,7 @@
         text.replaceChildren(el("div", "ctx-view-wait", t("Reading…")));
         read = readText(id, kind, i).then((one) => {
           const pieces = one?.items?.[i]?.pieces;
-          if (!pieces) { read = null; text.replaceChildren(el("p", "ctx-view-gone", t("This request's text is no longer kept: magpie keeps the text of the last {n} requests, in memory only, while it runs.", { n: list.kept }))); return; }
+          if (!pieces) { read = null; text.replaceChildren(gone(list.kept)); return; }
           text.replaceChildren(...(pieces.length ? pieces.map(pieceView) : [el("div", "ctx-piece-note", t("Empty"))]));
         }).catch((err) => { read = null; text.replaceChildren(el("p", "ctx-view-gone", err.message)); });
       };

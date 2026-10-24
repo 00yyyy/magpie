@@ -22,7 +22,8 @@ const latest = {
   parts: [
     { kind: "system", tokens: 5200, items: [{ name: "prompt", tokens: 4900 }, { name: "environment_context", tokens: 300 }] },
     { kind: "tools", tokens: 5000, items: [{ name: "multi_agent_v1", tag: "namespace", n: 5, tokens: 2900 }, { name: "exec_command", tokens: 2100 }] },
-    { kind: "memory", tokens: 3300, items: [{ name: "skills", tag: "skills", tokens: 3300 }] },
+    { kind: "skills", tokens: 2600, items: [{ name: "skills", tag: "skills", tokens: 2600 }] },
+    { kind: "memory", tokens: 700, items: [{ name: "/work/app/AGENTS.md", tag: "project", tokens: 700 }] },
     { kind: "files", tokens: 5900, items: [{ name: "/work/app/prompt.go", tag: "shell", tokens: 2950 }, { name: "/work/app/context.go", tag: "shell", tokens: 2950 }] },
     { kind: "results", tokens: 1200, items: [{ name: "exec_command", tag: "result", n: 4, tokens: 1200 }] },
     { kind: "chat", tokens: 800, items: [{ name: "turn", tag: "turn", n: 3, tokens: 800 }] },
@@ -60,7 +61,8 @@ const texts = {
     { name: "exec_command", tokens: 2100, pieces: [{ role: "tool", name: "exec_command", text: "{\n  \"name\": \"exec_command\",\n  \"description\": \"Runs a command in a PTY\"\n}" }] }],
   files: [{ name: "/work/app/prompt.go", tag: "shell", tokens: 2950, pieces: [{ role: "result", name: "exec_command", text: "package gateway // prompt.go" }] },
     { name: "/work/app/context.go", tag: "shell", tokens: 2950, pieces: [{ role: "result", name: "exec_command", text: "package gui // context.go" }] }],
-  memory: [{ name: "skills", tag: "skills", tokens: 3300, pieces: [{ role: "system", text: "## Skills" }] }],
+  skills: [{ name: "skills", tag: "skills", tokens: 2600, pieces: [{ role: "system", text: "## Skills" }] }],
+  memory: [{ name: "/work/app/AGENTS.md", tag: "project", tokens: 700, pieces: [{ role: "user", text: "# AGENTS.md" }] }],
   results: [{ name: "exec_command", tag: "result", n: 4, tokens: 1200, pieces: [{ role: "result", name: "exec_command", text: "ok" }] }],
   chat: [{ name: "1", tag: "turn", tokens: 300, pieces: [{ role: "user", text: "port the parser" }, { role: "thinking", text: "", size: 900 }, { role: "call", name: "exec_command", text: "{\"cmd\": \"ls\"}" }] },
     { name: "2", tag: "turn", tokens: 500, pieces: [{ role: "image", src: PNG }, { role: "image" }, { role: "assistant", text: "Done." }] }],
@@ -128,11 +130,11 @@ async function wheelTo(page, l) {
 }
 
 const words = {
-  en: { tools: "Tools", close: "Close", free: "Free space", map: "Context map", grid: "Block grid" },
-  zh: { tools: "工具", close: "关闭", free: "剩余空间", map: "上下文地图", grid: "方格" },
-  "zh-TW": { tools: "工具", close: "關閉", free: "剩餘空間", map: "上下文地圖", grid: "方格" },
-  ja: { tools: "ツール", close: "閉じる", free: "空き", map: "コンテキストマップ", grid: "ブロックグリッド" },
-  de: { tools: "Tools", close: "Schließen", free: "Frei", map: "Kontextkarte", grid: "Blockraster" },
+  en: { tools: "Tools", skills: "Skills", memory: "Memory", close: "Close", free: "Free space", map: "Context map", grid: "Block grid" },
+  zh: { tools: "工具", skills: "技能", memory: "记忆", close: "关闭", free: "剩余空间", map: "上下文地图", grid: "方格" },
+  "zh-TW": { tools: "工具", skills: "技能", memory: "記憶", close: "關閉", free: "剩餘空間", map: "上下文地圖", grid: "方格" },
+  ja: { tools: "ツール", skills: "スキル", memory: "メモリ", close: "閉じる", free: "空き", map: "コンテキストマップ", grid: "ブロックグリッド" },
+  de: { tools: "Tools", skills: "Skills", memory: "Memory", close: "Schließen", free: "Frei", map: "Kontextkarte", grid: "Blockraster" },
 };
 
 
@@ -197,6 +199,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await tip.innerText(), new RegExp(w.tools));
         assert.equal(await map.getAttribute("data-f"), "tile");
         assert.match(await tile.getAttribute("class"), /\bon\b/);
+        await page.mouse.move(2, 2);
+        await tip.waitFor({ state: "hidden" });
+
+        // the skills are their own part, not memory (the owner 10-24: 技能 / 记忆)
+        await map.locator(".ctx-tile.k-skills").hover();
+        await tip.waitFor({ state: "visible" });
+        const said = await tip.innerText();
+        assert.match(said, new RegExp(w.skills));
+        assert.doesNotMatch(said, new RegExp(w.memory), "the skills' tip names memory");
+        assert.equal(await map.locator(".ctx-tile.k-memory").count(), 1, "the skills are a memory tile too");
+        assert.notEqual(await map.locator(".ctx-tile.k-skills").evaluate((n) => getComputedStyle(n).backgroundColor),
+          await map.locator(".ctx-tile.k-memory").evaluate((n) => getComputedStyle(n).backgroundColor), "the skills are memory's colour");
         await page.mouse.move(2, 2);
         await tip.waitFor({ state: "hidden" });
 
