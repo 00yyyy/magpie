@@ -11,7 +11,10 @@
 // another serve a group while requests come, folded and opened, and what
 // the page does is counted: no key lookup through a whole list, times
 // parsed a bounded number of times, and no box read after a wire drawn
-// in the same pass. English, Chinese and German; the API is faked here.
+// in the same pass. And no wire is one cubic thousands of pixels tall: WebKit
+// dashes a cubic at a cost that grows faster than its length, and the
+// flowing wire to a fold hundreds of rows from magpie took ~75 ms of each
+// frame. English, Chinese and German; the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -113,7 +116,26 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => document.querySelectorAll("#view-routing .rt-accts > li:not(.rt-fold)").length >= 800);
       const opened = await look();
       clearInterval(pump);
-      t.diagnostic(`folded ${JSON.stringify(folded)}, open ${JSON.stringify(opened)}`);
+      // the tallest wire, and the tallest cubic any wire is drawn with
+      const tall = await page.evaluate(() => {
+        let wire = 0, cubic = 0;
+        for (const p of document.querySelectorAll("#view-routing .rt-wires path[d]")) {
+          const n = (p.getAttribute("d").match(/-?[\d.]+(?:e-?\d+)?|[A-Za-z]/g) || []);
+          let cmd = "", ys = [], y = 0;
+          for (let i = 0; i < n.length;) {
+            if (/[A-Za-z]/.test(n[i])) { cmd = n[i++]; continue; }
+            const k = { M: 2, L: 2, Q: 4, C: 6 }[cmd] || 2, a = n.slice(i, i + k).map(Number);
+            i += k;
+            const pts = [y, ...a.filter((_, j) => j % 2)];
+            if (cmd === "C") cubic = Math.max(cubic, Math.max(...pts) - Math.min(...pts));
+            y = pts[pts.length - 1];
+            ys.push(...pts);
+          }
+          wire = Math.max(wire, Math.max(...ys) - Math.min(...ys));
+        }
+        return { wire: Math.round(wire), cubic: Math.round(cubic) };
+      });
+      t.diagnostic(`folded ${JSON.stringify(folded)}, open ${JSON.stringify(opened)}, wires ${JSON.stringify(tall)}`);
       for (const [name, n] of [["folded", folded], ["open", opened]]) {
         // a key's place is looked up in an index of its provider's list:
         // before, a sort of 800 keys looked through the 500 for each of
@@ -128,6 +150,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(n.thrash < 400, `${name}: the stage laid out again ${n.thrash} times for a wire drawn, in 3s`);
       }
       assert(opened.boxes > 800, `the open stage was laid out (${opened.boxes} boxes read)`);
+      // a wire to a fold far from magpie runs thousands of pixels, in
+      // pieces of its curve: before, it was one cubic as tall as itself
+      assert(tall.wire > 5000, `the tallest wire is ${tall.wire}px`);
+      assert(tall.cubic <= 2000, `a wire is drawn with a cubic ${tall.cubic}px tall`);
       assert.deepEqual(errors, []);
     });
   }
