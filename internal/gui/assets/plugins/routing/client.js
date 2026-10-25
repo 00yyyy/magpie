@@ -3066,7 +3066,10 @@ function routingPage(part) {
   // place: the list scrolls on its own, and WebKit, a row taken out for a
   // moment, would send it back to its top from under the row just picked.
   // A list made mostly anew (another day) is put in at once, not row by
-  // row among the old ones.
+  // row among the old ones. A row going (one made again, its request having
+  // moved on) is taken out first: left where it was, every row after it was
+  // put in again in front of it, ~40 rows moved and laid out on each of the
+  // updates a busy gateway sends a second (#3164).
   function placeRows(els) {
     const kids = reqs.children;
     if (kids.length === els.length && els.every((e, i) => kids[i] === e)) return;
@@ -3076,6 +3079,8 @@ function routingPage(part) {
     for (const e of els) if (e.parentNode === reqs) kept++;
     if (kept * 2 < els.length) reqs.replaceChildren(...els);
     else {
+      const want = new Set(els);
+      for (const e of [...kids]) if (!want.has(e)) e.remove();
       let at = reqs.firstElementChild;
       for (const e of els) {
         if (e === at) { at = at.nextElementSibling; continue; }
