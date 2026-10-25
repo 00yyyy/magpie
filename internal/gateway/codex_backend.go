@@ -272,16 +272,16 @@ func sealedTaskError(model, lead, earlier string) string {
 }
 
 // sealedWayOut is the way to subagents on any model from a lead on
-// Codex's own models (#2245): Settings' "Codex subagents on any model"
-// (settings.CodexAgentsV1, #141) has the lead hand its subagents their
-// tasks as text. Off, the refusal names it; on, a thread still sealing
-// its tasks is on V2 all the same: begun before it was on, or held there
-// by Codex's own features.multi_agent_v2.
+// Codex's own models (#2245): "Codex subagents on any model", in Codex's
+// settings on the Agents page (settings.CodexAgentsV1, #141), has the
+// lead hand its subagents their tasks as text. Off, the refusal names
+// it; on, a thread still sealing its tasks is on V2 all the same: begun
+// before it was on, or held there by Codex's own features.multi_agent_v2.
 func sealedWayOut() string {
 	if settings.Load().CodexAgentsV1 {
-		return ` "Codex subagents on any model" is on in magpie's Settings, but this thread runs Codex's multi-agent V2, whose tasks are sealed: it began before the setting was turned on, or Codex's own features.multi_agent_v2 is on in its config. Start a new thread, with features.multi_agent_v2 off.`
+		return ` "Codex subagents on any model" is on in Codex's settings on magpie's Agents page, but this thread runs Codex's multi-agent V2, whose tasks are sealed: it began before the setting was turned on, or Codex's own features.multi_agent_v2 is on in its config. Start a new thread, with features.multi_agent_v2 off.`
 	}
-	return ` For subagents on any model while the lead is on a ChatGPT model, turn on "Codex subagents on any model" in magpie's Settings and start a new thread: the lead then hands its subagents their tasks as text.`
+	return ` For subagents on any model while the lead is on a ChatGPT model, turn on "Codex subagents on any model" in Codex's settings on magpie's Agents page and start a new thread: the lead then hands its subagents their tasks as text.`
 }
 
 // sealedTaskItself says what a sealed task is (#1855): spawn_agent's

@@ -10168,9 +10168,7 @@ function nativeCompactionField(show) {
 
 // compactField is the editor's Compact at (#876): where Codex and Claude
 // Code compact a conversation on its models when their window is longer,
-// one for all of them and model=size for one, as the window is set. Empty
-// follows Settings → Long conversations; one at or above a model's window
-// runs it to the whole window.
+// one for all of them and model=size for one, as the window is set.
 function compactField() {
   const cp = input(draft.compacts || "", t("e.g. 500k · or deepseek-v4-flash=272k, comma separated"));
   cp.classList.add("compacts");
@@ -10190,7 +10188,7 @@ function compactField() {
   light();
   const wrap = el("div", "cxfield");
   wrap.append(cp, row);
-  return field(t("Compact at"), wrap, t("Where Codex and Claude Code compact a long conversation on these models; empty follows Settings → Long conversations, and a size at or above a model's window runs it to its whole window"));
+  return field(t("Compact at"), wrap, t("Where Codex and Claude Code compact a long conversation on these models; empty follows Long conversations, in their settings on the Agents page (else in Settings), and a size at or above a model's window runs it to its whole window"));
 }
 
 function compactError(ed, v) {
