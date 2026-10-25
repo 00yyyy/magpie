@@ -894,13 +894,15 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 			want[s.Path] = s
 		}
 	}
+	var spill *archiveSpill
 	if len(want) >= requestDiskLeast {
 		idx.fromDisk(want)
+		spill = newArchiveSpill()
 	}
 	built, builtRows := 0, 0
 	// A file's rows are made by the reader that read it: made one after
 	// another, they were most of a cold build's wait (#3493).
-	read := prefetchEach(sources, stale, func() func(sessions.CallSource) *rowChunk {
+	makeChunk := func() func(sessions.CallSource) *rowChunk {
 		priceRow := pricers()
 		return func(s sessions.CallSource) *rowChunk {
 			cs := readSource(s)
@@ -918,7 +920,8 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 			c.dict, c.shapeIDs = nil, nil // local chunks are immutable until the source changes
 			return c.pack()
 		}
-	})
+	}
+	read := prefetchEach(sources, stale, makeChunk)
 	for i, s := range sources {
 		on[s.Path] = true
 		if !since.IsZero() && s.Modified.Before(since) {
@@ -927,17 +930,23 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 		// kept packed: the page reads a chunk's rows when it reaches them
 		// (chunkRows), not every file's at once
 		c := idx.chunks[s.Path]
+		put := false
 		if reused := c != nil && c.Source.Size == s.Size && c.Source.Modified.Equal(s.Modified); !reused {
 			c = read(i)
 			c.serial = nextChunkSerial()
 			built++
 			builtRows += c.Count
+			put = spill.put(c, i)
 		}
 		kept, next := *c, *c
 		kept.Used, next.Used = idx.tick, idx.tick
 		idx.chunks[s.Path] = &kept
 		chunks = append(chunks, &next)
+		if put {
+			spill.hand(&kept, &next)
+		}
 	}
+	spill.done(func(i int) *rowChunk { return makeChunk()(sources[i]) })
 	// the other computers' days (#542), a chunk each, read again only when
 	// sync brought a new copy
 	var others []*rowChunk
@@ -1032,7 +1041,7 @@ func (idx *requestIndex) keep(read *requestIndex, on map[string]bool) bool {
 		if prev != nil && prev.Used > c.Used {
 			continue
 		}
-		if prev != nil && prev.serial == c.serial && prev.mapped != nil && c.mapped == nil {
+		if prev != nil && prev.serial == c.serial && prev.pagesRank() > c.pagesRank() {
 			// copied before the file of it was written (save): its archive
 			// stays of the file's pages
 			next := *c
@@ -1105,7 +1114,7 @@ func (idx *requestIndex) save() {
 		// a read since has copied the chunk with a use of its own: the same
 		// chunk while its serial is
 		for path, c := range kept {
-			if cur := idx.chunks[path]; cur != nil && cur.serial == c.serial && cur.mapped == nil {
+			if cur := idx.chunks[path]; cur != nil && cur.serial == c.serial && cur.pagesRank() < 2 {
 				next := *cur
 				next.Archive, next.mapped = c.Archive, c.mapped
 				idx.chunks[path] = &next

@@ -231,6 +231,8 @@ func readDiskEntry(b []byte) (*rowChunk, error) {
 // (#3493). It is unmapped once no chunk read from it is left.
 type diskMapping struct {
 	data []byte
+	// spill: a build's own file (archiveSpill), not requests-v1.bin
+	spill bool
 }
 
 // diskUnmapped, in tests, is told each time a mapping is let go of.
@@ -407,8 +409,8 @@ func toDisk(root, meta string, chunks map[string]*rowChunk, on map[string]bool) 
 	return os.Rename(out.Name(), path)
 }
 
-// onDisk is a copy of each chunk of chunks whose Archive is of the heap,
-// with the same Archive of the pages of the file toDisk just wrote; save
+// onDisk is a copy of each chunk of chunks whose Archive is of the heap
+// or a build's spill, with the same Archive of the pages of the file toDisk just wrote; save
 // swaps them in for the chunks of the same serial. Made
 // in this run, they held a cold build's archives on the heap until the
 // next start: 32MB of 15.7k sessions, and a resting heap 40MB over a warm
@@ -424,7 +426,7 @@ func onDisk(root, meta string, chunks map[string]*rowChunk) map[string]*rowChunk
 			return false
 		}
 		c := chunks[path]
-		if c == nil || c.serial == 0 || c.mapped != nil || len(c.Archive) == 0 {
+		if c == nil || c.serial == 0 || c.pagesRank() == 2 || len(c.Archive) == 0 {
 			return true
 		}
 		e, err := readDiskEntry(raw)
