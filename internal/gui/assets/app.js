@@ -804,7 +804,7 @@ function renderProfiles() {
     c._profile = p.name;
     if (profilePending.has(p.name)) c.classList.add("pending");
     const lib = profileLibrary(p.library);
-    c.title = [p.inUse && t("In use"), p.summary, lib].filter(Boolean).join("\n");
+    c.title = tipLines(p.inUse && t("In use"), p.summary, lib);
     // the one the setup is now, ticked as a menu ticks the item in effect
     if (p.inUse) {
       c.classList.add("cur");
@@ -13551,7 +13551,7 @@ function accountQuota(data, user, capFor = () => 0, settable = null) {
   if (q?.resets?.count && !q.error) {
     const words = resetsWords(q.resets);
     const resets = el("span", "aq-w aq-resets");
-    resets.title = [words.textContent, words.title].filter(Boolean).join("\n");
+    resets.title = tipLines(words.textContent, words.title);
     resets.append(words.querySelector(".resets-n"));
     line.append(resets);
   }
@@ -13580,23 +13580,23 @@ function accountQuota(data, user, capFor = () => 0, settable = null) {
   if (!ws.length) { line.append(el("span", "aq-none", t("Unlimited"))); return line; }
   if (ws.some((w) => w.members)) return poolLine(line, ws, q, capFor, settable);
   line.title = ws.slice(2).map((w) => w.tiers ? tiersText(w) : t(w.name) + " " + quotaText(w)).join(ws !== counted ? "\n" : " · ");
-  if (q.asOf) line.title = [line.title, asOfText(q)].filter(Boolean).join("\n");
+  if (q.asOf) line.title = tipLines(line.title, asOfText(q));
   for (const w of ws.slice(0, 2)) {
-    const used = Math.max(0, Math.min(100, w.used));
+    const used = to100(w.used);
     const m = el("span", "aq-w" + (used >= 90 ? " full" : ""));
     const track = el("span", "aq-track");
     const fill = el("i");
     fill.style.width = quotaFill(w) + "%";
     track.append(fill);
     capMark(track, w, capFor(w));
-    m.append(el("span", "aq-n", t(w.name)), track, el("b", "", quotaText(w)));
+    m.append(el("span", "aq-n", t(w.name)), ...(w.text ? [] : [track]), el("b", "", quotaText(w)));
     if (w.resetsAt) {
       const at = new Date(w.resetsAt);
       m.title = resetText(at, at.toLocaleString(intlLang()));
       if (used >= 80) m.append(el("span", "aq-r", resetInText(at)));
     }
     const out = runsOutText(w, (at) => at.toLocaleString(intlLang()));
-    if (out) m.title = [m.title, out].filter(Boolean).join("\n");
+    if (out) m.title = tipLines(m.title, out);
     if (w.tiers) m.title = tiersText(w);
     line.append(settable ? settable(m, w) : m);
   }
@@ -13981,13 +13981,16 @@ setInterval(refreshLanes, 2000);
 // every meter and the menu bar, kept in the settings (#122). The vendor's
 // own count, where it gives one, stands before the percentage.
 let quotaLeft = false;
+function to100(v) { return Math.max(0, Math.min(100, v)); }
+function tipLines(...a) { return a.filter(Boolean).join("\n"); }
 function quotaFill(w) {
-  const used = Math.round(Math.max(0, Math.min(100, w.used)));
+  const used = Math.round(to100(w.used));
   return quotaLeft ? 100 - used : used;
 }
 function quotaText(w) {
   if (w.unlimited) return t("Unlimited");
-  const used = Math.max(0, Math.min(100, w.used));
+  if (w.text) return w.display;
+  const used = to100(w.used);
   const n = quotaLeft ? 100 - used : used;
   const pct = t(quotaLeft ? "{n} left" : "{n} used", { n: (Number.isInteger(n) ? n : n.toFixed(1)) + "%" });
   const count = quotaCount(w);
@@ -14004,7 +14007,7 @@ function quotaPace(w, now = Date.now()) {
   if (w.unlimited || w.historyMissing || !w.startsAt || !w.resetsAt) return null;
   const s = Date.parse(w.startsAt), e = Date.parse(w.resetsAt);
   if (!(e > s) || now < s || now >= e) return null;
-  const d = Math.max(0, Math.min(100, w.used)) - (100 * (now - s)) / (e - s);
+  const d = to100(w.used) - (100 * (now - s)) / (e - s);
   const n = Math.round(quotaLeft ? -d : d);
   return { n: n === 0 ? 0 : n, over: Math.round(d) > 0, under: Math.round(d) < 0, by: Math.abs(Math.round(d)) };
 }
@@ -16340,7 +16343,7 @@ function quotaSpan(lines, range, now) {
 // new subpath at each cycle's start; the point before x0 and the one after
 // x1 go along, so the line reaches the box's edges
 function quotaPaths(points, x0, x1, w, h) {
-  const X = (t) => ((t - x0) / (x1 - x0)) * w, Y = (v) => h - (Math.max(0, Math.min(100, v)) / 100) * h;
+  const X = (t) => ((t - x0) / (x1 - x0)) * w, Y = (v) => h - (to100(v) / 100) * h;
   let d = "", prev = null;
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
@@ -16477,7 +16480,7 @@ function quotaCurve(sub) {
     pace.textContent = p ? quotaEtaText(longest, now) : "";
     // which window it is, and the instant with its year, behind a line
     // that holds day and minute and is cut short rather than wrapped
-    pace.title = p ? [shown.length > 1 ? longest.label : "", pace.textContent, p.out != null ? new Date(p.out).toLocaleString(intlLang()) : ""].filter(Boolean).join("\n") : "";
+    pace.title = p ? tipLines(shown.length > 1 ? longest.label : "", pace.textContent, p.out != null ? new Date(p.out).toLocaleString(intlLang()) : "") : "";
   };
   box.append(head, g, axis, legend);
   box.draw();
@@ -16623,7 +16626,7 @@ function sparkGap(points, start, reset, now, w, h) {
   }
   if (pts.length < 2) return null;
   const X = (at) => ((at - start) / (reset - start)) * w;
-  const Y = (v) => h - (Math.max(0, Math.min(100, v)) / 100) * h;
+  const Y = (v) => h - (to100(v) / 100) * h;
   const E = (at) => ((at - start) / (reset - start)) * h; // the even burn's y
   const a = pts[0].at, b = pts[pts.length - 1].at;
   const poly = pts.map((p) => X(p.at).toFixed(1) + "," + Y(p.left).toFixed(1))
@@ -17316,9 +17319,10 @@ function panelQuotaCard(q) {
   const balance = q.balance && balanceRow(q, "What is left on the account besides its windows", false);
   // a pool's 5-hour and weekly rings, every pool's (a third pool once left
   // Claude's out: 01huadalang on Discord), else three
-  const fam = familyWindows(q.windows.filter((w) => !w.unlimited));
-  if (!fam.length && q.windows.some((w) => w.unlimited)) {
-    card.append(pqLine(t("Unlimited"), q));
+  const fam = familyWindows(q.windows.filter((w) => !w.unlimited && !w.text));
+  const tx = q.windows.filter((w) => w.text).map((w) => t(w.name) + " " + w.display).join(" · ");
+  if (!fam.length && (tx || q.windows.some((w) => w.unlimited))) {
+    card.append(pqLine(tx || t("Unlimited"), q));
     if (balance) card.append(balance);
     return card;
   }
@@ -17346,7 +17350,7 @@ function panelQuotaCard(q) {
   card.append(pqLine(say, q));
   const rings = el("span", "pq-rings" + (ws.length > 4 ? " many" : ""));
   for (const w of ws) {
-    const used = Math.max(0, Math.min(100, w.used));
+    const used = to100(w.used);
     const r = el("span", "pq-ring" + (used >= 90 ? " full" : ""));
     const dial = el("span", "pq-dial");
     dial.style.setProperty("--p", quotaFill(w));
@@ -18036,7 +18040,7 @@ function balanceShown(q) {
 
 // balanceMeter: a balance field's percent, as a meter.
 function balanceMeter(percent) {
-  const share = Math.max(0, Math.min(100, percent));
+  const share = to100(percent);
   const track = el("div", "quota-track" + (share >= 90 ? " full" : ""));
   const fill = el("i");
   fill.style.width = share + "%";
@@ -18308,7 +18312,7 @@ function quotaWindows(sub) {
     if (w.historyMissing) track.style.visibility = "hidden";
     track.append(fill);
     quota.append(labels);
-    if (!w.unlimited) quota.append(track);
+    if (!w.unlimited && !w.text) quota.append(track);
     // when it starts again, on the clock and how long until then
     let r = null;
     if (w.resetsAt) {
@@ -18332,7 +18336,7 @@ function quotaWindows(sub) {
       if (!r) quota.append(r = el("div", "quota-reset"));
       else r.append(" · ");
       r.append(el("span", "", out + " ·"), " ", el("span", "", untilText(new Date(w.runsOutAt))));
-      quota.title = [quota.title, runsOutText(w, (at) => at.toLocaleString(intlLang()))].filter(Boolean).join("\n");
+      quota.title = tipLines(quota.title, runsOutText(w, (at) => at.toLocaleString(intlLang())));
     }
     // what the whole window holds, by what magpie routed in it (Chiao), on
     // the reset's line, so the window keeps its three rows
@@ -18353,7 +18357,7 @@ function quotaWindows(sub) {
     // a model family's figure: its models, level by level, in its tooltip
     if (w.tiers) quota.title = t("{family}: the most used of its models", { family: w.name }) + "\n" + tiersText(w);
     // a pool's: when it starts again, and the models it counts
-    if (w.members) quota.title = [quota.title, poolTip(w)].filter(Boolean).join("\n");
+    if (w.members) quota.title = tipLines(quota.title, poolTip(w));
     windows.append(quota);
   }
   quotaFit.observe(windows);
@@ -18441,7 +18445,7 @@ function ledGroupSpeed(x) {
   const [a, b] = measured && floor && kf > kv ? [floor, measured] : [measured || floor, measured && floor];
   const say = (p) => p.count ? p.head + " · " + p.count : p.head;
   const main = say(a), other = b ? say(b) : "";
-  return { v: a.s, text: other ? t("{a}; {b}", { a: main, b: other }) : main, main, mainParts: a.count ? [a.head, " " + a.count] : [a.head], other, title: [a.title, b?.title].filter(Boolean).join("\n") };
+  return { v: a.s, text: other ? t("{a}; {b}", { a: main, b: other }) : main, main, mainParts: a.count ? [a.head, " " + a.count] : [a.head], other, title: tipLines(a.title, b?.title) };
 }
 // their mean wait for the first token, 0 for none
 const ledTTFT = (x) => x?.timed > 0 ? x.ttft_ms / x.timed : 0;
