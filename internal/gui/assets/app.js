@@ -23249,7 +23249,7 @@ function givesBack(e, dir) {
   for (const p of back) p.v.scrollTop += p.by;
 }
 let touchY = null;
-addEventListener("wheel", (e) => { readerScrolls(250); givesBack(e, Math.sign(e.deltaY)); }, { capture: true, passive: true });
+addEventListener("wheel", (e) => { flings(); givesBack(e, Math.sign(e.deltaY)); }, { capture: true, passive: true });
 addEventListener("touchstart", (e) => { touchY = e.touches[0]?.clientY ?? null; }, { capture: true, passive: true });
 addEventListener("touchmove", (e) => {
   readerScrolls(250);
@@ -23259,10 +23259,10 @@ addEventListener("touchmove", (e) => {
   if (touchY != null) givesBack(e, Math.sign(touchY - y));
   touchY = y;
 }, { capture: true, passive: true });
-// A flick goes on scrolling after the finger is lifted, with no touch event
-// to say so: each of its scrolls keeps the next one the reader's, till it
-// comes to rest. Put back, a phone's page jerked to and fro under the
-// finger's flick (jiakun_zhao on X: 滚动会抽搐).
+// A flick goes on after the finger lifts, and a trackpad's coast after the
+// fingers do (WebKit on the Mac plays it with no wheel), with no event to say
+// so: each of their scrolls keeps the next one the reader's till it rests.
+// Put back, the page shook (jiakun_zhao on X: 滚动会抽搐; issenn: 高频振动并复位).
 let flingUntil = 0;
 const flings = () => { flingUntil = performance.now() + 250; readerScrolls(250); };
 addEventListener("touchend", flings, { capture: true, passive: true });
