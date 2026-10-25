@@ -29,8 +29,8 @@ func mapDiskFile(path string) (*diskMapping, bool) {
 	m := &diskMapping{data: data}
 	runtime.AddCleanup(m, func(data []byte) {
 		unix.Munmap(data)
-		if diskUnmapped != nil {
-			diskUnmapped()
+		if f := diskUnmapped.Load(); f != nil {
+			(*f)()
 		}
 	}, data)
 	return m, true

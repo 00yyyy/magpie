@@ -1028,9 +1028,18 @@ func (idx *requestIndex) keep(read *requestIndex, on map[string]bool) bool {
 		return false
 	}
 	for path, c := range read.chunks {
-		if prev := idx.chunks[path]; prev == nil || prev.Used <= c.Used {
-			idx.chunks[path] = c
+		prev := idx.chunks[path]
+		if prev != nil && prev.Used > c.Used {
+			continue
 		}
+		if prev != nil && prev.serial == c.serial && prev.mapped != nil && c.mapped == nil {
+			// copied before the file of it was written (save): its archive
+			// stays of the file's pages
+			next := *c
+			next.Archive, next.mapped = prev.Archive, prev.mapped
+			c = &next
+		}
+		idx.chunks[path] = c
 	}
 	for path := range idx.chunks {
 		if !on[path] {
@@ -1068,6 +1077,9 @@ var requestDiskLeastRows = 20000
 // requestDiskSaves are the writes under way, for the tests to wait on.
 var requestDiskSaves sync.WaitGroup
 
+// savingDisk, in tests, is called by a write before it writes the file.
+var savingDisk func()
+
 // save writes the file of idx's chunks behind the lock: chunks are never
 // changed once made, so a copy of the map is enough. idx is locked.
 func (idx *requestIndex) save() {
@@ -1080,10 +1092,25 @@ func (idx *requestIndex) save() {
 	requestDiskSaves.Add(1)
 	go func() {
 		defer requestDiskSaves.Done()
-		_ = toDisk(root, meta, chunks, on)
+		if savingDisk != nil {
+			savingDisk()
+		}
+		var kept map[string]*rowChunk
+		if toDisk(root, meta, chunks, on) == nil {
+			kept = onDisk(root, meta, chunks)
+		}
 		idx.Lock()
 		defer idx.Unlock()
 		idx.saving = false
+		// a read since has copied the chunk with a use of its own: the same
+		// chunk while its serial is
+		for path, c := range kept {
+			if cur := idx.chunks[path]; cur != nil && cur.serial == c.serial && cur.mapped == nil {
+				next := *cur
+				next.Archive, next.mapped = c.Archive, c.mapped
+				idx.chunks[path] = &next
+			}
+		}
 	}()
 }
 
