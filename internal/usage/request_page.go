@@ -730,14 +730,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 			shared.parts = map[partKey]map[uint64]*chunkPart{}
 		}
 		shared.parts[pk] = cache.next
-		if shared.pairs == nil || len(shared.pairs) >= partSets && shared.pairs[p] == nil {
-			shared.pairs = map[Period]*pairMemo{}
-		}
-		if cache.pairsNext != nil {
-			shared.pairs[p] = cache.pairsNext
-		} else {
-			delete(shared.pairs, p)
-		}
+		shared.keepPairs(p, cache.pairsNext)
 	}
 	if len(shared.pages) >= 16 {
 		shared.pages = map[pageKey]RequestPage{}
@@ -762,15 +755,20 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 	shared.Lock()
 	shared.keepWhileAsked()
 	shared.adopt(st)
+	// the page of p just before, the warm-up's of All, paired these rows:
+	// a build after it paired every session file's calls again (#3493)
+	memo := shared.pairs[p]
 	idx := shared.private()
 	shared.Unlock()
 	b := readRequestBlocks(idx, st, p, now, sessions.ReadCallSource)
 	sums := effortSums{}
-	pairRows(p, now, b.gateways, b.chunks, b.others, st.codexIdentities).visit(func(_ timedRef, r *Row) { sums.add(r) })
+	ps, next := pairRowsMemo(p, now, b.gateways, b.chunks, b.others, st.codexIdentities, memo)
+	ps.visit(func(_ timedRef, r *Row) { sums.add(r) })
 	b.priced.release()
 	shared.Lock()
 	if shared.keep(idx, b.on) {
 		shared.noteBuilt(b)
+		shared.keepPairs(p, next)
 		shared.trim(requestCacheBytes)
 	}
 	shared.Unlock()
@@ -958,6 +956,18 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 // adopt drops what idx keeps of a state other than st: every chunk when
 // what prices or names a call changed (meta), the pages when anything
 // did (key). idx is locked.
+// keepPairs keeps memo as p's last pairing (nil: there is none to keep).
+func (idx *requestIndex) keepPairs(p Period, memo *pairMemo) {
+	if idx.pairs == nil || len(idx.pairs) >= partSets && idx.pairs[p] == nil {
+		idx.pairs = map[Period]*pairMemo{}
+	}
+	if memo != nil {
+		idx.pairs[p] = memo
+	} else {
+		delete(idx.pairs, p)
+	}
+}
+
 func (idx *requestIndex) adopt(st requestState) {
 	if idx.root != st.root || idx.meta != st.meta {
 		idx.root, idx.meta = st.root, st.meta
@@ -1419,7 +1429,13 @@ type pairedRows struct {
 	since, until  time.Time
 }
 
+// pairing, in tests, is told each time pairRows pairs chunks' rows.
+var pairing func()
+
 func pairRows(p Period, now time.Time, gateways, chunks, others []*rowChunk, identities map[string]sessions.CodexIdentity) *pairedRows {
+	if pairing != nil {
+		pairing()
+	}
 	gateways, chunks, others = cloneCodexChunks(gateways), cloneCodexChunks(chunks), cloneCodexChunks(others)
 	duplicateSkip := foldCodexRows(chunks)
 	pairs, compactions := codexChunkResponsePairs(gateways, chunks, duplicateSkip)
