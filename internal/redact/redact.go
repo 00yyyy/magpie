@@ -622,10 +622,20 @@ func Mask(s string, o Options) (string, int) {
 }
 
 // Preview is Mask with nothing remembered: each value goes as the
-// placeholder it would have, which isn't kept for Restore or as a value
-// seen before (known.go).
+// placeholder, or with Options.Shape the made-up key, it would have, which
+// isn't kept for Restore or as a value seen before (known.go).
 func Preview(s string, o Options) string {
-	out, _ := mask(s, withModel(o, []string{s}), tag, false)
+	put := tag
+	if o.Shape {
+		put = func(kind, v string) string {
+			name, k := splitName(v)
+			if f, ok := shapeOf(kind, k); ok {
+				return name + f
+			}
+			return tag(kind, v)
+		}
+	}
+	out, _ := mask(s, withModel(o, []string{s}), put, false)
 	return out
 }
 
