@@ -68,6 +68,7 @@ func TestMaskEval(t *testing.T) {
 		return out
 	}
 
+	redact.Forget()
 	var tally evalTally
 	for _, c := range evalCases {
 		rules := redact.Preview(c.Text, redact.Options{Secrets: true, Personal: true})
