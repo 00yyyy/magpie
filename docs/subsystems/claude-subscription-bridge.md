@@ -358,6 +358,27 @@ is either refused or kept and then taken out by `removeRun`.
   copies it, with the tool names the run's agent had, to the
   `savedSession`.
 
+### Claude Code's own sign-in before it has a name
+
+The owner in every key is the provider, the account's name and, for Claude
+Code's own sign-in, `own` (`ownHome`). `claude auth status` gives no email
+until Claude Code puts the account's profile (`oauthAccount`) in its
+config, which its first run does. Until then the account is named from its
+plan ("Claude Max", `Account.Unnamed`), and its owner ends in `unnamed`
+(`unnamedOwner`).
+
+The first run on such an account then names it, mid-turn. Its tool
+results came under the email, the owner no longer matched, and the run
+was let go ("tool results account changed"). A new run was told the whole
+conversation again, about 8k more cache writes. Now a run whose owner is
+unnamed takes the named owner of the same provider's own sign-in
+(`takeNamedOwner`), and goes on: a run in Claude Code's own home runs as
+whatever that home is signed in to. A turn that ends without a tool call
+takes the name before its keys are made (`nameOwner`, from
+`provider.ClaudeOwnName`), so the next turn finds the idle run. Every
+other change of owner still lets the run go. The owner is an atomic
+pointer (`owned`), read by the run's reader without a lock.
+
 ### A conversation the client rewrote (#912)
 
 Some clients send a turn's conversation back changed. Alma takes the
