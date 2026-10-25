@@ -59,10 +59,14 @@ func modelSpans(s string, o Options) []span {
 			continue
 		}
 		a, b := f.Start, f.End
-		for a < b && isSpace(s[a]) {
+		edge := isSpace
+		if kind != "SECRET" {
+			edge = delimiter
+		}
+		for a < b && edge(s[a]) {
 			a++
 		}
-		for b > a && isSpace(s[b-1]) {
+		for b > a && edge(s[b-1]) {
 			b--
 		}
 		if kind == "PERSON" {
@@ -85,6 +89,15 @@ func modelSpans(s string, o Options) []span {
 }
 
 func isSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
+
+// delimiter says c may end a span of the model's and is no part of a
+// name, a phone number, an address or an account: a space, or what is
+// between values in JSON or a CSV row. The model's span may start at the
+// token before the value, and a phone number in {"phone":"+86 139 …"}
+// came as `":"+86 139 …`, or in a CSV row as `,+81 90-…`, and was no
+// number to the PHONE check: it went as written (#3591). A secret's
+// edges are its own (a password may start with a quote).
+func delimiter(c byte) bool { return isSpace(c) || strings.IndexByte(`"',;:`, c) >= 0 }
 
 // modelTakes says v is masked as the model's kind: a secret as long as the
 // rules ask of one, never an id a vendor or a tool made (req_…, toolu_…,
