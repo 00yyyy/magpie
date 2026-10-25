@@ -1456,6 +1456,11 @@ function routingPage(part) {
       return v;
     };
     const h = b(hub), low = b(srcs).b;
+    // a key off screen is not drawn, and its content is as tall as a drawn
+    // key's (routing.css, #3164)
+    let row = list.firstElementChild;
+    while (row && (row.matches(".rt-fold, .rt-sub, .idle") || !row.firstElementChild?.checkVisibility?.({ contentVisibilityAuto: true }))) row = row.nextElementSibling;
+    const pad = row && getComputedStyle(row), rowH = row && Math.round((b(row).b - b(row).t - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom) - parseFloat(pad.borderTopWidth) - parseFloat(pad.borderBottomWidth)) * 100) / 100;
     for (const a of agents.values()) {
       const s = b(a.node), mx = (s.r + h.l) / 2;
       sets.push([a.wire, h.l > s.r ? curve(s.r, s.cy, mx, h.l, h.cy) : `M${s.cx} ${s.b} L${h.cx} ${h.t}`]);
@@ -1491,6 +1496,9 @@ function routingPage(part) {
       const up = f?.open ? f : row.up && subs.get(row.up), a = b(row.li);
       sets.push([row.wire, up ? fromSub(up, a) : fromHub(a)]);
     }
+    // set after this frame: the keys not drawn changing size resize the
+    // stage, which in its own ResizeObserver WebKit reports as a loop
+    if (rowH && list.style.getPropertyValue("--rt-row") !== rowH + "px") requestAnimationFrame(() => list.style.setProperty("--rt-row", rowH + "px"));
     wires.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`);
     sky.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`);
     for (const [p, d] of sets) {
