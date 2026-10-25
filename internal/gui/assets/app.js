@@ -423,7 +423,7 @@ function renderAgents() {
     // user's own)
     // nor Aside's account with one account only (#1499)
     const none = (f) => (f.key === "effort" || f.key === "ultracode" || f.label === "subagents" || f.label === SUB_EFFORT || f.label === SUB_MODEL || f.label === AUTO_MODE || f.label === MEMORIES || f.label === "sign-in" || f.key === "small" || asideAccount(a, f)) && !f.options.length && !f.value;
-    const shownFields = a.fields.filter((f) => !grouped(a, f) && !none(f) && !codexOwnSub(a, f));
+    const shownFields = a.fields.filter((f) => !grouped(a, f) && !none(f) && !codexOwnSub(a, f) && !codexRowed(a, f));
     const tiers = tierMenu(a);
     if (tiers) shownFields.push(tiers);
     const sorted = shownFields.sort((x, y) => wide(y) - wide(x) || extra(x) - extra(y));
@@ -650,9 +650,10 @@ function renderAgents() {
   // pickers keep lining up down the list
   // (a row whose CLI is gone has none)
   const setUp = state.agents.filter((a) => !a.cliMissing);
-  list.classList.toggle("extras", setUp.some((a) => a.fields.some(extra) || tierMenu(a) || a.launch));
+  const sq = (a) => a.fields.filter((f) => extra(f) && !codexRowed(a, f));
+  list.classList.toggle("extras", setUp.some((a) => sq(a).length || tierMenu(a) || a.launch));
   // as wide as the row with the most squares
-  list.style.setProperty("--extras", Math.max(1, ...setUp.map((a) => a.fields.filter((f) => extra(f) && !grouped(a, f)).length + (tierMenu(a) ? 1 : 0) + (a.launch ? 1 : 0))));
+  list.style.setProperty("--extras", Math.max(1, ...setUp.map((a) => sq(a).filter((f) => !grouped(a, f)).length + (tierMenu(a) ? 1 : 0) + (a.launch ? 1 : 0))));
   if (!folded.length) {
     for (const a of used) list.append(agentRow(a));
   } else {
@@ -3789,6 +3790,8 @@ const claudePicks = (a, f) => leadPicks(a, f) && a.id === "claude";
 // model of magpie's to pick there, Codex's own square stays.
 const codexSub = (a) => a.id.split("@wsl:")[0] === "codex" && a.fields.some((f) => f.label === SUB_MODEL && (f.options.length || f.value));
 const codexOwnSub = (a, f) => f.label === "subagents" && codexSub(a);
+// named rows in Codex's settings: no square too (the owner, 10-25)
+const codexRowed = (a, f) => a.id === "codex" && !gatewayMode && (f.label === SUB_MODEL || f.label === MEMORIES);
 const SAME_AS_LEAD = "Same as the lead";
 const SUB_MODEL_UNSET = "Each subagent runs on the lead's model ({model}), or on another the lead picks for it. Pick a model here to put every subagent on it.";
 const SUB_MODEL_UNSET_PLAIN = "Each subagent runs on the lead's model, or on another the lead picks for it. Pick a model here to put every subagent on it.";
