@@ -162,14 +162,16 @@ var rules = append([]rule{
 	// Discord); a sentence's closing stop is no part of it.
 	{kind: "PASSWORD", re: cjkNamed(cjkPasswordNames), fold: lowerAll(cjkPasswordNames), back: 64, ahead: 100, ok: notAVariable},
 	// a key, a secret or a token after its name the same way: 密钥为 …,
-	// 令牌是 …, 金鑰： … . A key is no number, so 密钥为 2048 位 is left.
-	{kind: "SECRET", re: cjkNamed(cjkKeyNames), fold: lowerAll(cjkKeyNames), back: 64, ahead: 100, ok: keyValue},
+	// 令牌是 …, 金鑰： … . A key of digits only is taken after 为, 是, ：
+	// or = when it has six or more and counts nothing, so 密钥为12231241
+	// is masked and 密钥为 2048 位 is left.
+	{kind: "SECRET", re: cjkNamed(cjkKeyNames), fold: lowerAll(cjkKeyNames), back: 64, ahead: 100, at: keyAt},
 	// an English name for one before 为, 為, 是 or ：, as a Chinese message
 	// has it: apikey 为 …, token 是 …, API Key：… (CyberCaius on Discord).
 	// password = … and API_KEY: … in a config are the SECRET rule's above.
-	{kind: "SECRET", re: regexp.MustCompile(`(?i)(?:` + secretNames.pattern() + `|pwd|api[ ]key|access[ ]key|secret[ ]key|key)` + quote +
+	{kind: "SECRET", re: regexp.MustCompile(`(?i)(?:` + secretNames.pattern() + `|pwd|api[ ]key|access[ ]key|secret[ ]key|key|\bpin(?:[ ]?code)?)` + quote +
 		`[ \t]*(?:[为為是][ \t]*[:：]?|：)[ \t]*(?:\\?["'“「])?(` + secretCh + `{3,}[A-Za-z0-9_\-/+=~!@#%^&*])`),
-		fold: cjkCopulas, back: 24, ahead: 260, ok: keyValue},
+		fold: cjkCopulas, back: 24, ahead: 260, at: keyAt},
 
 	{kind: "EMAIL", re: regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`), markers: []string{"@"}, bound: alnum + "._%+-", ok: realEmail, at: notUserinfo, cat: catPersonal},
 	{kind: "ID_CARD", re: regexp.MustCompile(`[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]`), bound: alnum, ok: chineseID, cat: catPersonal},
@@ -179,12 +181,12 @@ var rules = append([]rule{
 
 // cjkPasswordNames are what a password is called in Chinese, Japanese and
 // Korean.
-var cjkPasswordNames = []string{"密码", "密碼", "口令", "パスワード", "비밀번호", "암호"}
+var cjkPasswordNames = []string{"密码", "密碼", "口令", "PIN码", "PIN碼", "PIN 码", "安全码", "安全碼", "パスワード", "暗証番号", "비밀번호", "암호", "비번"}
 
 // cjkKeyNames are what a key, a secret or a token is called in Chinese,
 // Simplified and Traditional, Japanese and Korean.
 var cjkKeyNames = []string{
-	"密钥", "密鑰", "秘钥", "秘鑰", "私钥", "私鑰", "金钥", "金鑰", "令牌", "权杖", "權杖",
+	"密钥", "密鑰", "秘钥", "秘鑰", "私钥", "私鑰", "金钥", "金鑰", "令牌", "权杖", "權杖", "授权码", "授權碼",
 	"秘密鍵", "トークン", "シークレット", "APIキー", "アクセスキー",
 	"토큰", "비밀키", "API 키", "API키",
 }
@@ -205,7 +207,7 @@ func lowerAll(names []string) []string {
 // cjkNamed is a value after one of names: after ：, :, =, 为, 為, 是, は
 // or 는, quoted or not, or after nothing but a space.
 func cjkNamed(names []string) *regexp.Regexp {
-	return regexp.MustCompile(`(?:` + strings.Join(names, "|") + `)[ \t]*(?:[:：=][ \t]*|[为為是][ \t]*[:：]?[ \t]*|は[ \t]*|는[ \t]*)?(?:\\?["'“「])?(` + secretCh + `{3,63}[A-Za-z0-9_\-/+=~!@#%^&*])`)
+	return regexp.MustCompile(`(?i)(?:` + strings.Join(names, "|") + `)[ \t]*(?:[:：=][ \t]*|[为為是][ \t]*[:：]?[ \t]*|は[ \t]*|는[ \t]*)?(?:\\?["'“「])?(` + secretCh + `{3,63}[A-Za-z0-9_\-/+=~!@#%^&*])`)
 }
 
 // fieldNames are what a field that holds a secret is called: a pattern for
@@ -274,6 +276,32 @@ func keyValue(v string) bool {
 	letter := strings.IndexFunc(v, func(r rune) bool { return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' }) >= 0
 	return letter && (strings.ContainsAny(v, digits) || len(v) >= 16)
 }
+
+// keyAt is keyValue for s[a:b], or six digits or more right after 为, 為,
+// 是, ：, :, =, は or 는 that count nothing: a key said in a message is
+// often a number (密钥为12231241, token 是 20261025, CyberCaius on
+// Discord), while 密钥为 2048 位 and 令牌 300000 毫秒 are a size and a
+// time.
+func keyAt(s string, a, b int) bool {
+	v := s[a:b]
+	if keyValue(v) {
+		return true
+	}
+	if len(v) < 6 || strings.Trim(v, digits) != "" {
+		return false
+	}
+	before := strings.TrimRight(s[:a], " \t\"'“「\\")
+	after := strings.TrimLeft(s[b:], " \t")
+	return slices.ContainsFunc(keySeparators, func(c string) bool { return strings.HasSuffix(before, c) }) &&
+		!slices.ContainsFunc(quantityUnits, func(u string) bool { return strings.HasPrefix(after, u) })
+}
+
+// keySeparators are what stands between a name and a key's value.
+var keySeparators = []string{"为", "為", "是", "：", ":", "=", "は", "는"}
+
+// quantityUnits are what a number counts when one follows it: bits, bytes,
+// a time, a count.
+var quantityUnits = []string{"位", "比特", "字节", "字節", "个", "個", "次", "秒", "毫秒", "分钟", "分鐘", "小时", "小時", "天", "年", "bit", "byte", "ms", "sec", "min", "ビット", "バイト", "비트", "바이트"}
 
 // secretValue is a value that looks like a secret, not code: letters and
 // digits both, and not a call, a reference or a placeholder of its own.
