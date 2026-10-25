@@ -311,6 +311,19 @@ function routingPage(part) {
   // now is the gateway's time — or, in a replay, the time it is replaying
   const now = () => rp ? rp.real : Date.now() + skew;
   const at = (s) => new Date(s).getTime();
+  // when each rest was lifted by hand, by the key it rests by (#1869), on
+  // the gateway's clock: here, or anywhere else the trace tells of
+  // (d.lifted: the provider's editor's Try now, a key's new value)
+  const liftedAt = new Map();
+  function noteLifted(m) {
+    for (const [k, v] of Object.entries(m || {})) if (at(v) > (liftedAt.get(k) || 0)) liftedAt.set(k, at(v));
+  }
+  // lifted: the rest by key, found at found, was lifted since — by the
+  // time shown, so a replay of a request before the lift shows its rest
+  const lifted = (key, found) => { const l = liftedAt.get(key) || 0; return !!key && l >= found && l <= now(); };
+  // sunkKey is what a row sank by, as its rest's key is (restKey): an
+  // account by its provider and user, a key by its own id
+  const sunkKey = (w) => w.kind === "account" && w.who ? w.provider + "@" + w.who.toLowerCase() : w.id;
   const known0 = (s) => s && !s.startsWith("0001-");
   function dur(ms) {
     const s = Math.max(1, Math.round(ms / 1000));
@@ -1902,9 +1915,15 @@ function routingPage(part) {
       // rest of one model only: the account's other models' rows don't
       // rest with it (#1960)
       const r = src().get(row.rid) || pinned || cur, answered = new Set(), rests = new Map(), gave = new Map(), went = new Map();
-      const restAt = (id, m, rest) => { const rm = restModel(rest, m); rests.set(rm ? id + "\u0000" + rm : id, rest); };
+      // a rest lifted since it was found (#1869), here or in the
+      // provider's editor, is over: the row doesn't say it until the next
+      // request is refused again (zoecats on Discord)
+      const restAt = (id, m, rest, found) => {
+        if (lifted(rest.key, found)) return;
+        const rm = restModel(rest, m); rests.set(rm ? id + "\u0000" + rm : id, rest);
+      };
       const modelOf = (tr) => tried(r, tr)?.model || tr.model || "";
-      for (const w of r.order) if (w.rest) restAt(w.id, w.model, w.rest);
+      for (const w of r.order) if (w.rest) restAt(w.id, w.model, w.rest, at(r.time));
       for (const tr of r.tries) {
         if (tr.done && tryOk(tr)) answered.add(tryseat(r, tr));
         // the error the agent got: the last try's, once the request is
@@ -1913,7 +1932,7 @@ function routingPage(part) {
         // one the gateway went on from says what it answered, and that the
         // request went on, not that the agent got it
         else if (tr.done && !tr.rest && !tr.again && !tr.credits && tr !== r.tries[r.tries.length - 1]) went.set(tryseat(r, tr), tr);
-        if (tr.rest) restAt(tr.id, modelOf(tr), tr.rest);
+        if (tr.rest) restAt(tr.id, modelOf(tr), tr.rest, at(tr.start) + (tr.ms || 0));
       }
       // it answered: whatever rest it began in is over
       for (const tr of r.tries) if (tr.done && tryOk(tr)) { rests.delete(tr.id); rests.delete(tr.id + "\u0000" + modelOf(tr)); }
@@ -1928,7 +1947,7 @@ function routingPage(part) {
       else if (gave.has(id)) s = t("{status} · {fail} · passed to {agent}", { status: gave.get(id).status, fail: failWord(gave.get(id).fail), agent: agentName(r.agent) });
       else if (went.has(id)) s = t("{status} · {fail} · went on to the next", { status: went.get(id).status, fail: failWord(went.get(id).fail) });
       else if (w.noURL) s = noURLWord(w);
-      else if (w.sunk) s = t("rate limited at {time} · at the back", { time: clock(w.sunk) });
+      else if (w.sunk && !lifted(sunkKey(w), at(w.sunk))) s = t("rate limited at {time} · at the back", { time: clock(w.sunk) });
       else if (w.known) {
         const soon = usedRenews(w);
         s = !w.routing && w.used >= 98 && w.credits ? quota(w, "{n} used · on credits", "{n} left · on credits")
@@ -3085,8 +3104,6 @@ function routingPage(part) {
       + (x.resetsAt ? " · " + resetInText(new Date(x.resetsAt)) : "")) : [];
   }
 
-  // when each rest was lifted by hand, by the key it rests by (#1869)
-  const liftedAt = new Map();
   // modelRest keeps the latest word of one of an account's models resting
   // alone (#1960)
   function modelRest(a, m, rest, when) {
@@ -3132,8 +3149,8 @@ function routingPage(part) {
     // a rest lifted by hand since the request that found it (#1869): the
     // kept requests still say it, until the next one asks it again
     for (const a of by.values()) {
-      if (a.rest?.key && (liftedAt.get(a.rest.key) || 0) >= a.restAt) a.rest = null;
-      for (const [m, x] of a.mrests) if (x.rest.key && (liftedAt.get(x.rest.key) || 0) >= x.at) a.mrests.delete(m);
+      if (a.rest && lifted(a.rest.key, a.restAt)) a.rest = null;
+      for (const [m, x] of a.mrests) if (lifted(x.rest.key, x.at)) a.mrests.delete(m);
     }
     const list = [...by.values()].sort((x, y) => (x.w.name || "").localeCompare(y.w.name || "") || x.w.provider.localeCompare(y.w.provider) || rankOf(x.w) - rankOf(y.w) || x.pos - y.pos);
     setText(actLabel, t("Accounts and keys"));
@@ -3241,7 +3258,7 @@ function routingPage(part) {
         if (rest.why !== "restricted" && rest.why !== "verify") go.title = t("Ends the rest: the next request asks it again. Refused again, it rests again.");
         go.onclick = async () => {
           try {
-            for (const x of lifts) { await api("gateway/unrest", { key: x.key }); liftedAt.set(x.key, Date.now()); }
+            for (const x of lifts) { await api("gateway/unrest", { key: x.key }); liftedAt.set(x.key, Date.now() + skew); }
             render();
           } catch (e) { go.textContent = e.message; }
         };
@@ -3824,6 +3841,7 @@ function routingPage(part) {
         const d = await res.json();
         heard = true;
         noteAccounts(d);
+        noteLifted(d.lifted);
         skew = at(d.now) - Date.now();
         mine = d.mine;
         // another magpie took the gateway over (#2606): its routes and seq
