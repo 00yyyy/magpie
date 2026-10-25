@@ -4039,6 +4039,12 @@ function fit(extra = 0, glide) {
   api("window/fit?h=" + h + (still ? "" : "&ms=" + glide.ms + "&ease=" + glide.ease), {});
 }
 
+// the panel brought up on its Allowances tab is the reader opening them
+// (#1588); the page loaded while the panel is still put away is not
+function panelQuotasNow(again) {
+  panelTab === "usage" && !document.hidden && (again || document.hasFocus()) ? quotasOpened() : loadQuotas();
+}
+
 // again: the window came back (focused, or shown again), which only reads
 // what is on the page anew. It must not put a page's skeleton up over what
 // it shows: under focus-follows-mouse (Hyprland; Zhenzhen on Discord) the
@@ -4053,6 +4059,9 @@ async function load(again) {
   try {
     const since = prefsWrites, hid = hiddenIds().join(), visibilitySince = agentsVisibilityRevision;
     const asked = api("state");
+    // the panel's allowances asked beside the state, not after it (#3134)
+    const early = mode === "panel" && !load.done;
+    if (early) panelQuotasNow(again);
     // the first load draws the state magpie kept from its last read while
     // the fresh one is read (#1519, fatkun): reading every agent's config,
     // and a WSL distro's through \\wsl.localhost, took seconds after a
@@ -4068,6 +4077,7 @@ async function load(again) {
         tintPanel();
         tintTitleBar();
         renderAgents();
+        if (mode === "panel") renderPanelQuota(true);
       }
     }
     let next = await asked;
@@ -4103,9 +4113,7 @@ async function load(again) {
     loadInstalls();
     // the Providers page made ready behind the one shown (#1519)
     if (mode !== "panel" && !(view === "providers" || providersPage(view))) prefetchProviders();
-    // the panel brought up on its Allowances tab is the reader opening
-    // them (#1588); the page loaded while the panel is still put away is not
-    if (mode === "panel") { renderPanelQuota(true); panelTab === "usage" && !document.hidden && (again || document.hasFocus()) ? quotasOpened() : loadQuotas(); }
+    if (mode === "panel") { renderPanelQuota(true); if (!early) panelQuotasNow(again); }
     // an open provider editor is someone typing: coming back to the window
     // must not rebuild it under them
     if ((view === "providers" || providersPage(view)) && !(editing || adding)) await loadProviders();
@@ -15391,6 +15399,12 @@ function rollUpSheet(sheet, then) {
 // never waits for them. They don't depend on the period either.
 let quotas = null;
 let quotasAt = 0; // when they came in
+// the panel's last read, drawn at once, turning, until the read lands (#3160)
+let quotasKept = false;
+if (mode === "panel") try {
+  const kept = JSON.parse(localStorage.getItem("magpie.panelQuotas"));
+  if (Array.isArray(kept)) { quotas = kept; quotasKept = true; }
+} catch {}
 let quotaHist = []; // each account's windows over time, for the curves (#651)
 // quotasOpened: the reader opened what shows the allowances (the Usage
 // page's Overview, the tray panel's Allowances tab, a menu bar cell, either
@@ -15433,14 +15447,15 @@ function loadQuotas(asked, again) {
     .then((q) => {
       // an answer that isn't a list of cards is a read that failed: what
       // was read before stays, as it does when the read is refused
-      if (q != null && !Array.isArray(q)) { quotas = quotas || []; reading = false; return; }
+      if (q != null && !Array.isArray(q)) { quotas = quotas || []; quotasKept = reading = false; return; }
       q = keepRefreshedQuotas(q || [], began);
       // Whole-page reads are serialized; no older one still needs these
       // markers. A card reply must not retire them while a GET is pending.
       for (const [key, version] of quotaRefreshVersions) if (version <= began) quotaRefreshVersions.delete(key);
       same = !!again && !!quotas && JSON.stringify(q || []) === JSON.stringify(quotas);
-      quotas = q || []; quotasAt = Date.now();
-    }, () => { quotas = quotas || []; reading = false; })
+      quotas = q || []; quotasAt = Date.now(); quotasKept = false;
+      if (mode === "panel") try { localStorage.setItem("magpie.panelQuotas", JSON.stringify(quotas)); } catch {}
+    }, () => { quotas = quotas || []; quotasKept = reading = false; })
     .finally(() => {
       if (quotasLoading === p) quotasLoading = null;
       if (!same) renderQuotas(true);
@@ -17077,7 +17092,8 @@ function renderPanelQuota(lazy) {
   const restoreFlash = keepQuotaFlash(box);
   box.replaceChildren();
   if (none) { quotaFocus = ""; panelArranging = false; fit(); return; }
-  if (!quotas) {
+  // kept cards wait for a state to say which are hidden
+  if (!quotas || (quotasKept && !(load.done || state.last))) {
     for (let i = 0; i < 2; i++) {
       const card = el("div", "pq-card");
       card.append(el("span", "skeleton sk-aq"), el("span", "skeleton sk-ring"));
@@ -18106,6 +18122,7 @@ function quotaRefresh(q) {
   const kept = [quotaRefreshing.get(key)?.button, keptQuotaRefresh?.get(key)].find((k) => k && !k.isConnected);
   const b = kept || el("button", "quota-refresh");
   if (quotaRefreshing.has(key) && b !== quotaRefreshing.get(key).button) b.classList.add("busy", "spun");
+  b.classList.toggle("reading", quotasKept);
   b.dataset.key = key;
   b.type = "button";
   b.title = t(q.provider === "claude" ? "Read this card again, by running Claude Code's own /usage" : "Read this card again");
