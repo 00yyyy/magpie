@@ -9477,8 +9477,10 @@ function drawEditor(p, presetID) {
 
   // a server on this machine (Ollama, LM Studio, oMLX, MLX-Serve) can
   // listen on another port, or be another computer's: its address moves each URL, each API
-  // keeping its path, as provider.AtAddress does
-  let address = null, addressMore = null;
+  // keeping its path, as provider.AtAddress does. Shown first and never
+  // folded: folded under the key, an LM Studio on another computer read
+  // as one whose base URL can't be changed (mengxiangziyou on X)
+  let address = null, addressField = null;
   if (pr?.kind === "local") {
     // a saved provider's URLs (or a duplicate's) start it; a new one's are
     // the preset's, sent as none unless moved, so the gateway takes them
@@ -9486,8 +9488,7 @@ function drawEditor(p, presetID) {
     // oMLX's decision API (#1641) is the same server's, and moves with it
     draft.addressFrom ??= { chat: draft.chat ?? pr.chat ?? "", responses: draft.responses ?? pr.responses ?? "", anthropic: draft.anthropic ?? pr.anthropic ?? "", decide: draft.decide ?? (p?.decide || pr.decide || "") };
     draft.addressWas ??= own ? originOf(draft.addressFrom) : "";
-    const from = draft.addressFrom, addressWas = draft.addressWas;
-    draft.address ??= addressWas;
+    draft.address ??= draft.addressWas;
     address = input(draft.address, originOf(pr));
     address.inputMode = "url";
     address.classList.add("address");
@@ -9501,14 +9502,7 @@ function drawEditor(p, presetID) {
     };
     const keys = address.onkeydown;
     address.onkeydown = (e) => { keys(e); if (e.key === "Enter" && isNew) save(); };
-    // folded: most run where the preset says; open for one that doesn't,
-    // or an address typed before the editor was drawn again
-    addressMore = el("details", "more");
-    addressMore.open = (own && originOf(from) !== originOf(pr)) || draft.address.trim() !== addressWas;
-    addressMore.append(el("summary", "", t("Server address")));
-    const inner = el("div", "inner");
-    inner.append(...field(t("Address"), address, t("Where the server listens; change the port, or give another computer's address")));
-    addressMore.append(inner);
+    addressField = field(t("Server address"), address, t("Where the server listens; change the port, or give another computer's address"));
   }
 
   // null, not false, when there is none: false?.key is undefined, and a
@@ -9611,11 +9605,11 @@ function drawEditor(p, presetID) {
       ...field(t("Service account"), box("impersonate", t("optional · a service account's email"), "vertex-impersonate"), t("Requests are then made as this service account, impersonated with the credentials above: their account needs roles/iam.serviceAccountTokenCreator on it.")),
     ];
   };
+  if (addressField) ed.append(...addressField);
   if (p?.keyList?.length) ed.append(...field(t("Accounts"), renderKeyAccounts(p), p.routing ? t("Tick every key to use; Routing says how requests spread over them.") : t("Tick every key to use. Requests go to the first; when it runs out of quota or hits a rate limit, the next ticked key takes over.")));
   if (p?.keyList?.filter((k) => k.on).length > 1) ed.append(...renderRouting(p));
   else if (vertex) ed.append(...vertexFields());
   else ed.append(...field(t("API key"), keyWrap, isNew ? t("Kept in ~/.config/magpie/providers.json, readable by you alone. Nothing is read from your shell.") : ""));
-  if (addressMore) ed.append(addressMore);
 
   // A user-defined provider can have its own picture; presets keep theirs.
   if (custom) ed.append(...field(t("Icon"), iconPicker(ed), ""));
@@ -10129,7 +10123,7 @@ function drawEditor(p, presetID) {
     if (vertex && !body.vertex.project) { vertexProject?.focus({ preventScroll: true }); return editorError(t("Google Vertex AI needs the id of your Google Cloud project"), "warn"); }
     if (address) {
       const a = (draft.address || "").trim();
-      if (localAddress(a) === null) { addressMore.open = true; address.focus({ preventScroll: true }); return editorError(t("Address: {v} isn't an address like http://localhost:11434", { v: a }), "warn"); }
+      if (localAddress(a) === null) { address.focus({ preventScroll: true }); return editorError(t("Address: {v} isn't an address like http://localhost:11434", { v: a }), "warn"); }
       Object.assign(body, movedURLs(draft));
     }
     editorError("");
