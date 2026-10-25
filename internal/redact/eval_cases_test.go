@@ -137,6 +137,116 @@ var evalCases = []evalCase{
 		Keep: []evalValue{{V: "函数", Kind: "PERSON"}, {V: "错误处理", Kind: "PERSON"}},
 	},
 
+	{
+		ID: "ci-table", From: "611b9e173",
+		Text: "| run | file | result |\n| 6123456789 | ci.yml | success |",
+		Keep: []evalValue{{V: "6123456789", Kind: "ACCOUNT"}, {V: "ci.yml", Kind: "PERSON"}},
+	},
+	{
+		ID: "git-log", From: "d3db461bb",
+		Text: "ba319a758 gateway: the lone tool_choice none goes to the Grok plugin only (#3110)\nUpdate to v0.1.1442 now",
+		Keep: []evalValue{{V: "ba319a758", Kind: "ACCOUNT"}, {V: "v0.1.1442", Kind: "ACCOUNT"}},
+	},
+	{
+		ID: "pixels", From: "d3db461bb",
+		Text: "Attached a screenshot of 1624x1487 pixels, 2048000 bytes.",
+		Keep: []evalValue{{V: "1624x1487", Kind: "ACCOUNT"}, {V: "2048000", Kind: "PHONE"}},
+	},
+	{
+		ID: "assistant-prose", From: "d3db461bb",
+		Text: "Thanks Claude, that fixed it. Also ask Gemini later. — Sam Lee\nHi Codex, please review. Opus said it looks good, Sonnet disagreed.",
+		Mask: []evalValue{{V: "Sam Lee", Kind: "PERSON"}},
+		Keep: []evalValue{{V: "Claude", Kind: "PERSON"}, {V: "Codex", Kind: "PERSON"}, {V: "Opus", Kind: "PERSON"}, {V: "Sonnet", Kind: "PERSON"}},
+	},
+	{
+		ID: "commit-login", From: "d3db461bb",
+		Text: "commit 919585d1700e515ac38da49e31bc60a527fc15c2\nAuthor: yetone <yetone@users.noreply.github.com>",
+		Keep: []evalValue{{V: "yetone", Kind: "PERSON"}, {V: "919585d1700e515ac38da49e31bc60a527fc15c2", Kind: "SECRET"}},
+	},
+	{
+		ID: "session-tokens", From: "d3db461bb",
+		Text: "session 019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b token 019a2b3c4d5e7f608a9b0c1d2e3f4a5b",
+		Keep: []evalValue{{V: "019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b", Kind: "SECRET"}},
+	},
+	{
+		ID: "user-path", From: "d3db461bb",
+		Text: "read /Users/yetone/workspace/projects/magpie/AGENTS.md and C:\\Users\\vdxz\\notes.txt, then /home/rina/.config/app.toml",
+		Keep: []evalValue{{V: "yetone", Kind: "PERSON"}, {V: "AGENTS.md", Kind: "PERSON"}, {V: "vdxz", Kind: "PERSON"}, {V: "rina", Kind: "PERSON"}},
+	},
+	{
+		ID: "skill-list", From: "d3db461bb",
+		Text: "- artifact-design: Design guidance\n- workflow-authoring: Reference for writing scripts\nUser yetone logged in; local LLM ready\nReviewer: Approved",
+		Keep: []evalValue{{V: "artifact-design", Kind: "PERSON"}, {V: "workflow-authoring", Kind: "PERSON"}, {V: "yetone", Kind: "PERSON"}, {V: "Reviewer: Approved", Kind: "PERSON"}},
+	},
+	{
+		ID: "one-letter", From: "true",
+		Text: "J said the build is fine; K and Q disagreed.",
+		Keep: []evalValue{{V: "J", Kind: "PERSON"}, {V: "K", Kind: "PERSON"}},
+	},
+	{
+		ID: "tool-use-ids", From: "d3db461bb",
+		Text: `{"type":"tool_result","tool_use_id":"toolu_01XyZabcDEF123456","id":"srvtoolu_01AbCdEfGhIjKlMnOp","call":"call_Qm7vT2xLk9RbW4nZ"}`,
+		Keep: []evalValue{{V: "toolu_01XyZabcDEF123456", Kind: "SECRET"}, {V: "srvtoolu_01AbCdEfGhIjKlMnOp", Kind: "SECRET"}, {V: "call_Qm7vT2xLk9RbW4nZ", Kind: "ACCOUNT"}},
+	},
+	{
+		ID: "task-ids", From: "d3db461bb",
+		Text: "<task-id>a97c9bc67cc1f1e27</task-id> wrote 31a4f944-e7cf-4f6f-acc7-eef50d9911dd.jsonl",
+		Keep: []evalValue{{V: "a97c9bc67cc1f1e27", Kind: "SECRET"}, {V: "31a4f944-e7cf-4f6f-acc7-eef50d9911dd", Kind: "SECRET"}},
+	},
+	{
+		ID: "hex-lines", From: "d3db461bb",
+		Text: "hex40 ok? 1 2f1d0c9b8a7e6f5d4c3b2a1908f7e6d5c4b3a291\n919585d1700e515ac38da49e31bc60a527fc15c2 ok? 1",
+		Keep: []evalValue{{V: "2f1d0c9b8a7e6f5d4c3b2a1908f7e6d5c4b3a291", Kind: "SECRET", Known: "#3597"}, {V: "919585d1700e515ac38da49e31bc60a527fc15c2", Kind: "SECRET"}},
+	},
+	{
+		ID: "go-caches", From: "d3db461bb",
+		Text: "open /Users/x/Library/Caches/go-build/63700b7ab65fd1d3@v63: no such file\nP=/Users/yetone/.npm/_npx/1e7f6d9597241db0 d6426ecaaf0a28de@v31",
+		Keep: []evalValue{{V: "63700b7ab65fd1d3@v63", Kind: "EMAIL"}, {V: "d6426ecaaf0a28de@v31", Kind: "EMAIL"}, {V: "1e7f6d9597241db0", Kind: "SECRET"}},
+	},
+	{
+		ID: "base64-image", From: "d3db461bb",
+		Text: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA+k5zM7Md7tM9ehxd51xF/isvM9",
+		Keep: []evalValue{{V: "k5zM7Md7tM9ehxd51xF", Kind: "SECRET"}, {V: "isvM9", Kind: "SECRET"}},
+	},
+	{
+		ID: "grep-alts", From: "d3db461bb",
+		Text: "rg 'modelTakes|modelFits|personFits' internal; join at discord.gg/Ab3dEf9h today",
+		Keep: []evalValue{{V: "modelTakes|modelFits|personFits", Kind: "SECRET"}, {V: "discord.gg/Ab3dEf9h", Kind: "SECRET"}},
+	},
+	{
+		ID: "json-settings", From: "d3db461bb",
+		Text: `settings: {"mode": "fast", "retries": "3", "theme": "dark"}`,
+		Keep: []evalValue{{V: `"mode": "fast"`, Kind: "SECRET"}, {V: `"retries": "3"`, Kind: "SECRET"}},
+	},
+	{
+		ID: "event-times", From: "#3577",
+		Text: `{"event": "tool_call", "timestamp": 1792903687, "ms": 1792903687123, "at": "2026-10-25T04:48:03.755Z", "desk": "+1 415 555 0132", "ext": "4821"}`,
+		Mask: []evalValue{{V: "415 555 0132", Kind: "PHONE"}},
+		Keep: []evalValue{{V: "1792903687", Kind: "PHONE"}, {V: "4821", Kind: "PHONE"}},
+	},
+	{
+		ID: "codex-meta", From: "#3144",
+		Text: `{"stream_options":{"reasoning_summary_delivery":"sequential_cutoff"},"session_id":"019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b","text":"set sequential_cutoff for Rina Kowalczyk, skill at /Users/vdxz/.codex/skills/wrangler/SKILL.md, my password is Tr0ub4dor&3xq"}`,
+		Mask: []evalValue{{V: "Rina Kowalczyk", Kind: "PERSON"}, {V: "Tr0ub4dor&3xq", Kind: "SECRET"}},
+		Keep: []evalValue{{V: "sequential_cutoff", Kind: "PERSON"}, {V: "reasoning_summary_delivery", Kind: "PERSON"}, {V: "019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b", Kind: "SECRET"}, {V: "vdxz", Kind: "PERSON"}},
+	},
+	{
+		ID: "short-values", From: "true",
+		Text: "office: Unit 5, postcode 94107",
+		Keep: []evalValue{{V: "94107", Kind: "ADDRESS"}},
+	},
+	{
+		ID: "url-login", From: "#3538",
+		Text: "git clone https://deploy-bot@git.acme-corp.cn/team/app.git and ssh ops@10.0.0.7",
+		Keep: []evalValue{{V: "deploy-bot@git.acme-corp.cn", Kind: "EMAIL"}},
+	},
+	{
+		ID: "zh-names-edge", From: "true",
+		Text: "这个问题请找王小明先生处理，抄送给李华老师。",
+		Mask: []evalValue{{V: "王小明", Kind: "PERSON"}, {V: "李华", Kind: "PERSON"}},
+		Keep: []evalValue{{V: "先生", Kind: "PERSON"}, {V: "老师", Kind: "PERSON"}},
+	},
+
 	// ---- what masking is for --------------------------------------------
 	{
 		ID: "prose-person", From: "true",

@@ -7,6 +7,35 @@
 		"text": "6f312259162fb240",
 		"found": []
 	},
+	"assistant-prose": {
+		"text": "2f09c57d2bcd4a33",
+		"found": [
+			{
+				"Start": 7,
+				"End": 13,
+				"Label": "private_person"
+			},
+			{
+				"Start": 57,
+				"End": 64,
+				"Label": "private_person"
+			},
+			{
+				"Start": 68,
+				"End": 73,
+				"Label": "private_person"
+			},
+			{
+				"Start": 115,
+				"End": 121,
+				"Label": "private_person"
+			}
+		]
+	},
+	"base64-image": {
+		"text": "88418a5daf6d9b9a",
+		"found": []
+	},
 	"bearer": {
 		"text": "708d72f298141a4c",
 		"found": [
@@ -25,6 +54,16 @@
 	"card": {
 		"text": "7387f43ca5ce5824",
 		"found": []
+	},
+	"ci-table": {
+		"text": "059b37d552df2314",
+		"found": [
+			{
+				"Start": 26,
+				"End": 36,
+				"Label": "account_number"
+			}
+		]
 	},
 	"code-keys": {
 		"text": "d5f835bbf0a332b8",
@@ -50,6 +89,26 @@
 		"text": "ebbde1d7b5199206",
 		"found": []
 	},
+	"codex-meta": {
+		"text": "4978726969792675",
+		"found": [
+			{
+				"Start": 83,
+				"End": 119,
+				"Label": "account_number"
+			},
+			{
+				"Start": 155,
+				"End": 169,
+				"Label": "private_person"
+			},
+			{
+				"Start": 240,
+				"End": 253,
+				"Label": "secret"
+			}
+		]
+	},
 	"colors-ports": {
 		"text": "252b9ce2e8df3e82",
 		"found": [
@@ -57,6 +116,21 @@
 				"Start": 14,
 				"End": 21,
 				"Label": "secret"
+			}
+		]
+	},
+	"commit-login": {
+		"text": "43e1522fcf559a62",
+		"found": [
+			{
+				"Start": 56,
+				"End": 62,
+				"Label": "private_person"
+			},
+			{
+				"Start": 64,
+				"End": 95,
+				"Label": "private_email"
 			}
 		]
 	},
@@ -85,6 +159,36 @@
 			}
 		]
 	},
+	"event-times": {
+		"text": "c1fe2fbd2701c75c",
+		"found": [
+			{
+				"Start": 36,
+				"End": 46,
+				"Label": "account_number"
+			},
+			{
+				"Start": 54,
+				"End": 67,
+				"Label": "account_number"
+			},
+			{
+				"Start": 76,
+				"End": 100,
+				"Label": "private_date"
+			},
+			{
+				"Start": 111,
+				"End": 127,
+				"Label": "private_phone"
+			},
+			{
+				"Start": 138,
+				"End": 142,
+				"Label": "private_address"
+			}
+		]
+	},
 	"example-mail": {
 		"text": "a1867625846dc315",
 		"found": [
@@ -110,6 +214,10 @@
 			}
 		]
 	},
+	"git-log": {
+		"text": "8fc8f17e8817539a",
+		"found": []
+	},
 	"git-user-url": {
 		"text": "b92e10fa6b923a00",
 		"found": [
@@ -120,9 +228,32 @@
 			}
 		]
 	},
+	"go-caches": {
+		"text": "e855cf322da328a9",
+		"found": []
+	},
+	"grep-alts": {
+		"text": "dab9d9ae2f7b6d01",
+		"found": []
+	},
 	"grep-pattern": {
 		"text": "0d38dbff0a086bdf",
 		"found": []
+	},
+	"hex-lines": {
+		"text": "b378b2965f1a80de",
+		"found": [
+			{
+				"Start": 10,
+				"End": 52,
+				"Label": "secret"
+			},
+			{
+				"Start": 53,
+				"End": 96,
+				"Label": "secret"
+			}
+		]
 	},
 	"home-path": {
 		"text": "4f79a2f3631db506",
@@ -164,6 +295,10 @@
 			}
 		]
 	},
+	"json-settings": {
+		"text": "17b49a014daba2fc",
+		"found": []
+	},
 	"log-user": {
 		"text": "cda01fa1bd419b1d",
 		"found": [
@@ -188,6 +323,21 @@
 		"text": "271c7650b6474a19",
 		"found": []
 	},
+	"one-letter": {
+		"text": "0ff1555b12fd8004",
+		"found": [
+			{
+				"Start": 26,
+				"End": 27,
+				"Label": "private_person"
+			},
+			{
+				"Start": 32,
+				"End": 33,
+				"Label": "private_person"
+			}
+		]
+	},
 	"phone-intl": {
 		"text": "28bf596367da1b2b",
 		"found": [
@@ -202,6 +352,10 @@
 				"Label": "private_phone"
 			}
 		]
+	},
+	"pixels": {
+		"text": "96d207f1a0461a94",
+		"found": []
 	},
 	"prose-password": {
 		"text": "b45e2539ee55a672",
@@ -227,6 +381,16 @@
 		"text": "6210ece83f6b71ab",
 		"found": []
 	},
+	"session-tokens": {
+		"text": "6170ea7af28ec9e2",
+		"found": [
+			{
+				"Start": 0,
+				"End": 83,
+				"Label": "secret"
+			}
+		]
+	},
 	"session-uuid": {
 		"text": "45ff8afdbe77e369",
 		"found": [
@@ -237,9 +401,29 @@
 			}
 		]
 	},
+	"short-values": {
+		"text": "0133fede621b7801",
+		"found": [
+			{
+				"Start": 25,
+				"End": 30,
+				"Label": "private_address"
+			}
+		]
+	},
 	"sizes-versions": {
 		"text": "e08a850f552a995b",
 		"found": []
+	},
+	"skill-list": {
+		"text": "535fc5de908c39dd",
+		"found": [
+			{
+				"Start": 116,
+				"End": 125,
+				"Label": "private_address"
+			}
+		]
 	},
 	"snake-arg": {
 		"text": "7ade5b7b89a61dd4",
@@ -248,6 +432,21 @@
 	"snake-words": {
 		"text": "89fcc6da0d4cc9fb",
 		"found": []
+	},
+	"task-ids": {
+		"text": "faff967171e2421d",
+		"found": [
+			{
+				"Start": 8,
+				"End": 26,
+				"Label": "account_number"
+			},
+			{
+				"Start": 43,
+				"End": 85,
+				"Label": "account_number"
+			}
+		]
 	},
 	"token-count": {
 		"text": "359c740b1ce9a3c5",
@@ -313,6 +512,26 @@
 		"text": "6b9515c4bf396f51",
 		"found": []
 	},
+	"tool-use-ids": {
+		"text": "c83ab5e49cce4b75",
+		"found": [
+			{
+				"Start": 37,
+				"End": 60,
+				"Label": "account_number"
+			},
+			{
+				"Start": 68,
+				"End": 95,
+				"Label": "secret"
+			},
+			{
+				"Start": 105,
+				"End": 126,
+				"Label": "secret"
+			}
+		]
+	},
 	"unix-time": {
 		"text": "3e3d22cf38729962",
 		"found": []
@@ -320,6 +539,21 @@
 	"unix-time-ms": {
 		"text": "7e29836c6aa4f105",
 		"found": []
+	},
+	"url-login": {
+		"text": "d6f5b2b60e384bb9",
+		"found": [
+			{
+				"Start": 10,
+				"End": 58,
+				"Label": "private_url"
+			},
+			{
+				"Start": 63,
+				"End": 79,
+				"Label": "private_url"
+			}
+		]
 	},
 	"url-userinfo": {
 		"text": "a74a01c8225d54da",
@@ -343,6 +577,21 @@
 				"Start": 78,
 				"End": 92,
 				"Label": "private_phone"
+			}
+		]
+	},
+	"user-path": {
+		"text": "007eeda2f5ba95d3",
+		"found": [
+			{
+				"Start": 11,
+				"End": 54,
+				"Label": "private_url"
+			},
+			{
+				"Start": 84,
+				"End": 116,
+				"Label": "private_url"
 			}
 		]
 	},
@@ -373,6 +622,21 @@
 				"Start": 13,
 				"End": 31,
 				"Label": "account_number"
+			}
+		]
+	},
+	"zh-names-edge": {
+		"text": "709d9aa01117e001",
+		"found": [
+			{
+				"Start": 18,
+				"End": 39,
+				"Label": "private_person"
+			},
+			{
+				"Start": 51,
+				"End": 63,
+				"Label": "private_person"
 			}
 		]
 	},
