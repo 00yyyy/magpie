@@ -399,6 +399,46 @@ func claudeWorkDir() (string, error) {
 	return dir, nil
 }
 
+// clientWorkDir is the working directory the caller's instructions name,
+// the last one they name, as Claude Code ("Primary working directory:"),
+// Codex (<cwd>), OpenCode ("Working directory:") and pi ("Current working
+// directory:") write it; "" when they name none, or one that isn't an
+// absolute path to a folder on this computer (a caller elsewhere). The
+// model's own words are not read: what it says is no caller's.
+func clientWorkDir(req *Request) string {
+	texts := []string{req.System}
+	for _, m := range req.Messages {
+		if m.Role == "assistant" {
+			continue
+		}
+		for _, p := range m.Parts {
+			if p.Kind == Text {
+				texts = append(texts, p.Text)
+			}
+		}
+	}
+	dir := ""
+	for _, t := range texts {
+		for _, m := range clientCwdPattern.FindAllStringSubmatch(t, -1) {
+			for _, g := range m[1:] {
+				if g = strings.Trim(strings.TrimSpace(g), "`'\""); g != "" {
+					dir = g
+				}
+			}
+		}
+	}
+	if dir == "" || !filepath.IsAbs(dir) {
+		return ""
+	}
+	dir = filepath.Clean(dir)
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return ""
+	}
+	return dir
+}
+
+var clientCwdPattern = regexp.MustCompile(`(?m)(?:Primary working directory|^\s*(?:-\s*)?Working directory|Current working directory): *([^\r\n]+)$|<cwd>([^<\r\n]+)</cwd>`)
+
 func evalSymlinks(path string) string {
 	if p, err := filepath.EvalSymlinks(path); err == nil {
 		return p
@@ -679,7 +719,18 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	if len(req.Format.schema()) > 0 {
 		args = append(args, "--json-schema", string(cliSchema(req.Format.schema())))
 	}
-	work, err := claudeWorkDir()
+	// in the caller's own folder when it says which it is and it is one
+	// here (clientWorkDir): Claude Code tells the model the folder it runs
+	// in as its working directory, and a model told magpie's folder wrote
+	// the caller's files there, through tools that run in the caller's
+	work := ""
+	if binary.wsl == nil {
+		work = clientWorkDir(req)
+	}
+	client := work != ""
+	if !client {
+		work, err = claudeWorkDir()
+	}
 	var sessions []string
 	switch {
 	case err != nil:
@@ -692,7 +743,11 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		// go on with it (claudeSessions)
 		sessions = claudeSessions(configDir, work)
 		args = slices.DeleteFunc(args, func(a string) bool { return a == "--no-session-persistence" })
-		b.sweepSessions(sessions)
+		// a caller's folder keeps its own sessions beside the runs': only
+		// magpie's own folder is swept, a run's session removed by its id
+		if !client {
+			b.sweepSessions(sessions)
+		}
 	}
 	if from != nil {
 		defer from.discard() // unless the run took it
@@ -2007,6 +2062,11 @@ func cleanClaudeEnv(env []string) []string {
 	// prompt of all the account's others, and a change to it would undo
 	// the cache from there on
 	return append(out, "ENABLE_CLAUDEAI_MCP_SERVERS=0", "DISABLE_AUTO_COMPACT=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1",
+		// run in a caller's folder (clientWorkDir), Claude Code would put
+		// its repository's status in the prompt too: the caller tells its
+		// model that itself, and a status changing with each commit undoes
+		// the cache from there on
+		"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1",
 		// an hour's cache, as Claude Code writes it on a subscription within
 		// its limits, always: the mark on the caller's instructions
 		// (renderClaudePrompt) is an hour's, which may not follow a 5m one
