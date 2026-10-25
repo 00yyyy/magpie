@@ -90,6 +90,8 @@ function fixture(lang, theme, events, options = {}) {
       }
       return json(lanState());
     }
+    // options.keysError: the list can't be read
+    if (url.pathname === "/api/caller-keys" && options.keysError) return route.fulfill({ status: 500, json: { error: options.keysError } });
     if (url.pathname === "/api/caller-keys") return json({ keys });
     if (url.pathname === "/api/caller-keys/models") return json({ models: [
       ...(options.groups ? [
