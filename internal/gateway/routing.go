@@ -929,6 +929,16 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// the account is as good as it was; the proxy is the user's to start
 		return r
 	}
+	if c.p.LimitRestOff && (why == failQuota || why == failCredit || why == failRate || status == http.StatusTooManyRequests) {
+		// the user set it never to rest for a limit (provider.LimitRestOff;
+		// zoecats on Discord: a local aggregator says "quota exhausted"
+		// for the moment it switches upstreams, and the next request goes
+		// through): not set aside, sunk or counted, and asked as ever. A
+		// key refused, a model not served or a plain failure rests it as
+		// before
+		r.By, r.Until = "off", now
+		return r
+	}
 	if why == failCredit || why == failQuota {
 		// the vendor's words, for quotaHeld to give again
 		r.said = provider.APIError(body, http.StatusText(status))
