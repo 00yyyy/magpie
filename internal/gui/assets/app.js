@@ -22858,9 +22858,9 @@ async function renderUpdate(r, u) {
   if (u == null) {
     const early = !updateBusy && updateLast && !r.querySelector(".sub");
     if (early) renderUpdate(r, updateLast);
-    u = await api(updatePath("update")).catch(() => null);
+    u = await api(updatePath("update?fresh=1")).catch(() => null);
     if (!u || !r.isConnected || seqOf(r) !== seq) return;
-    if (early) updateSeq.set(r, seq + 1); // stops its timers
+    if (early) updateSeq.set(r, seq + 1); // stops timers
   } else if (!r.isConnected) return;
   updateLast = u;
   const who = r.querySelector(".who"), val = r.querySelector(".val");
