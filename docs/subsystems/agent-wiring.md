@@ -195,5 +195,11 @@ read or write Lody's private document store, select models there, or claim
 that opening the link completed the import. Lody exposes no public status
 reader: `Agent.Added` remains nil and the JSON row omits `added`. The GUI
 shows a confirmation hint for this unknown state; Cindy still reports its
-known true/false status. Reopening the link lets Lody handle duplicates.
+known true/false status. `Added` returns `(added, known)`: Cindy's
+databases are read without writing beside them (`sessions.OpenUntouched`,
+immutable with no WAL log, from a copy with one; a plain read-only open
+made `-wal` and `-shm` in Cindy's folder while it was closed), and one that
+can't be read, or a stopped WSL distro's, is unknown, never "not added"
+(`TestCindyHasClosedWALAndUnreadable`, `TestImportStatusUnreadableIsUnknown`).
+Reopening the link lets Lody handle duplicates.
 Bub requires its separately installed ACP plugin.

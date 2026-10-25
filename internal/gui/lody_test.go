@@ -144,3 +144,29 @@ func TestLodyImportRunsLodyOnLinux(t *testing.T) {
 		t.Fatalf("Lody ran with %q, want %q", b, want)
 	}
 }
+
+// Cindy's database that can't be read leaves its row's added out, as
+// unknown: the window never says "Not added" for what it couldn't read.
+func TestImportStatusUnreadableIsUnknown(t *testing.T) {
+	sandboxHome(t)
+	cfg, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(cfg, "Cindy")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cindy-local-v1.db"), []byte("half-written, no database"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range state().Agents {
+		if a.ID == "cindy" {
+			if b, _ := json.Marshal(a); strings.Contains(string(b), `"added"`) {
+				t.Fatalf("unreadable Cindy database said: %s", b)
+			}
+			return
+		}
+	}
+	t.Fatal("no Cindy row")
+}
