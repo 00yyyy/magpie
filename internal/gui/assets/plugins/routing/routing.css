@@ -632,6 +632,18 @@ button.rt-session { cursor: pointer; }
 @supports (grid-template-columns: subgrid) { .rt-rule { grid-template-columns: subgrid; } }
 .rt-rule:first-child { border-top: 0; padding-top: 2px; }
 .rt-rule > .i { line-height: 26px; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; }
+/* a rule's number is its handle, as a model's is: the grip beside it
+   shows on hover, dragged or from the keyboard only */
+.rt-rule > .rt-rhandle.ag-handle { position: relative; width: 16px; height: 26px; padding: 0; margin: 0; font: inherit; font-size: 11.5px; line-height: 26px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.rt-rule > .rt-rhandle::before { content: ""; position: absolute; left: -5px; top: 50%; width: 5px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3.5px 3.75px; opacity: 0; transition: opacity .15s; }
+.rt-rule:is(:hover, .dragging) > .rt-rhandle::before { opacity: 1; }
+/* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
+.rt-rule > .rt-rhandle:focus-visible::before { opacity: 1; }
+.rt-rules > .fbl.sorting { user-select: none; -webkit-user-select: none; }
+.rt-rules > .fbl.sorting > .rt-rule { transition: transform .22s cubic-bezier(.22, 1, .36, 1); }
+.rt-rules > .fbl.sorting .rt-rhandle { cursor: grabbing; }
+.rt-rules > .fbl > .rt-rule.dragging { position: relative; z-index: 2; background: var(--card); box-shadow: 0 6px 18px rgba(20, 22, 30, .12), 0 0 0 1px var(--line); border-radius: 8px; transition: none; }
+@media (prefers-reduced-motion: reduce) { .rt-rules > .fbl.sorting > .rt-rule { transition: none; } }
 .rt-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 /* on a narrow page what it does goes under the conditions */
 @media (max-width: 640px) {

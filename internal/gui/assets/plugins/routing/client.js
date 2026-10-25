@@ -5542,6 +5542,37 @@ function routingPage(part) {
       b.style.width = `clamp(6ch, ${w}px, 44ch)`;
       if (!b.isConnected) requestAnimationFrame(() => { if (b.isConnected) fitBox(b); });
     };
+    // moveRule puts the rule at `from` at `to` and keeps the keyboard on
+    // the same control of the moved rule (its handle, or its ⋯)
+    const moveRule = (from, to, keep) => {
+      if (to < 0 || to >= d.rules.length || to === from) return;
+      d.rules.splice(to, 0, d.rules.splice(from, 1)[0]);
+      drawRules();
+      if (keep) rlist.querySelectorAll(keep)[to]?.focus({ preventScroll: true });
+    };
+    // ruleHandle is a rule's number, which is also its handle (monkeyin_92
+    // on X): drag it to move the rule, or Alt+↑/↓ from the keyboard, as a
+    // model's number does; Move up and down stay under ⋯. The grip shows
+    // only on hover.
+    const ruleHandle = (i, row) => {
+      const b = el("button", "i ag-handle rt-rhandle", String(i + 1));
+      b.type = "button";
+      b.dataset.at = i;
+      b.setAttribute("aria-label", t("Move rule {n}", { n: i + 1 }));
+      b.title = t("Drag to reorder · Alt+↑/↓ to move");
+      b.onkeydown = (e) => {
+        if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        moveRule(i, i + (e.key === "ArrowUp" ? -1 : 1), ".rt-rhandle");
+      };
+      b.onclick = (e) => { e.stopPropagation(); delete b.dataset.dragged; };
+      b.onpointerdown = (e) => {
+        const rows = [...rlist.children].filter((r) => r.classList.contains("rt-rule"));
+        dragRows(e, b, row, rlist, rows, (to) => moveRule(i, to));
+      };
+      return b;
+    };
     const drawRules = () => {
       drawCtx(); // the members' windows changed with them
       rlist.replaceChildren();
@@ -5876,7 +5907,7 @@ function routingPage(part) {
         more.setAttribute("aria-label", t("Actions for rule {n}", { n: i + 1 }));
         more.title = t("Actions for rule {n}", { n: i + 1 });
         more.append(svg(DOTS, 14, 2.2));
-        const move = (to) => { d.rules.splice(to, 0, d.rules.splice(i, 1)[0]); drawRules(); rlist.querySelectorAll(".rt-rmore")[to]?.focus({ preventScroll: true }); };
+        const move = (to) => moveRule(i, to, ".rt-rmore");
         more.onclick = () => {
           const again = agentMenu?.anchor === more;
           closeAgentMenu();
@@ -5891,7 +5922,7 @@ function routingPage(part) {
             { name: "Remove rule", icon: CROSS, sep: true, run: () => { d.rules.splice(i, 1); drawRules(); } },
           ]);
         };
-        row.append(el("span", "i", String(i + 1)), line, then, more, need);
+        row.append(ruleHandle(i, row), line, then, more, need);
         rlist.append(row);
       });
       drawClassifier();
