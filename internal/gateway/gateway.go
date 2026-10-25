@@ -4026,6 +4026,11 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	body = kimiLockedSampling(p, to, body)
 	body = clinePin(p, to, body)
 	body = codexImagesFit(p, to, body)
+	if to == provider.Responses && !keepsAccessPrograms(p, in) {
+		// Codex's Cyber program, relayed or built, goes to OpenAI alone
+		// (#3172); before the user's own fields, which may name one
+		body = withoutAccessPrograms(body)
+	}
 	if to == provider.Gemini && !p.FactoryGemini() {
 		// the model is in a Gemini API's and Vertex AI's path
 		// (upstreamPath), as Google's own SDK asks it; Factory's generate

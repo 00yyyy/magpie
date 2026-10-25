@@ -2548,6 +2548,33 @@ func forVendor(p provider.Provider, body []byte) []byte {
 	return nb
 }
 
+// keepsAccessPrograms says a Responses request to p goes with its top-level
+// access_programs, the Cyber program a request asks the model under
+// (OpenAI's Daybreak, magpie-releases#18): to the ChatGPT backend, to
+// OpenAI's API, to another magpie (whose own upstream decides), and to a
+// relay that takes Codex's requests as Codex sent them (CodexAsSent). Codex
+// itself sends the field to nobody else: only with a ChatGPT sign-in, or an
+// API key on its provider named "openai" (codex-rs cyber_access_program.rs,
+// for_auth and for_provider), which is how it comes to magpie. OpenCode Go
+// answers it, for DeepSeek and GLM, with a 503 "Endpoint is unavailable"
+// that says nothing of the field (#3172), and no other vendor has a program
+// to read in it.
+func keepsAccessPrograms(p provider.Provider, in http.Header) bool {
+	return p.Account != nil && p.Account.Agent == "codex" ||
+		strings.HasSuffix(p.Host(), "openai.com") ||
+		p.IsRemoteMagpie() ||
+		p.CodexAsSent && p.Account == nil && fromCodex(in)
+}
+
+// withoutAccessPrograms is body without its top-level access_programs, the
+// rest byte for byte (withoutTopMember).
+func withoutAccessPrograms(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"access_programs"`)) {
+		return body
+	}
+	return withoutTopMember(body, "access_programs")
+}
+
 // forVendorChanges reports whether forVendor has anything to leave out of
 // body, read as it reads it, without decoding the conversation: Codex
 // sends what the rewrite looks for by name in every request, and its
