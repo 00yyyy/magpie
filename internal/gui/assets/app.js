@@ -17302,9 +17302,7 @@ function panelQuotaCard(q) {
   card.title = [q.name, q.alias, q.user, q.seat && q.seat !== q.alias && "≡ " + q.seat, q.plan, q.until ? planTerm(q) : "", q.balance && t("Balance") + " " + q.balance].filter(Boolean).join(" · ");
   if (q.error) {
     card.classList.add("err");
-    const why = el("span", "pq-sub err", quotaError(q.error, q));
-    why.append(quotaRefresh(q));
-    card.append(why);
+    card.append(pqLine(quotaError(q.error, q), q, " err"));
     card.title += "\n" + q.error;
     return card;
   }
@@ -17317,16 +17315,14 @@ function panelQuotaCard(q) {
   // Claude's out: 01huadalang on Discord), else three
   const fam = familyWindows(q.windows.filter((w) => !w.unlimited));
   if (!fam.length && q.windows.some((w) => w.unlimited)) {
-    const sub = el("span", "pq-sub", t("Unlimited"));
-    sub.append(quotaRefresh(q));
-    card.append(sub);
+    card.append(pqLine(t("Unlimited"), q));
     if (balance) card.append(balance);
     return card;
   }
   const ws = fam.slice(0, fam.some((w) => w.members) ? Math.max(4, fam.filter((w) => w.members).length) : 3);
   // when the windows begun start again: the first bare, the others by name
   const begun = ws.filter((w) => w.resetsAt && w.used > 0);
-  const sub = el("span", "pq-sub", begun.length
+  const say = el("span", "pq-say", begun.length
     ? begun.map((w, i) => {
       const at = new Date(w.resetsAt);
       // the first deadline named as one: a bare "↻ 14:26" read as a
@@ -17343,10 +17339,8 @@ function panelQuotaCard(q) {
   // it would read as the week's.
   const line = quotaRange !== "off" && begun.length === 1 && begun[0] === ws[0] && !ws[0].tiers ? quotaWindowLine(q, ws[0]) : null;
   const pace = line ? quotaEtaText(line, Date.now()) : "";
-  if (pace) sub.append(el("span", "pq-pace", " · " + pace));
-  // the card's own refresh, as on the Usage page: shown as it's hovered
-  sub.append(quotaRefresh(q));
-  card.append(sub);
+  if (pace) say.append(el("span", "pq-pace", " · " + pace));
+  card.append(pqLine(say, q));
   const rings = el("span", "pq-rings" + (ws.length > 4 ? " many" : ""));
   for (const w of ws) {
     const used = Math.max(0, Math.min(100, w.used));
@@ -18092,6 +18086,12 @@ function keepQuotaRefresh(box) {
     // a frame for the new hover state, so the reading doesn't slide
     requestAnimationFrame(() => { for (const b of shown) b.classList.remove("kept"); });
   };
+}
+// a tray line, its refresh kept (#3569)
+function pqLine(say, q, c = "") {
+  const l = el("span", "pq-sub pq-line" + c);
+  l.append(say.nodeType ? say : el("span", "pq-say", say), quotaRefresh(q));
+  return l;
 }
 function quotaRefresh(q) {
   const key = usageAcctKey(q);
