@@ -23204,19 +23204,10 @@ function savePrefs(body) {
 //   anchoring), WebKit scrolls a field it focuses to the middle of the view,
 //   and code sets scrollTop.
 // - What the reader clicks stays where it is on the screen while what the
-//   click does redraws around it — the part above it grown or shrunk, the
-//   control itself drawn again, a load come in — till the reader scrolls or
-//   clicks again, or it has settled. A click is never a scroll: a tab, a
-//   filter, a day, a toggle leaves the page where it was. When what it does
-//   leaves the page shorter under it (a list emptied), the view keeps room
-//   at its foot for it to stay, room that goes as the reader scrolls back.
-//   A control under what it unrolls (data-unrolls: "Show 7 more") is the
-//   exception: it goes down with what it opens, and what's held is the
-//   part it is in, so the rows open downwards rather than the page riding
-//   up past them. A view at its top stays at its top: what comes in above
-//   the control there moves it down instead of scrolling itself out of sight,
-//   as long as that leaves it under the pointer (less than half its height);
-//   what comes in larger above it (a day's stage on Routing) is scrolled past.
+//   click does redraws around it, till they scroll or click again or it has
+//   settled: a click is never a scroll. A page left shorter under it keeps
+//   room at its foot; a data-unrolls control goes down with what it opens;
+//   a view at its top stays there (gui-shell.md, "A click never moves").
 //
 // Code moves a view only in answer to a click that asks to go somewhere, and
 // shows that with the reader's event: scrollOnPurpose(e). Called without one
@@ -23259,17 +23250,26 @@ function keyboardFocus(e) {
     if ((r.top < b.top || r.bottom > b.bottom) && scrollOnPurpose(e, 400)) focused.scrollIntoView({ block: "nearest" });
   }));
 }
-// A wheel or a touch can scroll the view before the page is told of it: the
-// browser scrolls off the main thread, and a busy page gets the scroll event
-// first and the wheel after (WebKit, a loaded Mac). That scroll was put back
-// as no one's, and the reader lost a wheel step. What was put back is kept
-// for a moment, and a wheel or touch that came in before it was put back, the
-// same way, gives it back to the reader.
-let putBack = []; // { v, by: px put back, at }, the last second's
+// A wheel or a touch can scroll the view before the page is told of it (the
+// browser scrolls off the main thread; WebKit, a loaded Mac): put back as no
+// one's, the reader lost a step. What was put back is kept a moment, and a
+// wheel or touch made before it, the same way, gives it back.
+// macOS 13's WebKit (16.6) may scroll a view under a wheel or a coast it never
+// tells the page of: every scroll was put back, the page shook and only the
+// bar's drag moved it (issenn). Three put back the same way in a second, no
+// click holding, are the reader's: given back, and so is each one after
+// that goes on the same way within a second. Code scrolls once; not a run.
+let putBack = [], run = null; // { v, by: px put back, at, h: held }, the last second's
 function puttingBack(v, from) {
-  const by = from - v.scrollTop, at = performance.now();
+  const by = from - v.scrollTop, at = performance.now(), d = Math.sign(by), h = held?.v === v;
   putBack = putBack.filter((p) => at - p.at < 1000);
-  if (Math.abs(by) >= 1) putBack.push({ v, by, at });
+  if (Math.abs(by) < 1) return;
+  putBack.push({ v, by, at, h });
+  if (h) return;
+  const mine = putBack.filter((p) => p.v === v && !p.h && Math.sign(p.by) === d);
+  if (mine.length < 3 && !(run?.v === v && run.d === d && at - run.at < 1000)) return;
+  run = { v, d, at }; putBack = putBack.filter((p) => !mine.includes(p)); flings();
+  for (const p of mine) v.scrollTop += p.by;
 }
 // Given back is what was put back after the reader's input was made (its
 // timeStamp is when it was made, not when the page was told) and went the
