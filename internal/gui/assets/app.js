@@ -4418,7 +4418,18 @@ function showWhatsNew(releases, auto, more = {}) {
   head.append(el("b", "", t("What's new in {v}", { v: "v" + (releases[0]?.version || more.current) })));
   if (!auto) head.append(el("span", "grow"), wnRange(more.last || ""));
   ed.append(head);
-  for (const r of releases) {
+  if (releases.length > 1) {
+    const sec = el("section", "wn-rel");
+    const wait = releases.filter((r) => r.pending);
+    if (wait.length) {
+      const h = el("div", "wn-ver");
+      h.append(el("b", "", "v" + wait.at(-1).version + (wait.length > 1 ? " – v" + wait[0].version : "")), el("span", "badge", t("Not installed yet")));
+      sec.append(h);
+    }
+    sec.append(mergedNotes(releases));
+    ed.append(sec);
+  }
+  else for (const r of releases) {
     const sec = el("section", "wn-rel");
     const h = el("div", "wn-ver");
     h.append(el("b", "", "v" + r.version));
@@ -4491,6 +4502,54 @@ function noteBlocks(md) {
   return box;
 }
 
+// NOTE_ORDER: the merged notes' sections, what's new first
+const NOTE_ORDER = ["Features", "Improvements", "Performance Improvements", "Bug Fixes", "Security", "Provider Changes", "Changes", "Documentation"];
+
+// mergedNotes draws many releases' notes as one (the owner: nine releases
+// of a line each read as a scattered list): their bullets gathered under
+// one heading per kind, New features first, each with the version it came
+// in, newest first, and a line that says the range. A line outside a list
+// is a bullet of its own; a release with no notes is left out.
+function mergedNotes(releases) {
+  const secs = new Map();
+  for (const r of releases) {
+    const of = (k) => secs.get(k) || secs.set(k, []).get(k);
+    let sec = null, li = null;
+    const put = (text) => {
+      sec ??= of(t("Changes"));
+      li = sec.some((b) => b.text === text) ? null : { text, v: r.version };
+      if (li) sec.push(li);
+    };
+    for (const line of String(r.notes || "").split(/\r?\n/)) {
+      const h = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+      const b = /^\s*[-*+]\s+(.*)$/.exec(line);
+      if (h) {
+        sec = of(tHeading(h[1]));
+        li = null;
+      } else if (b) put(b[1]);
+      else if (!line.trim()) li = null;
+      else if (li && /^\s{2,}\S/.test(line)) li.text += " " + line.trim();
+      else put(line.trim());
+    }
+  }
+  const rank = (k) => { const i = NOTE_ORDER.findIndex((o) => t(o) === k); return i < 0 ? NOTE_ORDER.length : i; };
+  const box = el("div", "wn-notes wn-merged");
+  const vs = releases.map((r) => r.version);
+  box.append(el("div", "wn-span", t("{n} releases · {from} – {to}", { n: vs.length, from: "v" + vs.at(-1), to: "v" + vs[0] })));
+  for (const [k, items] of [...secs].filter(([, x]) => x.length).sort((a, b) => rank(a[0]) - rank(b[0]))) {
+    const h = el("div", "wn-h wn-h2");
+    h.append(k, el("span", "wn-n", String(items.length)));
+    const list = el("ul");
+    for (const it of items) {
+      const e = inlineMD(el("li"), it.text);
+      e.append(el("span", "wn-v", "v" + it.v));
+      list.append(e);
+    }
+    box.append(h, list);
+  }
+  return box;
+}
+
 // inlineMD appends text to e with **bold**, `code`, [links](https://…),
 // bare https:// links and #123 issue links; only http(s) addresses link.
 function inlineMD(e, s) {
@@ -4535,7 +4594,12 @@ async function confirmUpdate(u, go) {
   const box = el("div", "wn-list");
   const draw = (releases) => {
     box.replaceChildren();
-    for (const r of releases) {
+    if (releases.length > 1) {
+      const sec = el("section", "wn-rel");
+      sec.append(mergedNotes(releases));
+      box.append(sec);
+    }
+    else for (const r of releases) {
       const sec = el("section", "wn-rel");
       const h = el("div", "wn-ver");
       h.append(el("b", "", "v" + r.version));
