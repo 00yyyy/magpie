@@ -228,10 +228,13 @@ body.window .msk-onebar::before { inset: -6px -16px; }
 /* below this the flow beside the number leaves its middle under ~120px:
    the lines bunch up and the providers' names are cut, so it goes under */
 @container (max-width: 780px) {
-  .msk-band { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .msk-band { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  /* under the number the flow has the card's width: the names take what
+     they need, the middle the rest, not a third of it */
+  .mo-flow { grid-template-columns: fit-content(150px) minmax(80px, 1fr) fit-content(150px); }
 }
 @container (max-width: 640px) {
-  .mo-flow { grid-template-columns: minmax(0, 1fr) minmax(48px, 1fr) minmax(0, 1fr); gap: 4px; }
+  .mo-flow { grid-template-columns: fit-content(120px) minmax(48px, 1fr) fit-content(120px); gap: 4px; }
   .msk-model, .msk-kind:not(:first-child), .msk-kind.more { display: none; }
   .msk-msgs.both .msk-mbody, .msk-cols { grid-template-columns: minmax(0, 1fr); }
   .msk-cols span:last-child { display: none; }
