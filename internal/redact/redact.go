@@ -761,7 +761,7 @@ func mask(raw string, o Options, put func(kind, v string) string, escaped bool) 
 	if escaped {
 		found = outsideEscapes(raw, found)
 	}
-	return apply(raw, noDecimals(s, noIDs(s, found)), put, o)
+	return apply(raw, noNumbers(s, noIDs(s, found)), put, o)
 }
 
 // unescapedView is s, JSON text, as long as s and read as the vendor reads
@@ -860,19 +860,65 @@ func outsideEscapes(s string, found []span) []span {
 	return out
 }
 
-// noDecimals is found without what is a piece of a decimal number of s:
+// noNumbers is found without what is a piece of a decimal number of s:
 // digits right after the point of 5.13800138000, or right before the
 // point of 13800138000.5. A number is judged whole, and the fraction of
 // a height, a price or a coordinate is not a phone or a card number
-// because its digits happen to check (willz on Discord). Only personal
-// data's kinds, whoever found them (a rule, the model, a value known
-// before): a secret is masked wherever it is, and what the user chose
-// (their words, their rules) stays theirs.
-func noDecimals(s string, found []span) []span {
+// because its digits happen to check (willz on Discord). Nor is a number
+// that stands bare as a JSON value: "timestamp": 17929036837 in a session
+// file is a count or a time, and a phone, a card or an ID number in JSON
+// is a string (id.null on Discord). Only personal data's kinds, whoever
+// found them (a rule, the model, a value known before): a secret is
+// masked wherever it is, and what the user chose (their words, their
+// rules) stays theirs.
+func noNumbers(s string, found []span) []span {
 	return slices.DeleteFunc(found, func(f span) bool {
 		_, personal := kindCats[f.kind]
-		return personal && f.by != ByWord && f.by != ByYours && inDecimal(s, f.start, f.end)
+		return personal && f.by != ByWord && f.by != ByYours && (inDecimal(s, f.start, f.end) || jsonNumber(s, f.start, f.end))
 	})
+}
+
+// jsonNumber says s[a:b] is all of a bare JSON number, by where it sits:
+// digits only, an object's value ("key": …) or an element of an array of
+// numbers ([…, …]), and nothing after it but the , } or ] that ends a
+// value. "phone": "13800138000" is a string, and phone:13800138000 and
+// "call 13800138000, thanks" are text, so each is still masked.
+func jsonNumber(s string, a, b int) bool {
+	if a >= b || strings.Trim(s[a:b], digits) != "" {
+		return false
+	}
+	space := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
+	k := b
+	for k < len(s) && space(s[k]) {
+		k++
+	}
+	if k < len(s) && strings.IndexByte(",}]", s[k]) < 0 {
+		return false
+	}
+	i := a - 1
+	for i >= 0 && space(s[i]) {
+		i--
+	}
+	if i < 0 {
+		return false
+	}
+	switch s[i] {
+	case ':':
+		for i--; i >= 0 && space(s[i]); i-- {
+		}
+		return i >= 0 && s[i] == '"'
+	case '[', ',':
+		// back over the numbers before it to the array's [
+		for ; i >= 0; i-- {
+			if s[i] == '[' {
+				return true
+			}
+			if strings.IndexByte(digits+",.-+eE", s[i]) < 0 && !space(s[i]) {
+				return false
+			}
+		}
+	}
+	return false
 }
 
 // inDecimal says s[a:b] starts with a digit that is a decimal's fraction
