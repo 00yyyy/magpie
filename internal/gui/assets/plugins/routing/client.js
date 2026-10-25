@@ -3282,8 +3282,13 @@ function routingPage(part) {
     if ((a.mrests.get(m)?.at || 0) <= when) a.mrests.set(m, { rest, at: when });
   }
   // each account or key the kept requests weighed: how often it was
-  // tried, answered and failed in them, and how the latest found it
-  function renderActs(rs) {
+  // tried, answered and failed in them, and how the latest found it.
+  // Folded again only when a request listed is new or has changed: the
+  // list is drawn ten times a second, and each fold went through every
+  // kept request's hundreds of keys, a few ms each time (#3164)
+  let actsFold = { rs: [], by: null };
+  function foldActs(rs) {
+    if (actsFold.by && actsFold.rs.length === rs.length && rs.every((r, i) => r === actsFold.rs[i])) return actsFold.by;
     const by = new Map();
     // The agent's current sign-in uses its provider's ID; after switching,
     // that same account uses provider@user and the base ID names another.
@@ -3318,13 +3323,19 @@ function routingPage(part) {
         else if (tr.rest && end >= a.restAt) { a.rest = tr.rest; a.restAt = end; }
       }
     }
+    actsFold = { rs: [...rs], by };
+    return by;
+  }
+  function renderActs(rs) {
     // a rest lifted by hand since the request that found it (#1869): the
-    // kept requests still say it, until the next one asks it again
-    for (const a of by.values()) {
-      if (a.rest && lifted(a.rest.key, a.restAt)) a.rest = null;
-      for (const [m, x] of a.mrests) if (lifted(x.rest.key, x.at)) a.mrests.delete(m);
-    }
-    const list = [...by.values()].sort((x, y) => (x.w.name || "").localeCompare(y.w.name || "") || x.w.provider.localeCompare(y.w.provider) || rankOf(x.w) - rankOf(y.w) || x.pos - y.pos);
+    // kept requests still say it, until the next one asks it again. By the
+    // time shown, which a replay takes back, so the fold is left as it is
+    const list = [...foldActs(rs).values()].map((a) => {
+      const rest = a.rest && lifted(a.rest.key, a.restAt) ? null : a.rest;
+      const mrests = [...a.mrests.values()].some((x) => lifted(x.rest.key, x.at))
+        ? new Map([...a.mrests].filter(([, x]) => !lifted(x.rest.key, x.at))) : a.mrests;
+      return rest === a.rest && mrests === a.mrests ? a : { ...a, rest, mrests };
+    }).sort((x, y) => (x.w.name || "").localeCompare(y.w.name || "") || x.w.provider.localeCompare(y.w.provider) || rankOf(x.w) - rankOf(y.w) || x.pos - y.pos);
     setText(actLabel, t("Accounts and keys"));
     setText(actNote, t("over those requests"));
     // live, with a subscription account listed: a kept day's were weighed
