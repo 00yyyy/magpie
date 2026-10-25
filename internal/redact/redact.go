@@ -47,6 +47,9 @@ type Options struct {
 	Kinds map[string]bool
 	// Model, where set, finds more in the texts to mask (model.go)
 	Model Model
+	// Shape sends a key as a made-up key of its form, not a placeholder
+	// (shape.go)
+	Shape bool
 
 	// Actions is what is done with a value of a kind (a Hit's Kind) other
 	// than masking it, where the user chose: Warn sends it as written,
@@ -491,22 +494,39 @@ func placeholder(kind, v string) string {
 	p := tag(kind, v)
 	mu.Lock()
 	if _, ok := values[p]; !ok {
-		if len(values) >= maxValues {
-			n := 0
-			for k := range values {
-				delete(values, k)
-				if n++; n >= maxValues/2 {
-					break
-				}
-			}
-			reindexKnown()
-		}
+		makeRoom()
 		values[p] = v
 		kinds[kind] = true
 		addKnown(p, v)
 	}
 	mu.Unlock()
 	return p
+}
+
+// makeRoom lets the oldest half of values go when they are full; called
+// with mu held.
+func makeRoom() {
+	if len(values) < maxValues {
+		return
+	}
+	n := 0
+	for k := range values {
+		delete(values, k)
+		delete(shapes, k)
+		if n++; n >= maxValues/2 {
+			break
+		}
+	}
+	reindexKnown()
+}
+
+// put is how o sends a value: as its placeholder, or as a made-up key of
+// its form (Shape).
+func (o Options) put() func(kind, v string) string {
+	if o.Shape {
+		return shaped
+	}
+	return placeholder
 }
 
 // ---- masking --------------------------------------------------------------------
@@ -598,7 +618,7 @@ func anyCase(w string) *regexp.Regexp {
 // Mask swaps what o covers in s for placeholders, and says how many.
 func Mask(s string, o Options) (string, int) {
 	o.sent = true
-	return mask(s, withModel(o, []string{s}), placeholder, false)
+	return mask(s, withModel(o, []string{s}), o.put(), false)
 }
 
 // Preview is Mask with nothing remembered: each value goes as the
@@ -953,7 +973,8 @@ func apply(s string, found []span, put func(kind, v string) string, o Options) (
 	if len(found) == 0 {
 		return s, 0
 	}
-	// nothing inside a placeholder already there
+	// nothing inside a placeholder already there, or a made-up key
+	found = outsideShapes(s, found)
 	if strings.Contains(s, "{{") {
 		for _, p := range placeholderRe.FindAllStringIndex(s, -1) {
 			found = slices.DeleteFunc(found, func(f span) bool { return f.start < p[1] && f.end > p[0] })
@@ -1045,12 +1066,13 @@ func Restore(s string, escaped bool) string { return restore(s, escaped, nil) }
 // restore is Restore, counting in put, when it isn't nil, each
 // placeholder it put a value back for.
 func restore(s string, escaped bool, put map[string]int) string {
-	if !strings.Contains(s, "_") {
-		return s
-	}
 	mu.RLock()
 	defer mu.RUnlock()
 	if len(values) == 0 {
+		return s
+	}
+	s = restoreShapes(s, put)
+	if !strings.Contains(s, "_") {
 		return s
 	}
 	var b strings.Builder
@@ -1139,7 +1161,7 @@ func partialTail(s string) int {
 	if n := braceTail(s); n > 0 {
 		return n
 	}
-	return wordTail(s)
+	return max(wordTail(s), shapeTail(s))
 }
 
 // braceTail is a tail from {, or {{, on: then spaces, a placeholder's body
