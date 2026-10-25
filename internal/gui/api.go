@@ -845,6 +845,13 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// before the first paint rather than after the settings come
 		list := builtinsState()
 		boot["featuresOff"] = builtinsOff(list)
+		// and where the gateway listens, so the sidebar's line at its foot
+		// is drawn from the start, not held back until providers has come
+		// in (#1519's read waits for the agents); only this process's own,
+		// for one served by another magpie is the providers' read to find
+		if served.Load() != nil {
+			boot["sideGateway"] = map[string]any{"url": gateway.URL(), "running": true, "boot": true}
+		}
 		// and the settings of those the page draws (kernel.js)
 		boot["pluginConfig"] = builtinConfig(list)
 		// on Omarchy the page takes its theme's look before it paints

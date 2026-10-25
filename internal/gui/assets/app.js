@@ -24382,10 +24382,10 @@ function renderCrumb(items) {
   if (on) parts.push(on.textContent.trim().split(" · ")[0]);
   c.replaceChildren(...parts.flatMap((p, i) => i ? [el("i", "", "/"), el(i === parts.length - 1 ? "b" : "span", "", p)] : [el(parts.length === 1 ? "b" : "span", "", p)]));
 }
-// the gateway at the sidebar's foot: where it listens, or that it doesn't
-var sideGwAt = null;
+// the gateway at the sidebar's foot, boot.js's until providers says (#3429)
+var sideGwAt = window.bootPrefs?.sideGateway;
 function sideGwRead() {
-  if (!(sideGwRead.due && sideNav() && !sideGwAt)) return;
+  if (!(sideGwRead.due && sideNav() && (!sideGwAt || sideGwAt.boot))) return;
   // the list is not read yet: the read the Providers page is made ready
   // with (#1519) serves both, one read, not two
   if (!providers && mode !== "panel") {
