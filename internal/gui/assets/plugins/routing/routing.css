@@ -653,15 +653,16 @@ button.rt-session { cursor: pointer; }
 .rt-cx:hover { color: var(--fg); border-color: var(--muted); }
 .rt-c:hover > .rt-cx, .rt-c:focus-within > .rt-cx { opacity: 1; pointer-events: auto; }
 @media (hover: none) { .rt-cx { opacity: 1; pointer-events: auto; } }
-/* the quiet + that adds a condition; in words while the rule has none */
-.rt-addc {
+/* the quiet + that adds a condition (in words while the rule has none),
+   and the one that adds the rule's next model */
+.rt-addc, .rt-adduse {
   display: inline-grid; grid-auto-flow: column; place-items: center; gap: 5px;
   width: 24px; height: 24px; padding: 0; border-radius: 999px; border: 1px solid transparent;
   background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer;
   transition: color .15s, border-color .15s, background .15s;
 }
 .rt-addc.wide { width: auto; height: 26px; padding: 0 10px 0 8px; border: 1px dashed var(--line); }
-.rt-addc:hover, .rt-addc.open, .rt-addc:focus-visible { color: var(--fg); background: var(--card-2); }
+.rt-addc:hover, .rt-addc.open, .rt-addc:focus-visible, .rt-adduse:hover, .rt-adduse.open, .rt-adduse:focus-visible { color: var(--fg); background: var(--card-2); }
 .rt-addc.wide:hover, .rt-addc.wide.open { border-color: var(--muted); }
 /* the rule's ⋯, always drawn, in the icons' quiet grey: it is the only
    way to move or remove a rule, and drawn on hover alone nobody found it
