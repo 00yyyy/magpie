@@ -1337,7 +1337,7 @@ function routingPage(part) {
   // three agents sending at once, ~10 s of a 40 s look at the page went to
   // getTotalLength and getPointAtLength alone, and the page lagged
   // (yg6888 on X: "打开页面很卡").
-  const measured = new WeakMap(); // path → { d, L, tips, pts }
+  const measured = new WeakMap(); // path → { d, L, tips, pts, flat }
   function measure(p) {
     const d = p.isConnected && p.getAttribute("d");
     if (!d) return null;
@@ -1352,10 +1352,58 @@ function routingPage(part) {
   // for the same points again. Between two points 8 px apart, a wire's
   // curve is off its chord by a fraction of a pixel.
   const ptStep = 8;
+  // flat is a d as points close together, with the length along it to
+  // each, read once for its d: getPointAtLength walks the path from its
+  // start on each call, and in WebKit the flights along wires to keys
+  // hundreds of rows down spent a sixth of the page's time in it (#3164).
+  // Only what the stage draws with, an absolute M then L, Q and C; any
+  // other d is read from the browser, a point every ptStep
+  function flat(d) {
+    const n = d.match(/[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) || [], k = { M: 2, L: 2, Q: 4, C: 6 };
+    const xs = [], ys = [], len = [];
+    const to = (x, y) => {
+      const j = xs.length - 1;
+      len.push(j < 0 ? 0 : len[j] + Math.hypot(x - xs[j], y - ys[j]));
+      xs.push(x); ys.push(y);
+    };
+    let c = "";
+    for (let i = 0; i < n.length;) {
+      if (/[A-Za-z]/.test(n[i])) { c = n[i++]; continue; }
+      if (!k[c] || (c === "M" && xs.length)) return null;
+      const a = n.slice(i, i += k[c]).map(Number);
+      if (a.length < k[c] || a.some(isNaN)) return null;
+      if (c === "M") { to(a[0], a[1]); c = "L"; continue; }
+      if (!xs.length) return null;
+      const P = [xs[xs.length - 1], ys[ys.length - 1], ...a];
+      if (c === "L") { to(a[0], a[1]); continue; }
+      // pieces no longer than 2 px along the curve's control points
+      let hull = 0;
+      for (let j = 2; j < P.length; j += 2) hull += Math.hypot(P[j] - P[j - 2], P[j + 1] - P[j - 1]);
+      const steps = Math.max(1, Math.ceil(hull / 2));
+      for (let j = 1; j <= steps; j++) {
+        const t = j / steps, u = 1 - t;
+        const w = c === "Q" ? [u * u, 2 * u * t, t * t] : [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+        let x = 0, y = 0;
+        w.forEach((wi, q) => { x += wi * P[2 * q]; y += wi * P[2 * q + 1]; });
+        to(x, y);
+      }
+    }
+    return xs.length > 1 && len[len.length - 1] > 0 ? { xs, ys, len } : null;
+  }
   function pointAt(p, s) {
     const m = measure(p);
     if (!m?.L) return p.getPointAtLength(s);
     s = Math.max(0, Math.min(m.L, s));
+    if (m.flat === undefined) m.flat = flat(m.d);
+    if (m.flat) {
+      // the browser's length and the points' differ by a hair: s is read
+      // as the same share of the way along
+      const { xs, ys, len } = m.flat, u = s / m.L * len[len.length - 1];
+      let lo = 0, hi = len.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (len[mid] <= u) lo = mid; else hi = mid; }
+      const f = len[hi] > len[lo] ? (u - len[lo]) / (len[hi] - len[lo]) : 0;
+      return { x: xs[lo] + (xs[hi] - xs[lo]) * f, y: ys[lo] + (ys[hi] - ys[lo]) * f };
+    }
     const k = Math.floor(s / ptStep), s0 = k * ptStep, s1 = Math.min(m.L, s0 + ptStep);
     const at = (i, si) => m.pts[i] || (m.pts[i] = p.getPointAtLength(si));
     const a = at(k, s0);
