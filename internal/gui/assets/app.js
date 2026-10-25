@@ -22557,7 +22557,7 @@ function maskTryDraw(out) {
   }
   const text = el("div", "mask-try-text");
   let at = 0;
-  for (const m of res.text.matchAll(PLACEHOLDER)) {
+  for (const m of maskMatches(res.text, info)) {
     text.append(document.createTextNode(res.text.slice(at, m.index)));
     const h = info.get(m[0]);
     const kind = h?.kind || m[0].slice(2, -2).replace(/_[^_]*$/, "");

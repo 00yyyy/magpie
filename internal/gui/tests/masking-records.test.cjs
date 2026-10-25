@@ -93,20 +93,21 @@ function serve(lang, sum, asked, opts = {}) {
     if (url.pathname === "/api/masking/records") {
       asked.push(url.search);
       const q = url.searchParams, kinds = q.get("kind")?.split(",");
-      const rs = (opts.none ? [] : records).filter((r) => (!kinds || r.values.some((v) => kinds.includes(v.k))) && (!q.get("by") || r.values.some((v) => v.b === q.get("by")))
+      const rs = (opts.none ? [] : opts.records || records).filter((r) => (!kinds || r.values.some((v) => kinds.includes(v.k))) && (!q.get("by") || r.values.some((v) => v.b === q.get("by")))
         && (!q.get("agent") || r.agent === q.get("agent")) && (!q.get("provider") || r.provider === q.get("provider")) && (!q.get("blocked") || r.blocked));
       return json({ records: rs, more: false });
     }
     if (url.pathname === "/api/masking/record") {
-      const r = records.find((r) => r.key === +url.searchParams.get("key"));
+      const r = (opts.records || records).find((r) => r.key === +url.searchParams.get("key"));
       return r ? json(r) : route.fulfill({ status: 404, body: "404 page not found" });
     }
     if (url.pathname === "/api/masking/sent") {
       asked.push("sent " + url.searchParams.get("key"));
-      return url.searchParams.get("key") === "1002" ? json({ body: SENT }) : route.fulfill({ status: 404, body: "404 page not found" });
+      const body = opts.sent ? opts.sent[url.searchParams.get("key")] : url.searchParams.get("key") === "1002" && SENT;
+      return body ? json({ body }) : route.fulfill({ status: 404, body: "404 page not found" });
     }
     if (url.pathname === "/api/masking/values") {
-      const known = { [KEY]: SECRET, [MAIL]: ADDR };
+      const known = { [KEY]: SECRET, [MAIL]: ADDR, ...opts.known };
       const ps = JSON.parse(req.postData()).ps;
       asked.push("values " + ps.join(","));
       return json({ values: Object.fromEntries(ps.filter((p) => known[p]).map((p) => [p, known[p]])) });
@@ -380,4 +381,33 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.locator("#maskCard .msk-num").waitFor();
     assert.deepEqual(errors, []);
   });
+}
+
+// "Keep a key's form" sends a made-up key of the real one's form in place of
+// a {{…}} placeholder (redact's shape.go): the page marks it, and puts the
+// real key against it, as it does a placeholder (#3599)
+const MADE = "sk_hYQWRBFmdHNIo5XVT2VnIIGh4mmMiJNm", REAL = "sk_w3axCByTQgK1PxqPhfKTrJOLBqz6sbZv";
+const made = {
+  records: [{ key: 1005, t: ago(60e3), route: "chat", what: "chat", agent: "codex", provider: "openai", model: "gpt-5", n: 2, back: { [MADE]: 1 },
+    values: [{ p: MADE, k: "API_KEY", b: "rule", h: "sk_w", l: 35, n: 2, known: true }],
+    snips: { [MADE]: `OPENAI_API_KEY=${MADE}` } }],
+  sent: { 1005: JSON.stringify({ model: "gpt-5", messages: [{ role: "user", content: `OPENAI_API_KEY=${MADE} sk_live_other\nonce more: ${MADE}` }] }) },
+  known: { [MADE]: REAL },
+};
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh"]) {
+    test(`${engine} ${lang}: a made-up key is marked as a placeholder is`, async (t) => {
+      const { browser, page, errors } = await open(engine, lang, 1100, summary, "", made);
+      t.after(() => browser.close());
+      await page.locator("#maskList .msk-row").first().click();
+      const one = page.locator("#maskOne");
+      await one.locator(".msk-msg").first().waitFor();
+      assert.deepEqual(await one.locator(".msk-msg .msk-text").last().locator("mark").allTextContents(), [MADE, MADE], "as the vendor got it");
+      assert.deepEqual(await one.locator(".msk-msg .msk-text").first().locator("mark").allTextContents(), [REAL, REAL], "as written here");
+      await stillClick(page, one.locator(".msk-val").first());
+      assert.equal(await one.locator("mark.lit").count(), 4);
+      await untranslated(page, lang);
+      assert.deepEqual(errors, []);
+    });
+  }
 }

@@ -1,11 +1,27 @@
 // Insights › Masking's code (client.js has its markup and hooks): run after
 // app.js, whose masking helpers it shares (maskTip, maskColor,
 // maskShape, maskValue: Settings' Try it and the masked calls' badges use
-// them too). What a placeholder stood for is in this magpie's memory alone,
-// never on disk, so after a restart it is gone; so is the text a request
-// went out with (/api/masking/sent), kept for the newest requests only.
+// them too; Try it uses this page's maskMatches in turn). What a
+// placeholder stood for is in this magpie's memory alone, never on disk,
+// so after a restart it is gone; so is the text a request went out with
+// (/api/masking/sent), kept for the newest requests only.
 
 const stillMotion = calm;
+// maskMatches is text's stand-ins as matchAll gives them: its {{…}}
+// placeholders, and the made-up keys "Keep a key's form" sent (redact's
+// shape.go), the keys of info that are no placeholder, which only the
+// record's own list tells from the text around them (#3599)
+const maskLookRes = new WeakMap();
+function maskMatches(text, info) {
+  let re = maskLookRes.get(info);
+  if (!re) {
+    const looks = [...info.keys()].filter((p) => p && !p.startsWith("{{")).sort((a, b) => b.length - a.length)
+      .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    re = looks.length ? new RegExp(PLACEHOLDER.source + "|" + looks.join("|"), "g") : PLACEHOLDER;
+    maskLookRes.set(info, re);
+  }
+  return text.matchAll(re);
+}
 // the providers' names, read once when the page opened before any page
 // that loads them
 let maskProv = null, maskProvAsked = false;
@@ -709,7 +725,7 @@ function maskBlocked(r) {
 // got them or, here, as they were written
 function maskInk(into, text, here, o, info) {
   let at = 0;
-  for (const m of text.matchAll(PLACEHOLDER)) {
+  for (const m of maskMatches(text, info)) {
     const x = info.get(m[0]);
     if (!x) continue;
     into.append(document.createTextNode(text.slice(at, m.index)));
@@ -731,7 +747,7 @@ function maskInk(into, text, here, o, info) {
 // side, the rest left out
 function maskWindows(text, info) {
   const rs = [];
-  for (const m of text.matchAll(PLACEHOLDER)) if (info.has(m[0])) rs.push([Math.max(0, m.index - 120), Math.min(text.length, m.index + m[0].length + 120)]);
+  for (const m of maskMatches(text, info)) if (info.has(m[0])) rs.push([Math.max(0, m.index - 120), Math.min(text.length, m.index + m[0].length + 120)]);
   const out = [];
   for (const r of rs) {
     const last = out.at(-1);
@@ -761,7 +777,7 @@ function maskContent(r, o, info) {
     items = [];
     let fold = null;
     for (const l of o.leaves) {
-      const changed = [...l.text.matchAll(PLACEHOLDER)].some((m) => info.has(m[0]));
+      const changed = [...maskMatches(l.text, info)].some((m) => info.has(m[0]));
       if (changed) { fold = null; items.push({ leaf: l }); continue; }
       if (!fold) items.push(fold = { fold: [] });
       fold.fold.push(l);
@@ -804,7 +820,7 @@ function maskContent(r, o, info) {
       return list.append(f);
     }
     const l = it.leaf, m = el("div", "msk-msg");
-    const n = [...l.text.matchAll(PLACEHOLDER)].filter((x) => info.has(x[0])).length;
+    const n = [...maskMatches(l.text, info)].filter((x) => info.has(x[0])).length;
     const mh = el("div", "msk-mhead");
     if (l.role) mh.append(el("span", "msk-role", l.role));
     if (l.path) mh.append(el("span", "msk-path", l.path));
@@ -845,7 +861,7 @@ function maskHow(r, o, info) {
   head.append(el("h2", "", t("How it was masked")), el("span", "msk-hint", t(vs.length === 1 ? "1 value" : "{n} values", { n: fmtN(vs.length) }) + " · " + t(r.n === 1 ? "1 place" : "{n} places", { n: fmtN(r.n) })));
   aside.append(head);
   const where = new Map();
-  for (const l of o.leaves || []) for (const m of l.text.matchAll(PLACEHOLDER)) if (info.has(m[0]) && l.path) {
+  for (const l of o.leaves || []) for (const m of maskMatches(l.text, info)) if (info.has(m[0]) && l.path) {
     const w = where.get(m[0]) || new Set();
     w.add(l.path);
     where.set(m[0], w);
