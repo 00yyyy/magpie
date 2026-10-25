@@ -966,6 +966,7 @@ time a plugin needs it, and the plugin signs in, lists the models and makes
 each request; magpie serves them to agents like any provider's.
 
 ```sh
+magpie plugin add workbuddy              # a community plugin by its name (WorkBuddy, think-tags, Qoder)
 magpie plugin add opencode-gemini-auth   # an npm package, or a path to a plugin of your own
 magpie plugin add pi-antigravity         # a pi package, the same way
 magpie plugin                           # the plugins, what each signs in to, and whether you are
