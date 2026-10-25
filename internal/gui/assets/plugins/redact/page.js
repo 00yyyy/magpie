@@ -251,12 +251,12 @@ function maskFlow(sum, move) {
     for (const r of rows) {
       const b = el("button", "mo-node" + (r.id && maskL[kind] === r.id ? " on" : ""));
       b.type = "button";
-      // its logo on the side the lines are: an agent's after its name, a
-      // provider's before it; "N more" keeps the room so the names line up
+      // its logo first, then its name, on both sides; "N more" keeps the
+      // logo's room so the names line up
       const ic = r.id ? icon(r.icon || "generic") : el("span", "ic");
       const tx = el("span", "tx");
       tx.append(el("span", "nm", r.name), el("span", "ct", fmtN(r.n)));
-      b.append(...(kind === "agent" ? [tx, ic] : [ic, tx]));
+      b.append(ic, tx);
       if (r.id) {
         b.title = t("Show what {name} sent masked", { name: r.name });
         b.onclick = () => maskNarrow({ [kind]: maskL[kind] === r.id ? "" : r.id });

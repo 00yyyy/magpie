@@ -188,11 +188,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // to the ring's top left)
         const bird = await card.locator(".msk-hub svg").boundingBox();
         assert(Math.abs(bird.x + bird.width / 2 - (hub.x + hub.width / 2)) < 1 && Math.abs(bird.y + bird.height / 2 - (hub.y + hub.height / 2)) < 1, "the bird in the middle of its ring");
-        // each agent and provider with its logo, on the side the lines are
+        // each agent and provider with its logo
         assert.deepEqual(await card.locator(".mo-node .ic").evaluateAll((ns) => ns.map((n) => n.dataset.icon)), ["claudecode-color", "codex-color", "anthropic", "openai"]);
-        const agentNode = card.locator(".mo-col.agent .mo-node").first(), provNode = card.locator(".mo-col.provider .mo-node").first();
-        assert((await agentNode.locator(".ic").boundingBox()).x > (await agentNode.locator(".nm").boundingBox()).x, "an agent's logo after its name");
-        assert((await provNode.locator(".ic").boundingBox()).x < (await provNode.locator(".nm").boundingBox()).x, "a provider's logo before its name");
+        // on both sides the logo first, then the name; a side's logos in one
+        // column and its names on one edge; every logo on a disc of one size
+        // (bare, a logo that fills its box and one that doesn't read as two
+        // sizes)
+        const nodes = await card.locator(".mo-node:not(:disabled)").evaluateAll((ns) => ns.map((b) => {
+          const ic = b.querySelector(".ic").getBoundingClientRect(), nm = b.querySelector(".nm").getBoundingClientRect();
+          return { side: b.parentElement.classList.contains("agent") ? "agent" : "provider", ic: { x: ic.x, w: ic.width, h: ic.height, r: getComputedStyle(b.querySelector(".ic")).borderRadius }, nm: nm.x };
+        }));
+        for (const n of nodes) {
+          assert(n.ic.x + n.ic.w <= n.nm, `the logo before the name: ${JSON.stringify(n)}`);
+          assert.deepEqual([n.ic.w, n.ic.h, n.ic.r], [24, 24, "50%"], `one disc for every logo: ${JSON.stringify(n)}`);
+        }
+        for (const side of ["agent", "provider"]) {
+          const of = nodes.filter((n) => n.side === side);
+          assert(of.every((n) => Math.abs(n.ic.x - of[0].ic.x) < 0.5 && Math.abs(n.nm - of[0].nm) < 0.5), `${side}s' logos in one column, names on one edge: ${JSON.stringify(of)}`);
+        }
         assert.match(await card.locator(".mo-cap").textContent(), /magpie/);
         assert.equal(await page.evaluate(() => [...document.querySelectorAll("#maskCard, #maskCard *")].some((n) => /gradient/.test(getComputedStyle(n).backgroundImage))), false, "flat: no gradient");
         // short: the list starts in the first screen
