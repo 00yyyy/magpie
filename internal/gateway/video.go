@@ -750,7 +750,9 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	if b, e := json.Marshal(f.Extra); e == nil && extra.n > 0 {
 		sent += " " + string(b)
 	}
-	noteMasked(r, "video", hits, sent, 0, call.Provider, call.Model)
+	// the record names the member that had it last (noteMaskedUntil)
+	_, noted := noteMaskedUntil(r, "video", hits, sent, 0, cmp.Or(call.Provider, p.ID), call.Model)
+	defer func() { noted(call.Provider, model) }()
 	if n > 0 && f.Prompt == prompt { // the prompt's mask wraps w already
 		var done func()
 		w, done = restoring(w)
