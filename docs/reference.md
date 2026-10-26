@@ -2327,6 +2327,17 @@ the API key goes to `~/.gemini/.env`. Picking a catalog model points
 `auth` to API key with the gateway token, and names the model in
 `settings.json`; a native model puts the previous auth back.
 
+**Antigravity CLI** (`agy`) takes the gateway, its key and the model only
+from how it is started. Picking a catalog model (`magpie agy <model>`)
+puts a function named `agy` in a marked block (`# >>> magpie agy >>>`) of
+your shell profiles: `.zshrc`, the bash profile a terminal reads, and
+`config.fish` (the PowerShell profiles on Windows). In a new terminal,
+plain `agy` then runs `magpie agy run`, which starts the real agy with the
+gateway, the key and `--model` (yours wins when you give one); off magpie
+it starts agy untouched. A terminal open already takes the command the
+Launch row copies. Stepping out (`magpie agy default`) takes the block out
+again. `magpie agy env` prints what `agy run` adds.
+
 ### Import links
 
 A vendor or relay can hand its users a ready-made provider as a link:

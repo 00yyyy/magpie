@@ -265,6 +265,11 @@ func run(args []string) error {
 		agent.SyncCatalogSettled()
 		catalog.Changed = was
 	}()
+	// what a shell's agy runs (agy_cli.go): every argument after run is
+	// agy's, --help too, and nothing is moved or started first
+	if ok, err := agyCmd(args); ok {
+		return err
+	}
 	// before anything is read, moved or started: --help on any command
 	// prints its usage and does nothing else
 	if helpAsked(args) {

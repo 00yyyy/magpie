@@ -2082,7 +2082,12 @@ function connectPanel(a, { fields, fieldBtn }) {
     const cp = el("button", "ag-quiet", t("Copy"));
     cp.type = "button";
     cp.onclick = () => copy(a.launch, t("Launch command"), null, t("Copied — run it to start {name} on magpie", { name: a.name }));
-    kv(t("Start it with"), line(code(a.launch), cp));
+    // a function magpie gave the user's shells starts it (agy): typed in a
+    // new terminal; the command is for one open before
+    if (a.typed) {
+      kv(t("Start it with"), line(code(a.typed), el("span", "ag-hint", t("in a new terminal"))));
+      kv(t("In a terminal open now"), line(code(a.launch), cp));
+    } else kv(t("Start it with"), line(code(a.launch), cp));
   }
   // the files magpie changed, and the way back
   const foot = el("div", "ag-foot");
@@ -3894,7 +3899,9 @@ function launchButton(a) {
   const b = el("button", "field extra launch");
   b.type = "button";
   b.append(svg(LAUNCH_GLYPH, 13, 1.5));
-  b.title = t("{name} takes magpie only from its environment · click to copy the command that starts it:", { name: a.name }) + "\n" + a.launch;
+  b.title = (a.typed
+    ? t("Type {command} in a new terminal to start {name} on magpie · click to copy the command for a terminal open now:", { command: a.typed, name: a.name })
+    : t("{name} takes magpie only from its environment · click to copy the command that starts it:", { name: a.name })) + "\n" + a.launch;
   b.setAttribute("aria-label", b.title);
   b.onclick = (ev) => {
     ev.stopPropagation();

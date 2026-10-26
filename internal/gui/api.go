@@ -197,6 +197,9 @@ type agentJSON struct {
 	// Launch: the command that starts an agent taking the gateway only
 	// from its environment (agy) on magpie, to copy
 	Launch string `json:"launch,omitempty"`
+	// Typed: what starts it on magpie typed in a new terminal, a function
+	// magpie gave the user's shells (agy); the launch is for one open now
+	Typed string `json:"typed,omitempty"`
 	// Models: how many of the catalog its lists show, for an agent that
 	// picks among it (agent_models.go)
 	Models *modelCountJSON `json:"models,omitempty"`
@@ -2449,6 +2452,9 @@ func state() stateJSON {
 		}
 		if a.Launch != nil {
 			aj.Launch = a.Launch()
+		}
+		if a.Typed != nil && aj.Launch != "" {
+			aj.Typed = a.Typed()
 		}
 		aj.CLIMissing = a.CLIMissing()
 		if a.Native != nil {
