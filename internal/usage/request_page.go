@@ -672,8 +672,12 @@ func readRequestState(now time.Time) requestState {
 		fmt.Fprintf(h, "%s:%d:%d;", s.path, s.size, s.mod.UnixNano())
 	}
 	return requestState{sources: sources, codexIdentities: codexIdentities, cfg: cfg, snapshot: snapshot, days: days, someShared: someShared,
-		root: Path() + "|" + catalog.CachePath(), meta: meta, key: fmt.Sprintf("%x", h.Sum(nil))}
+		root: requestRoot(), meta: meta, key: fmt.Sprintf("%x", h.Sum(nil))}
 }
+
+// requestRoot is the logs a request state is read from: another home's
+// answer is no answer.
+func requestRoot() string { return Path() + "|" + catalog.CachePath() }
 
 func QueryPage(p Period, f Filter, offset, limit int) RequestPage {
 	return queryPage(p, f, offset, limit, sessions.ReadCallSource)

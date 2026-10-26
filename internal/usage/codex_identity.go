@@ -390,7 +390,17 @@ type effortEntry struct {
 	have     bool
 	building chan struct{} // closed when the build under way ends
 	used     int64
+	at       time.Time // when the kept answer's build began
 }
+
+// effortFresh is how long an answer stands before a change is built into
+// it. Codex and Claude Code write to their session files all the time, so
+// nearly every 15 s Sessions poll found the history changed and built the
+// ledger of all of it again: over a real history that was ~2.5 GB
+// allocated and ~1 s of CPU every 3.5 minutes for this answer alone. A
+// thread's consumption a minute behind is still the thread's; the page's
+// own rows and totals are read as they change.
+var effortFresh = time.Minute
 
 // effortBuilt, in tests, is told each time CodexModelEffort reads the ledger.
 var effortBuilt func()
@@ -400,6 +410,15 @@ func CodexModelEffort(p Period) map[string][]sessions.ModelEffort {
 	if LogCalls != nil { // synthetic logs carry no state to key on
 		return codexModelEffort(codexEffortRows(p, Clock(), LogCalls))
 	}
+	codexEffort.Lock()
+	if e := codexEffort.periods[p]; e != nil && e.have && e.root == requestRoot() && time.Since(e.at) < effortFresh {
+		codexEffort.built++
+		e.used = codexEffort.built
+		value := e.value
+		codexEffort.Unlock()
+		return cloneEffort(value) // read before the state is: that is most of an unchanged ask's cost
+	}
+	codexEffort.Unlock()
 	now := Clock()
 	st := readRequestState(now)
 	codexEffort.Lock()
@@ -427,6 +446,7 @@ func CodexModelEffort(p Period) map[string][]sessions.ModelEffort {
 	done := make(chan struct{})
 	e.building = done
 	codexEffort.Unlock()
+	began := time.Now()
 	var value map[string][]sessions.ModelEffort
 	defer func() {
 		codexEffort.Lock()
@@ -434,7 +454,7 @@ func CodexModelEffort(p Period) map[string][]sessions.ModelEffort {
 		if value != nil {
 			// kept under the state read before the build: a call written
 			// while it ran changes the state, and the next ask builds again
-			e.key, e.root, e.value, e.have = st.key, st.root, value, true
+			e.key, e.root, e.value, e.have, e.at = st.key, st.root, value, true, began
 		}
 		codexEffort.Unlock()
 		close(done)
