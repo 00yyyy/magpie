@@ -736,6 +736,23 @@ function routingPage(part) {
     return t("{who} goes first, in the order given: when its allowance renews isn't known.", { who: w });
   }
 
+  // behindWhy is why an account Smart weighed, with quota to spare, isn't
+  // the one tried first for the request it was weighed for, when its row
+  // would otherwise say only what it has left and read as passed over
+  // (demonyins on X: a Design Plan at 75% left, behind a Claude Max whose
+  // week renewed sooner, read as paused): "kept" when the conversation
+  // stays on the one that answered it, "sooner" when the first's allowance
+  // renews sooner (cmpRenews, as the gateway ranks them). null when it is
+  // first, or behind for what the row or another reason says already.
+  function behindWhy(r, w) {
+    const f = r.order[0], x = r.order.find((y) => y.id === w.id);
+    if (!f || !x || x === f || f.rest || f.fallback || x.fallback || x.routing || !x.known || group(x) !== "fine") return null;
+    if (!weighedWith(r, x).includes(f) || memberSplit(r, f, x)) return null;
+    if (["session", "turn", "cache"].includes(r.affinity?.why)) return "kept";
+    if (r.sealedTask || ruleWhy(r, true) || f.learns || !f.known || group(f) !== "fine") return null;
+    return cmpRenews(f, x).c < 0 ? "sooner" : null;
+  }
+
   // memberSplit: the group that put x behind f, when it is one that takes
   // its members whole (by weight, in order) and f and x are of different
   // members of it — with the names of those members and the group; null
@@ -2313,7 +2330,7 @@ function routingPage(part) {
       // rest with it (#1960)
       const r = src().get(row.rid) || pinned || cur, { answered, rests, gave, went } = findings(r);
       const w = row.w, rest = rests.get(w.id) || rests.get(w.id + "\u0000" + (w.model || "")), resting = rest && at(rest.until) > n;
-      let s;
+      let s, b;
       if (w.unlisted) s = unlistedWord(w);
       else if (resting) s = `${failWord(rest.why)} · ${restWhen(rest)}`;
       else if (w.window) s = t("request longer than its {n} window · passed over", { n: ctxShort(w.window) });
@@ -2335,6 +2352,8 @@ function routingPage(part) {
         s = !w.routing && w.used >= 98 && w.credits ? quota(w, "{n} used · on credits", "{n} left · on credits")
           : !w.routing && w.used >= 98 ? quota(w, "{n} used · all but used up", "{n} left · all but used up")
           : !w.routing && w.used >= 90 ? quota(w, "{n} used · kept for last", "{n} left · kept for last")
+          : (b = behindWhy(r, w)) === "kept" ? quota(w, "{n} used · conversation kept on another", "{n} left · conversation kept on another")
+          : b === "sooner" && soon ? quota(w, "{n} used · renews in {d} · one renewing sooner goes first", "{n} left · renews in {d} · one renewing sooner goes first", { d: dur(soon - n) })
           : soon ? quota(w, "{n} used · renews in {d}", "{n} left · renews in {d}", { d: dur(soon - n) }) : quota(w, "{n} used", "{n} left");
       } else if (w.kind === "account") s = t("what's left not known yet");
       else if (w.routing === "usage") s = t("{n} tokens lately", { n: tokens(w.tokens || 0) });
