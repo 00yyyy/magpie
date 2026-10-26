@@ -24385,7 +24385,11 @@ setInterval(renderPluginDot, 15 * 60 * 1000);
 const accountNames = new Set();
 // generic words an account can't be named, lest every one of them on the
 // page is hidden
-const NOT_ACCOUNTS = new Set(["default", "own", "desktop", "account", "main", "local", "unknown", "none", "free", "pro"]);
+// "api key" and "signed in" are what magpie calls a plugin's account that
+// has no name (pluginLabels), "(2)" after one a second such: words of a
+// sentence too, a plugin's summary among them (outloudvi on Discord: Kiro's
+// "…or an API key" blurred)
+const NOT_ACCOUNTS = new Set(["default", "own", "desktop", "account", "main", "local", "unknown", "none", "free", "pro", "api key", "signed in"]);
 function noteAccount(s) {
   if (typeof s !== "string") return;
   s = s.trim();
@@ -24437,7 +24441,7 @@ window.noteAccounts = noteAccounts;
       if (q.alias && q.alias !== q.seat) all.add(q.alias.trim());
     }
     for (const a of state?.agents || []) for (const n of [a.id, a.name]) if (n) not.add(String(n).toLowerCase());
-    return [...all].filter((n) => n.length >= 2 && !IS_EMAIL.test(n) && !not.has(n.toLowerCase())).sort((a, b) => b.length - a.length);
+    return [...all].filter((n) => n.length >= 2 && !IS_EMAIL.test(n) && !not.has(n.toLowerCase().replace(/ \(\d+\)$/, ""))).sort((a, b) => b.length - a.length);
   }
   let findKey = null, find = EMAIL;
   // finder is the pattern of everything to hide now: an address, or a name
