@@ -818,6 +818,8 @@ function routingPage(part) {
     for (const x of r.order.filter((x) => x.aside)) out.push(t("{who} is made for {api}, not {other} as the keys routed over are, so it isn't one of them: it's tried after them.", { who: who(x), api: API[x.speaks] || x.speaks || t("any API"), other: API[pooled?.speaks] || pooled?.speaks || t("any API") }));
     for (const x of r.left || []) out.push(x.held
       ? t("{who} is left out: the gateway key asking may not use its account.", { who: who(x) })
+      : x.window
+      ? t("{who} is left out: this request is longer than its {n} context window, so it would only refuse it. It's asked only once every one with room is out of its allowance.", { who: who(x), n: ctxShort(x.window) })
       : x.noCredits
       ? t("{who} is left out: a usage window is used up, and the account is set not to spend its credits, so it counts as used up until that window renews.", { who: who(x) })
       : x.capped
@@ -1802,7 +1804,9 @@ function routingPage(part) {
   // comes back when its window renews, and a group member held so would
   // otherwise vanish from the stage (#2129, wyq0x55: d-task's gpt-sol-6.1,
   // used up, wasn't shown while a used-up Claude was).
-  const heldOut = (w) => !w.held && !!(w.capped || w.noCredits);
+  // window: passed over as the request is longer than its model's
+  // context window (#3749), a row of its own as one at a cap is
+  const heldOut = (w) => !w.held && !!(w.capped || w.noCredits || w.window);
   function seated(r) {
     const members = r.group?.members || [];
     const key = (w) => {
@@ -2309,6 +2313,7 @@ function routingPage(part) {
       let s;
       if (w.unlisted) s = unlistedWord(w);
       else if (resting) s = `${failWord(rest.why)} · ${restWhen(rest)}`;
+      else if (w.window) s = t("request longer than its {n} window · passed over", { n: ctxShort(w.window) });
       // a row another request weighed, answering that one: the header
       // tells of this request, so it says the answer is not this one's
       else if (trying.has(id)) s = r.id !== cur.id && agents.size <= 1 ? t("answering another request…") : t("answering…");
@@ -2352,9 +2357,9 @@ function routingPage(part) {
       lightRow(row.li, row.wire, on, flying);
       row.li.classList.toggle("low", !!(!w.routing && w.known && w.used >= 90));
       row.li.classList.toggle("rest", !!resting || gave.has(id));
-      row.li.classList.toggle("left", !!w.unlisted);
+      row.li.classList.toggle("left", !!w.unlisted || !!w.window);
       if (on) row.wire.style.setProperty("--agent", hueOf(r.agent));
-      row.wire.classList.toggle("rest", !!resting || !!w.unlisted);
+      row.wire.classList.toggle("rest", !!resting || !!w.unlisted || !!w.window);
     }
     // a fold tells of its keys together: the one answering or that
     // answered, by name, then how many are there to route to and how many

@@ -268,6 +268,10 @@ type Weighed struct {
 	Speaks   provider.Protocol `json:"speaks,omitempty"`   // a key made for one protocol only
 	Rest     *Rest             `json:"rest,omitempty"`     // resting after a failure, when the request came
 	Unlisted bool              `json:"unlisted,omitempty"`
+	// Window: left out as the request is longer than this, its model's
+	// context window (roomy), unless every one with room is out of its
+	// allowance (#3749)
+	Window int `json:"window,omitempty"`
 	// DueBy: "reset" when Due is when an auto-used Codex reset about to
 	// run out starts the windows again, sooner than they renew (#717)
 	DueBy string `json:"dueBy,omitempty"`

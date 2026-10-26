@@ -1523,7 +1523,9 @@ func holds(c candidate, tokens int) bool {
 // to compact.
 //
 // Those left out are handed back (small, their rows in smallW when the
-// order has one each), kept for the last resort: when every candidate
+// order has one each, with Window set to the window: the trace lists
+// them as left out, so the Routing page keeps their rows and says why,
+// #3749), kept for the last resort: when every candidate
 // with room is out of its allowance, a fallback too small is asked all
 // the same (Kai on Discord: both Claude accounts at their limit until
 // the next day, the Claude provider's Fallback a Codex model of 272K
@@ -1563,7 +1565,9 @@ func roomy(cs []candidate, pl planned, from provider.Protocol, body []byte) (out
 		if w := windows[key(c)]; w > 0 && tokens >= w {
 			small = append(small, c)
 			if parallel {
-				smallW = append(smallW, pl.order[i])
+				x := pl.order[i]
+				x.Window = w
+				smallW = append(smallW, x)
 			}
 			continue
 		}

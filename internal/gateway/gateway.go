@@ -2381,7 +2381,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		capture.tools = tools
 	}
 	tierAsked := bodyTier(from, body) // the service tier the client asked for (#1784)
-	tr := s.trace.beginFor(r, Route{turn: turn, dirOf: dirOf(from, plain), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, call.Agent), TitleLink: link, Pinned: pin, Time: start, Agent: call.Agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, call.Kind), Kind: call.Kind, For: call.For, Model: call.Model, Effort: requestEffort(from, body), Tier: tierAsked, Provider: p.ID, Group: group, Rule: hit, Nested: nested, SealedTask: sealedTask, LeadAccount: leadAccount, Compaction: compactionWho(checkpoint), Subagent: subagent, SubagentEffort: subagentEffort, Sub: subOf(r.Header), SubagentID: subagentID, Affinity: shown, Order: pl.order, Left: pl.left})
+	tr := s.trace.beginFor(r, Route{turn: turn, dirOf: dirOf(from, plain), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, call.Agent), TitleLink: link, Pinned: pin, Time: start, Agent: call.Agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, call.Kind), Kind: call.Kind, For: call.For, Model: call.Model, Effort: requestEffort(from, body), Tier: tierAsked, Provider: p.ID, Group: group, Rule: hit, Nested: nested, SealedTask: sealedTask, LeadAccount: leadAccount, Compaction: compactionWho(checkpoint), Subagent: subagent, SubagentEffort: subagentEffort, Sub: subOf(r.Header), SubagentID: subagentID, Affinity: shown, Order: pl.order, Left: append(slices.Clip(pl.left), smallW...)})
 	if watched != nil {
 		watched.routeID = tr.ID
 	}
@@ -3597,7 +3597,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				}
 				next = append(next, x)
 				if len(smallW) == len(small) {
-					nextW = append(nextW, smallW[k])
+					w := smallW[k]
+					w.Window = 0 // asked after all: weighed, not left out
+					nextW = append(nextW, w)
 				}
 			}
 			small = nil
@@ -3607,6 +3609,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				s.trace.update(tr, func(t *Route) {
 					t.Tries[len(t.Tries)-1] = try
 					t.Order = append(slices.Clip(t.Order), nextW...)
+					t.Left = slices.DeleteFunc(slices.Clone(t.Left), func(l Weighed) bool {
+						return l.Window > 0 && slices.ContainsFunc(nextW, func(w Weighed) bool { return w.ID == l.ID && w.Model == l.Model })
+					})
 				})
 				skipped = append(skipped, c.label()+": "+call.Error)
 				cands = append(cands[:len(cands):len(cands)], next...)
