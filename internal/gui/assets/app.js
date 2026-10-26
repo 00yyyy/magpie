@@ -23014,11 +23014,12 @@ function keyboardFocus(e) {
 // macOS 13's WebKit (16.6) may scroll a view under a wheel or a coast it never
 // tells the page of: every scroll was put back, the page shook and only the
 // bar's drag moved it (issenn). Three put back the same way in a second, no
-// click holding, are the reader's: given back, and so is each one after
-// that goes on the same way within a second. Code scrolls once; not a run.
+// redraw under a click's hold (h) moving them, are the reader's: given back,
+// and so is each one after that goes on the same way within a second. Code
+// scrolls once; not a run.
 let putBack = [], run = null; // { v, by: px put back, at, h: held }, the last second's
-function puttingBack(v, from) {
-  const by = from - v.scrollTop, at = performance.now(), d = Math.sign(by), h = held?.v === v;
+function puttingBack(v, from, h) {
+  const by = from - v.scrollTop, at = performance.now(), d = Math.sign(by);
   putBack = putBack.filter((p) => at - p.at < 1000);
   if (Math.abs(by) < 1) return;
   putBack.push({ v, by, at, h });
@@ -23233,13 +23234,17 @@ function standIn(h) {
     if (s && s !== c[0] && s.tagName === c[0].tagName && s.classList[0] === c[0].classList[0] && atRest(s)) { c[0] = s; return c; }
   }
 }
+// where the held parts are in the page, and how tall it is: what the hold
+// left (h.lay), and a redraw changes, a scroll not
+const laid = (h) => [h.v.scrollHeight, ...h.chain.slice(0, 3).map(([n]) => n.isConnected ? onScreen(n, h.v) + h.v.scrollTop : NaN)];
+const redrawn = (h) => !h.lay || laid(h).some((x, i) => !(Math.abs(x - h.lay[i]) < 1.5));
 function hold(h) {
   // held by what can be seen: an empty part (a row's value with nothing in it
   // yet) has no height, so "moved by less than half its height" below never
   // held, and Add to PATH on Settings' About slid the view 11px off its top
   // once the page was a little taller than the window (#2296)
   const a = h.chain.find(([n]) => atRest(n) && n.offsetHeight) || h.chain.find(([n]) => atRest(n)) || (h.chain.some(([n]) => n.isConnected) ? null : standIn(h));
-  if (!a) return;
+  if (!a) { h.lay = laid(h); return; }
   const v = h.v, d = onScreen(a[0], v) - a[1];
   if (Math.abs(d) >= 1) {
     let want = v.scrollTop + d;
@@ -23270,6 +23275,7 @@ function hold(h) {
   }
   fitRoom(v);
   readerLeaves(v);
+  h.lay = laid(h);
 }
 let holding = false; // one frame loop, whatever the clicks
 // A window made wider or narrower lays the whole page out again, the sidebar
@@ -23351,9 +23357,14 @@ for (const v of document.querySelectorAll(".view")) {
     if (panning?.v === v) readerScrolls(250);
     if (performance.now() < purposeUntil || barDrag === v) { fitRoom(v); readerLeaves(v); scrolledFrom.set(v, document.activeElement); return; }
     const from = v.scrollTop;
+    // a click's hold takes what a redraw moved; a scroll with the page laid
+    // out as the hold left it is put back as at rest, so the reader's run
+    // is theirs a click before it too (issennknight: a profile opened, then
+    // wheeled through, held still for 4s)
+    const h = held?.v === v && redrawn(held);
     if (held?.v === v) hold(held);
     else backToReader(v);
-    puttingBack(v, from);
+    puttingBack(v, from, h);
   }, { passive: true });
 }
 
