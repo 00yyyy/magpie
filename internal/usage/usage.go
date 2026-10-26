@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -245,21 +246,67 @@ func Append(r Record) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	// the folder is made only when it is missing: every request appends,
-	// and MkdirAll stat'ed it each time (#3725)
-	f, err := os.OpenFile(Path(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if errors.Is(err, fs.ErrNotExist) && os.MkdirAll(filepath.Dir(Path()), 0o755) == nil {
-		f, err = os.OpenFile(Path(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	}
-	if err != nil {
+	path := Path()
+	f, before := openLog(path)
+	if f == nil {
 		return
 	}
-	defer f.Close()
-	before, _ := statLogHandle(f)
-	if _, err := f.Write(append(b, '\n')); err == nil {
-		after, _ := statLogHandle(f)
-		noteLogAppend(Path(), before, after)
+	if !holdLog {
+		defer f.Close()
 	}
+	if _, err := f.Write(append(b, '\n')); err != nil {
+		if holdLog {
+			f.Close()
+			heldLog.f = nil
+		}
+		return
+	}
+	after, _ := statLogHandle(f)
+	noteLogAppend(path, before, after)
+}
+
+// heldLog is the log Append keeps open between calls, under mu: every
+// request appends, and an open and a close of usage.jsonl each time was
+// most of Append's time (#3725). It is written to only while Path still
+// names that same file, so a log moved, removed or replaced is opened
+// again. Windows closes it after each write, since a file open there
+// can't be removed or renamed.
+var heldLog struct {
+	path string
+	f    *os.File
+}
+
+const holdLog = runtime.GOOS != "windows"
+
+// openLog returns the log to append to and its state before the write,
+// or nil when it can't be opened.
+func openLog(path string) (*os.File, os.FileInfo) {
+	if f := heldLog.f; f != nil {
+		heldLog.f = nil
+		if heldLog.path == path {
+			before, err := statLogHandle(f)
+			now, nerr := statLogFile(path)
+			if err == nil && nerr == nil && sameLogFile(before, now) {
+				heldLog.f = f
+				return f, before
+			}
+		}
+		f.Close()
+	}
+	// the folder is made only when it is missing: every request appends,
+	// and MkdirAll stat'ed it each time (#3725)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if errors.Is(err, fs.ErrNotExist) && os.MkdirAll(filepath.Dir(path), 0o755) == nil {
+		f, err = os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	}
+	if err != nil {
+		return nil, nil
+	}
+	before, _ := statLogHandle(f)
+	if holdLog {
+		heldLog.path, heldLog.f = path, f
+	}
+	return f, before
 }
 
 // IsRejected also recognizes local rejections written before the explicit flag.
