@@ -6319,19 +6319,20 @@ func parse(proto provider.Protocol, body []byte) (*Request, error) {
 	return parseIn(proto, body, false)
 }
 
-// parseIn is parse, for facts only as readResponses says.
+// parseIn is parse, for facts only as readResponses, readChat and
+// readAnthropic say.
 func parseIn(proto provider.Protocol, body []byte, facts bool) (*Request, error) {
 	var req *Request
 	var err error
 	switch proto {
 	case provider.Chat:
-		req, err = parseChat(body)
+		req, err = readChat(body, facts)
 	case provider.Responses:
 		req, err = readResponses(body, facts)
 	case provider.Gemini:
 		req, err = parseGemini(body)
 	default:
-		req, err = parseAnthropic(body)
+		req, err = readAnthropic(body, false, facts)
 	}
 	if err != nil {
 		return nil, err

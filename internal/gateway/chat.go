@@ -73,11 +73,22 @@ type cRequest struct {
 	AccessPrograms json.RawMessage `json:"access_programs,omitempty"`
 }
 
-func parseChat(body []byte) (*Request, error) {
+func parseChat(body []byte) (*Request, error) { return readChat(body, false) }
+
+// readChat is parseChat; for facts (readFacts) it leaves out what they
+// never read, as readResponses does: the assistant's words and calls, the
+// tools' outputs, and the copies of raw values a parse kept would need. A
+// plugin's request is read for its work folder on every try (tellWorkPlace),
+// and a long conversation's history was most of what that allocated (#3472).
+func readChat(body []byte, facts bool) (*Request, error) {
+	decode := decodeJSON
+	if facts {
+		decode = decodeJSONView
+	}
 	body = liftMessageTools(body) // a request handle didn't see (#2322)
 	body = shapeChatTools(body)   // and its tools in another API's shape (#2622)
 	var c cRequest
-	if err := decodeJSON(body, &c); err != nil {
+	if err := decode(body, &c); err != nil {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: c.Model, MaxTokens: c.MaxCompletionTokens, Temp: c.Temperature, TopP: c.TopP,
@@ -104,6 +115,10 @@ func parseChat(body []byte) (*Request, error) {
 		case "user":
 			r.Messages = append(r.Messages, Message{Role: "user", Parts: chatParts(m.Content)})
 		case "assistant":
+			if facts {
+				r.Messages = append(r.Messages, Message{Role: "assistant"})
+				continue
+			}
 			msg := Message{Role: "assistant"}
 			// an earlier turn's thinking comes back in any of
 			// messageReasoning's spellings, and every upstream that
@@ -122,6 +137,10 @@ func parseChat(body []byte) (*Request, error) {
 			}
 			r.Messages = append(r.Messages, msg)
 		case "tool":
+			if facts {
+				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: m.ToolCallID}}})
+				continue
+			}
 			out, images := toolOutput(m.Content)
 			r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: m.ToolCallID, Text: out, Images: images}}})
 		}
