@@ -44,6 +44,9 @@ const providerUsage = `usage:
                                           Copilot), compaction=magpie, the default, has magpie summarise
                                           routing=smart|order|rotate|usage|pace|weight|free|fast spreads requests
                                           over its keys or accounts (fast: the one that answered fastest lately first);
+                                          prompt=as-written sends Antigravity the system prompt exactly as written;
+                                          prompt=default, the default, breaks up the lines Google answers with a
+                                          false 429 (Codex's, Claude Code's, Hermes' old persona) with a zero-width space
                                           additional-tools=on sends a tool Claude Code's tool search loads to its
                                           Responses API where it was loaded (an additional_tools item, which
                                           keeps the cache); additional-tools=default puts it with the other tools
@@ -1093,6 +1096,19 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				p.CodexAsSent = false
 			default:
 				return fmt.Errorf("codex=as-sent|default, not %q", v)
+			}
+		case "prompt":
+			// as-written: Antigravity's subscription is sent the system
+			// prompt exactly as the agent wrote it, the lines Google turns
+			// away with a 429 included; default breaks those lines up
+			// with a zero-width space (Provider.PromptAsWritten)
+			switch strings.ToLower(v) {
+			case "as-written", "as-sent", "on", "yes":
+				p.PromptAsWritten = true
+			case "default", "no", "off":
+				p.PromptAsWritten = false
+			default:
+				return fmt.Errorf("prompt=as-written|default, not %q", v)
 			}
 		case "additional-tools":
 			// on: a tool an Anthropic client's tool search loads goes to

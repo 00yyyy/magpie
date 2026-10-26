@@ -1562,6 +1562,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if !in.CodexAsSent && old != nil {
 					in.CodexAsSent = old.CodexAsSent
 				}
+				// and Antigravity's prompt as written, set with `magpie
+				// provider set antigravity prompt=as-written`
+				if !in.PromptAsWritten && old != nil {
+					in.PromptAsWritten = old.PromptAsWritten
+				}
 				// and additional_tools taken, set with `magpie provider
 				// set <id> additional-tools=on` (#2660)
 				if !in.AdditionalTools && old != nil {
