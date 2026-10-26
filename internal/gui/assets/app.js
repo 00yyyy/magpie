@@ -17400,7 +17400,7 @@ function panelQuotaCard(q) {
       return at <= Date.now() ? (i || w.members ? ringName(w) + " " : "") + resetText(at)
         : i || w.members ? ringName(w) + " " + resetClock(at) : resetText(at);
     }).join(" · ")
-    : t("Not used yet"));
+    : ws.some((w) => w.used > 0) ? "" : t("Not used yet"));
   // The first window's own pace as well, in the line already about its
   // deadline: the thin line under it has no room for what it only hints at,
   // and a card with no readings of that window has nothing to say (#2079).
