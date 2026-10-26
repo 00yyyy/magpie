@@ -1873,9 +1873,10 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// and the auto-review model the user picked (#938)
+	autoReview := codexcat.AutoReviewModel()
 	for _, m := range own {
 		if o, ok := m.(map[string]any); ok {
-			codexcat.AutoReview(o)
+			codexcat.AutoReview(o, autoReview)
 		}
 	}
 	// a Codex here for account failover alone, not connected to magpie,
