@@ -869,7 +869,7 @@ body.window .field.solo { grid-column: auto; }
 .subscription-card.several .subscription-account.brief:not(:nth-child(2)) { padding-top: 7px; }
 .subscription-account.brief { margin-bottom: 4px; }
 .quota-acct-fold { align-self: center; display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; margin: -2px -5px -2px -3px; padding: 0; border-radius: 4px; color: var(--faint); transition: background .12s, color .12s; }
-.subscription-account .user + .quota-acct-fold { margin-left: auto; }
+.subscription-account :is(.user, .acct-eye) + .quota-acct-fold { margin-left: auto; }
 .quota-acct-fold:hover { background: var(--pill); color: var(--fg-2); }
 .quota-acct-fold svg { transform: rotate(180deg); transition: transform .15s ease-out; }
 .quota-acct-fold[aria-expanded="false"] svg { transform: none; }
@@ -1020,7 +1020,14 @@ body.window .field.solo { grid-column: auto; }
 /* "Every model" at the end of the account's line, above its families */
 .text.quota-every { flex: none; margin: -2px -7px -2px 0; padding: 1px 7px; font-size: 10.5px; }
 .subscription-account .plan + .quota-every, .subscription-head .plan + .quota-every { margin-left: 4px; }
-.subscription-account .user + .quota-every, .subscription-head .quota-every { margin-left: auto; }
+.subscription-account :is(.user, .acct-eye) + .quota-every, .subscription-head .quota-every { margin-left: auto; }
+/* Hide accounts' eye by an account's name: that one shown while the rest
+   stay hidden, for this window (yogurt36); in sight on hover or focus, and
+   while it shows its account */
+.acct-eye { display: none; flex: none; align-self: center; padding: 2px; border-radius: 4px; color: var(--muted); line-height: 0; opacity: 0; }
+body.masked .acct-eye { display: inline-flex; }
+body.masked :hover > .acct-eye, body.masked :focus-within > .acct-eye, .acct-eye[aria-pressed="true"] { opacity: 1; }
+.acct-eye:hover { color: var(--fg); background: var(--pill-hover); }
 .quota-balance b { margin-left: auto; font-size: 15px; color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
 /* a balance field's several amounts (#420): a line each, the label quiet
    at the left and the figure at the right, the first the larger; a

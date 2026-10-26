@@ -9057,7 +9057,7 @@ function drawEditor(p, presetID) {
       if (p.move) ed.append(...renderMove(p));
     } else {
       const acct = el("div", "acct");
-      acct.append(icon(a.agentIcon), el("span", "n", a.user), el("span", "plan", accountPlan(a)));
+      acct.append(icon(a.agentIcon), el("span", "n", a.user), hideAccounts.eye(a.user), el("span", "plan", accountPlan(a)));
       ed.append(...field(t("Account"), acct, t("{agent}'s sign-in, read from its own files. Sign out there and this provider goes away.", { agent: a.agentName })));
     }
     ed.append(...field(t("Models"), renderModels(p), ""));
@@ -13416,6 +13416,7 @@ function accountNameButton(p, user) {
     s.title = t("The same seat as the key plan {name}, shown once, on this account's card", { name: seat });
     wrap.append(s);
   }
+  wrap.append(hideAccounts.eye(user));
   return wrap;
 }
 function accountCapOf(p, user) { return p?.accountCaps?.[String(user).toLowerCase()] || 0; }
@@ -24341,9 +24342,12 @@ window.noteAccounts = noteAccounts;
   // an address always is
   const WORD = /[A-Za-z0-9_]/, JOIN = /[-.]/;
   const joined = (s, i, step) => WORD.test(s[i] || "") || (JOIN.test(s[i] || "") && WORD.test(s[i + step] || ""));
+  // accounts shown while the rest stay hidden, this window's only (yogurt36)
+  const shown = new Set(), low = (x) => String(x).trim().toLowerCase();
   function* hits(s, re) {
     re.lastIndex = 0; // matchAll starts where the pattern's last test ended
     for (const m of s.matchAll(re)) {
+      if (shown.has(low(m[0]))) continue;
       const name = !m[0].includes("@"), end = m.index + m[0].length;
       if (name && ((WORD.test(m[0][0]) && joined(s, m.index - 1, -1)) || (WORD.test(m[0].at(-1)) && joined(s, end, 1)))) continue;
       yield m;
@@ -24466,8 +24470,41 @@ window.noteAccounts = noteAccounts;
     if (!keep) { chosen = on ? "1" : "0"; try { localStorage.setItem("magpie.maskEmails", chosen); } catch {} }
     for (const set of pages) set(on);
   }
+  const kin = (u) => {
+    const k = [u];
+    for (const p of providers?.providers || []) for (const [a, n] of Object.entries(p.accountNames || {})) if (a === low(u) || n === u) k.push(a, n);
+    for (const q of quotas || []) if (q.user === u || q.alias === u) k.push(q.user, q.alias);
+    return k.filter(Boolean).map(low);
+  };
+  const paint = (b) => {
+    const on = shown.has(low(b._u));
+    b.setAttribute("aria-pressed", on);
+    b.title = t(on ? "Hide this account" : "Show this account");
+    b.querySelector("path").setAttribute("d", on ? EYE : EYE_OFF);
+  };
+  const redraw = () => {
+    document.querySelectorAll(".acct-eye").forEach(paint);
+    if (masked) for (const set of pages) set(true);
+  };
   // Settings' Privacy has the same switch, and the settings follow
   window.hideAccounts = {
+    eye: (u) => {
+      const b = el("button", "acct-eye");
+      b._u = u;
+      b.setAttribute("aria-label", t("Show this account"));
+      b.append(svg("", 13, 2));
+      b.firstChild.setAttribute("viewBox", "0 0 24 24");
+      paint(b);
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const on = !shown.has(low(u));
+        for (const k of kin(u)) on ? shown.add(k) : shown.delete(k);
+        redraw();
+      };
+      return b;
+    },
+    // the window closed (hideMain): every account hidden again
+    closed: () => { shown.clear(); redraw(); },
     on: () => masked,
     set: (on) => setMasked(on),
     follow: (personal) => { if (chosen === null && personal !== masked) setMasked(personal, true); },
