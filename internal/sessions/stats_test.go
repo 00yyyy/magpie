@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/yetone/magpie/internal/testenv"
 )
@@ -290,6 +292,16 @@ func TestStatsHoursAndSessions(t *testing.T) {
 	}
 	if clip("abcdef", 4) != "abc…" || clip("abc", 4) != "abc" {
 		t.Fatal("clip")
+	}
+}
+
+// The overview's title of a long first prompt is the session's own string:
+// cut again to 160, it was a new copy of every title in each range kept.
+func TestStatsTitleIsTheSessionsOwn(t *testing.T) {
+	long := title(strings.Repeat("写一个很长的提示词", 40))
+	got := clip(long, titleKept)
+	if got != long || unsafe.StringData(got) != unsafe.StringData(long) {
+		t.Fatalf("clipped again: %q", got)
 	}
 }
 

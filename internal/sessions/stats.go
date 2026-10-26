@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -354,7 +355,7 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 		}
 		setSessionCodexIdentity(&s, identities)
 		setSessionCodexTaskTitle(&s, taskTitles)
-		sum := Summary{Key: key, Agent: s.Agent, ID: s.ID, Cwd: cmp.Or(folder[key], s.Cwd), Title: clip(s.Title, 160),
+		sum := Summary{Key: key, Agent: s.Agent, ID: s.ID, Cwd: cmp.Or(folder[key], s.Cwd), Title: clip(s.Title, titleKept),
 			Nickname: s.Nickname,
 			Last:     s.Last, Role: s.Role, ParentSession: s.ParentSession, RootSession: s.RootSession, Priced: true, Active: sh.active / 1000, Models: []string{}, Days: []int{},
 			Prompts: sh.prompts, Replies: sh.replies, tools: sh.tools, skills: sh.skills, skillLast: sh.skillLast,
@@ -406,12 +407,18 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 	return out
 }
 
-// clip cuts s to at most n characters, with an ellipsis.
+// titleKept is as long as a title gets from title(): 160 characters and
+// the ellipsis.
+const titleKept = 161
+
+// clip cuts s to at most n characters, with an ellipsis. One that fits is
+// s itself: the overview's titles are the cached sessions' own strings, not
+// a copy of each in every range kept (statsFor).
 func clip(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
+	if utf8.RuneCountInString(s) <= n {
 		return s
 	}
+	r := []rune(s)
 	return strings.TrimSpace(string(r[:n-1])) + "…"
 }
 
