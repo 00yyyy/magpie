@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"hash/maphash"
 	"io"
 	"maps"
 	"os"
@@ -1175,8 +1176,12 @@ func (idx *requestIndex) trim(bound int64) {
 // references for matches, never a full hydrated row for every call.
 func visibleLocal(chunks []*rowChunk) map[rowRef]bool {
 	duplicates := map[rowRef]bool{}
-	seen := map[string]bool{}
-	rows := lentRows() // a kept message id is cloned
+	// a message id seen is kept as two 64-bit hashes of it, not a copy of
+	// the decoded chunk's string: a long history's ~400k ids held ~7MB of
+	// copies at the start's peak, and a key of these is a string header's
+	// size. Two ids alike in both are ~1e-28 likely.
+	seen := map[[2]uint64]struct{}{}
+	rows := lentRows()
 	defer rows.release()
 	for _, c := range chunks {
 		open := rows.of(c)
@@ -1186,16 +1191,18 @@ func visibleLocal(chunks []*rowChunk) map[rowRef]bool {
 			if msg == "" {
 				continue
 			}
-			if seen[msg] {
+			k := [2]uint64{maphash.String(msgSeeds[0], msg), maphash.String(msgSeeds[1], msg)}
+			if _, ok := seen[k]; ok {
 				duplicates[rowRef{c, i}] = true
 			} else {
-				// a copy: a decoded chunk's strings are one allocation
-				seen[strings.Clone(msg)] = true
+				seen[k] = struct{}{}
 			}
 		}
 	}
 	return duplicates
 }
+
+var msgSeeds = [2]maphash.Seed{maphash.MakeSeed(), maphash.MakeSeed()}
 
 // matchKey narrows candidates before comparing their end times. Request IDs
 // are consumed first; fallback matching still requires uniqueness both ways.
