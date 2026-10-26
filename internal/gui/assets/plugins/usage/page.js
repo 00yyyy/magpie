@@ -2304,7 +2304,8 @@ async function loadSessions() {
   } finally { stop(); }
   if (range !== sessRange) return; // another range was picked meanwhile; its load draws
   const fresh = q === sessOverQ(); // no filter changed meanwhile
-  if (sessions && sessStats && JSON.stringify(s) === JSON.stringify(sessions) && JSON.stringify(st) === JSON.stringify(sessStats) &&
+  // an answer the same as the last is the object read then (api's sameReads)
+  if (sessions && sessStats && sameRead(s, sessions) && sameRead(st, sessStats) &&
     (!fresh || JSON.stringify(o) === JSON.stringify(sessOver))) return;
   sessions = s;
   sessStats = st;

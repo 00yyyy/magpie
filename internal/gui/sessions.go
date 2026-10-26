@@ -140,7 +140,10 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			j.Path = tilde(j.Path)
 			out.Sessions = append(out.Sessions, j)
 		}
-		writeJSON(rw, out)
+		writeJSONRows(rw, r, "sessions", out.Sessions, struct {
+			Terminal bool     `json:"terminal"`
+			Dirs     []string `json:"dirs"`
+		}{out.Terminal, out.Dirs})
 	})
 	// stats is every session's usage by day over the last ?days=N days
 	// (every day when 0 or none), cut by agent, folder and model for the
@@ -161,7 +164,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 				agents[a.Agent] = cmp.Or(names[a.Agent], a.Agent)
 			}
 		}
-		writeJSON(rw, struct {
+		writeJSONSame(rw, r, struct {
 			sessions.Stats
 			Agents map[string]string `json:"agents"`
 		}{st, agents})

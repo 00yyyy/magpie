@@ -93,6 +93,18 @@ const modelFavorites = new Set(Array.isArray(savedModelFavorites) ? savedModelFa
 const favoriteKey = (o) => o.ref || o.value;
 const isFavorite = (o) => modelFavorites.has(favoriteKey(o)) || modelFavorites.has(o.value);
 
+// The reads the page asks for again and again and mostly finds the same
+// (writeJSONSame in api.go): the tag of the answer last read goes with the
+// next ask, and an answer that is the same comes back with no body and is
+// the object read before. The Sessions tab's ~8 MB list was read, parsed and
+// compared every 15 s over a long history.
+const sameReads = new Map();
+const readsSame = (path) => /^sessions(\?|$)|^sessions\/stats\?/.test(path);
+// each such answer's tag: two answers with tags are the same only when they
+// are one object, so the Sessions tab needn't compare ~8 MB to know
+const readTags = new WeakMap();
+const sameRead = (a, b) => a === b || !(readTags.has(a) && readTags.has(b)) && JSON.stringify(a) === JSON.stringify(b);
+
 // heads, when given, is shown the answer's headers (loadQuotas' X-Magpie-Reading);
 // signal, when given, cancels the request (a read the reader moved on from)
 async function api(path, body, heads, signal) {
@@ -102,13 +114,16 @@ async function api(path, body, heads, signal) {
   // reaches the default omp row (#1187). Only # is encoded: ? = & stay a
   // query string, which encodeURIComponent would turn into a 404.
   path = path.replace(/#/g, "%23");
+  const same = body === undefined && readsSame(path);
+  const had = same ? sameReads.get(path) : undefined;
   const res = await fetch("/api/" + path, {
     method: body === undefined ? "GET" : "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: had ? { "Content-Type": "application/json", "X-Magpie-Had": had.tag } : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
   heads?.(res.headers);
+  if (had && res.ok && res.headers.get("X-Magpie-Same")) return had.data;
   if (res.status === 204) return null;
   // a body that isn't JSON (a proxy's or a plain http.Error) is the error
   // itself, not WebKit's "did not match the expected pattern"
@@ -171,6 +186,16 @@ async function api(path, body, heads, signal) {
   // the accounts it names, for Hide accounts to know them (#568); a
   // session's or a library's words aren't looked through
   if (data && typeof data === "object" && !/^(sessions|library|skills|plugins|market)/.test(path)) noteAccounts(data);
+  // a list changed since the one the page has (writeJSONRows in api.go):
+  // only its new rows are sent, and [from, count] for each run of the old
+  const delta = had && res.headers.get("X-Magpie-Delta");
+  const was = delta && had.data?.[delta];
+  if (Array.isArray(was) && Array.isArray(data?.[delta])) data[delta] = data[delta].flatMap((r) => Array.isArray(r) ? was.slice(r[0], r[0] + r[1]) : [r]);
+  const tag = same && res.headers.get("X-Magpie-Tag");
+  if (tag) {
+    sameReads.set(path, { tag, data });
+    if (data && typeof data === "object") readTags.set(data, tag);
+  }
   return data;
 }
 
