@@ -2478,7 +2478,8 @@ async function checkinOf(provider, account) {
   const num = (v) => (typeof v === "number" && isFinite(v) ? Math.max(0, v) : 0)
   const message = typeof r.message === "string" ? r.message : ""
   if (!checkinOutcomes.includes(r.outcome)) {
-    return { outcome: "failed", credit: 0, streak: 0, message: message || `the plugin answered no outcome (${JSON.stringify(r.outcome ?? null)})` }
+    const said = r.outcome === undefined || r.outcome === null ? "no outcome" : JSON.stringify(r.outcome)
+    return { outcome: "failed", credit: 0, streak: 0, message: message ? `the plugin answered ${said}: ${message}` : `the plugin answered ${said}` }
   }
   return { outcome: r.outcome, credit: num(r.credit), streak: Math.round(num(r.streak)), message }
 }
