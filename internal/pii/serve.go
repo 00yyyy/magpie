@@ -101,10 +101,10 @@ var loadTimeout = 3 * time.Minute
 
 // gpuLoadTimeout is how long it has on a GPU, where it takes seconds
 // (0.9-10s on an M4 Pro): one that takes longer is taken for hung, and
-// the CPU is tried, until the GPU is tried again. It is well under the 2
-// minutes the gateway holds a request for (unroutedMost), so a GPU's
-// hung load and the CPU's after it fit in one request's wait: with 3
-// minutes for either, every request in a hung load was answered 504.
+// the CPU is tried, until the GPU is tried again. With 3 minutes for
+// either, every request in a hung load waited out the gateway's 2
+// minutes and was answered 504; the gateway no longer counts masking's
+// time (#3682), and 40s still keeps a hung GPU's wait short.
 var gpuLoadTimeout = 40 * time.Second
 
 // giveUp is when a load is given up on; a test ends one when its state
