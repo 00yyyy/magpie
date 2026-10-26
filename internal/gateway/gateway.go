@@ -4434,6 +4434,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// a turn the client cut off before it said anything, which
 		// DeepSeek and Kimi turn every later request away for (#2599)
 		body = silentAssistantsOut(body)
+		// a call no tool message answers, or an answer to no call, which
+		// Kimi and OpenAI turn the whole request away for: what a fork
+		// at an earlier turn or a stopped reply leaves (Paidaixinbao on X)
+		body = toolPairsOut(body)
 		if mistral := p.Preset == "mistral" || p.Host() == "api.mistral.ai"; !mistral && (chatReplaysReasoning(buildHost(p), model) || chatReplaysReasoning(buildHost(p), upstream)) {
 			// a tool call the client kept no thinking for, which DeepSeek
 			// turns the whole request away for (#1462)

@@ -592,8 +592,8 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 // 400 "tool_call_id is not found" or "an assistant message with
 // 'tool_calls' must be followed by tool messages…", and OpenAI-style
 // upstreams refuse the same shapes. It runs on every request built for a
-// Chat upstream (Zed's xAI path included); Chat→Chat traffic relays
-// as-is and never reaches this path.
+// Chat upstream (Zed's xAI path included), and on a Chat client's own
+// body relayed whose exchange doesn't pair (toolPairsOut).
 //
 //   - the tool messages answering an assistant's tool_calls go in the
 //     calls' order (an agent returns parallel results out of order);
@@ -645,7 +645,7 @@ func pairToolMessages(msgs []map[string]any) []map[string]any {
 	// the text in, so two user messages never stand in a row (some
 	// models' chat templates turn them away).
 	toolAsUser := func(m map[string]any) {
-		text, _ := m["content"].(string)
+		text := contentText(m["content"])
 		if strings.TrimSpace(text) == "" {
 			text = "Tool result received."
 		}
@@ -701,6 +701,26 @@ func pairToolMessages(msgs []map[string]any) []map[string]any {
 	}
 	flushPending()
 	return out
+}
+
+// contentText is a Chat message content's text: the string, or its text
+// parts joined, as a relayed client's tool message may hold them.
+func contentText(c any) string {
+	switch c := c.(type) {
+	case string:
+		return c
+	case []any:
+		var parts []string
+		for _, p := range c {
+			if pm, _ := p.(map[string]any); pm != nil {
+				if t, _ := pm["text"].(string); t != "" {
+					parts = append(parts, t)
+				}
+			}
+		}
+		return strings.Join(parts, "\n")
+	}
+	return ""
 }
 
 // toolMsgID is a tool message's tool_call_id.
