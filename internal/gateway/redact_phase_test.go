@@ -12,6 +12,7 @@ import (
 
 	"github.com/yetone/magpie/internal/gwmw"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // heldMasker masks nothing, and holds each request it is asked about
@@ -58,8 +59,9 @@ func (heldMasker) Writer(w http.ResponseWriter) (http.ResponseWriter, func()) {
 // fremontdango on Discord: a Claude Code request sat on the Routing page
 // as routing for a long while that it was being masked. While a
 // request is masked its phase is "redact", on /v1/magpie/concurrency and
-// on the route that shows it.
-func TestMaskingIsAPhase(t *testing.T) {
+// on the route that shows it, and what masking took is kept, on its route
+// and in its usage record, as a part of magpie's own time.
+func TestMaskingIsAPhaseWithItsTime(t *testing.T) {
 	unroutedLimits(t, 10*time.Millisecond, time.Minute)
 	fresh(t)
 	if err := settings.Save(settings.Settings{Redact: true}); err != nil {
@@ -89,6 +91,7 @@ func TestMaskingIsAPhase(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the request never reached the masker")
 	}
+	entered := time.Now()
 	// its phase, and the route that shows it as held, say masking
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -109,6 +112,7 @@ func TestMaskingIsAPhase(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+	held := time.Since(entered)
 	let()
 	var r unroutedReply
 	select {
@@ -128,10 +132,21 @@ func TestMaskingIsAPhase(t *testing.T) {
 	if rt.Phase != "" {
 		t.Fatalf("a done route still says %q", rt.Phase)
 	}
+	if rt.Masking < held.Milliseconds() || rt.Masking > rt.Own || rt.Own == 0 {
+		t.Fatalf("route: masking %d ms of own %d, held at least %s", rt.Masking, rt.Own, held)
+	}
+	recs := usage.Load(time.Time{})
+	if len(recs) == 0 {
+		t.Fatal("no usage record")
+	}
+	rec := recs[len(recs)-1]
+	if rec.Masking != rt.Masking || rec.Own != rt.Own {
+		t.Fatalf("record: masking %d own %d, route %d %d", rec.Masking, rec.Own, rt.Masking, rt.Own)
+	}
 }
 
-// A request that isn't masked never has the phase.
-func TestNoMaskingNoPhase(t *testing.T) {
+// A request that isn't masked has no masking time, and never the phase.
+func TestNoMaskingNoMaskingTime(t *testing.T) {
 	fresh(t)
 	slowOn(t, "a", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
@@ -144,7 +159,7 @@ func TestNoMaskingNoPhase(t *testing.T) {
 		t.Fatalf("%d %s", code, body)
 	}
 	rs := routesOf(s, "a/m")
-	if len(rs) != 1 || rs[0].Phase != "" || rs[0].Own == 0 {
+	if len(rs) != 1 || rs[0].Masking != 0 || rs[0].Phase != "" || rs[0].Own == 0 {
 		t.Fatalf("routes: %+v", rs)
 	}
 }

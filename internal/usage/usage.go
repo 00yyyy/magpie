@@ -126,7 +126,12 @@ type Record struct {
 	// sending it the body. #1532: a vendor that held a try ~100 s and
 	// said 503 read as 104 s "In magpie". 0 in a record written before
 	// they were, where Sent is all that is known.
-	Own     int64 `json:"own_ms,omitempty"`
+	Own int64 `json:"own_ms,omitempty"`
+	// Masking: the ms of Own that went on masking the request (Settings
+	// → Privacy: the rules, and the local model with its wait for a
+	// turn); 0 where nothing was masked, or in a record from before it
+	// was kept.
+	Masking int64 `json:"masking_ms,omitempty"`
 	Retried int64 `json:"retried_ms,omitempty"`
 	Queued  int64 `json:"queued_ms,omitempty"`
 	// Flow: the ms the reply's content took to come, from where its speed

@@ -1025,7 +1025,10 @@ function ledDetail(r, cols) {
   // before they were kept has only the whole
   if (r.ttft_ms && r.sent_ms) {
     const split = r.own_ms != null;
-    add("In magpie", ledTook(split ? r.own_ms : r.sent_ms));
+    // of magpie's own, what went on masking it (Settings → Privacy)
+    const masking = split && r.masking_ms > 0 ? Math.min(r.masking_ms, r.own_ms) : 0;
+    if (masking) add("Masking", ledTook(masking));
+    add("In magpie", ledTook((split ? r.own_ms : r.sent_ms) - masking));
     if (split) {
       if (r.retried_ms > 0) add("Tries that failed first", ledTook(r.retried_ms));
       if (r.queued_ms > 0) add("Waiting for a slot", ledTook(r.queued_ms));

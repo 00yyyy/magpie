@@ -121,8 +121,10 @@ type Route struct {
 	Retried int64 `json:"retried,omitempty"`
 	Queued  int64 `json:"queued,omitempty"`
 	// Phase: "redact" while it is being masked and not yet done
-	// (noteRedacting), so its row says masking rather than routing
-	Phase string `json:"phase,omitempty"`
+	// (noteRedacting), so its row says masking rather than routing;
+	// Masking: the ms of Own that went on masking it (maskingMs)
+	Phase   string `json:"phase,omitempty"`
+	Masking int64  `json:"masking,omitempty"`
 	// Served: the model the reply says answered, as the last try has it;
 	// Swapped: another than the one that try asked for; Routed: that try
 	// asked another magpie's routing group, and Served is its member

@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // phaseRedact is the phase of a request while it is masked (redactedHits,
@@ -13,19 +14,23 @@ import (
 // being masked).
 const phaseRedact = "redact"
 
-// redaction is a request's maskings: how many are under way, and the
-// phase to put back when the last ends. It holds no text.
+// redaction is a request's maskings: how many are under way, since when
+// one has been, the time spent in one before that, and the phase to put
+// back when the last ends. It holds no text.
 type redaction struct {
 	mu      sync.Mutex
 	now     int
+	since   time.Time
+	spent   time.Duration
 	restore func()
 }
 
 // noteRedacting tells ctx's request it is being masked, until the func it
 // answers is called: its phase is phaseRedact, the route that shows it
 // says so, its watch counts the time toward neither of its limits
-// (noteMasking). Maskings at once are one, from the first's start to the
-// last's end.
+// (noteMasking), and the time is added to what masking took it
+// (maskedFor). Maskings at once are counted once, from the first's start
+// to the last's end.
 func noteRedacting(ctx context.Context) func() {
 	unmasked := noteMasking(ctx)
 	f := inflightOf(ctx)
@@ -34,6 +39,7 @@ func noteRedacting(ctx context.Context) func() {
 	}
 	f.redaction.mu.Lock()
 	if f.redaction.now++; f.redaction.now == 1 {
+		f.redaction.since = time.Now()
 		f.redaction.restore = notePhase(ctx, phaseRedact)
 	}
 	f.redaction.mu.Unlock()
@@ -44,6 +50,7 @@ func noteRedacting(ctx context.Context) func() {
 			f.redaction.mu.Lock()
 			var restore func()
 			if f.redaction.now--; f.redaction.now == 0 {
+				f.redaction.spent += time.Since(f.redaction.since)
 				restore, f.redaction.restore = f.redaction.restore, nil
 			}
 			f.redaction.mu.Unlock()
@@ -61,6 +68,32 @@ func (f *inflight) redacting() bool {
 	f.redaction.mu.Lock()
 	defer f.redaction.mu.Unlock()
 	return f.redaction.now > 0
+}
+
+// maskedFor is how long masking has taken f so far, the one under way
+// included; 0 for none or no f.
+func (f *inflight) maskedFor() time.Duration {
+	if f == nil {
+		return 0
+	}
+	f.redaction.mu.Lock()
+	defer f.redaction.mu.Unlock()
+	d := f.redaction.spent
+	if f.redaction.now > 0 {
+		d += time.Since(f.redaction.since)
+	}
+	return d
+}
+
+// maskingMs is the ms of own, magpie's own time before the request went
+// out (splitSent), that went on masking it: what masking took it, at
+// most own. Under a ms is still said, as 1; none is 0.
+func maskingMs(ctx context.Context, own int64) int64 {
+	d := inflightOf(ctx).maskedFor()
+	if d <= 0 || own <= 0 {
+		return 0
+	}
+	return min(max(d.Milliseconds(), 1), own)
 }
 
 // showRedacting puts f's phase on the route that shows it, its own or the

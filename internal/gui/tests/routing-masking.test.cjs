@@ -3,7 +3,9 @@
 // (fremontdango on Discord: a long Claude Code request sat as "routing…"
 // while it was masked): its row says masking while the gateway's route for
 // it has the "redact" phase, and routing once that is over and no try is
-// out yet. Both engines, a narrow window, every language. The API is faked.
+// out yet. Once answered, the time masking took is the first part of where
+// its first try's time went, magpie's. Both engines, a narrow window, every
+// language. The API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -20,10 +22,10 @@ const routes = [
   { id: 203, seq: 203, time: at(20), agent: "claude", model: "deepseek/deepseek-flash", provider: "magpie", phase: "redact", order: [], tries: [], done: false, status: 0 },
   // held, masked, not yet routed
   { id: 202, seq: 202, time: at(40), agent: "claude", model: "deepseek/deepseek-chat", provider: "magpie", order: [], tries: [], done: false, status: 0 },
-  // answered
+  // answered, after 2.3 s of masking
   { id: 201, seq: 201, time: at(90), agent: "claude", model: "deepseek/deepseek-flash", provider: "deepseek", order: [key],
     tries: [{ id: key.id, model: "deepseek-flash", start: at(87), done: true, status: 200, ms: 3000, ttft: 1200, net }],
-    done: true, status: 200, ms: 5400, ttft: 3500, own: 2310, sent: 2320, tokens: 900, served: "deepseek-flash" },
+    done: true, status: 200, ms: 5400, ttft: 3500, own: 2310, masking: 2300, sent: 2320, tokens: 900, served: "deepseek-flash" },
 ];
 
 function serve(lang) {
@@ -55,16 +57,16 @@ function serve(lang) {
 }
 
 const want = {
-  en: { masking: "masking…", routing: "routing…" },
-  zh: { masking: "脱敏中…", routing: "路由中…" },
-  "zh-TW": { masking: "脫敏中…", routing: "路由中…" },
-  ja: { masking: "マスク中…", routing: "ルーティング中…" },
-  de: { masking: "maskiert…", routing: "leitet weiter…" },
+  en: { masking: "masking…", routing: "routing…", part: "Masking" },
+  zh: { masking: "脱敏中…", routing: "路由中…", part: "脱敏" },
+  "zh-TW": { masking: "脫敏中…", routing: "路由中…", part: "脫敏" },
+  ja: { masking: "マスク中…", routing: "ルーティング中…", part: "マスク" },
+  de: { masking: "maskiert…", routing: "leitet weiter…", part: "Maskierung" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of Object.keys(want)) {
-    test(`${engine} ${lang}: a request being masked says so`, async (t) => {
+    test(`${engine} ${lang}: a request being masked says so, and its time`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       const context = await browser.newContext({ viewport: { width: 440, height: 900 }, reducedMotion: "reduce" });
       const page = await context.newPage();
@@ -89,6 +91,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(said[1].includes(want[lang].routing) && !said[1].includes(want[lang].masking), said[1]);
       assert(!said[2].includes(want[lang].masking), said[2]);
 
+      // the answered one: masking is magpie's first part of its try's time
+      await rows.nth(2).click();
+      const box = page.locator(".rt-steps li.time .rt-time");
+      await box.waitFor();
+      const parts = await box.evaluate((b) => [...b.querySelectorAll(".rt-time-parts li")].map((li) => [li.className, li.querySelector(".k").textContent, li.querySelector(".v").textContent]));
+      assert.equal(parts[0][0], "magpie");
+      assert.equal(parts[0][1], want[lang].part);
+      assert.match(parts[0][2], /2[.,]3/);
+      assert.equal(parts.filter((p) => p[1] === want[lang].part).length, 1);
       assert.deepEqual(errors, []);
     });
   }

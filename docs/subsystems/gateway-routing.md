@@ -281,8 +281,12 @@ recorded as a prediction failure (`noPrediction`).
   every `redactedHits` and `maskTextHits`), on `/v1/magpie/concurrency`
   and on the route that shows it (`Route.Phase`), so the row says
   masking, not routing (fremontdango on Discord: a Claude Code request
-  sat as "routing…" while it was masked). It holds no text.
-  `TestMaskingIsAPhase`, `TestNoMaskingNoPhase` in
+  sat as "routing…" while it was masked). What masking took is kept
+  as a part of magpie's own time, never more than it (`maskingMs`):
+  `Route.Masking` and the usage record's `masking_ms`, shown as
+  *Masking* in the Routing page's time and the Usage page's detail. It
+  holds no text. `TestMaskingIsAPhaseWithItsTime`,
+  `TestNoMaskingNoMaskingTime` in
   [`redact_phase_test.go`](../../internal/gateway/redact_phase_test.go),
   `routing-masking.test.cjs`. It is answered 504 after
   `unroutedUnknown` (30s) held in no wait magpie knows of, or after
