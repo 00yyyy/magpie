@@ -1446,10 +1446,12 @@ const (
 	// clear than a busy moment: pauses of 1, 2 and 4s, or what Retry-After
 	// says, under half a minute in all
 	rateRetries = 3
-	// longestPause is the longest the vendor's Retry-After is waited for
-	// before that; longer, and the agent gets the error.
-	longestPause = 8 * time.Second
 )
+
+// longestPause is the longest the vendor's Retry-After is waited for by
+// the same-one retries; longer, and a plain provider or a group waits it
+// out within its patience (replan), else the agent gets the error.
+var longestPause = 8 * time.Second
 
 // retryPause is the first pause before the last one left is tried again;
 // each pause after is twice the one before.

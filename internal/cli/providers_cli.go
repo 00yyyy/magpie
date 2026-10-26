@@ -47,6 +47,10 @@ const providerUsage = `usage:
                                           additional-tools=on sends a tool Claude Code's tool search loads to its
                                           Responses API where it was loaded (an additional_tools item, which
                                           keeps the cache); additional-tools=default puts it with the other tools
+                                          patience=2m keeps a request to it alone (not through a group) that long
+                                          while it is busy or briefly rate limited, asking again after a pause
+                                          (at most 4m); patience=off hands the agent the error at once;
+                                          patience=default, 1m
   magpie provider key <id> <key>          change the API key
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
   magpie provider fallback <id> <provider/model>…   where requests go when it's out of quota or down (none clears)
@@ -1102,6 +1106,14 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			default:
 				return fmt.Errorf("additional-tools=on|default, not %q", v)
 			}
+		case "patience":
+			// how long a request to the provider alone is kept while it
+			// is busy, as a group's Patience (zoecats on Discord)
+			n, err := patienceArg(v)
+			if err != nil {
+				return err
+			}
+			p.Patience = n
 		case "user-agent", "ua":
 			// agent: a request goes with the User-Agent the agent that
 			// sent it gave, for a coding plan that serves only agents it
@@ -2027,4 +2039,31 @@ func autoIncludeCmd(rest []string) error {
 	}
 	fmt.Printf("%s · a newly listed model is exposed when one of these matches its id: %s\n", p.Name, strings.Join(p.AutoInclude, " "))
 	return nil
+}
+
+// patienceArg reads patience=: off, default, or a time up to
+// provider.PatienceLongest seconds, as 90, 90s or 2m.
+func patienceArg(v string) (int, error) {
+	v = strings.ToLower(strings.TrimSpace(v))
+	switch v {
+	case "off", "no", "none", "0":
+		return provider.PatienceOff, nil
+	case "default", "":
+		return 0, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		n, nerr := strconv.Atoi(v)
+		if nerr != nil {
+			return 0, fmt.Errorf("patience=off|default|<time, e.g. 2m>, not %q", v)
+		}
+		d = time.Duration(n) * time.Second
+	}
+	if d == 0 {
+		return provider.PatienceOff, nil
+	}
+	if d < 0 || d > provider.PatienceLongest*time.Second {
+		return 0, fmt.Errorf("patience is at most %s, not %q", provider.PatienceLongest*time.Second, v)
+	}
+	return int((d + time.Second - 1) / time.Second), nil
 }

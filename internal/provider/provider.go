@@ -250,6 +250,16 @@ type Provider struct {
 	// turns the item away (#350).
 	AdditionalTools bool `json:"additionalTools,omitempty"`
 
+	// Patience is how many seconds more a request to this provider alone,
+	// not through a group, may be kept once it has failed in a way that
+	// passes (overloaded, unavailable, rate limited for a moment) and the
+	// same-one retries are spent, as a group's Patience is (zoecats on
+	// Discord): 0 keeps it PatienceDefault, PatienceOff hands the agent
+	// the error at once, and it is at most PatienceLongest. Set with
+	// `magpie provider set <id> patience=`; a group it is in keeps the
+	// group's own.
+	Patience int `json:"patience,omitempty"`
+
 	// NativeCompaction has Codex's compaction_trigger go to the provider
 	// as Codex sent it, and the compaction the provider writes back go to
 	// Codex as it came (#1099), where magpie otherwise asks the model for
@@ -1254,6 +1264,10 @@ func keyOptional(p Provider) bool {
 func normalize(p Provider) Provider {
 	p.ID = strings.ToLower(strings.TrimSpace(p.ID))
 	p.Name = strings.TrimSpace(p.Name)
+	if p.Patience < 0 {
+		p.Patience = PatienceOff
+	}
+	p.Patience = min(p.Patience, PatienceLongest)
 	p.Key = strings.TrimSpace(p.Key)
 	p.Proxy = strings.TrimSpace(p.Proxy)
 	p.AccountProxies = normalAccountProxies(p.AccountProxies)
