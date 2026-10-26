@@ -408,40 +408,49 @@ func stat(f *file) bool {
 	return true
 }
 
-// statFiles fills in each file's size and modification time from info(i),
-// or leaves the file out when it is gone or no regular file. Every
-// Requests page walks every session folder again, and stat()ing ~16k files
-// one after another was most of that walk (#3493), so they are stat()ed on
-// a few goroutines.
-func statFiles(files []file, info func(i int) (os.FileInfo, error)) []file {
+// statFiles fills in each file's size and modification time, as os.Stat
+// gives them when follow is set and os.Lstat when it isn't, or leaves the
+// file out when it is gone or no regular file. Every Requests page and
+// every 15 s Sessions poll walks every session folder again, and stat()ing
+// ~21k files one after another was most of that walk (#3493): each folder
+// is read in one listing where the system has one (dirent.Stats), and the
+// rest are stat()ed on a few goroutines.
+func statFiles(files []file, follow bool) []file {
+	dirs := map[string]map[string]dirent.Stat{}
+	var order []string
+	for _, f := range files {
+		d := filepath.Dir(f.path)
+		if _, seen := dirs[d]; !seen {
+			dirs[d] = nil
+			order = append(order, d)
+		}
+	}
+	listed := make([]map[string]dirent.Stat, len(order))
+	parallel(len(order), 8, func(i int) {
+		if s, ok := dirent.Stats(order[i]); ok {
+			listed[i] = s
+		}
+	})
+	for i, d := range order {
+		dirs[d] = listed[i]
+	}
 	ok := make([]bool, len(files))
-	one := func(i int) {
-		if fi, err := info(i); err == nil && fi.Mode().IsRegular() {
-			files[i].size, files[i].mod, ok[i] = fi.Size(), fi.ModTime(), true
+	parallel(len(files), 256, func(i int) {
+		f := &files[i]
+		if in := dirs[filepath.Dir(f.path)]; in != nil {
+			s, there := in[filepath.Base(f.path)]
+			if !there || s.Mode != 0 && (s.Mode != fs.ModeSymlink || !follow) {
+				return
+			}
+			if s.Mode == 0 {
+				f.size, f.mod, ok[i] = s.Size, s.Mod, true
+				return
+			}
 		}
-	}
-	if workers := min(runtime.GOMAXPROCS(0), 8, len(files)/256); workers < 2 {
-		for i := range files {
-			one(i)
+		if fi, err := statOne(f.path, follow); err == nil && fi.Mode().IsRegular() {
+			f.size, f.mod, ok[i] = fi.Size(), fi.ModTime(), true
 		}
-	} else {
-		var next atomic.Int64
-		var wg sync.WaitGroup
-		for range workers {
-			wg.Go(func() {
-				for {
-					i := int(next.Add(64)) - 64
-					if i >= len(files) {
-						return
-					}
-					for j := i; j < min(i+64, len(files)); j++ {
-						one(j)
-					}
-				}
-			})
-		}
-		wg.Wait()
-	}
+	})
 	kept := files[:0]
 	for i, f := range files {
 		if ok[i] {
@@ -449,6 +458,43 @@ func statFiles(files []file, info func(i int) (os.FileInfo, error)) []file {
 		}
 	}
 	return kept
+}
+
+// statOne is a file statFiles asks after alone: where no listing said, or
+// a link it follows.
+var statOne = func(path string, follow bool) (os.FileInfo, error) {
+	if follow {
+		return os.Stat(path)
+	}
+	return os.Lstat(path)
+}
+
+// parallel runs one(i) for each i below n, on a few goroutines when there
+// are more than per for each.
+func parallel(n, per int, one func(i int)) {
+	workers := min(runtime.GOMAXPROCS(0), 8, n/per)
+	if workers < 2 {
+		for i := range n {
+			one(i)
+		}
+		return
+	}
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Go(func() {
+			for {
+				i := int(next.Add(64)) - 64
+				if i >= n {
+					return
+				}
+				for j := i; j < min(i+64, n); j++ {
+					one(j)
+				}
+			}
+		})
+	}
+	wg.Wait()
 }
 
 // ccFiles are the session files of an agent that keeps them as Claude Code
@@ -494,7 +540,7 @@ func ccFiles(agent, dir string) []file {
 			}
 		}
 	}
-	return statFiles(out, func(i int) (os.FileInfo, error) { return os.Stat(out[i].path) })
+	return statFiles(out, true)
 }
 
 // allFiles are every agent's session files.
@@ -664,9 +710,14 @@ func walkLinked(root string, fn fs.WalkDirFunc) error {
 // codexFilesIn are the rollouts in a Codex folder.
 func codexFilesIn(dir string) []file {
 	var out []file
-	var entries []fs.DirEntry
 	for _, folder := range []string{"sessions", "archived_sessions"} {
-		walkLinked(filepath.Join(dir, folder), func(p string, d os.DirEntry, err error) error {
+		root := filepath.Join(dir, folder)
+		if listed, ok := listedRollouts(root); ok {
+			out = append(out, listed...)
+			continue
+		}
+		var found []file
+		walkLinked(root, func(p string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
 			}
@@ -674,12 +725,11 @@ func codexFilesIn(dir string) []file {
 			if m == nil {
 				return nil
 			}
-			out = append(out, file{agent: "codex", key: "codex:" + m[1], path: p, main: true})
-			entries = append(entries, d)
+			found = append(found, file{agent: "codex", key: "codex:" + m[1], path: p, main: true})
 			return nil
 		})
+		out = append(out, statFiles(found, false)...)
 	}
-	out = statFiles(out, func(i int) (os.FileInfo, error) { return entries[i].Info() })
 	// During compression, prefer the readable plain twin in the same
 	// directory: the new compressed file may not have its trailer yet.
 	plain := map[string]bool{}
@@ -695,6 +745,50 @@ func codexFilesIn(dir string) []file {
 		}
 	}
 	return distinctCodexFiles(kept)
+}
+
+// listedRollouts are the rollouts under root, in walkLinked's order and
+// with their sizes and times, read with one listing a folder
+// (dirent.Stats) rather than a listing and an lstat() a file: Codex's day
+// folders were listed twice and every rollout lstat()ed on each 15 s
+// Sessions poll. ok is false when a folder couldn't be read so, and
+// walkLinked and statFiles read root instead.
+func listedRollouts(root string) (out []file, ok bool) {
+	walk := root
+	if fi, err := os.Lstat(root); err != nil {
+		return nil, false
+	} else if !fi.IsDir() {
+		real, err := proc.RealPath(root)
+		if err != nil {
+			return nil, false
+		}
+		walk = real
+	}
+	var in func(real, shown string) bool
+	in = func(real, shown string) bool {
+		entries, ok := dirent.Stats(real)
+		if !ok {
+			return false
+		}
+		for _, name := range slices.Sorted(maps.Keys(entries)) {
+			e := entries[name]
+			switch e.Mode {
+			case fs.ModeDir:
+				if !in(filepath.Join(real, name), filepath.Join(shown, name)) {
+					return false
+				}
+			case 0:
+				if m := rolloutName.FindStringSubmatch(name); m != nil {
+					out = append(out, file{agent: "codex", key: "codex:" + m[1], path: filepath.Join(shown, name), main: true, size: e.Size, mod: e.Mod})
+				}
+			}
+		}
+		return true
+	}
+	if !in(walk, root) {
+		return nil, false
+	}
+	return out, true
 }
 
 // rolloutTwin is a Codex rollout's file in its other form: the compressed
