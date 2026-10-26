@@ -275,7 +275,16 @@ recorded as a prediction failure (`noPrediction`).
   empty, until Codex and magpie were restarted; what held it wasn't
   found). After `unroutedShow` (15s) a route of provider `magpie` shows it
   on the Routing page as routing, and gives way to the request's own route
-  once one is begun (`noteRoute`, `trace.drop`). It is answered 504 after
+  once one is begun (`noteRoute`, `trace.drop`). While the request is
+  masked its phase is `redact` (`phaseRedact`, `noteRedacting` in
+  [`redact_phase.go`](../../internal/gateway/redact_phase.go), around
+  every `redactedHits` and `maskTextHits`), on `/v1/magpie/concurrency`
+  and on the route that shows it (`Route.Phase`), so the row says
+  masking, not routing (fremontdango on Discord: a Claude Code request
+  sat as "routing…" while it was masked). It holds no text.
+  `TestMaskingIsAPhase`, `TestNoMaskingNoPhase` in
+  [`redact_phase_test.go`](../../internal/gateway/redact_phase_test.go),
+  `routing-masking.test.cjs`. It is answered 504 after
   `unroutedUnknown` (30s) held in no wait magpie knows of, or after
   `unroutedMost` (2m) in all but masking (sharwowwow on X: two minutes of
   spinning before a 504). Masking's time, its wait for the local model's
@@ -284,11 +293,12 @@ recorded as a prediction failure (`noPrediction`).
   480 KB request it took 90s over on an RX 470/580, behind the requests
   ahead of it, was answered 504 at 2m every time it was sent (#3682). The known waits are counted as they happen and their
   time added up (`noteWait`, `waited`): the request's body arriving
-  (`waitedBody`, every read of `r.Body`), masking (`noteMasking`), System
+  (`waitedBody`, every read of `r.Body`), masking (`noteMasking`, from
+  `noteRedacting`), System
   One's or the decision model's classifier (`askWaited`), an image's
   description (`seenBody`), Codex's auto reset (`autoReset`), plugins'
   gateway hooks (`GatewayBegin`) and JS gateway middleware, and every
-  `notePhase` (slot, rpm, upstream). What is left is magpie's own work
+  `notePhase` (slot, rpm, upstream, redact). What is left is magpie's own work
   (the catalog, parsing, planning, reading the usage log), ~8.5s at its
   slowest (a cold catalog sync), so 30s gives it room on a loaded machine.
   With no route and nothing written, it is answered 504 in its client's

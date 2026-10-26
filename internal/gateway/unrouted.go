@@ -459,6 +459,9 @@ func (u *unroutedHold) showLocked() {
 	if rt.Agent == "" {
 		rt.Agent = u.f.agent
 	}
+	if u.f.redacting() {
+		rt.Phase = phaseRedact
+	}
 	rt.callerKey = access.Caller(u.r.Context()).KeyID
 	u.shown = u.s.trace.begin(rt)
 }
