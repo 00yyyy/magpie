@@ -283,7 +283,13 @@ func KeepListsFresh(ctx context.Context) {
 // answers the ids it asked.
 func refreshDueLists(ctx context.Context, now time.Time) []string {
 	var asked []string
-	for _, p := range All() {
+	// the user's own providers alone, as All lists them: only those keep a
+	// list on a schedule (ownList), and All asks every agent for its
+	// sign-in, the Claude keychain's `security` among them, each minute
+	// of an idle magpie (#3185)
+	f := load()
+	own, _ := ownOf(f)
+	for _, p := range ordered(own, f.Order) {
 		every := p.RefreshInterval()
 		// one that lists nothing (Preset.NoList) has no list to keep fresh
 		if every == 0 || p.Off || !p.lists() {
