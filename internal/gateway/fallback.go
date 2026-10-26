@@ -239,7 +239,12 @@ func perKeyBarred(p provider.Provider, model string, from provider.Protocol) (ou
 	}
 	keys := p.KeysOn()
 	serves := p.Serving(model) // the lists read once, not once a key (@NetRozee on X)
-	var unlisted []candidate
+	// a key on a plan of its own whose models leave this one out
+	// (KeyAccount.Plan): the Agent Plan's key is never sent the pay as
+	// you go's deepseek-v4-1-flash-261017, while a key whose plan has it
+	// can take it (yckonnnn on X)
+	planHas := p.PlanServing(model)
+	var unlisted, planless []candidate
 	var noURL provider.Protocol
 	for i, k := range keys {
 		q := p.WithKey(k)
@@ -257,6 +262,10 @@ func perKeyBarred(p provider.Provider, model string, from provider.Protocol) (ou
 			barred = append(barred, candidate{p: q, model: model, rest: rest, rank: i})
 			continue
 		}
+		if !planHas(k) {
+			planless = append(planless, candidate{p: q, model: model, rest: rest, rank: i})
+			continue
+		}
 		if !serves(k) {
 			// the vendor lists the model to another key only
 			unlisted = append(unlisted, candidate{p: q, model: model, rest: rest, rank: i})
@@ -266,6 +275,13 @@ func perKeyBarred(p provider.Provider, model string, from provider.Protocol) (ou
 	}
 	if len(out) == 0 {
 		out, unlisted = unlisted, nil // no key lists it: try them all the same
+	}
+	if len(out) == 0 {
+		// no key's plan has it as magpie knows the plans: a model the
+		// vendor added since, tried on them all the same. Else a key
+		// whose plan lacks it is never asked, not even after the others
+		// refused it: its endpoint has no such model either
+		out = planless
 	}
 	if len(out) == 0 && len(barred) > 0 {
 		return nil, nil, nil, barred

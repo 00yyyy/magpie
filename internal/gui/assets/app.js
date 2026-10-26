@@ -14145,6 +14145,8 @@ function renderKeyAccounts(p) {
     if (k.on && several) row.append(keyWeight(p, k, weightOf(k), weights));
     const proto = protoPicker(p, k.protocol, (v) => accountAction("keys/protocol", { id: p.id, ref: k.id, protocol: v }));
     if (proto) row.append(proto);
+    const plan = planPicker(p, k, several);
+    if (plan) row.append(plan);
     // set to a protocol the provider has no URL for (#1702): the gateway
     // can't send it there, so the row says so rather than the request
     // quietly going out on another URL
@@ -14419,22 +14421,36 @@ function protoPicker(p, value, onChange) {
   value = value || "";
   const have = ["anthropic", "chat", "responses"].filter((x) => p[x]);
   if (have.length < 2 && !value) return null;
-  const opts = PROTO_OPTS.filter((o) => !o.v || have.includes(o.v) || o.v === value);
-  const pill = el("button", "proto" + (value ? " set" : ""));
+  return pickPill(PROTO_OPTS.filter((o) => !o.v || have.includes(o.v) || o.v === value), value, "", "Some relays give out a key per protocol. Set it here and the gateway sends each request to the key that fits: Claude models to the Anthropic key, GPT models to the OpenAI one.", undefined, onChange);
+}
+
+// planPicker is the key row's plan badge, for a vendor whose plans take
+// keys of their own (keyPlans): each key goes to its plan's endpoints.
+function planPicker(p, k, several) {
+  const pr = providers.presets.find((x) => x.id === p.preset), rs = pr?.keyPlans && pr.regions;
+  if (!(rs?.length > 1) || (!several && !k.plan)) return null;
+  const own = (regionAt(pr, p) || rs[0]).id;
+  return pickPill(rs.map((r) => ({ v: r.id, pill: r.name, name: r.name, note: (r.chat || r.anthropic || "").replace(/^https?:\/\//, "") })), rs.some((r) => r.id === k.plan) ? k.plan : own, own,
+    "The plan this key is for: its requests go to that plan's endpoints, and it is asked only for that plan's models.", "Plan this key is for", (v) => accountAction("keys/plan", { id: p.id, ref: k.id, plan: v === own ? "" : v }));
+}
+
+// pickPill is a key row's badge of one of opts, set when not dflt; a
+// click drops the menu of them.
+function pickPill(opts, value, dflt, title, head, onChange) {
+  const pill = el("button", "proto");
   pill.type = "button";
-  pill.title = t("Some relays give out a key per protocol. Set it here and the gateway sends each request to the key that fits: Claude models to the Anthropic key, GPT models to the OpenAI one.");
-  const paint = () => pill.replaceChildren(el("span", "", t(PROTO_OPTS.find((o) => o.v === value).pill)), svg(CHEV, 11, 1.6));
+  pill.title = t(title);
+  const paint = () => {
+    pill.classList.toggle("set", value !== dflt);
+    pill.replaceChildren(el("span", "", t(opts.find((o) => o.v === value).pill)), svg(CHEV, 11, 1.6));
+  };
   paint();
   pill.onclick = (e) => {
     e.stopPropagation();
     if (pill.classList.contains("open")) return closeProtoMenu();
     openProtoMenu(pill, opts, value, (v) => {
-      if (v === value) return;
-      value = v;
-      pill.classList.toggle("set", !!v);
-      paint();
-      onChange(v);
-    });
+      if (v !== value) { value = v; paint(); onChange(v); }
+    }, head);
   };
   return pill;
 }
