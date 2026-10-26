@@ -132,7 +132,9 @@ var gsrv struct {
 }
 
 // spanFinder is the model, loaded (*guard.Model).
-type spanFinder interface{ Find(text string) []guard.Span }
+type spanFinder interface {
+	Find(text string) []guard.Span
+}
 
 // guardLoad reads the model; a var for tests.
 var guardLoad = func(dir string) (spanFinder, error) {

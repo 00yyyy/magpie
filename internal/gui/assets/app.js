@@ -21880,7 +21880,8 @@ function privacyModelRow(box, why) {
     const who = el("div", "who"), val = el("div", "val");
     who.append(name(), el("div", "sub", pmSub(m)));
     if (m?.supported || m?.installed) {
-      if (m.downloading) {
+      if (m.models?.length > 1) val.append(pmPick(m, (id) => act("pick", id)));
+      if (pmBusy(m)) {
         const c = el("button", "text", t("Cancel"));
         c.onclick = () => act("cancel");
         val.append(c);
@@ -21897,19 +21898,42 @@ function privacyModelRow(box, why) {
     clearTimeout(pmTimer);
     // a download's progress, and where pf-serve runs once it has started
     const starting = m?.on && m.installed && !m.running && !m.failed && tries++ < 30;
-    if (m?.downloading || starting) pmTimer = setTimeout(load, 1000);
+    if (pmBusy(m) || starting) pmTimer = setTimeout(load, 1000);
   };
   const load = () => api("privacy-model").then((m) => { pmState = m; draw(m); }).catch(() => {});
-  const act = (doing) => { tries = 0; api("privacy-model", { do: doing }).then((m) => { pmState = m; draw(m); }).catch((e) => { status(t(e.message), "err"); load(); }); };
+  const act = (doing, model) => { tries = 0; api("privacy-model", { do: doing, model }).then((m) => { pmState = m; draw(m); }).catch((e) => { status(t(e.message), "err"); load(); }); };
   draw(pmState);
   load();
+}
+// the local models to pick from (pii.Models), by the app's menu: what
+// each is, its size and whether it is downloaded
+const PM_MODELS = { "astrlink-guard": ["AstrLink Guard", "Chinese and English, few false alarms in code"], "privacy-filter": ["Privacy Filter", "OpenAI's, masks more ordinary values in code"] };
+// pmBusy is the model downloading (the one picked while another masks, too)
+const pmBusy = (m) => (m?.models || []).find((x) => x.downloading) || (m?.downloading ? m : null);
+function pmPick(m, pick) {
+  const b = el("button", "sess-pick pm-model");
+  b.type = "button";
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  b.title = t("The local model");
+  b.append(el("span", "", (PM_MODELS[m.model] || [m.model])[0]), svg(CHEV, 11, 1.6));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    const opts = (m.models || []).map((x) => ({ v: x.model, name: (PM_MODELS[x.model] || [x.model])[0], literalName: true,
+      note: !x.supported && !x.installed ? t("Not available on this system yet") : t(PM_MODELS[x.model]?.[1] || "") + " · " + fmtBytes(x.size) + (x.installed ? " · " + t("downloaded") : "") }));
+    openProtoMenu(b, opts, m.model, (v) => v !== m.model && pick(v), "The local model", "sess-menu", "right");
+  };
+  return b;
 }
 function pmSub(m) {
   const about = t("Names, addresses and passwords no rule can find, found by a model that runs on this computer");
   if (!m) return about;
   if (!m.supported && !m.installed) return t("Not available on this system yet");
-  if (m.downloading) return t("Downloading the model: {done} of {total}", { done: fmtBytes(m.done), total: fmtBytes(m.total) });
-  if (m.error) return t("The download stopped: {error}", { error: m.error });
+  const d = pmBusy(m);
+  if (d) return t("Downloading the model: {done} of {total}", { done: fmtBytes(d.done), total: fmtBytes(d.total) });
+  const bad = (m.models || []).find((x) => x.error) || (m.error ? m : null);
+  if (bad) return t("The download stopped: {error}", { error: bad.error });
   if (m.on && m.failed) return t("The model didn't answer, so requests are held back: {error}", { error: m.failed });
   if (m.on && m.running) {
     if (m.gpu) return t("On, on the GPU ({device})", { device: m.device });
