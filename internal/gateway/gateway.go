@@ -4778,6 +4778,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			s.markUnfit(p.ID, f, proto)
 		}
 	}
+	offRetried := false
 	if e := bodyEffort(proto, body); res.StatusCode == http.StatusBadRequest && (e == "none" || e == "minimal" || proto == provider.Chat && hasReasoningDisabled(body)) {
 		// A model can refuse reasoning turned off. If it names its levels,
 		// or Gemini the level it hasn't, try its lowest, and from then on;
@@ -4794,14 +4795,34 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 				refused = levelRefused(model, e)
 			}
 			s.markUnfit(p.ID, refused, proto)
+			offRetried = true
 			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(withBodyEffort(proto, body, onEffort(p, model))), r.Header); err != nil {
 				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 			}
 		} else if proto == provider.Chat && mandatoryReasoning.Match(b) {
 			if nb, ok := withoutReasoningOff(body); ok {
+				offRetried = true
 				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(nb), r.Header); err != nil {
 					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 				}
+			}
+		}
+	}
+	if e := bodyEffort(proto, body); res.StatusCode == http.StatusBadRequest && proto != provider.Anthropic && !offRetried && (e == "" || offEffort(e)) {
+		// no reasoning effort, or none, turned away by a model that needs
+		// one (a Codex title on a model other than its own asks none,
+		// cybercaius on Discord): asked again once at its lowest, low
+		// where its levels aren't known. Only that refusal: any other 400
+		// goes back as it came
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		res.Body.Close()
+		res.Body = io.NopCloser(bytes.NewReader(b))
+		if effortRequired.Match(b) {
+			if offEffort(e) {
+				s.markUnfit(p.ID, offRefused(model), proto)
+			}
+			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(withFixedEffort(proto, body, onEffort(p, model))), r.Header); err != nil {
+				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 			}
 		}
 	}
@@ -5589,6 +5610,18 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				continue
 			}
 		}
+		if (req.Effort == "" || offEffort(req.Effort)) && beforeOff == nil && res.StatusCode == http.StatusBadRequest && effortRequired.Match(b) {
+			// no reasoning effort, or none, turned away by a model that
+			// needs one (a Codex title on a model other than its own
+			// asks none, cybercaius on Discord): asked again once at its
+			// lowest, low where its levels aren't known
+			if offEffort(req.Effort) {
+				s.markUnfit(p.ID, offRefused(model), to)
+			}
+			r := *req
+			r.Effort, req = onEffort(p, model), &r
+			continue
+		}
 		if req.OwnEffort {
 			if refused, value := ownEffortRefused(res.StatusCode, b, req.Effort); refused {
 				// the effort magpie added for auto mode's classifier
@@ -5693,6 +5726,14 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 // /v1/chat/completions. To use function tools, use /v1/responses or set
 // reasoning_effort to 'none'.").
 var toolsWithoutEffort = regexp.MustCompile(`(?is)tools with reasoning_effort are not supported.*reasoning_effort to .?none`)
+
+// effortRequired is an upstream turning a request away for asking no
+// reasoning effort, or none, from a model that needs one: "reasoning
+// effort is required", "missing required parameter: reasoning.effort",
+// "this model requires a reasoning effort", "reasoning cannot be
+// disabled". A refusal of a level the model hasn't, or of the field
+// itself, is not one.
+var effortRequired = regexp.MustCompile(`(?i)reasoning[ _.]?effort\W+(?:is\s+)?(?:required|mandatory|missing)\b|(?:missing|requires?|needs?)\s+(?:a\s+|the\s+)?(?:required\s+)?(?:parameter\W+)?reasoning(?:[ _.]?effort)?\b|reasoning\s+is\s+(?:required|mandatory)\b|reasoning\W+(?:cannot|can't|can not)\s+be\s+(?:disabled|turned off)`)
 
 // OpenRouter rejects an explicit reasoning-off request for some endpoints.
 var mandatoryReasoning = regexp.MustCompile(`(?i)reasoning is mandatory for this endpoint and cannot be disabled`)

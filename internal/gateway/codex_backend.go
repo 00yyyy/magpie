@@ -167,6 +167,11 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 				writeError(w, provider.Responses, 400, "/responses/compact is not supported for Magpie models; use a compaction_trigger on /responses")
 				return
 			}
+			if kind == "guardian" || isMemoryKind(kind) {
+				// an auto-review or a memory call, at an effort the
+				// model takes (codexSideEffort)
+				body = codexSideEffort(body, model)
+			}
 			// a sealed subagent task goes to a ChatGPT account the model
 			// or group has, or is turned away (serve, sealedReader)
 			// a provider set to compact natively is asked Codex's own

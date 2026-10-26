@@ -74,7 +74,19 @@ model the user just switched from. A call tied to no seen thread whose
 key's last turn is older than 3s (`codexSideFresh`) waits, up to 5s
 (`codexSideWait`) or its cancellation, for the next turn and takes its
 model (`codexLeads.sideOf`, `TestCodexTitleBeforeTheFirstTurnFollowsTheSwitch`);
-a later rename suggestion with no turn beside it waits the 5s. A session on Codex's
+a later rename suggestion with no turn beside it waits the 5s. Codex
+asks a title with no reasoning effort on any model but its own title
+model, and its auto-review at a model's default, which it has none of for
+magpie's models; a model that needs an effort answered those with 400
+(cybercaius on Discord). A title, description, summary, prediction,
+auto-review or memory call on one of magpie's models whose levels are
+known, asking no effort or an off one the model hasn't, is asked at its
+lowest on level (`codexSideEffort`, `TestCodexSideCallAskedAtAnEffortTheModelTakes`).
+Wherever the levels aren't known, serve asks any request again once at
+its lowest (low) when the upstream turns no effort or none away as needing
+one, matched on the error body (`effortRequired`, on Chat and Responses,
+forwarded or translated; `TestEffortRequiredRefusalAskedAgainAtLow`); any
+other 400 goes back as it came (`TestOtherBadRequestNotAskedAgainAtLow`). A session on Codex's
 own model sends them to ChatGPT as Codex sent them, whatever the config says
 (`TestCodexAppSideTurnsStayWithAnOwnModelSession`); so does a session model
 magpie can't serve now (turned off, gone, held from the caller's key). Summaries use
