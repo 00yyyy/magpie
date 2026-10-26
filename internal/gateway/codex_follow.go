@@ -41,7 +41,10 @@ const codexLeadsCap = 512
 type codexLeads struct {
 	mu     sync.Mutex
 	thread map[string]codexLead
-	last   map[string]string
+	last   map[string]codexLead
+	// next is closed, and replaced, when any conversation's own turn
+	// comes (codexSideSession waits on it)
+	next chan struct{}
 }
 
 type codexLead struct {
@@ -59,9 +62,13 @@ func (l *codexLeads) saw(r *http.Request, kind, model string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.thread == nil {
-		l.thread, l.last = map[string]codexLead{}, map[string]string{}
+		l.thread, l.last = map[string]codexLead{}, map[string]codexLead{}
 	}
-	l.last[key] = model
+	l.last[key] = codexLead{model: model, at: time.Now()}
+	if l.next != nil {
+		close(l.next)
+		l.next = nil
+	}
 	if thread == "" {
 		return
 	}
@@ -78,21 +85,72 @@ func (l *codexLeads) saw(r *http.Request, kind, model string) {
 }
 
 // of is the model the conversation a side call was made for is on: its
-// parent thread's (a subagent's lead, a review's conversation), else its
-// own thread's, else the one this key's Codex last had a turn on.
+// parent thread's (a subagent's lead, a review's conversation), the
+// thread it was forked from (a composer prediction), else its own
+// thread's, else the one this key's Codex last had a turn on.
 func (l *codexLeads) of(r *http.Request, body []byte) string {
-	parent := requestSessionMetadata(r.Header, body).Parent
+	model, _, _ := l.lookup(r, body)
+	return model
+}
+
+// lookup is of, with whether the call's conversation was one magpie has
+// seen a turn of, and when this key's last turn came when it wasn't.
+func (l *codexLeads) lookup(r *http.Request, body []byte) (model string, tied bool, at time.Time) {
+	meta := requestSessionMetadata(r.Header, body)
+	parent := meta.Parent
 	if parent == "" {
 		parent = strings.TrimSpace(r.Header.Get("x-codex-parent-thread-id"))
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for _, id := range []string{parent, sessionOf(r.Header)} {
+	for _, id := range []string{parent, meta.Forked, sessionOf(r.Header)} {
 		if v, ok := l.thread[id]; ok && id != "" {
-			return v.model
+			return v.model, true, v.at
 		}
 	}
-	return l.last[access.Caller(r.Context()).KeyID]
+	v := l.last[access.Caller(r.Context()).KeyID]
+	return v.model, false, v.at
+}
+
+// codexSideFresh is how recent the key's last turn must be for a side
+// call tied to no conversation magpie has seen to take its model at once;
+// codexSideWait bounds how long such a call waits for the turn it was
+// started beside.
+var (
+	codexSideFresh = 3 * time.Second
+	codexSideWait  = 5 * time.Second
+)
+
+// sideOf is of for the Codex app's own side turns: a title, description,
+// summary or prediction. Codex writes a new conversation's title on a
+// temporary thread of its own, with no link to the conversation, started
+// as the user's first message is sent, so it often reaches magpie before
+// that conversation's first turn. Read then, the key's last turn is the
+// previous conversation's, on the model the user switched away from
+// (cybercaius on Discord: the first title after a switch came from the
+// old model). When this key's last turn is older than codexSideFresh,
+// such a call waits, up to codexSideWait or until it is cancelled, for
+// the next turn of any conversation, and takes that one's model.
+func (l *codexLeads) sideOf(r *http.Request, body []byte) string {
+	model, tied, at := l.lookup(r, body)
+	if tied || model == "" || time.Since(at) < codexSideFresh {
+		return model
+	}
+	l.mu.Lock()
+	if l.next == nil {
+		l.next = make(chan struct{})
+	}
+	next := l.next
+	l.mu.Unlock()
+	t := time.NewTimer(codexSideWait)
+	defer t.Stop()
+	select {
+	case <-next:
+	case <-t.C:
+	case <-r.Context().Done():
+	}
+	model, _, _ = l.lookup(r, body)
+	return model
 }
 
 // codexFollowTo is the model a Codex side call that asked for one of
@@ -142,7 +200,18 @@ func (s *Server) codexFollowTo(r *http.Request, agent, kind, asked string, body 
 // conversation is on one of Codex's own models, or magpie can't serve its
 // model now (turned off, gone, or one the caller's key is held from).
 func (s *Server) codexSessionOf(r *http.Request, body []byte) string {
-	to := s.codexLeads.of(r, body)
+	return s.servedSession(r, s.codexLeads.of(r, body))
+}
+
+// codexSideSession is codexSessionOf for the Codex app's own side turns,
+// read after the turn they were started beside (codexLeads.sideOf).
+func (s *Server) codexSideSession(r *http.Request, body []byte) string {
+	return s.servedSession(r, s.codexLeads.sideOf(r, body))
+}
+
+// servedSession is to, else the model in Codex's config, when magpie can
+// serve it to this caller now; "" otherwise.
+func (s *Server) servedSession(r *http.Request, to string) string {
 	if to == "" && CodexSideModel != nil {
 		to = CodexSideModel()
 	}

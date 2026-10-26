@@ -109,7 +109,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		// still on Codex's own model, through its sign-in, when it says
 		// nothing of them
 		if rest == "/responses" {
-			session := func() string { return s.codexSessionOf(r, body) }
+			session := func() string { return s.codexSideSession(r, body) }
 			if to := codexTitlesTo(r.Header, body, false, session); to != "" {
 				s.codexTitle(w, r, body, to)
 				return

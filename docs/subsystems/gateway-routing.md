@@ -58,13 +58,23 @@ The Codex app asks for titles, descriptions and one-line thread summaries
 whatever the conversation is on, and composer predictions
 (`composer_predictions`) on the thread's model. An unset setting ("Same as
 the session" in the picker) sends these on the session's model when it is
-one of magpie's (`codexSideTo` with `Server.codexSessionOf`): the model the
-conversation's own turns last went on (`codexLeads`), else, before any turn
+one of magpie's (`codexSideTo` with `Server.codexSideSession`): the model the
+conversation's own turns last went on (`codexLeads`: its parent's, the
+thread it was forked from for a prediction, its own), else the last turn by
+the gateway key, else, before any turn
 has come through magpie, `agent.CodexSideModel` (Codex's config `model`, when
 it is magpie's and magpie is not Codex's provider). So a conversation on a
 third-party model spends none of the ChatGPT account's allowance (atom_Ray on
 X), whether the model was picked in Codex's config or in the app (cybercaius
-on Discord, `TestCodexAppSideTurnsFollowTheSession`). A session on Codex's
+on Discord, `TestCodexAppSideTurnsFollowTheSession`). Codex writes a new
+conversation's title on a temporary thread with no link to it, started as
+the first message is sent, so it can arrive before that conversation's
+first turn, when the key's last turn is the previous conversation's, on the
+model the user just switched from. A call tied to no seen thread whose
+key's last turn is older than 3s (`codexSideFresh`) waits, up to 5s
+(`codexSideWait`) or its cancellation, for the next turn and takes its
+model (`codexLeads.sideOf`, `TestCodexTitleBeforeTheFirstTurnFollowsTheSwitch`);
+a later rename suggestion with no turn beside it waits the 5s. A session on Codex's
 own model sends them to ChatGPT as Codex sent them, whatever the config says
 (`TestCodexAppSideTurnsStayWithAnOwnModelSession`); so does a session model
 magpie can't serve now (turned off, gone, held from the caller's key). Summaries use
