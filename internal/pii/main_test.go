@@ -44,6 +44,11 @@ const (
 //	novulkan     as pf-serve-vulkan, says Vulkan is missing; else ok
 //	gpuloadhang  on the GPU, never says the model is loaded; else ok
 //	asserts      fails a ggml assert at its first request
+//	gpuhang      on the GPU, never answers a request; else ok
+//	gpuhangonce  on the GPU, never answers the first request of the
+//	             test; else ok
+//	gpudiesonce  on the GPU, ends at the first request of the test;
+//	             else ok
 //
 // Like pf-serve, it first writes ggml's startup lines to stderr.
 func fakeServe(mode string) {
@@ -100,11 +105,19 @@ func fakeServe(mode string) {
 			texts[i] = string(b)
 		}
 		logf("request %d %q", n, texts)
+		// once: the first request of the test, on the GPU
+		once := false
+		if p := os.Getenv(fakeLog); p != "" && gpu && strings.HasSuffix(mode, "once") {
+			if f, err := os.OpenFile(p+".once", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644); err == nil {
+				f.Close()
+				once = true
+			}
+		}
 		switch {
-		case mode == "gpudies" && gpu:
+		case mode == "gpudies" && gpu, mode == "gpudiesonce" && once:
 			fmt.Fprintln(os.Stderr, "ggml_metal: device lost")
 			os.Exit(3)
-		case mode == "hang":
+		case mode == "hang", mode == "gpuhang" && gpu, mode == "gpuhangonce" && once:
 			time.Sleep(time.Hour)
 		case mode == "asserts":
 			fmt.Fprintln(os.Stderr, "ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_add_id'")
@@ -162,6 +175,7 @@ func fakeInstall(t *testing.T, mode string, vulkan bool) string {
 		disk.saves.Wait() // a write under way reads dir
 		srv.mu.Lock()
 		srv.cpu, srv.gpuLost, srv.failed = false, "", ""
+		srv.gpuFails, srv.gpuAgain = 0, time.Time{}
 		srv.lastErr, srv.fails, srv.retryAt = nil, 0, time.Time{}
 		srv.mu.Unlock()
 		cache.mu.Lock()

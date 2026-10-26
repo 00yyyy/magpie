@@ -13,9 +13,10 @@
 //
 // A process of its own, not linked in: 1.7 GB the gateway would otherwise
 // hold for good, and a GPU driver's crash that would end the gateway with
-// it. One that dies is started again; one that dies on the GPU, or doesn't
-// load there in gpuLoadTimeout, is started on the CPU for the rest of
-// magpie's run. One that keeps failing holds requests back at once, not
+// it. One that dies is started again; one that dies on the GPU, doesn't
+// load there in gpuLoadTimeout, or hangs there twice in a row, is started
+// on the CPU until the GPU is tried again (gpuRetryAfter), with no restart
+// of magpie. One that keeps failing holds requests back at once, not
 // after a load each, until it is tried again (retryAfter).
 package pii
 
