@@ -16504,7 +16504,10 @@ function planSpan(q) {
 // though the tab hides it, until the panel is put away or the tab left.
 let panelArranging = false, panelPeek = "";
 if (mode === "panel") document.addEventListener("visibilitychange", () => {
-  if (document.hidden && (panelPeek || panelArranging)) { panelPeek = ""; panelArranging = false; renderPanelQuota(); }
+  if (!document.hidden) return;
+  // an account its eye showed is hidden again once the panel is put away
+  window.hideAccounts?.closed();
+  if (panelPeek || panelArranging) { panelPeek = ""; panelArranging = false; renderPanelQuota(); }
 });
 
 // The tray panel is four tabs over the one page: the agents, the allowances
@@ -17145,7 +17148,11 @@ function panelQuotaCard(q) {
   if (q.balanceCard) card.dataset.balCard = q.balanceCard;
   // by the name the user gave the account, or the key plan it stands
   // in for (#1515), before the account itself
-  card.append(el("span", "pq-user", q.alias || q.user || q.name));
+  // and its eye while Hide accounts is on, as on the Usage page (yogurt36)
+  const who = el("span", "pq-who");
+  who.append(el("span", "pq-user", q.alias || q.user || q.name));
+  if ((q.user || q.alias) && window.hideAccounts) who.append(hideAccounts.eye(q.user || q.alias));
+  card.append(who);
   card.title = [q.name, q.alias, q.user, q.seat && q.seat !== q.alias && "≡ " + q.seat, q.plan, q.until ? planTerm(q) : "", q.balance && t("Balance") + " " + q.balance].filter(Boolean).join(" · ");
   if (q.error) {
     card.classList.add("err");
@@ -24508,7 +24515,9 @@ window.noteAccounts = noteAccounts;
   // an address always is
   const WORD = /[A-Za-z0-9_]/, JOIN = /[-.]/;
   const joined = (s, i, step) => WORD.test(s[i] || "") || (JOIN.test(s[i] || "") && WORD.test(s[i + step] || ""));
-  // accounts shown while the rest stay hidden, this window's only (yogurt36)
+  // accounts shown while the rest stay hidden (yogurt36), this page's
+  // only: the window and the tray panel are pages of their own, so one
+  // shown in either never shows in the other
   const shown = new Set(), low = (x) => String(x).trim().toLowerCase();
   function* hits(s, re) {
     re.lastIndex = 0; // matchAll starts where the pattern's last test ended
@@ -24669,8 +24678,9 @@ window.noteAccounts = noteAccounts;
       };
       return b;
     },
-    // the window closed (hideMain): every account hidden again
-    closed: () => { shown.clear(); redraw(); },
+    // the window closed (hideMain) or the panel put away: every account
+    // hidden again
+    closed: () => { if (shown.size) { shown.clear(); redraw(); } },
     on: () => masked,
     set: (on) => setMasked(on),
     follow: (personal) => { if (chosen === null && personal !== masked) setMasked(personal, true); },
