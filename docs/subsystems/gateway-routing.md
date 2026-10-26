@@ -787,6 +787,19 @@ model, checked before the arguments. Nothing is written into the agent's
 project. Settings › Models shows the address (`#imageMcpRow`, below
 `#visionMcpRow`).
 
+Each answer also carries `_meta` for a client that acts on it rather than
+reads it: `usemagpie.ai/pending` is the id to wait on (`PendingMeta`, beside
+the text that says to call `generation_result`), and `usemagpie.ai/files`
+lists each file made (`FilesMeta`, `MadeFile`: its URL, and `inline` when the
+image is in the content too). `magpie tool` ([`tool_cli.go`](../../internal/cli/tool_cli.go))
+is such a client: it lists and calls the tools of every server in
+`OwnMCPServers` (image, vision, web search, plugin tools) over HTTP with the
+local token and the `magpie-tool/1` User-Agent, waits on a pending id, and
+saves the files (`imagemcp.Target` names them, never over a file). It starts
+nothing of its own (#3318) and refuses an unknown or missing parameter before
+calling. Covered by `TestToolDrawsThroughTheGateway` (the real gateway, a fake
+vendor) and the other `TestTool*` tests.
+
 Covered by `TestImageMCPDrawsAndServesTheImage`, `TestImageMCPSaysWhenOff`,
 `TestImageMCPGuarded`, `TestImageMCPHeldToKeyLimit`,
 `TestImageMCPSlowDrawingIsWaitedOn`, `TestImageMCPMakesVideos`,
