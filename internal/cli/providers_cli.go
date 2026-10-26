@@ -42,6 +42,8 @@ const providerUsage = `usage:
                                           compaction=native asks the provider Codex's own compaction and hands
                                           Codex its sealed item as it came (a Responses API, a ChatGPT account,
                                           Copilot), compaction=magpie, the default, has magpie summarise
+                                          routing=smart|order|rotate|usage|pace|weight|free|fast spreads requests
+                                          over its keys or accounts (fast: the one that answered fastest lately first);
                                           additional-tools=on sends a tool Claude Code's tool search loads to its
                                           Responses API where it was loaded (an additional_tools item, which
                                           keeps the cache); additional-tools=default puts it with the other tools
@@ -1152,6 +1154,18 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			}
 		case "family", "tag":
 			p.Family = strings.TrimSpace(v)
+		case "routing", "strategy":
+			// how requests spread over its keys or accounts, as the
+			// provider editor's Routing says: a group's names, but a
+			// provider has no member to pick by hand
+			r, err := parseRouting(v)
+			if err != nil {
+				return err
+			}
+			if r == provider.Manual {
+				return fmt.Errorf("routing=manual is a group's: a provider's keys or accounts are routed smart, order, rotate, usage, pace, weight, free or fast")
+			}
+			p.Routing = r
 		case "icon":
 			// a picture on disk is kept by magpie; anything else is one of
 			// the built-in icons' names
