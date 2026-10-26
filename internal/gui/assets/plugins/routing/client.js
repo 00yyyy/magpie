@@ -2299,6 +2299,11 @@ function routingPage(part) {
       else if (went.has(id)) s = t("{status} · {fail} · went on to the next", { status: went.get(id).status, fail: failWord(went.get(id).fail) });
       else if (w.noURL) s = noURLWord(w);
       else if (w.sunk && !lifted(sunkKey(w), at(w.sunk))) s = t("rate limited at {time} · at the back", { time: clock(w.sunk) });
+      // a model its vendor serves at no cost is no share of the account's
+      // allowance: the windows are what the rest of it costs, so "100%
+      // used" and its bar said the seat that always can answer was spent
+      // (#3763). The gateway says .free under a routing that weighs by it.
+      else if (w.free) s = t("free · costs nothing");
       else if (w.known) {
         const soon = usedRenews(w);
         s = !w.routing && w.used >= 98 && w.credits ? quota(w, "{n} used · on credits", "{n} left · on credits")
@@ -2317,7 +2322,7 @@ function routingPage(part) {
       // crowd the stage. Live only, as the list's are (winsOf).
       const tip = [w.id, ...(day ? [] : winsOf(w))].join("\n");
       if (row.li.title !== tip) row.li.title = tip;
-      const bar = w.known;
+      const bar = w.known && !w.free;
       row.li.classList.toggle("nobar", !bar);
       row.bi.style.width = bar ? fill(w) : "0";
       // on: the row answers or answered the request shown; flying: a
