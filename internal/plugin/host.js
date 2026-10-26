@@ -2371,7 +2371,8 @@ async function load({ provider, account, proxy }) {
 //       ms; none: it never runs out), window? ("fiveHour", "weekly") }]
 //       (every reset still to be used) } (the rate-limit resets the
 //       account may spend),
-//     windows?: [{ name, used (percent, 0–100), resetsAt? (ISO or ms),
+//     windows?: [{ name, used (percent, 0–100; left out: the plugin didn't
+//       say, which is no share and not 0%), resetsAt? (ISO or ms),
 //       resetSecs?, display?, amount? / limit? / unit? (the window's own
 //       count, when it counts in amounts: amount of limit used, in unit,
 //       "credits"), span? (seconds the window runs), model? (a
@@ -2427,7 +2428,7 @@ async function usageOf(provider, account) {
         : null,
     windows: (Array.isArray(u.windows) ? u.windows : []).map((w) => ({
       name: text(w?.name),
-      used: Math.max(0, num(w?.used)), // past 100 when overspent
+      used: w?.used == null ? null : Math.max(0, num(w?.used)), // past 100 when overspent; null: not said
       resetsAt: when(w?.resetsAt),
       resetSecs: Math.max(0, Math.round(num(w?.resetSecs))),
       display: text(w?.display),
