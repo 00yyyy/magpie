@@ -241,6 +241,11 @@ var startUp = func() {
 	if _, err := pluginrt.Refresh(); err != nil {
 		fmt.Fprintf(os.Stderr, "magpie: plugins.yml: %v\n", err)
 	}
+	// a vendor's keys saved a provider each ("NVIDIA #001"…) are one
+	// provider with those keys, before anything lists them
+	if _, err := provider.FoldCopies(); err != nil {
+		fmt.Fprintf(os.Stderr, "magpie: providers.json: %v\n", err)
+	}
 	// the providers and settings read once for every agent's fields, which
 	// the moves below look at (a write among them reads them again)
 	release := provider.Hold()
