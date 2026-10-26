@@ -2597,16 +2597,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		// a middleware's onProvider changes what this provider is sent
 		attemptBody = triedOn(r.Context(), c.p, c.model, attemptBody)
-		if !last && s.antigravityForeseen(c.p, from, attemptBody) {
+		if hint := s.antigravityForeseen(c.p, from, attemptBody); !last && hint != "" {
 			// Antigravity would only turn it away, as it did lately, and
 			// someone after it may answer: it isn't asked, and nothing is
 			// held against the account (#2156). If nobody after it answers
 			// but with a quota, the agent is told this, as it would be had
 			// Antigravity been asked
 			if other == nil {
-				other = &Try{Status: turnedAwayStatus, Error: c.p.Name + ": " + antigravityTurnedAwayHint}
+				other = &Try{Status: turnedAwayStatus, Error: c.p.Name + ": " + hint}
 			}
-			skipped = append(skipped, c.label()+": "+antigravityTurnedAwayHint)
+			skipped = append(skipped, c.label()+": "+hint)
 			continue
 		}
 		// a group tells agents the longest reply a member of it gives
@@ -2922,8 +2922,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if hw.turnedAway {
 			s.agTurnedAway.Store(time.Now().UnixNano())
 		}
-		if hw.turnedAway && !strings.HasSuffix(call.Error, antigravityTurnedAwayHint) {
-			call.Error += " — " + antigravityTurnedAwayHint
+		if hw.turnedAway && !strings.HasSuffix(call.Error, hw.turnedAwayHint) {
+			call.Error += " — " + hw.turnedAwayHint
 		}
 		if hw.refused {
 			// the vendor's safety filter, with nothing said (#248)
@@ -4006,11 +4006,12 @@ func markOpenRouterSharedPool(w http.ResponseWriter) {
 }
 
 // markAntigravityTurnsAway keeps in the held attempt that the account was
-// asked with the system prompt Antigravity turns away, so a failure on it
-// isn't held against the account.
-func markAntigravityTurnsAway(w http.ResponseWriter) {
+// asked with system, the system prompt Antigravity turns away, so a failure
+// on it isn't held against the account, and the hint that says why.
+func markAntigravityTurnsAway(w http.ResponseWriter, system string) {
 	if h, ok := w.(*holdWriter); ok {
 		h.turnedAway = true
+		h.turnedAwayHint = antigravityHint(system)
 	}
 }
 
@@ -4026,7 +4027,7 @@ func markAntigravityRefused(w http.ResponseWriter, p provider.Provider, system, 
 	if said == "" || !antigravityTurnedAway(p, system, said) {
 		return false
 	}
-	markAntigravityTurnsAway(w)
+	markAntigravityTurnsAway(w, system)
 	return true
 }
 
@@ -6160,7 +6161,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 			}
 		}
 		if !searching(r.Context()) && canSearchFor(p) && !searchesFor(p, to, model, request) {
-			ask := s.askTranslated(p, to, model, r.Header, w.Header())
+			ask := antigravityRound(w, p, s.askTranslated(p, to, model, r.Header, w.Header()))
 			if zen != nil {
 				ask = zenRound(zen.z, ask)
 			}
@@ -6188,8 +6189,8 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		}
 		turnedAway := res.StatusCode == http.StatusTooManyRequests && antigravityTurnedAway(p, request.System, string(b))
 		if turnedAway {
-			msg += " — " + antigravityTurnedAwayHint
-			markAntigravityTurnsAway(w)
+			msg += " — " + antigravityHint(request.System)
+			markAntigravityTurnsAway(w, request.System)
 		}
 		if p.Preset == "openrouter" && openRouterSharedPool(b) {
 			markOpenRouterSharedPool(w)
@@ -6251,7 +6252,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	if col.err != "" && (!saidAnything(col.res.Parts) || col.errSaid != nil) {
 		said := col.err
 		if markAntigravityRefused(w, p, request.System, said) {
-			said += " — " + antigravityTurnedAwayHint
+			said += " — " + antigravityHint(request.System)
 			u.ErrType = turnedAwayErrType
 		}
 		if code := gjson.GetBytes(col.errSaid, "error.code").String(); code != "" {
