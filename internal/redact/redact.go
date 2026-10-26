@@ -30,6 +30,8 @@ import (
 	"strings"
 	"sync"
 	"unicode/utf8"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Options says what to mask.
@@ -380,7 +382,7 @@ func realEmail(v string) bool {
 		return false
 	}
 	host := strings.ToLower(v[at+1:])
-	if fileHost(host) {
+	if fileHost(host) || docFiles[host] || !mailTLD(host[strings.LastIndexByte(host, '.')+1:]) {
 		return false
 	}
 	for _, fake := range []string{"example.com", "example.org", "example.net", "localhost", ".test", ".invalid", ".example"} {
@@ -389,6 +391,31 @@ func realEmail(v string) bool {
 		}
 	}
 	return !strings.HasPrefix(host, "noreply") && !strings.Contains(v, "noreply@")
+}
+
+// docFiles are the files agents read by name, on a domain's ending
+// (.md): "@AGENTS.md" after a word, as a prompt names one, is no address
+// (ydzh on Discord: xxx@Agents.md was masked).
+var docFiles = map[string]bool{
+	"agents.md": true, "claude.md": true, "gemini.md": true, "readme.md": true, "skill.md": true,
+	"changelog.md": true, "contributing.md": true, "license.md": true, "lessons.md": true, "todo.md": true,
+	"copilot-instructions.md": true, "crush.md": true, "qwen.md": true, "iflow.md": true, "warp.md": true,
+}
+
+// localTLDs are names an organisation's own mail can end in that no
+// registry has: an address there is someone's all the same.
+var localTLDs = map[string]bool{"local": true, "internal": true, "lan": true, "corp": true, "home": true, "intranet": true, "localdomain": true}
+
+// mailTLD is whether tld, an address's last label, is one mail can be
+// sent to: in the public suffix list's ICANN part, or an organisation's
+// own. A decorator's or a module's attribute after a name
+// (x@pytest.fixture, ydzh on Discord) ends in a word no registry has.
+func mailTLD(tld string) bool {
+	if localTLDs[tld] {
+		return true
+	}
+	_, icann := publicsuffix.PublicSuffix(tld)
+	return icann
 }
 
 // fileExt are file name extensions that are no top-level domain, so
