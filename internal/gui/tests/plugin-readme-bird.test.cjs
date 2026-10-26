@@ -92,15 +92,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert(seen.places > 20, `the bird moved: ${JSON.stringify(seen)}`);
     assert(seen.lit >= 2, `the lines it landed on lit: ${JSON.stringify(seen)}`);
 
+    // read at the swap itself: a few frames on, the dialog has moved on its
+    // spring and the leaving box has not, so a later read measures timing
+    await page.evaluate(() => {
+      const o = new MutationObserver(() => {
+        const b = document.querySelector("#modal .pm-bounce"), m = document.querySelector("#modal .pm-md");
+        if (!m) return;
+        o.disconnect();
+        window.__swap = { gone: b ? "gone" in b.dataset : null, inReadme: b ? !!b.closest(".pm-readme") : null, boxTop: b?.getBoundingClientRect().top,
+          mdTop: m.getBoundingClientRect().top, readmeTop: m.parentElement.getBoundingClientRect().top };
+      });
+      o.observe(document.querySelector("#modal"), { childList: true, subtree: true });
+    });
     release({ readme: readme(12), updated: "2026-09-01T00:00:00Z" });
     await page.locator("#modal .pm-md p", { hasText: "Paragraph 11." }).waitFor();
     // flying off, it sits over the README, not above it, and leaves from
     // where it was
-    const md = await page.evaluate(() => {
-      const b = document.querySelector("#modal .pm-bounce"), m = document.querySelector("#modal .pm-md");
-      return { gone: b ? "gone" in b.dataset : null, inReadme: b ? !!b.closest(".pm-readme") : null, boxTop: b?.getBoundingClientRect().top,
-        mdTop: m.getBoundingClientRect().top, readmeTop: m.parentElement.getBoundingClientRect().top };
-    });
+    const md = await page.evaluate(() => window.__swap);
     assert.notEqual(md.gone, false, `the box leaves when the README comes: ${JSON.stringify(md)}`);
     assert.notEqual(md.inReadme, true, `it leaves from outside the README's flow: ${JSON.stringify(md)}`);
     assert(md.boxTop == null || Math.abs(md.boxTop - md.mdTop) < 4, `it leaves from where it was: ${JSON.stringify(md)}`);
