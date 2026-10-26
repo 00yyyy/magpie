@@ -1337,7 +1337,7 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	}
 	// Count the same masked prompt that generation sends to the vendor.
 	plain := body
-	w, body, unmask, err := redacted(w, body)
+	w, body, unmask, err := redacted(r.Context(), w, body)
 	defer unmask()
 	if err != nil {
 		writeError(w, provider.Anthropic, maskStatus(err), err.Error())
@@ -1676,7 +1676,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// unmasked (unredactedRoute)
 	plain := body
 	var masked []byte // the masked body, when plain goes instead
-	w, body, unmask, maskedHits, err := redactedHits(w, body)
+	w, body, unmask, maskedHits, err := redactedHits(r.Context(), w, body)
 	defer unmask()
 	if err != nil { // fails closed: never sent unmasked
 		log.Printf("gateway: %v", err)

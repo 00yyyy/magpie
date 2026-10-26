@@ -880,7 +880,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	if r.Method == http.MethodPost {
 		var unmask func()
 		var err error
-		w, body, unmask, maskedHits, err = redactedHits(w, body)
+		w, body, unmask, maskedHits, err = redactedHits(r.Context(), w, body)
 		defer unmask()
 		if err != nil {
 			writeError(w, provider.Responses, maskStatus(err), err.Error())
