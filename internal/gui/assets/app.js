@@ -3811,8 +3811,10 @@ const EXTRA_GLYPH = {
   [MEMORIES]: "M4.25 2.75h7.5v10.5h-7.5zM6.25 2.75v10.5M8.25 5.75h1.75M8.25 8h1.75",
 };
 // what Codex writes its memories with when none is set (codex-rs
-// model-provider: memory_consolidation_preferred_model, _extraction_)
-const MEMORIES_DEFAULT = "Codex's own: gpt-5.6-terra, threads summed up with gpt-5.6-luna";
+// model-provider: memory_consolidation_preferred_model, _extraction_), or
+// the session's when it is on magpie's (gateway codexFollowTo)
+const MEMORIES_DEFAULT = "Codex's own: gpt-5.6-terra/luna, or the session's magpie model";
+const SAME_SESSION = "Same as the session";
 function extraField(a, f) {
   if (f.key === "ultracode") return ultracodeToggle(a, f);
   const said = f.label === SUB_MODEL && codexSub(a) ? codexSubSaid(a, f) : null;
@@ -19218,6 +19220,8 @@ async function loadSettings() {
 // went back to the old one when the read came in, the picker showing the
 // new).
 let prefsWrites = 0, prefsBusy = 0;
+// prefWrite: a Settings write of its own, the page drawn again either way
+function prefWrite(p) { return writingPrefs(p).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); }); }
 async function writingPrefs(p) {
   prefsWrites++;
   prefsBusy++;
@@ -19602,7 +19606,7 @@ function renderSettings() {
   ]) $(row + " .who").title = t(en);
   // the system's record, set on its own, not with the other choices
   $("#loginSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.login ? "on" : "off", (v) =>
-    writingPrefs(api("settings/login", { on: v === "on" })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); })));
+    prefWrite(api("settings/login", { on: v === "on" }))));
   renderLoginAllow(s);
   // Codex's and Claude Code's warm-ups and WorkBuddy's check-in, one tab
   // each over one card, the rows' names not saying the service again.
@@ -21118,7 +21122,7 @@ function renderCodexDescriptions(s) {
     ...models.map(opt)],
   onPick: (id) => {
     if (id === v) return;
-    writingPrefs(api("settings/codex-descriptions", { model: id })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); });
+    prefWrite(api("settings/codex-descriptions", { model: id }));
   } }, b, ev);
   $("#codexDescriptionsPick").replaceChildren(b);
 }
@@ -21146,7 +21150,7 @@ function renderCodexPredictions(s) {
     ...models.map(opt)],
   onPick: (id) => {
     if (id === v) return;
-    writingPrefs(api("settings/codex-predictions", { model: id })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); });
+    prefWrite(api("settings/codex-predictions", { model: id }));
   } }, b, ev);
   $("#codexPredictionsPick").replaceChildren(b);
 }
@@ -21175,7 +21179,7 @@ function renderCodexTitles(s) {
     ...models.map(opt)],
   onPick: (id) => {
     if (id === v) return;
-    writingPrefs(api("settings/codex-titles", { model: id })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); });
+    prefWrite(api("settings/codex-titles", { model: id }));
   } }, b, ev);
   $("#codexTitlesPick").replaceChildren(b);
 }
@@ -21183,7 +21187,8 @@ function renderCodexTitles(s) {
 // renderCodexAutoReview: the model Codex's auto-review — the reviewer that
 // decides an approval in the user's place — runs on (#938): Codex's own pick
 // (its codex-auto-review, else the conversation's model), or a model of
-// magpie's named in every entry of the list magpie hands Codex.
+// magpie's named in every entry of the list magpie hands Codex, or the
+// session's own ("session": each of magpie's entries names itself).
 function renderCodexAutoReview(s) {
   const models = s.titleModels || [];
   const v = s.codexAutoReview || "";
@@ -21191,15 +21196,16 @@ function renderCodexAutoReview(s) {
   const b = el("button", "rt-cond on");
   b.type = "button";
   b.setAttribute("aria-label", t("Codex auto-review model"));
-  if (v) b.append(icon(m?.icon || "generic"), el("span", "", m ? `${m.name || m.id} · ${m.providerName}` : v));
+  if (v) b.append(icon(m?.icon || "generic"), el("span", "", m ? `${m.name || m.id} · ${m.providerName}` : v == "session" ? t(SAME_SESSION) : v));
   else b.append(icon("openai"), el("span", "", t("Codex’s own pick")));
   const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexAutoReview", label: "model", value: v, options: [
     { value: "", label: t("Codex’s own pick"), note: t("as Codex picks it"), icon: "openai", reset: true },
+    { value: "session", label: t(SAME_SESSION), icon: "generic" },
     ...models.map(opt)],
   onPick: (id) => {
     if (id === v) return;
-    writingPrefs(api("settings/codex-auto-review", { model: id })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); });
+    prefWrite(api("settings/codex-auto-review", { model: id }));
   } }, b, ev);
   $("#codexAutoReviewPick").replaceChildren(b);
 }

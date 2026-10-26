@@ -429,6 +429,9 @@ type Server struct {
 	// codexTurns is the model each Codex last had a turn of its own
 	// answered on, by caller (codexMemoryStandIn)
 	codexTurns sync.Map
+	// codexLeads is the model each Codex conversation's own turns last
+	// went on, for its side calls to follow (codexFollowTo)
+	codexLeads codexLeads
 	// the listener, swapped when the gateway is shared on the network or
 	// taken off it (see Relisten)
 	lnMu sync.Mutex
