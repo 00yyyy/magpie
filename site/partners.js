@@ -131,9 +131,9 @@ export const PARTNERS = [
   {
     id: "fastai",
     name: "FastAIToken",
-    chat: "https://api.fastaitoken.com/v1",
-    responses: "https://api.fastaitoken.com/v1",
-    anthropic: "https://api.fastaitoken.com",
+    chat: "https://www.fastaitoken.com/v1",
+    responses: "https://www.fastaitoken.com/v1",
+    anthropic: "https://www.fastaitoken.com",
     keysUrl: "https://www.fastaitoken.com/register?aff=MAGPIE&utm=soft",
     website: "https://www.fastaitoken.com/register?aff=MAGPIE&utm=soft",
     iconUrl: "https://usemagpie.ai/img/partner-fastai.png",
