@@ -745,23 +745,33 @@ func Find(id string) (*Provider, error) {
 }
 
 func findIn(all []Provider, id string) (*Provider, error) {
+	if p := lookIn(all, id); p != nil {
+		return p, nil
+	}
+	return nil, fmt.Errorf("no provider %q — magpie providers lists them%s", id, readElsewhere())
+}
+
+// lookIn is findIn without its error, which looks on disk for where else
+// this magpie's files may be (readElsewhere): a request's model not found
+// among the providers asked it twice, for nothing (#3394).
+func lookIn(all []Provider, id string) *Provider {
 	q := strings.ToLower(strings.TrimSpace(id))
 	// an id before a name: a provider of the user's called WorkBuddy isn't
 	// the workbuddy subscription
 	if i := slices.IndexFunc(all, func(p Provider) bool { return p.ID == q }); i >= 0 {
-		return &all[i], nil
+		return &all[i]
 	}
 	for _, p := range all {
 		if strings.ToLower(p.Name) == q {
-			return &p, nil
+			return &p
 		}
 	}
 	for _, p := range all {
 		if slices.Contains(p.Was, q) {
-			return &p, nil
+			return &p
 		}
 	}
-	return nil, fmt.Errorf("no provider %q — magpie providers lists them%s", id, readElsewhere())
+	return nil
 }
 
 // readElsewhere says, for a provider not found, that this magpie reads its
