@@ -6313,13 +6313,18 @@ func upstreamPath(p provider.Provider, proto provider.Protocol, model string) st
 // Only the allowlist contracts below promise a required callable function:
 // other protocols have server, custom and MCP tools the IR cannot render.
 func parse(proto provider.Protocol, body []byte) (*Request, error) {
+	return parseIn(proto, body, false)
+}
+
+// parseIn is parse, for facts only as readResponses says.
+func parseIn(proto provider.Protocol, body []byte, facts bool) (*Request, error) {
 	var req *Request
 	var err error
 	switch proto {
 	case provider.Chat:
 		req, err = parseChat(body)
 	case provider.Responses:
-		req, err = parseResponses(body)
+		req, err = readResponses(body, facts)
 	case provider.Gemini:
 		req, err = parseGemini(body)
 	default:
