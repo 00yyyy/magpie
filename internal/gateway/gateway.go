@@ -3657,8 +3657,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// a compaction a rule sent to a model of its own isn't a turn of
 			// the conversation: it leaves the stick where it was when it
 			// answers (below), and breaking off mid-reply forgets nothing
-			// either (#776's follow-up)
-			if hit == nil || !hit.Compact {
+			// either (#776's follow-up). A conversation kept strictly
+			// forgets nothing: it never moves, so the retry goes back to
+			// the one it is on, its failure the agent's, as any other's
+			// there is (imwhatiam123 on Discord: Stays: Strict moved a
+			// session from Qoder CN to WorkBuddy AI after a reply broke
+			// off, the stick gone and the retry routed as a new one)
+			if (hit == nil || !hit.Compact) && aff.Why != "strict" {
 				unanswered(stuck, c)
 			}
 			if hw.looped != "" {
