@@ -3896,8 +3896,13 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// Chat (#997, Xiaomi MiMo)
 	ownAPI := false
 	// except a subagent's task its lead sealed (#1109): only the server
-	// that sealed it reads it, and a translation would drop it
-	if relay && searchedForIt(p, from, model, body) && !(from == provider.Responses && hasSealedAgentMessage(body)) {
+	// that sealed it reads it, and a translation would drop it; and Codex's
+	// turn to a relay that takes it as Codex sent it (codexAsSent): the
+	// translation merged the developer message into instructions, sent
+	// apply_patch as a function, left web_search out and added
+	// max_output_tokens, the shape such a relay turns away (maralica on
+	// Discord). Its web_search goes to the relay as sent.
+	if relay && searchedForIt(p, from, model, body) && !(from == provider.Responses && (hasSealedAgentMessage(body) || codexAsSent(p, r.Header))) {
 		relay, ownAPI = false, true
 	}
 	// Copilot seals an argument the tools mark "encrypted" (spawn_agent's
@@ -4370,6 +4375,13 @@ func fromCodex(in http.Header) bool {
 	return false
 }
 
+// codexAsSent says a Responses request goes to p as Codex sent it, its
+// model name alone swapped: Codex's own, to a relay set codex=as-sent,
+// which checks that a request is Codex's own (#1758).
+func codexAsSent(p provider.Provider, in http.Header) bool {
+	return p.CodexAsSent && p.Account == nil && fromCodex(in)
+}
+
 // codexClientHeader is one of the headers Codex tells itself by to an API
 // it talks to with a key: its User-Agent and originator, the session and
 // thread (session-id, thread-id), and what codexHeader lets through. Never
@@ -4403,7 +4415,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	replay := proto == provider.Responses && (replaysReasoning(model, p.Host()) || replaysReasoning(upstream, p.Host()))
 	switch proto {
 	case provider.Responses:
-		if p.CodexAsSent && p.Account == nil && fromCodex(r.Header) {
+		if codexAsSent(p, r.Header) {
 			// as Codex sent it, its model name alone swapped: a relay
 			// that checks it is Codex's own turns away the shape fitted
 			// for other backends (#1758)
