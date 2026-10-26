@@ -370,8 +370,16 @@ func inUserinfo(s string, a int) bool {
 	return k < j
 }
 
+// realEmail is whether v, matched as an address, is someone's. git@ is
+// the user every git host is reached by over SSH (git@github.com:o/r.git,
+// git@gitee.com, a company's own git@git.corp.com), no one's mailbox, and
+// was masked so a remote no longer read as one (jumy on Discord).
 func realEmail(v string) bool {
-	host := strings.ToLower(v[strings.LastIndexByte(v, '@')+1:])
+	at := strings.LastIndexByte(v, '@')
+	if strings.EqualFold(v[:at], "git") {
+		return false
+	}
+	host := strings.ToLower(v[at+1:])
 	if fileHost(host) {
 		return false
 	}
