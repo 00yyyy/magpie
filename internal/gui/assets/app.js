@@ -21102,6 +21102,12 @@ function renderAgentPrefLinks() {
   }
 }
 
+// modelOpt is a Settings model picker's row: a routing group (no provider
+// of its own) goes with the others, as in an agent's picker.
+function modelOpt(x) {
+  return { value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id };
+}
+
 // renderCodexDescriptions picks the model for descriptions independently
 // of titles; an empty setting preserves Codex's requested model.
 function renderCodexDescriptions(s) {
@@ -21116,10 +21122,9 @@ function renderCodexDescriptions(s) {
   b.setAttribute("aria-label", t("Codex thread descriptions"));
   if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
   else b.append(icon("openai"), el("span", "", t("Codex’s own (ChatGPT)")));
-  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexDescriptions", label: "model", value: v, options: [
     { value: "", label: t("Codex’s own (ChatGPT)"), note: t("as Codex sends them"), icon: "openai", reset: true },
-    ...models.map(opt)],
+    ...models.map(modelOpt)],
   onPick: (id) => {
     if (id === v) return;
     prefWrite(api("settings/codex-descriptions", { model: id }));
@@ -21143,11 +21148,10 @@ function renderCodexPredictions(s) {
   if (v === "off") b.append(el("span", "", t("Off")));
   else if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
   else b.append(icon("openai"), el("span", "", t("Codex’s own (ChatGPT)")));
-  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexPredictions", label: "model", value: v, options: [
     { value: "", label: t("Codex’s own (ChatGPT)"), note: t("as Codex sends them"), icon: "openai", reset: true },
     { value: "off", label: t("Off"), note: t("no prediction, nothing sent"), reset: true },
-    ...models.map(opt)],
+    ...models.map(modelOpt)],
   onPick: (id) => {
     if (id === v) return;
     prefWrite(api("settings/codex-predictions", { model: id }));
@@ -21172,11 +21176,10 @@ function renderCodexTitles(s) {
   if (v === "off") b.append(el("span", "", t("Off")));
   else if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
   else b.append(icon("openai"), el("span", "", t("Codex’s own (ChatGPT)")));
-  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexTitles", label: "model", value: v, options: [
     { value: "", label: t("Codex’s own (ChatGPT)"), note: t("as Codex sends them"), icon: "openai", reset: true },
     { value: "off", label: t("Off"), note: t("no title, nothing sent"), reset: true },
-    ...models.map(opt)],
+    ...models.map(modelOpt)],
   onPick: (id) => {
     if (id === v) return;
     prefWrite(api("settings/codex-titles", { model: id }));
@@ -21198,11 +21201,10 @@ function renderCodexAutoReview(s) {
   b.setAttribute("aria-label", t("Codex auto-review model"));
   if (v) b.append(icon(m?.icon || "generic"), el("span", "", m ? `${m.name || m.id} · ${m.providerName}` : v == "session" ? t(SAME_SESSION) : v));
   else b.append(icon("openai"), el("span", "", t("Codex’s own pick")));
-  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexAutoReview", label: "model", value: v, options: [
     { value: "", label: t("Codex’s own pick"), note: t("as Codex picks it"), icon: "openai", reset: true },
     { value: "session", label: t(SAME_SESSION), icon: "generic" },
-    ...models.map(opt)],
+    ...models.map(modelOpt)],
   onPick: (id) => {
     if (id === v) return;
     prefWrite(api("settings/codex-auto-review", { model: id }));
@@ -21297,13 +21299,10 @@ function renderImages(s, keep) {
   const notMarked = s.visionNotMarked || [];
   if (notMarked.length && v !== "off") who.append(el("div", "sub vision-not-marked", t("Models of {providers} aren’t listed until marked in their provider’s {names} › {images}",
     { providers: notMarked.join(", "), names: t("Names & levels"), images: t("Accepts images") })));
-  // a routing group (no provider of its own) goes with the others, as in
-  // an agent's picker, not in a group of its own with its own rail button
-  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "vision", label: "model", value: v, options: [
     { value: "", label: t("Automatic"), note: s.visionAuto ? named(s.visionAuto) : t("no model that sees"), reset: true },
     { value: "off", label: t("Off"), note: t("images turned away"), reset: true },
-    ...models.map(opt)],
+    ...models.map(modelOpt)],
   onPick: (id) => { if (id !== v) savePrefs({ ...keep, vision: id }); } }, b, ev);
   const val = el("div", "val");
   val.append(b);
@@ -21899,7 +21898,7 @@ function renderDisabledModels(s) {
   b.id = "disabledAdd";
   const models = (s.titleModels || []).filter((x) => x.provider);
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "disabledModels", label: "model", value: "",
-    options: models.map((x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id })),
+    options: models.map(modelOpt),
     onPick: (id) => {
       id = String(id || "").trim();
       if (!id || list.some((p) => p.toLowerCase() === id.toLowerCase())) return;
