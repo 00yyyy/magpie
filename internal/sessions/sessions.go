@@ -717,7 +717,11 @@ func codexFilesIn(dir string) []file {
 	for _, folder := range []string{"sessions", "archived_sessions"} {
 		root := filepath.Join(dir, folder)
 		if listed, ok := listedRollouts(root); ok {
-			out = append(out, listed...)
+			if out == nil {
+				out = listed
+			} else {
+				out = append(out, listed...)
+			}
 			continue
 		}
 		var found []file
@@ -751,6 +755,9 @@ func codexFilesIn(dir string) []file {
 	return distinctCodexFiles(kept)
 }
 
+// rolloutsListed is how many rollouts each root's last listing found.
+var rolloutsListed sync.Map
+
 // listedRollouts are the rollouts under root, in walkLinked's order and
 // with their sizes and times, read with one listing a folder
 // (dirent.Stats) rather than a listing and an lstat() a file: Codex's day
@@ -758,6 +765,16 @@ func codexFilesIn(dir string) []file {
 // Sessions poll. ok is false when a folder couldn't be read so, and
 // walkLinked and statFiles read root instead.
 func listedRollouts(root string) (out []file, ok bool) {
+	// sized as the last listing of root was: grown a rollout at a time,
+	// ~20k of them allocated five times their size on every poll
+	if n, ok := rolloutsListed.Load(root); ok {
+		out = make([]file, 0, n.(int)+n.(int)/16)
+	}
+	defer func() {
+		if ok {
+			rolloutsListed.Store(root, len(out))
+		}
+	}()
 	walk := root
 	if fi, err := os.Lstat(root); err != nil {
 		return nil, false
