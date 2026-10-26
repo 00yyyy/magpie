@@ -128,4 +128,21 @@ export const PARTNERS = [
     from: "2026-10-26T00:00:00+08:00",
     until: "2026-11-26T00:00:00+08:00",
   },
+  {
+    id: "fastai",
+    name: "FastAIToken",
+    chat: "https://api.fastaitoken.com/v1",
+    responses: "https://api.fastaitoken.com/v1",
+    anthropic: "https://api.fastaitoken.com",
+    keysUrl: "https://www.fastaitoken.com/register?aff=MAGPIE&utm=soft",
+    website: "https://www.fastaitoken.com/register?aff=MAGPIE&utm=soft",
+    iconUrl: "https://usemagpie.ai/img/partner-fastai.png",
+    notes: {
+      en: "One-stop access to Claude, GPT and DeepSeek, from 6% of list price",
+      zh: "Claude / GPT / Deepseek 一站式接入方案，最低0.6折，支持对公",
+      "zh-TW": "Claude / GPT / Deepseek 一站式接入方案，最低0.6折，支援對公",
+    },
+    from: "2026-10-26T00:00:00+08:00",
+    until: "2026-11-26T00:00:00+08:00",
+  },
 ];
