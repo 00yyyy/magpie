@@ -69,6 +69,7 @@ func fakeServe(mode string) {
 	fmt.Fprintln(os.Stderr, "ggml_metal_device_init: recommendedMaxWorkingSetSize  = 12713.12 MB")
 	logf("path %s", filepath.Base(filepath.Dir(os.Args[0])))
 	logf("residency %s", os.Getenv("GGML_METAL_NO_RESIDENCY"))
+	logf("moechunk %s %s", name, os.Getenv("PF_MOE_CHUNK"))
 	if mode == "noload" || mode == "novulkan" && name == "pf-serve-vulkan" {
 		json.NewEncoder(os.Stdout).Encode(map[string]string{"error": "can't load " + mode})
 		os.Exit(1)

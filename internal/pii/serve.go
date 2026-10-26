@@ -201,6 +201,8 @@ func startOne(path string, cpu bool, stop <-chan struct{}) (*helper, error) {
 	cmd.Env = append(os.Environ(), "GGML_METAL_NO_RESIDENCY=1")
 	if cpu {
 		cmd.Env = append(cmd.Env, "PF_DEVICE=cpu")
+	} else if v := moeChunk(path); v != "" {
+		cmd.Env = append(cmd.Env, "PF_MOE_CHUNK="+v)
 	}
 	wait := loadTimeout
 	if !cpu {
@@ -247,6 +249,29 @@ func startOne(path string, cpu bool, stop <-chan struct{}) (*helper, error) {
 		return nil, fmt.Errorf("%s: %s", baseName(path), why)
 	}
 	return h, nil
+}
+
+// vulkanMoEChunk is the MoE's token chunk pf-serve-vulkan runs with
+// (privacy-filter.cpp's PF_MOE_CHUNK, src/model.cpp): the expert matmul
+// over a window's tokens in pieces of this many, exactly the same answer
+// either way. Its own default is the window, 4096. On an RX 470/580-class
+// GPU through Vulkan, 2048 read the same texts 1.77x faster at every size
+// from 24 KB to 480 KB (#3682: 480 KB in 90s, not 159s), and was the
+// fastest of 1024 to 3072. On Metal it is a little slower (an M4 Pro: 96
+// KB in 2.00s, 1.87s at 4096), so macOS's pf-serve keeps the default, and
+// the CPU's is the window either way.
+const vulkanMoEChunk = "2048"
+
+// moeChunk is the PF_MOE_CHUNK magpie gives the GPU's pf-serve at path:
+// pf-serve-vulkan's, unless the user set their own, which it inherits.
+func moeChunk(path string) string {
+	if _, set := os.LookupEnv("PF_MOE_CHUNK"); set {
+		return ""
+	}
+	if strings.TrimSuffix(baseName(path), ".exe") == "pf-serve-vulkan" {
+		return vulkanMoEChunk
+	}
+	return ""
 }
 
 func baseName(path string) string {

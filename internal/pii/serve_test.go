@@ -403,3 +403,42 @@ func TestCacheKeepsTheLatest(t *testing.T) {
 		t.Fatal("an entry read lately was dropped")
 	}
 }
+
+// pf-serve-vulkan runs its MoE in 2048-token chunks, 1.77x faster than
+// its default 4096 on an RX 470/580-class GPU (#3682); macOS's Metal one
+// and the CPU's keep their default. A PF_MOE_CHUNK the user set is theirs,
+// on every one.
+func TestVulkanServeGetsMoEChunk(t *testing.T) {
+	cases := []struct {
+		name   string
+		vulkan bool
+		user   string // "" unset
+		want   []string
+	}{
+		{"vulkan", true, "", []string{"moechunk pf-serve-vulkan 2048", "moechunk pf-serve "}},
+		{"vulkan, user's own", true, "3072", []string{"moechunk pf-serve-vulkan 3072", "moechunk pf-serve 3072"}},
+	}
+	if runtime.GOOS == "darwin" {
+		cases = append(cases, struct {
+			name   string
+			vulkan bool
+			user   string
+			want   []string
+		}{"metal", false, "", []string{"moechunk pf-serve ", "moechunk pf-serve "}})
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("PF_MOE_CHUNK", c.user)
+			if c.user == "" {
+				os.Unsetenv("PF_MOE_CHUNK")
+			}
+			log := fakeInstall(t, "gpudies", c.vulkan)
+			if _, err := Find([]string{"hi Alice"}); err != nil {
+				t.Fatal(err)
+			}
+			if got := fakeLines(t, log, "moechunk"); !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("moechunk lines = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
