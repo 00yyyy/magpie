@@ -2372,6 +2372,36 @@ downloads a new version in the background and installs it when you restart
 a terminal. Every release is on
 [yetone/magpie-releases](https://github.com/yetone/magpie-releases/releases).
 
+### Update channel
+
+magpie takes every version as it comes out unless you choose Stable, in
+*Settings → About → Update channel* or with `magpie update channel stable`
+(`magpie update channel every` goes back; `magpie update channel` prints
+the one in use). It is saved as `"updateChannel": "stable"` in
+settings.json, and the app and `magpie update` both follow it.
+
+Stable is one version a week. Each Monday at 00:00 UTC it becomes the
+newest release that had been out for three days by then (Friday 00:00
+UTC), so every Stable version has had three days of use on the Every
+version channel first. A release marked urgent goes to Stable at once.
+When Stable moves past several versions, What's new lists the notes of
+every version since yours as one list.
+
+The update feed works this out from the release list
+(`https://usemagpie.ai/api/latest?channel=stable`); nothing is promoted
+by hand. A release is urgent when its notes have a line that starts with
+`**Urgent release:**` and says why, for example:
+
+```md
+**Urgent release:** the gateway sent requests without a key to a page on another site.
+```
+
+magpie-releases' release run writes it from an `Urgent: <why>` trailer on
+any commit since the version before. It can also be added to a published
+release with `gh release edit` while the release is among the newest 100
+(about a day of releases); the feed's ledger reads them every quarter
+hour. A release is never marked prerelease for this.
+
 From source:
 
 ```sh
