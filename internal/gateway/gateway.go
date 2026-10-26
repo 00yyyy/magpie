@@ -2003,6 +2003,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	ask := s.askClassifier
 	if r.Header.Get("User-Agent") == RouterAgent {
 		ask = nil
+	} else {
+		// a wait magpie knows of, before a route is begun (unrouted.go)
+		ask = askWaited(r.Context(), ask)
 	}
 	if isGroup && slices.ContainsFunc(ms, func(m provider.Member) bool {
 		return g.Ruled() || slices.ContainsFunc(m.Via, provider.Group.Ruled)

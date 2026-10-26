@@ -247,14 +247,27 @@ recorded as a prediction failure (`noPrediction`).
   empty, until Codex and magpie were restarted; what held it wasn't
   found). After `unroutedShow` (15s) a route of provider `magpie` shows it
   on the Routing page as routing, and gives way to the request's own route
-  once one is begun (`noteRoute`, `trace.drop`). After `unroutedMost` (2m)
-  with no route and nothing written, it is answered 504 in its client's
+  once one is begun (`noteRoute`, `trace.drop`). It is answered 504 after
+  `unroutedUnknown` (30s) held in no wait magpie knows of, or after
+  `unroutedMost` (2m) in all (sharwowwow on X: two minutes of spinning
+  before a 504). The known waits are counted as they happen and their
+  time added up (`noteWait`, `waited`): the request's body arriving
+  (`waitedBody`, every read of `r.Body`), masking (`noteMasking`), System
+  One's or the decision model's classifier (`askWaited`), an image's
+  description (`seenBody`), Codex's auto reset (`autoReset`), plugins'
+  gateway hooks (`GatewayBegin`) and JS gateway middleware, and every
+  `notePhase` (slot, rpm, upstream). What is left is magpie's own work
+  (the catalog, parsing, planning, reading the usage log), ~8.5s at its
+  slowest (a cold catalog sync), so 30s gives it room on a loaded machine.
+  With no route and nothing written, it is answered 504 in its client's
   protocol, whole (`Content-Length`, `Connection: close`) so the client
   has it while the handler may still be held; its context ends with
   `errUnrouted`, its route ends with the error, and the log has every
   goroutine's stack (at most once in 10 minutes). The handler's writes go
   through `heldWriter`, and nowhere once magpie has answered for it.
-  `TestUnroutedRequestShownThenAnswered`, `TestUnroutedShownGivesWayToItsRoute`.
+  `TestUnroutedRequestShownThenAnswered`, `TestUnroutedShownGivesWayToItsRoute`,
+  `TestUnroutedUnknownHoldAnsweredSooner`, `TestUnroutedSlowBodyNotCutOff`,
+  `TestUnroutedMaskingNotCutOff`, `TestUnroutedSlotWaitNotCutOff`.
 
 ## Remote magpie APIs
 
