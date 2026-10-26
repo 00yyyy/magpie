@@ -60,16 +60,48 @@ type Summary struct {
 	Replies   int `json:"replies"`
 	ToolCalls int `json:"tool_calls"`
 
-	tools     map[string]int      // calls by tool
-	skills    map[string]int      // calls by skill
-	skillLast map[string]string   // the last date each skill was called
-	perDay    map[int]*summaryDay // by day after From
+	// slices and not maps: each range statsFor keeps holds them for every
+	// session, and a map of one or two names is a few hundred bytes
+	tools  counts       // calls by tool
+	skills counts       // calls by skill, with the last date of each
+	perDay []summaryDay // by day after From, in order
 }
 
 // summaryDay is a session's day, for the overview's calendar and trends.
 type summaryDay struct {
+	day              int // after From
 	messages, output int
-	tools            map[string]int // calls by tool category
+	tools            counts // calls by tool category
+}
+
+// counts are calls by name, in the names' order.
+type counts []nameCount
+
+type nameCount struct {
+	name string
+	n    int
+	last string // a skill's: the last date it was called
+}
+
+// of is name's calls.
+func (c counts) of(name string) int {
+	if i, ok := slices.BinarySearchFunc(c, name, func(c nameCount, name string) int { return strings.Compare(c.name, name) }); ok {
+		return c[i].n
+	}
+	return 0
+}
+
+// countsOf is m in the names' order, with last's date for each when given.
+func countsOf(m map[string]int, last map[string]string) counts {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(counts, 0, len(m))
+	for name, n := range m {
+		out = append(out, nameCount{name: name, n: n, last: last[name]})
+	}
+	slices.SortFunc(out, func(a, b nameCount) int { return strings.Compare(a.name, b.name) })
+	return out
 }
 
 // Day is one local date's usage, cut fine enough for the page to filter
@@ -193,6 +225,10 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 	act := map[ak]*act0{}
 	dates := map[string]bool{}
 	// each session's share: its files' models and dates in range
+	type dayShare struct {
+		messages, output int
+		tools            map[string]int
+	}
 	type share struct {
 		models           map[string]Tokens
 		active           int64
@@ -200,7 +236,7 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 		prompts, replies int
 		tools, skills    map[string]int
 		skillLast        map[string]string
-		perDate          map[string]*summaryDay
+		perDate          map[string]*dayShare
 	}
 	shares := map[string]*share{}
 	for _, f := range want {
@@ -247,12 +283,12 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 			sh := shares[f.key]
 			if sh == nil {
 				sh = &share{models: map[string]Tokens{}, dates: map[string]bool{}, tools: map[string]int{},
-					skills: map[string]int{}, skillLast: map[string]string{}, perDate: map[string]*summaryDay{}}
+					skills: map[string]int{}, skillLast: map[string]string{}, perDate: map[string]*dayShare{}}
 				shares[f.key] = sh
 			}
 			pd := sh.perDate[date]
 			if pd == nil {
-				pd = &summaryDay{tools: map[string]int{}}
+				pd = &dayShare{tools: map[string]int{}}
 				sh.perDate[date] = pd
 			}
 			for model, t := range d.Models {
@@ -358,16 +394,17 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 		sum := Summary{Key: key, Agent: s.Agent, ID: s.ID, Cwd: cmp.Or(folder[key], s.Cwd), Title: clip(s.Title, titleKept),
 			Nickname: s.Nickname,
 			Last:     s.Last, Role: s.Role, ParentSession: s.ParentSession, RootSession: s.RootSession, Priced: true, Active: sh.active / 1000, Models: []string{}, Days: []int{},
-			Prompts: sh.prompts, Replies: sh.replies, tools: sh.tools, skills: sh.skills, skillLast: sh.skillLast,
-			perDay: map[int]*summaryDay{}}
+			Prompts: sh.prompts, Replies: sh.replies, tools: countsOf(sh.tools, nil), skills: countsOf(sh.skills, sh.skillLast)}
 		for _, n := range sh.tools {
 			sum.ToolCalls += n
 		}
+		sum.perDay = make([]summaryDay, 0, len(sh.perDate))
 		for date, pd := range sh.perDate {
 			if t, err := time.ParseInLocation(time.DateOnly, date, time.Local); err == nil {
-				sum.perDay[int(math.Round(t.Sub(first).Hours()/24))] = pd
+				sum.perDay = append(sum.perDay, summaryDay{day: int(math.Round(t.Sub(first).Hours() / 24)), messages: pd.messages, output: pd.output, tools: countsOf(pd.tools, nil)})
 			}
 		}
+		slices.SortFunc(sum.perDay, func(a, b summaryDay) int { return cmp.Compare(a.day, b.day) })
 		for model, t := range sh.models {
 			sum.Tokens.add(t)
 			sum.Models = append(sum.Models, model)
@@ -522,8 +559,8 @@ func (st Stats) Overview(agent, model, cwd string, n int) Overview {
 				out.Days[d]++
 			}
 		}
-		for d, pd := range s.perDay {
-			if d >= 0 && d < len(out.Days) {
+		for _, pd := range s.perDay {
+			if d := pd.day; d >= 0 && d < len(out.Days) {
 				out.Messages[d] += pd.messages
 				out.Output[d] += pd.output
 			}
@@ -603,7 +640,8 @@ func toolUse(in []Summary, first time.Time, n int) ToolUse {
 		out.Sessions++
 		out.Calls += s.ToolCalls
 		seen := map[string]bool{}
-		for name, c := range s.tools {
+		for _, tc := range s.tools {
+			name, c := tc.name, tc.n
 			t := tools[name]
 			if t == nil {
 				t = &ToolStat{Name: name, Category: ToolCategory(name)}
@@ -625,16 +663,16 @@ func toolUse(in []Summary, first time.Time, n int) ToolUse {
 		if first.IsZero() {
 			continue
 		}
-		for d, pd := range s.perDay {
-			day := first.AddDate(0, 0, d)
+		for _, pd := range s.perDay {
+			day := first.AddDate(0, 0, pd.day)
 			mon := day.AddDate(0, 0, -(int(day.Weekday())+6)%7).Format(time.DateOnly)
 			w := weeks[mon]
 			if w == nil {
 				w = map[string]int{}
 				weeks[mon] = w
 			}
-			for cat, c := range pd.tools {
-				w[cat] += c
+			for _, c := range pd.tools {
+				w[c.name] += c.n
 			}
 		}
 	}
@@ -661,7 +699,8 @@ func skillUse(in []Summary, n int) SkillUse {
 	skills := map[string]*Skill{}
 	projects := map[string]map[string]int{}
 	for _, s := range in {
-		for name, c := range s.skills {
+		for _, sc := range s.skills {
+			name, c := sc.name, sc.n
 			k := skills[name]
 			if k == nil {
 				k = &Skill{Name: name, Agents: map[string]int{}, Projects: []ToolStat{}}
@@ -671,7 +710,7 @@ func skillUse(in []Summary, n int) SkillUse {
 			k.Calls += c
 			k.Sessions++
 			k.Agents[s.Agent] += c
-			k.Last = max(k.Last, s.skillLast[name])
+			k.Last = max(k.Last, sc.last)
 			projects[name][s.Cwd] += c
 			out.Calls += c
 		}
