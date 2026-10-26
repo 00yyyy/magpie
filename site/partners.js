@@ -110,4 +110,22 @@ export const PARTNERS = [
     from: "2026-10-26T00:00:00+08:00",
     until: "2026-11-26T00:00:00+08:00",
   },
+  {
+    id: "sidrune",
+    name: "Sidrune AI",
+    chat: "https://sidrune.ai/v1",
+    responses: "https://sidrune.ai/v1",
+    anthropic: "https://sidrune.ai",
+    keysUrl: "https://sidrune.ai/register",
+    website: "https://sidrune.ai/",
+    iconUrl: "https://usemagpie.ai/img/partner-sidrune.png",
+    notes: {
+      en: "Reliable full-power Cloud from 15% of list; invoicing.",
+      zh: "低至1.5折，稳定使用满血 Cloud，可开发票。",
+      "zh-TW": "低至1.5折，穩定使用滿血 Cloud，可開發票。",
+    },
+    langs: ["zh", "en"],
+    from: "2026-10-26T00:00:00+08:00",
+    until: "2026-11-26T00:00:00+08:00",
+  },
 ];
