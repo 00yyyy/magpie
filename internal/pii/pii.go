@@ -2,7 +2,13 @@
 // masking rules can't (internal/redact's Model): a name or an address in
 // free text, a password with nothing around it to say so.
 //
-// The model is OpenAI's Privacy Filter (Apache-2.0), 1.6 GB as the q8 GGUF
+// It runs one of two models, the user's pick (Choose, Models):
+// AstrLink Guard (astrlink.go), a 39 MB int8 token classifier for Chinese
+// and English, run in this process by internal/pii/guard, the default for
+// a user who never had the other; or Privacy Filter, below, which masks
+// many more ordinary values in code (go.sum hashes, product names; #3578).
+//
+// Privacy Filter is OpenAI's (Apache-2.0), 1.6 GB as the q8 GGUF
 // LocalAI made of it, run by pf-serve (native/privacy-filter), a program
 // built from privacy-filter.cpp on ggml. Neither ships with magpie: both
 // are downloaded when the user turns the model on, each checked against
