@@ -55,7 +55,7 @@ func TestFindJoinsTextsAndMapsBack(t *testing.T) {
 func TestJoinSplitsAtChunkSize(t *testing.T) {
 	long := strings.Repeat("x", chunkSize)
 	texts := []string{"a", "b", long, "c"}
-	chunks, parts := join(missing(texts, []int{0, 1, 2, 3}, nil))
+	chunks, parts := join(pf.missing(texts, []int{0, 1, 2, 3}, nil))
 	if len(chunks) != 3 || chunks[0] != "a"+sep+"b" || chunks[1] != long || chunks[2] != "c" {
 		t.Fatalf("chunks = %d: %.20q", len(chunks), chunks)
 	}

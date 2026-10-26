@@ -138,10 +138,7 @@ type Status struct {
 // Now is the model's status.
 func Now() Status {
 	s := Status{Supported: Supported(), Installed: Installed(), Size: modelSize}
-	dl.mu.Lock()
-	s.Downloading, s.Error = dl.cancel != nil, dl.err
-	s.Done, s.Total = dl.done.Load(), dl.total
-	dl.mu.Unlock()
+	dl.fill(&s)
 	srv.mu.Lock()
 	if srv.h != nil {
 		s.Running, s.Device, s.GPU, s.LoadMS, s.GPUError = true, srv.h.hello.Device, srv.h.hello.GPU, srv.h.hello.MS, srv.h.hello.GPUError

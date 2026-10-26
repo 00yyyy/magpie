@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/redact"
@@ -34,18 +35,40 @@ func Find(texts []string) ([][]redact.Found, error) {
 // after it are left. Between chunks the turn is given up and taken again,
 // so a short request waiting for it goes before the rest of a long one.
 func FindContext(ctx context.Context, texts []string) ([][]redact.Found, error) {
-	loadCache()
-	out, miss := known(texts, nil)
+	return pf.find(ctx, texts)
+}
+
+// backend is one model's side of FindContext: its turn and the requests
+// waiting for it, what it found (cache, on disk at path), and how it is
+// asked (classify, with turn held) unless it failed a while ago
+// (heldBack).
+type backend struct {
+	turn     chan struct{}
+	waiting  *atomic.Int32
+	cache    *lru
+	disk     *diskState
+	path     func() string
+	classify func([]string) ([][]redact.Found, error)
+	heldBack func() error
+}
+
+// pf is Privacy Filter's, run by pf-serve.
+var pf = &backend{turn: turn, waiting: &waiting, cache: cache, disk: &disk, path: cachePath,
+	classify: classify, heldBack: heldBack}
+
+func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, error) {
+	b.loadCache()
+	out, miss := b.known(texts, nil)
 	if len(miss) == 0 {
 		return out, nil
 	}
 	if ctx.Err() != nil {
 		return nil, waitErr(ctx)
 	}
-	if err := heldBack(); err != nil {
+	if err := b.heldBack(); err != nil {
 		return nil, err
 	}
-	if !takeTurn(ctx) {
+	if !b.takeTurn(ctx) {
 		return nil, waitErr(ctx)
 	}
 	type result struct {
@@ -57,7 +80,7 @@ func FindContext(ctx context.Context, texts []string) ([][]redact.Found, error) 
 		held := true
 		defer func() {
 			if held {
-				<-turn
+				<-b.turn
 			}
 		}()
 		// what this call's chunks found, by hash, whatever the cache
@@ -65,14 +88,14 @@ func FindContext(ctx context.Context, texts []string) ([][]redact.Found, error) 
 		got := map[[32]byte][]redact.Found{}
 		// read again: the requests before this one in turn had most of a
 		// history in common with it, and asked already
-		out, miss := known(texts, got)
+		out, miss := b.known(texts, got)
 		for c := 0; len(miss) > 0; c++ {
 			if c > 0 {
 				// give way to a request waiting for the turn: it goes
 				// before the next chunk
-				<-turn
+				<-b.turn
 				held = false
-				if !takeTurn(ctx) {
+				if !b.takeTurn(ctx) {
 					done <- result{nil, waitErr(ctx)}
 					return
 				}
@@ -80,35 +103,35 @@ func FindContext(ctx context.Context, texts []string) ([][]redact.Found, error) 
 			}
 			// the one ahead may have failed: those queued behind it
 			// don't each try again, minutes apiece
-			if err := heldBack(); err != nil {
+			if err := b.heldBack(); err != nil {
 				done <- result{nil, err}
 				return
 			}
-			chunks, parts := join(missing(texts, miss, got))
+			chunks, parts := join(b.missing(texts, miss, got))
 			if len(chunks) == 0 {
 				done <- result{nil, fmt.Errorf("the local masking model has no text to read for %d texts", len(miss))}
 				return
 			}
-			read, err := classify(chunks[:1])
+			read, err := b.classify(chunks[:1])
 			if err != nil {
 				done <- result{nil, err}
 				return
 			}
-			cache.mu.Lock()
+			b.cache.mu.Lock()
 			for _, p := range parts[0] {
 				k := sha256.Sum256([]byte(p.s))
 				got[k] = within(read[0], p.at, p.at+len(p.s))
-				cache.put(k, got[k])
+				b.cache.put(k, got[k])
 			}
-			cache.mu.Unlock()
-			saveSoon()
+			b.cache.mu.Unlock()
+			b.saveSoon()
 			// the texts still missing, with this chunk's answers and
 			// what others' requests found meanwhile
 			sub := make([]string, len(miss))
 			for j, i := range miss {
 				sub[j] = texts[i]
 			}
-			o, m := known(sub, got)
+			o, m := b.known(sub, got)
 			was := miss
 			miss = nil
 			for j, i := range was {
@@ -130,11 +153,11 @@ func FindContext(ctx context.Context, texts []string) ([][]redact.Found, error) 
 
 // takeTurn waits for the model's turn while ctx lives, counted as
 // waiting; false when ctx ended first.
-func takeTurn(ctx context.Context) bool {
-	waiting.Add(1)
-	defer waiting.Add(-1)
+func (b *backend) takeTurn(ctx context.Context) bool {
+	b.waiting.Add(1)
+	defer b.waiting.Add(-1)
 	select {
-	case turn <- struct{}{}:
+	case b.turn <- struct{}{}:
 		return true
 	case <-ctx.Done():
 		return false
@@ -150,16 +173,16 @@ func waitErr(ctx context.Context) error {
 // cache, and which texts it isn't. A text kept whole is taken as it is;
 // a long one is put together from its pieces, once all of them are known,
 // and kept whole then too.
-func known(texts []string, got map[[32]byte][]redact.Found) (out [][]redact.Found, miss []int) {
+func (b *backend) known(texts []string, got map[[32]byte][]redact.Found) (out [][]redact.Found, miss []int) {
 	out = make([][]redact.Found, len(texts))
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
+	b.cache.mu.Lock()
+	defer b.cache.mu.Unlock()
 	look := func(s string) ([]redact.Found, bool) {
 		k := sha256.Sum256([]byte(s))
 		if fs, ok := got[k]; ok {
 			return fs, true
 		}
-		if fs, ok := cache.get(k); ok && fits(fs, s) {
+		if fs, ok := b.cache.get(k); ok && fits(fs, s) {
 			return fs, true
 		}
 		return nil, false
@@ -191,7 +214,7 @@ func known(texts []string, got map[[32]byte][]redact.Found) (out [][]redact.Foun
 			continue
 		}
 		out[i] = merge(all)
-		cache.put(sha256.Sum256([]byte(t)), out[i])
+		b.cache.put(sha256.Sum256([]byte(t)), out[i])
 	}
 	return out, miss
 }
@@ -299,11 +322,11 @@ func merge(fs []redact.Found) []redact.Found {
 
 // missing are what of texts[miss] neither got nor the cache has, to ask
 // the model about: the texts whole, and the long ones' pieces, each once.
-func missing(texts []string, miss []int, got map[[32]byte][]redact.Found) []string {
+func (b *backend) missing(texts []string, miss []int, got map[[32]byte][]redact.Found) []string {
 	var out []string
 	seen := map[[32]byte]bool{}
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
+	b.cache.mu.Lock()
+	defer b.cache.mu.Unlock()
 	for _, i := range miss {
 		t := texts[i]
 		for _, p := range pieces(t) {
@@ -316,7 +339,7 @@ func missing(texts []string, miss []int, got map[[32]byte][]redact.Found) []stri
 			if _, ok := got[k]; ok {
 				continue
 			}
-			if fs, ok := cache.get(k); ok && fits(fs, s) {
+			if fs, ok := b.cache.get(k); ok && fits(fs, s) {
 				continue
 			}
 			out = append(out, s)
