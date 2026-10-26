@@ -80,6 +80,8 @@ func gatewaySession(g usage.GatewaySession) sessions.Session {
 func sessionRoutes(mux *http.ServeMux, w Windows) {
 	warmSessions()
 	mux.HandleFunc("GET /api/sessions", func(rw http.ResponseWriter, r *http.Request) {
+		// the list and the Codex threads' effort each list every session file
+		defer sessions.OneListing()()
 		n, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 		// The page draws a session count taken from every session
 		// (statsFor's Overview) beside this list, so the list is read as

@@ -503,6 +503,10 @@ func parallel(n, per int, one func(i int)) {
 // its workflows (ultracode) in <id>/subagents/workflows/<run>/agent-*.jsonl
 // — beside each run's journal.jsonl, which isn't a transcript.
 func ccFiles(agent, dir string) []file {
+	return heldFiles("cc\x00"+agent+"\x00"+dir, func() []file { return listCCFiles(agent, dir) })
+}
+
+func listCCFiles(agent, dir string) []file {
 	projects := filepath.Join(dir, "projects")
 	var out []file
 	for _, project := range readDirectory(projects) {
@@ -636,7 +640,7 @@ const zstSuffix = ".zst"
 // calls (phantom3792 on X).
 func codexFiles() []file {
 	if !quiet() {
-		return listCodexFiles()
+		return heldFiles("codex", listCodexFiles)
 	}
 	warmListing.Lock()
 	defer warmListing.Unlock()
