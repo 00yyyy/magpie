@@ -109,19 +109,20 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		// still on Codex's own model, through its sign-in, when it says
 		// nothing of them
 		if rest == "/responses" {
-			if to := codexTitlesTo(r.Header, body, false); to != "" {
+			session := func() string { return s.codexSessionOf(r, body) }
+			if to := codexTitlesTo(r.Header, body, false, session); to != "" {
 				s.codexTitle(w, r, body, to)
 				return
 			}
-			if to := codexDescriptionsTo(r.Header, body, false); to != "" {
+			if to := codexDescriptionsTo(r.Header, body, false, session); to != "" {
 				s.codexDescription(w, r, body, to)
 				return
 			}
-			if to := codexSummariesTo(r.Header, body, false); to != "" {
+			if to := codexSummariesTo(r.Header, body, false, session); to != "" {
 				s.codexSummary(w, r, body, to)
 				return
 			}
-			if to := codexPredictionsTo(r.Header, body, false); to != "" {
+			if to := codexPredictionsTo(r.Header, body, false, session); to != "" {
 				s.codexPrediction(w, r, body, to)
 				return
 			}

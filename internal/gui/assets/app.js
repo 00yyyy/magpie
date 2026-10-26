@@ -19595,11 +19595,11 @@ function renderSettings() {
   // alone as Settings › General does (#2120); Open at login's says where
   // the Mac lists it: a launch agent, under App Background Activity
   for (const [row, en] of [
-    ["#codexTitlesRow", "Names each thread in a hidden request of its own; at Codex’s own, it goes as Codex sends it, through its ChatGPT sign-in"],
-    ["#codexDescriptionsRow", "Writes each thread’s short description in a hidden request of its own; at Codex’s own, it goes as Codex sends it, through its ChatGPT sign-in"],
-    ["#codexPredictionsRow", "Guesses your next message for the composer, reading the whole conversation again each time; at Codex’s own, it goes on the thread’s model through its ChatGPT sign-in"],
+    ["#codexTitlesRow", "Names each thread in a hidden request of its own; same as the session, it goes on the session’s model, as Codex sends it when that is one of Codex’s own"],
+    ["#codexDescriptionsRow", "Writes each thread’s short description in a hidden request of its own; same as the session, it goes on the session’s model, as Codex sends it when that is one of Codex’s own"],
+    ["#codexPredictionsRow", "Guesses your next message for the composer, reading the whole conversation again each time; same as the session, it goes on the session’s model"],
     ["#codexAutoReviewRow", "Decides an approval in your place when Codex’s approvals are on auto-review; Codex’s own pick is codex-auto-review, else the conversation’s model at low effort"],
-    ["#codexMemoriesRow", "Writes Codex’s memories of past threads, in the background; Codex’s own: gpt-5.6-terra, with gpt-5.6-luna summing up each thread"],
+    ["#codexMemoriesRow", "Writes Codex’s memories of past threads, in the background; same as the session, on the session’s model, or on gpt-5.6-terra and gpt-5.6-luna when that is one of Codex’s own"],
     ["#loginRow", document.body.classList.contains("mac")
       ? "Opens in the menu bar with no window. System Settings › General › Login Items lists it under App Background Activity, not Open at Login"
       : "Opens in the tray with no window"],
@@ -21121,9 +21121,9 @@ function renderCodexDescriptions(s) {
   b.type = "button";
   b.setAttribute("aria-label", t("Codex thread descriptions"));
   if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
-  else b.append(icon("openai"), el("span", "", t("Codex’s own (ChatGPT)")));
+  else b.append(icon("generic"), el("span", "", t(SAME_SESSION)));
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexDescriptions", label: "model", value: v, options: [
-    { value: "", label: t("Codex’s own (ChatGPT)"), note: t("as Codex sends them"), icon: "openai", reset: true },
+    { value: "", label: t(SAME_SESSION), note: t("as Codex sends them when the session is on Codex’s own model"), icon: "generic", reset: true },
     ...models.map(modelOpt)],
   onPick: (id) => {
     if (id === v) return;
@@ -21147,9 +21147,9 @@ function renderCodexPredictions(s) {
   b.setAttribute("aria-label", t("Codex composer predictions"));
   if (v === "off") b.append(el("span", "", t("Off")));
   else if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
-  else b.append(icon("openai"), el("span", "", t("Codex’s own (ChatGPT)")));
+  else b.append(icon("generic"), el("span", "", t(SAME_SESSION)));
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexPredictions", label: "model", value: v, options: [
-    { value: "", label: t("Codex’s own (ChatGPT)"), note: t("as Codex sends them"), icon: "openai", reset: true },
+    { value: "", label: t(SAME_SESSION), note: t("as Codex sends them when the session is on Codex’s own model"), icon: "generic", reset: true },
     { value: "off", label: t("Off"), note: t("no prediction, nothing sent"), reset: true },
     ...models.map(modelOpt)],
   onPick: (id) => {
@@ -21175,9 +21175,9 @@ function renderCodexTitles(s) {
   b.setAttribute("aria-label", t("Codex thread titles"));
   if (v === "off") b.append(el("span", "", t("Off")));
   else if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
-  else b.append(icon("openai"), el("span", "", t("Codex’s own (ChatGPT)")));
+  else b.append(icon("generic"), el("span", "", t(SAME_SESSION)));
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexTitles", label: "model", value: v, options: [
-    { value: "", label: t("Codex’s own (ChatGPT)"), note: t("as Codex sends them"), icon: "openai", reset: true },
+    { value: "", label: t(SAME_SESSION), note: t("as Codex sends them when the session is on Codex’s own model"), icon: "generic", reset: true },
     { value: "off", label: t("Off"), note: t("no title, nothing sent"), reset: true },
     ...models.map(modelOpt)],
   onPick: (id) => {
@@ -21232,7 +21232,7 @@ function renderCodexMemories() {
   b.type = "button";
   b.setAttribute("aria-label", t("Codex memories model"));
   if (f.value) b.append(icon(opt?.icon || "generic"), el("span", "", opt?.label || f.value));
-  else b.append(icon("openai"), el("span", "", t("Codex’s own pick")));
+  else b.append(icon("generic"), el("span", "", t(SAME_SESSION)));
   b.onclick = (ev) => openPicker(a, f, b, ev);
   $("#codexMemoriesPick").replaceChildren(b);
 }

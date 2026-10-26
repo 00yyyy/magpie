@@ -1540,19 +1540,19 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 		// Codex with magpie as its provider asks for a thread's title
 		// here (#743)
 		if from == provider.Responses {
-			if to := codexTitlesTo(r.Header, body, true); to != "" {
+			if to := codexTitlesTo(r.Header, body, true, nil); to != "" {
 				s.codexTitle(w, r, body, to)
 				return
 			}
-			if to := codexDescriptionsTo(r.Header, body, true); to != "" {
+			if to := codexDescriptionsTo(r.Header, body, true, nil); to != "" {
 				s.codexDescription(w, r, body, to)
 				return
 			}
-			if to := codexSummariesTo(r.Header, body, true); to != "" {
+			if to := codexSummariesTo(r.Header, body, true, nil); to != "" {
 				s.codexSummary(w, r, body, to)
 				return
 			}
-			if to := codexPredictionsTo(r.Header, body, true); to != "" {
+			if to := codexPredictionsTo(r.Header, body, true, nil); to != "" {
 				s.codexPrediction(w, r, body, to)
 				return
 			}
