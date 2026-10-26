@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"cmp"
+	"maps"
 	"math"
 	"slices"
 	"sort"
@@ -405,7 +406,9 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 			}
 		}
 		slices.SortFunc(sum.perDay, func(a, b summaryDay) int { return cmp.Compare(a.day, b.day) })
-		for model, t := range sh.models {
+		// in the models' order, as assembleListed sums a session's cost
+		for _, model := range slices.Sorted(maps.Keys(sh.models)) {
+			t := sh.models[model]
 			sum.Tokens.add(t)
 			sum.Models = append(sum.Models, model)
 			if p := price(model); p != nil {
