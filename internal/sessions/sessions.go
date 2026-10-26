@@ -198,10 +198,10 @@ type state struct {
 	Convs                 []string          `json:"convs,omitempty"`  // the gateway's ids for its requests (dshConvs)
 	Start                 time.Time         `json:"start"`
 	Last                  time.Time         `json:"last"`
-	Models                map[string]Tokens `json:"models,omitempty"`
+	Models                named[Tokens]     `json:"models,omitempty"`
 	// Days is Models again, split by the local date each message was
 	// written on: a session that runs past midnight counts on both days.
-	Days map[string]*day `json:"days,omitempty"`
+	Days named[*day] `json:"days,omitempty"`
 	// Claude Code: the message last counted, whose later lines repeat it,
 	// and the day it was counted on
 	Msg      string `json:"msg,omitempty"`
@@ -237,7 +237,7 @@ type state struct {
 // day is one local date's share of a file: tokens by model, and the time
 // the session was at work on it.
 type day struct {
-	Models map[string]Tokens `json:"m,omitempty"`
+	Models named[Tokens] `json:"m,omitempty"`
 	// Active is milliseconds of work: the gaps between one line and the
 	// next, each counted when shorter than idleGap and put on the later
 	// line's day. A longer pause (lunch, the night, a session picked up
@@ -253,8 +253,8 @@ type day struct {
 	Replies int `json:"r,omitempty"`
 	// Tools are the tool calls made, by the tool's name, and Skills the
 	// skills called up, by the skill's (subagents' files included)
-	Tools  map[string]int `json:"t,omitempty"`
-	Skills map[string]int `json:"k,omitempty"`
+	Tools  named[int] `json:"t,omitempty"`
+	Skills named[int] `json:"k,omitempty"`
 }
 
 // tool counts a call of a tool, and of a skill when it calls one up; a
@@ -265,16 +265,10 @@ func (s *state) tool(at time.Time, name, skill string) {
 	}
 	d := s.day(dateOf(at))
 	if name != "" {
-		if d.Tools == nil {
-			d.Tools = map[string]int{}
-		}
-		d.Tools[name]++
+		*d.Tools.at(name)++
 	}
 	if skill != "" {
-		if d.Skills == nil {
-			d.Skills = map[string]int{}
-		}
-		d.Skills[skill]++
+		*d.Skills.at(skill)++
 	}
 }
 
@@ -290,15 +284,11 @@ func dateOf(t time.Time) string {
 }
 
 func (s *state) day(date string) *day {
-	if s.Days == nil {
-		s.Days = map[string]*day{}
+	d := s.Days.at(date)
+	if *d == nil {
+		*d = &day{}
 	}
-	d := s.Days[date]
-	if d == nil {
-		d = &day{}
-		s.Days[date] = d
-	}
-	return d
+	return *d
 }
 
 // use counts a model's tokens, spent on a date.
@@ -306,31 +296,18 @@ func (s *state) use(date, model string, t Tokens) {
 	if t.zero() {
 		return
 	}
-	if s.Models == nil {
-		s.Models = map[string]Tokens{}
-	}
-	m := s.Models[model]
-	m.add(t)
-	s.Models[model] = m
-	d := s.day(date)
-	if d.Models == nil {
-		d.Models = map[string]Tokens{}
-	}
-	m = d.Models[model]
-	m.add(t)
-	d.Models[model] = m
+	s.Models.at(model).add(t)
+	s.day(date).Models.at(model).add(t)
 }
 
 // unuse takes back what use counted.
 func (s *state) unuse(date, model string, t Tokens) {
-	if m, ok := s.Models[model]; ok {
-		m.sub(t)
-		s.Models[model] = m
+	if i, ok := s.Models.find(model); ok {
+		s.Models[i].v.sub(t)
 	}
-	if d := s.Days[date]; d != nil {
-		if m, ok := d.Models[model]; ok {
-			m.sub(t)
-			d.Models[model] = m
+	if d := s.Days.of(date); d != nil {
+		if i, ok := d.Models.find(model); ok {
+			d.Models[i].v.sub(t)
 		}
 	}
 }
@@ -361,10 +338,7 @@ func (s *state) clone() *state {
 	c := *s
 	c.Codex = s.Codex.clone()
 	c.Claude = s.Claude.clone()
-	c.Models = make(map[string]Tokens, len(s.Models))
-	for k, v := range s.Models {
-		c.Models[k] = v
-	}
+	c.Models = slices.Clone(s.Models)
 	if s.Total != nil {
 		t := *s.Total
 		c.Total = &t
@@ -374,22 +348,15 @@ func (s *state) clone() *state {
 	c.CodexSpawnConflicts = maps.Clone(s.CodexSpawnConflicts)
 	c.CodexAgentIDs = maps.Clone(s.CodexAgentIDs)
 	c.CodexAgentConflicts = maps.Clone(s.CodexAgentConflicts)
-	c.Days = make(map[string]*day, len(s.Days))
-	for k, v := range s.Days {
-		d := &day{Active: v.Active, Models: make(map[string]Tokens, len(v.Models)), Prompts: v.Prompts, Replies: v.Replies}
+	c.Days = slices.Clone(s.Days)
+	for i, e := range c.Days {
+		v := e.v
+		d := &day{Active: v.Active, Models: slices.Clone(v.Models), Prompts: v.Prompts, Replies: v.Replies}
 		if v.Hours != nil {
 			d.Hours = append([]int64(nil), v.Hours...)
 		}
-		if v.Tools != nil {
-			d.Tools = maps.Clone(v.Tools)
-		}
-		if v.Skills != nil {
-			d.Skills = maps.Clone(v.Skills)
-		}
-		for m, t := range v.Models {
-			d.Models[m] = t
-		}
-		c.Days[k] = d
+		d.Tools, d.Skills = slices.Clone(v.Tools), slices.Clone(v.Skills)
+		c.Days[i].v = d
 	}
 	return &c
 }
@@ -1350,7 +1317,7 @@ func assembleListed(fs []file, price func(string) *catalog.Price, codexTitle fun
 		if st.Last.After(s.Last) {
 			s.Last = st.Last
 		}
-		for name, t := range st.Models {
+		for name, t := range st.Models.all() {
 			m := models[name]
 			if m == nil {
 				m = &Model{Model: name}

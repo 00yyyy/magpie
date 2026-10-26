@@ -248,11 +248,11 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 		if cwd == "" {
 			cwd = st.Cwd
 		}
-		for date, d := range st.Days {
+		for date, d := range st.Days.all() {
 			if date == "" || date < from || date > out.To {
 				continue
 			}
-			for model, t := range d.Models {
+			for model, t := range d.Models.all() {
 				if t.zero() {
 					continue
 				}
@@ -291,7 +291,7 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 				pd = &dayShare{tools: map[string]int{}}
 				sh.perDate[date] = pd
 			}
-			for model, t := range d.Models {
+			for model, t := range d.Models.all() {
 				if !t.zero() {
 					u := sh.models[model]
 					u.add(t)
@@ -307,11 +307,11 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 				dates[date] = true
 			}
 			pd.messages += d.Prompts + d.Replies
-			for name, n := range d.Tools {
+			for name, n := range d.Tools.all() {
 				sh.tools[name] += n
 				pd.tools[ToolCategory(name)] += n
 			}
-			for name, n := range d.Skills {
+			for name, n := range d.Skills.all() {
 				sh.skills[name] += n
 				if date > sh.skillLast[name] {
 					sh.skillLast[name] = date
