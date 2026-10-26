@@ -2620,6 +2620,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		} else if n := userOutput(c.p, c.model); n > 0 {
 			attemptBody = withMaxOutput(from, attemptBody, n)
 		}
+		// a request naming no reply limit, to an API that would cut it
+		// short (DeepSeek's 8K), asks for the model's own, relayed or
+		// translated (withOwnOutput)
+		attemptBody = withOwnOutput(c.p, c.model, from, attemptBody)
 		if roomFor == c.who()+"|"+c.model {
 			if b, ok := withReplyCap(from, attemptBody, roomCap); ok {
 				attemptBody = b
@@ -5294,6 +5298,9 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 	var beforeOff *Request
 	var toolsRefusal []byte
 	offAsked := false
+	// the reply limit was filled in, the client having named none
+	// (fillsOutput)
+	filledOutput := false
 	for {
 		if mayDropImageTool(p) && !s.fits(p.ID, imageToolRefused, to) {
 			req, _ = withoutImageToolReq(req)
@@ -5408,11 +5415,15 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.Ultrafast, req = true, &r
 		}
 		// Anthropic's API needs a reply limit: one the client didn't name
-		// is the model's own, not a flat 16384 (#1792, askedOutput)
-		if to == provider.Anthropic && req.MaxTokens <= 0 {
+		// is the model's own, not a flat 16384 (#1792, askedOutput). So on
+		// a vendor's Chat or Responses, which may read none as less than
+		// the model gives (fillsOutput), unless it turned the one filled
+		// in away before
+		if req.MaxTokens <= 0 && fillsOutput(p, to) && (to == provider.Anthropic || s.fits(p.ID, outputFillRefused(model), to)) {
 			if n := askedOutput(p, model); n > 0 {
 				r := *req
 				r.MaxTokens, req = n, &r
+				filledOutput = to != provider.Anthropic
 			}
 		}
 		wire := provider.UpstreamNameIn(wires, p.ID, model)
@@ -5486,6 +5497,16 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
+		if filledOutput && outputFieldRefused(res.StatusCode, b) {
+			// the model's own limit, filled in, turned away (a list or
+			// models.dev saying more than the vendor takes): asked again
+			// naming none, as the client did, and so from then on
+			log.Printf("gateway: %s turned away max tokens %d for %s (%d); asked naming none from now on", p.ID, req.MaxTokens, model, res.StatusCode)
+			s.markUnfit(p.ID, outputFillRefused(model), to)
+			r := *req
+			r.MaxTokens, req, filledOutput = 0, &r, false
+			continue
+		}
 		if req.LoadedInPlace && refusesField(res.StatusCode, b, additionalToolsItem) && bytes.Contains(body, []byte(`"`+additionalToolsItem+`"`)) {
 			// an upstream that turns the item away is asked again with the
 			// loaded tools among the others, and not sent it again: the
