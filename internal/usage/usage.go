@@ -7,7 +7,9 @@ package usage
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -243,10 +245,12 @@ func Append(r Record) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
-		return
-	}
+	// the folder is made only when it is missing: every request appends,
+	// and MkdirAll stat'ed it each time (#3725)
 	f, err := os.OpenFile(Path(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if errors.Is(err, fs.ErrNotExist) && os.MkdirAll(filepath.Dir(Path()), 0o755) == nil {
+		f, err = os.OpenFile(Path(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	}
 	if err != nil {
 		return
 	}
