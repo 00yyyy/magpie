@@ -1428,7 +1428,9 @@ func windowIn(served func() []provider.Entry, p provider.Provider, model string)
 	if n := p.Contexts[model]; n > 0 {
 		return n
 	}
-	for _, e := range served() {
+	cat := served()
+	for i := range cat {
+		e := &cat[i]
 		if e.Group == "" && e.Provider.ID == p.ID && (e.Model == model || e.ID == model) && e.Context > 0 {
 			return e.Context
 		}

@@ -16,7 +16,9 @@ import (
 // known: its catalog entry's (the user's setting, else the vendor's list
 // or models.dev).
 func outputLimit(p provider.Provider, model string) int {
-	for _, e := range provider.Served() {
+	cat := provider.Served()
+	for i := range cat {
+		e := &cat[i] // an Entry is ~1.3KB, the catalog hundreds
 		if e.Group == "" && e.Provider.ID == p.ID && (e.Model == model || e.ID == model) && e.Output > 0 {
 			return e.Output
 		}
@@ -32,7 +34,9 @@ func outputLimit(p provider.Provider, model string) int {
 // as max_tokens times the price turned every turn away, and the field the
 // editor says caps max_tokens did nothing (YaCo on Discord).
 func userOutput(p provider.Provider, model string) int {
-	for _, e := range provider.Served() {
+	cat := provider.Served()
+	for i := range cat {
+		e := &cat[i] // an Entry is ~1.3KB, the catalog hundreds
 		if e.Group == "" && e.Provider.ID == p.ID && (e.Model == model || e.ID == model) && e.OutputSet && e.Output > 0 {
 			return e.Output
 		}
@@ -48,7 +52,9 @@ func userOutput(p provider.Provider, model string) int {
 // turn ran out of, Codex showing "Incomplete response returned, reason:
 // max_output_tokens" (#1792, tensornull).
 func askedOutput(p provider.Provider, model string) int {
-	for _, e := range provider.Served() {
+	cat := provider.Served()
+	for i := range cat {
+		e := &cat[i] // an Entry is ~1.3KB, the catalog hundreds
 		if e.Group == "" && e.Provider.ID == p.ID && (e.Model == model || e.ID == model) {
 			return e.PublishedOutput()
 		}
