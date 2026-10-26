@@ -20,7 +20,7 @@ func person(s, e int) redact.Found { return redact.Found{Start: s, End: e, Label
 // comes back to each text at that text's own offsets; a text seen before
 // isn't asked about again.
 func TestFindJoinsTextsAndMapsBack(t *testing.T) {
-	log := fakeInstall(t, "ok", false)
+	log, _ := gpuInstall(t, "ok")
 	texts := []string{"hi Alice", "nothing here", "Bob, Alice and Alice"}
 	got, err := Find(texts)
 	if err != nil {
@@ -82,7 +82,7 @@ func TestWithinCutsSpansAtTheTextsEnds(t *testing.T) {
 // pf-serve that dies on the GPU is started again on the CPU, which the
 // request then gets its answer from, and stays there; the status says why.
 func TestGPUDeathMovesToCPU(t *testing.T) {
-	log := fakeInstall(t, "gpudies", false)
+	log, gpu := gpuInstall(t, "gpudies")
 	got, err := Find([]string{"hi Alice"})
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestGPUDeathMovesToCPU(t *testing.T) {
 	if !reflect.DeepEqual(got, [][]redact.Found{{person(3, 8)}}) {
 		t.Fatalf("Find = %v", got)
 	}
-	if starts := fakeLines(t, log, "start"); !reflect.DeepEqual(starts, []string{"start pf-serve MTL0", "start pf-serve CPU"}) {
+	if starts := fakeLines(t, log, "start"); !reflect.DeepEqual(starts, []string{gpu, "start pf-serve CPU"}) {
 		t.Fatalf("starts = %q", starts)
 	}
 	st := Now()
@@ -295,7 +295,7 @@ func TestFailedModelHoldsRequestsBackAtOnce(t *testing.T) {
 // woke an idle one ~146 times a second (#3185). The CPU one after a GPU
 // death too.
 func TestServeStartsWithoutResidencyHeartbeat(t *testing.T) {
-	log := fakeInstall(t, "gpudies", false)
+	log, _ := gpuInstall(t, "gpudies")
 	if _, err := Find([]string{"hi Alice"}); err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +351,7 @@ func TestWarm(t *testing.T) {
 	Warm()
 	wait("no failure", func(s Status) bool { return strings.Contains(s.Failed, "can't load noload") })
 
-	log := fakeInstall(t, "ok", false)
+	log, _ := gpuInstall(t, "ok")
 	srv.failed = "before"
 	Warm()
 	wait("not running", func(s Status) bool { return s.Running && s.Device == "MTL0" && s.Failed == "" })

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -194,6 +195,19 @@ func fakeInstall(t *testing.T, mode string, vulkan bool) string {
 	t.Setenv(fakeVar, mode)
 	t.Setenv(fakeLog, log)
 	return log
+}
+
+// gpuInstall is fakeInstall with a GPU's pf-serve to start first:
+// macOS's own, which runs on Metal, or elsewhere pf-serve-vulkan, as a
+// computer with no Vulkan loader has none (#3741: these tests took
+// macOS's for every system, and were red on Linux). It answers the line
+// the stand-in logs as it starts there.
+func gpuInstall(t *testing.T, mode string) (log, gpuStart string) {
+	t.Helper()
+	if runtime.GOOS == "darwin" {
+		return fakeInstall(t, mode, false), "start pf-serve MTL0"
+	}
+	return fakeInstall(t, mode, true), "start pf-serve-vulkan MTL0"
 }
 
 // fakeLines are the lines the stand-in logged that start with prefix.
