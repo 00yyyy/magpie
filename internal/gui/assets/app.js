@@ -23264,9 +23264,18 @@ function standIn(h) {
   }
 }
 // where the held parts are in the page, and how tall it is: what the hold
-// left (h.lay), and a redraw changes, a scroll not
-const laid = (h) => [h.v.scrollHeight, ...h.chain.slice(0, 3).map(([n]) => n.isConnected ? onScreen(n, h.v) + h.v.scrollTop : NaN)];
-const redrawn = (h) => !h.lay || laid(h).some((x, i) => !(Math.abs(x - h.lay[i]) < 1.5));
+// left (h.lay), and a redraw changes, a scroll not. Only parts that scroll
+// with the page and are in it: one drawn again (the Usage page's tabs, the
+// agents' list under an agent opened or closed) or stuck to the view's edge
+// (Settings' tabs, sticky) read as moved at every scroll, and for the hold's
+// 4s every scroll was put back (issennknight on macOS 13)
+const scrolls = (n, v) => { for (; n && n !== v; n = n.parentElement) if (/sticky|fixed/.test(getComputedStyle(n).position)) return false; return !!n; };
+function laid(h) {
+  const at = [];
+  for (const [n] of h.chain) if (at.length < 3 && n.isConnected && n.offsetParent && scrolls(n, h.v)) at.push([n, onScreen(n, h.v) + h.v.scrollTop]);
+  return { sh: h.v.scrollHeight, at };
+}
+const redrawn = (h) => !h.lay || Math.abs(h.v.scrollHeight - h.lay.sh) >= 1.5 || h.lay.at.some(([n, y]) => !n.isConnected || !(Math.abs(onScreen(n, h.v) + h.v.scrollTop - y) < 1.5));
 function hold(h) {
   // held by what can be seen: an empty part (a row's value with nothing in it
   // yet) has no height, so "moved by less than half its height" below never
