@@ -41,8 +41,8 @@ function server(reply) {
 const look = (page) => page.evaluate(() => {
   const b = document.querySelector("#modal .pm-bounce");
   if (!b) return null;
-  return { paths: [...b.querySelectorAll("path")].map((p) => p.getAttribute("d")), bird: b.querySelector(".pm-bird").style.transform,
-    feet: b.querySelector(".pm-bird svg").getBoundingClientRect().height };
+  return { paths: [...b.querySelectorAll("path")].map((p) => p.getAttribute("d")), bird: b.querySelector(".sk-bird").style.transform,
+    feet: b.querySelector(".sk-bird svg").getBoundingClientRect().height };
 });
 // how far a line's middle bends below its ends
 const bend = (d) => { const n = (d || "").match(/-?[\d.]+/g)?.map(Number) || []; return n.length < 14 ? 0 : n[7] - n[1]; };
@@ -82,7 +82,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           if (n.length >= 14) out.bend = Math.max(out.bend, n[7] - n[1]);
         }
         out.lit = Math.max(out.lit, b.querySelectorAll("path[data-lit]").length);
-        out.places.add(b.querySelector(".pm-bird").style.transform);
+        out.places.add(b.querySelector(".sk-bird").style.transform);
         if (performance.now() - t0 > 2000) return done({ bend: out.bend, places: out.places.size, lit: out.lit });
         requestAnimationFrame(step);
       };

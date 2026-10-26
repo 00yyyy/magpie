@@ -1068,6 +1068,15 @@ body.masked :hover > .acct-eye, body.masked :focus-within > .acct-eye, .acct-eye
 @media (prefers-reduced-motion: reduce) { .quota-refresh { transition: none; } }
 .skeleton { display: block; border-radius: 5px; background: linear-gradient(90deg, var(--skel, var(--pill)) 25%, var(--skel-hi, var(--pill-hover)) 45%, var(--skel, var(--pill)) 65%); background-size: 240% 100%; animation: skeleton-shift 1.4s ease-in-out infinite; }
 @keyframes skeleton-shift { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+/* magpie's bird on what is loading, placed by its feet (skelBird, and the
+   plugin page's README strings) */
+.sk-bird { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 1; pointer-events: none; }
+.sk-bird.roam { position: fixed; z-index: 32; }
+.sk-bird svg { position: absolute; left: -13.2px; top: -19.6px; width: 22px; height: 22px; color: var(--fg); fill: currentColor; overflow: visible; }
+.sk-bird .tail { transform-box: view-box; transform-origin: 14px 22px; }
+.sk-bird .wing { transform-box: view-box; transform-origin: 30px 19.8px; }
+.sk-bird[data-flap] .wing { animation: sk-flap .16s ease-in-out infinite alternate; }
+@keyframes sk-flap { from { transform: rotate(-22deg); } to { transform: rotate(18deg); } }
 .sk-cost { width: 72px; height: 15px; }
 .skeleton-card { min-height: 78px; display: flex; flex-direction: column; gap: 9px; justify-content: center; }
 .sk-title { width: 38%; height: 12px; }
@@ -3670,7 +3679,7 @@ body.panel .modal { padding: 16px 12px; }
      the old one, and the page stayed a few pixels wider than the window
      (#2142, #1864, #2023). No specificity: any transition declared wins. */
   :where(*), :where(*)::before, :where(*)::after { transition-property: none; }
-  .skeleton { animation: none !important; }
+  .skeleton, .sk-bird .wing { animation: none !important; }
 }
 
 /* A browser on a phone: keep the desktop and tray's layout independent.
