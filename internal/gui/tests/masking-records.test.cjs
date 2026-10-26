@@ -296,6 +296,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await one.locator(".msk-msg").first().waitFor();
         assert.equal(await card.isHidden(), true);
         assert.equal(await one.locator(".msk-steps li").count(), 5);
+        // each step's line runs from the number before it to its own, not a dash in the gap
+        const lines = await one.locator(".msk-steps li").evaluateAll((lis) => lis.slice(1).map((li, i) => {
+          const b = getComputedStyle(li, "::before");
+          if (b.display === "none") return null;
+          const x = li.getBoundingClientRect().left + parseFloat(b.left);
+          const from = lis[i].querySelector(".msk-sdot").getBoundingClientRect(), to = li.querySelector(".msk-sdot").getBoundingClientRect();
+          return [Math.round(x - from.right), Math.round(to.left - (x + parseFloat(b.width)))];
+        }));
+        for (const l of lines) if (l) assert.deepEqual(l, [6, 6], "a line from number to number");
         assert.equal(await one.locator(".msk-msg").count(), 1, "one piece of text had values");
         assert.equal(await one.locator(".msk-fold").count(), 1, "the system prompt and the earlier message, folded as one");
         assert.deepEqual(await one.locator(".msk-msg .msk-text").last().locator("mark").allTextContents(), [KEY, MAIL, KEY], "as the vendor got it");
