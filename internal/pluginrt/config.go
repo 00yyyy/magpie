@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/beat"
 	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/filememo"
 )
@@ -373,8 +374,6 @@ func KeepFresh(ctx context.Context, every time.Duration, also ...string) {
 		return b.String()
 	}
 	last := ""
-	tick := time.NewTicker(every)
-	defer tick.Stop()
 	for {
 		// taken before the look, so a write made during it isn't missed
 		written := filememo.Written()
@@ -389,7 +388,7 @@ func KeepFresh(ctx context.Context, every time.Duration, also ...string) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-tick.C:
+		case <-beat.Next(every):
 		case <-written:
 		}
 	}

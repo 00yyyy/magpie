@@ -32,6 +32,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/beat"
 )
 
 // MinRefreshEvery is the shortest RefreshEvery: a vendor's list changes
@@ -268,14 +270,16 @@ var listsEvery = time.Minute
 func KeepListsFresh(ctx context.Context) {
 	t := time.NewTimer(30 * time.Second)
 	defer t.Stop()
+	var wait <-chan time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		case <-wait:
 		}
 		refreshDueLists(ctx, time.Now())
-		t.Reset(listsEvery)
+		wait = beat.Next(listsEvery)
 	}
 }
 
