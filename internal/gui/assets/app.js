@@ -13938,12 +13938,11 @@ function accountCapPill(p, user, cap, direct) {
 }
 
 // An account's or key's limit on requests at once (#892): its own, else
-// the provider's Concurrency. The pill says it, and while requests are out
-// under it how many run and wait — the gateway's lanes, read again every
-// two seconds while a pill is shown (refreshLanes) — and opens the app's
-// menu: the provider's, none, a number, or one of the user's own.
+// the provider's Concurrency. The pill says it, and how many run and wait
+// (the lanes, read every 2s while one is in sight: refreshLanes), and opens
+// the app's menu: the provider's, none, a number, or the user's own.
 const LANE_LIMITS = [1, 2, 3, 5, 10];
-let lanesNow = {}, lanesRead = false;
+let lanesNow = {}, lanesRead = false, lanesTick;
 function laneOwnOf(p, ref) {
   const m = p?.accountConcurrency || {};
   const k = String(ref).toLowerCase();
@@ -13964,6 +13963,7 @@ function laneText(pill) {
   else if (limit) text = t("{n} at once", { n: limit });
   else text = t("No limit at once");
   if (pill.textContent !== text) pill.textContent = text;
+  lanesTick ||= setInterval(refreshLanes, 2e3);
   pill.classList.toggle("set", own != null || limit > 0);
   pill.classList.toggle("busy-lane", !!(limit && busy >= limit));
   pill.classList.toggle("queued", !!waiting);
@@ -14020,17 +14020,16 @@ function laneLimitPill(p, ref, who, name) {
   };
   return pill;
 }
-// refreshLanes reads the gateway's lanes again and rewrites the pills in
-// place: nothing is redrawn, so nothing moves under the reader.
+// refreshLanes rewrites the pills in place, so nothing moves; with none
+// in sight its tick stops (#3185) until one is drawn
 async function refreshLanes() {
-  if (document.hidden || view !== "providers" || !document.querySelector(".alane")) return;
+  if (document.hidden || view !== "providers" || !document.querySelector(".alane")) return lanesTick = clearInterval(lanesTick);
   let lanes;
   try { lanes = await api("lanes"); } catch { return; }
   lanesNow = lanes || {};
   lanesRead = true;
   for (const pill of document.querySelectorAll(".alane")) laneText(pill);
 }
-setInterval(refreshLanes, 2000);
 
 // A window reads as how much of it is used, or — as the vendors' own apps
 // show it — how much is left, the bar filling with that; one choice for
@@ -24590,7 +24589,7 @@ function loadBack() {
   loadBack.flight = flight;
   return flight.done;
 }
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadBack(); wag(); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadBack(); wag(); refreshLanes(); } });
 // an agent's config can be rewritten, or the agent run round magpie, while the
 // window is up: ask what drifted now and then, and redraw only on a change —
 // never under an open menu
