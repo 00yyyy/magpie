@@ -532,7 +532,8 @@ func (s *Server) answeredHere(r *http.Request, from provider.Protocol, body []by
 	kind := requestCallKind(r.Header, metadata)
 	model := modelOf(body)
 	seat := Weighed{ID: "magpie", Provider: "magpie", Name: "magpie", Who: who, Kind: "provider", Model: model}
-	tr := s.trace.beginFor(r, Route{Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, kind),
+	by := callerOf(r) // as it is recorded: another magpie's agent by its own name
+	tr := s.trace.beginFor(r, Route{Time: start, Agent: by.agent, Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, kind),
 		Kind: kind, Model: model, Provider: "magpie", Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Start: start}}})
 	write()
 	ms := time.Since(start).Milliseconds()
@@ -541,8 +542,8 @@ func (s *Server) answeredHere(r *http.Request, from provider.Protocol, body []by
 		t.Done, t.Status, t.Error, t.Millis = true, 200, why, ms
 	})
 	s.record(Call{Route: tr.ID, Time: start, From: from, To: from, Model: model, Provider: "magpie",
-		Agent: agentOf(r), Kind: kind, Status: 200, Millis: ms, Error: why})
-	appendUsage(r, usage.Record{RouteID: tr.ID, Time: start, Agent: agentOf(r), Provider: "magpie", Model: model, Requested: model,
+		Agent: by.agent, Via: by.via, Kind: kind, Status: 200, Millis: ms, Error: why})
+	appendUsage(r, usage.Record{RouteID: tr.ID, Time: start, Agent: by.agent, Via: by.via, Provider: "magpie", Model: model, Requested: model,
 		Millis: ms, Status: 200, Rejected: true, Error: why, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header),
 		Kind: kind, Endpoint: r.URL.Path})
 }
