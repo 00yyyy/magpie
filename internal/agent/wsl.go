@@ -1060,6 +1060,30 @@ var wslRoot = func(name string) string {
 	return `\\wsl$\` + name // before Windows 11 / WSL 0.50
 }
 
+// wslHungPath, while recent, says a wsl.exe listing timed out: each
+// command a hung WSL held for its 10s timeout (20s with the running list),
+// `magpie providers` for Copilot's sign-in in a distro, `magpie version`
+// for start-up's moves.
+func wslHungPath() string { return filepath.Join(filepath.Dir(provider.Path()), "wsl-hung") }
+
+// wslHungAfter: a failure this slow is a hang, not no WSL; a var for tests.
+var wslHungAfter = 5 * time.Second
+
+const wslHungAge = 10 * time.Minute // how long another process takes it as hung
+
+func wslHungLately() bool {
+	fi, err := os.Stat(wslHungPath())
+	return err == nil && time.Since(fi.ModTime()) < wslHungAge
+}
+
+func wslHung(hung bool) {
+	if hung {
+		_ = os.WriteFile(wslHungPath(), []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o600)
+	} else {
+		_ = os.Remove(wslHungPath())
+	}
+}
+
 func wslStatePath() string { return filepath.Join(filepath.Dir(provider.Path()), "wsl.json") }
 
 func wslDistros() []distro {
@@ -1073,8 +1097,21 @@ func wslDistros() []distro {
 		wslForgetOldBins()
 	}
 	if time.Since(wsl.at) > wslListAge {
-		wsl.names, wsl.listed = wslList("-l", "-q")
+		if wsl.at.IsZero() && wslHungLately() {
+			// another magpie waited out a hung wsl.exe moments ago: a
+			// command doesn't wait 10s more (this one lists again in a minute)
+			wsl.names, wsl.listed = nil, false
+		} else {
+			start := time.Now()
+			wsl.names, wsl.listed = wslList("-l", "-q")
+			wslHung(!wsl.listed && time.Since(start) >= wslHungAfter)
+		}
 		wsl.at = time.Now()
+		if !wsl.listed || len(wsl.names) == 0 {
+			// none to run: a wsl.exe that couldn't list them isn't asked
+			// again which run, another timeout under the lock the GUI waits on
+			wsl.running, wsl.runOK, wsl.runAt = map[string]bool{}, wsl.listed, time.Now()
+		}
 	}
 	wslRunningLocked()
 	installed := map[string]bool{}
