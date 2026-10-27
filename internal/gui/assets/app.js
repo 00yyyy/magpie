@@ -1903,9 +1903,28 @@ function appOutSaid(a) {
   let s = o.user
     ? t("{user}'s ChatGPT allowance is used up, so magpie serves {agent}'s turns until it resets.", { user: o.user, agent: a.name })
     : t("{agent}'s ChatGPT allowance is used up, so magpie serves its turns until it resets.", { agent: a.name });
-  s += " " + t("Till then the {agent} app's ChatGPT side is off: cloud tasks, its usage meter and Log out. It all comes back on its own at the reset.", { agent: a.name });
+  s += " " + t("Till then the {agent} app's ChatGPT side is off: browser use (its Chrome control), cloud tasks, its usage meter and Log out. It all comes back on its own at the reset.", { agent: a.name });
   if (o.stuck) s += " " + t("magpie couldn't restart the {agent} app's app-server: quit the app and open it again to send.", { agent: a.name });
-  return s;
+  return s + " " + t("Keep on ChatGPT (its sign-in's Always ChatGPT) leaves {agent} on its ChatGPT account instead: it shows its own limit message till the reset, and magpie no longer takes it over.", { agent: a.name });
+}
+
+// keepChatGPT: the takeover turned off where it is told (eddie.zhan on
+// Discord: browser use said it had no permission), as the sign-in's
+// Always ChatGPT, which puts Codex back on its account at once
+function keepChatGPT(a) {
+  const go = el("button", "ag-quiet accent", t("Keep on ChatGPT"));
+  go.type = "button";
+  go.onclick = async () => {
+    go.disabled = true;
+    try {
+      state = await api("set", { agent: a.id, field: "login", value: "chatgpt" });
+      renderAgents();
+    } catch (e) {
+      go.disabled = false;
+      status(tNotice(e.message), "err");
+    }
+  };
+  return go;
 }
 
 // appRestart: a desktop app running on what it read before magpie's last
@@ -1994,7 +2013,9 @@ function connectPanel(a, { fields, fieldBtn }) {
     if (a.appOut) {
       const w = line(el("span", "ag-dot"), el("span", "", appOutSaid(a)));
       w.classList.add("ag-warn", "ag-app-out");
-      parts.unshift(w);
+      // its own line: WebKit sized a wrapped flex line to the text alone,
+      // and the next line lay over the button
+      parts.unshift(w, line(keepChatGPT(a)));
     }
     kv(t("In {agent}", { agent: a.name }), ...parts);
   } else if (menuFromList(a)) {
