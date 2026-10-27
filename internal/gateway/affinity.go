@@ -52,6 +52,17 @@ const (
 	// cacheCold is how long a vendor keeps a prompt cached without it being
 	// read: five minutes at Anthropic and at OpenAI, the shortest there is.
 	cacheCold = 5 * time.Minute
+	// chatGPTCold is how long the ChatGPT backend keeps a Codex
+	// conversation's prompt cached without it being read. Measured on a
+	// real account (10-27, gpt-5.6-terra), a Codex thread left 7, 12, 25,
+	// 45 and 60 minutes read back from cache all it had sent before (79–99%
+	// of each request), so it is
+	// held for the hour measured, not cacheCold's five minutes.
+	// Moving a conversation between two ChatGPT accounts after five
+	// minutes sent its whole context to the other uncached, and the
+	// reasoning the first had sealed was refused there (leelantao on X:
+	// two Plus accounts' allowance spent 90% in a day).
+	chatGPTCold = time.Hour
 	// cacheHour is how long Anthropic keeps what was written with
 	// cache_control's ttl "1h" (cache_creation's ephemeral_1h_input_tokens)
 	// without it being read, as Claude Code asks of a subscription (#2302)
@@ -61,6 +72,15 @@ const (
 	// sticksKept is how many conversations, the latest, are kept on disk.
 	sticksKept = 512
 )
+
+// coldAfter is how long p's vendor keeps a prompt cached without it being
+// read: cacheCold, or chatGPTCold for a ChatGPT account.
+func coldAfter(p provider.Provider) time.Duration {
+	if p.Account != nil && p.Account.Agent == "codex" {
+		return chatGPTCold
+	}
+	return cacheCold
+}
 
 // Affinity is what the trace tells of a request's conversation and whether
 // it stayed with who answered it last.
@@ -536,8 +556,9 @@ func affine(scope, mode string, rotate bool, in http.Header, from provider.Proto
 		// what it wrote counts with what it read: the cache a first turn
 		// built is there for the next to read
 		a.Why = "no-cache"
-	case time.Since(st.at) > cacheCold && !st.hour.warm(time.Now()):
-		// past five minutes, kept still where the vendor said it
+	case time.Since(st.at) > coldAfter(cs[at].p) && !st.hour.warm(time.Now()):
+		// past what the vendor keeps unread (five minutes, longer at
+		// the ChatGPT backend), kept still where the vendor said it
 		// keeps enough for an hour (#2302)
 		a.Why = "cold"
 	default:

@@ -3730,10 +3730,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// only it can read (#2271)
 			sealedBy = &c
 			if hit != nil && !hit.Compact {
-				ruleAnswered(ruleAt, call.Usage)
+				ruleAnswered(ruleAt, call.Usage, coldAfter(c.p))
 			}
 			for _, at := range nestedAt {
-				ruleAnswered(at, call.Usage)
+				ruleAnswered(at, call.Usage, coldAfter(c.p))
 			}
 		} else if hw.refused {
 			try.Fail = failRefused
