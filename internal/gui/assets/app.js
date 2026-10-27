@@ -11997,6 +11997,7 @@ let justAdded = ""; // the account that just came in, to greet it
 // through
 async function startSignIn(agent, risky, site, o = {}) {
   if (signingOpen()) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
+  if (signing?.behind) api("signin/" + signing.behind + "/cancel", {}).catch(() => {});
   // an account Google may suspend is added only once that is said
   if (subOf(agent)?.risk && !risky) {
     signing = { agent, state: "risk", forUser: o.user, picked: o.proxy };
@@ -12293,6 +12294,7 @@ function renderStepPlan(sp, id) {
 
 function cancelSignIn() {
   if (signing?.id) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
+  if (signing?.behind) api("signin/" + signing.behind + "/cancel", {}).catch(() => {});
   signing = null;
   renderProviders();
 }
@@ -13098,9 +13100,14 @@ function renderCodexAppOut(out) {
 // again: the files' text (or what is pasted) goes to magpie, which checks
 // each account with the vendor before keeping it, and says what became of
 // each. What is read stays here only until it is sent; the box masks it.
+// A sign-in waiting for its browser's address is kept behind the import
+// rather than canceled: that address pasted into the import box finishes
+// it there (LuvLetter, magpie in Docker, pasted it into this box instead of
+// the sign-in's Callback URL field), and closing the box ends it.
 function startImport(agent) {
-  if (signingOpen()) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
-  signing = { agent, state: "import", text: "", files: [] };
+  const behind = signingOpen() && signing.pasteCallback ? signing.id : signing?.behind;
+  if (signingOpen() && signing.id !== behind) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
+  signing = { agent, state: "import", text: "", files: [], behind };
   renderProviders();
   document.querySelector(".signing.import textarea")?.focus();
 }
@@ -13111,14 +13118,15 @@ async function runImport(agent) {
   const names = signing.files.map((f) => f.name);
   if (signing.text.trim()) { files.push(signing.text); names.push(t("The pasted text")); }
   if (!files.length) return;
-  signing = { agent, state: "importing", names };
+  const behind = signing.behind;
+  signing = { agent, state: "importing", names, behind };
   renderProviders();
   try {
     const r = await api("signin/import", { agent, files });
     if (signing?.agent !== agent) return;
     providers = r.providers;
     const added = r.results.filter((x) => x.status === "added" || x.status === "updated");
-    signing = { agent, state: "imported", results: r.results, names };
+    signing = { agent, state: "imported", results: r.results, names, behind };
     delete loginUsage[agent];
     const p = providers.providers.find((x) => x.account?.agent === agent);
     if (p && added.length) {
@@ -13133,7 +13141,7 @@ async function runImport(agent) {
     renderAgents();
   } catch (e) {
     if (signing?.agent !== agent) return;
-    signing = { agent, state: "import", text: "", files: [], error: e.message };
+    signing = { agent, state: "import", text: "", files: [], error: e.message, behind };
     renderProviders();
   }
 }

@@ -2266,10 +2266,20 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				return provider.ImportFactoryKeys(ctx, files)
 			}
 		}
-		res, err := imp(ctx, in.Agent, in.Files)
-		if err != nil {
-			fail(rw, err)
-			return
+		// the address a sign-in's browser ended on, pasted here rather than
+		// in the sign-in's Callback URL field, finishes that sign-in: it is
+		// no account file, and never goes to the vendor as a token
+		res, rest := provider.PastedSignIns(in.Files)
+		if len(rest) > 0 {
+			more, err := imp(ctx, in.Agent, rest)
+			if err != nil && len(res) == 0 {
+				fail(rw, err)
+				return
+			}
+			if err != nil {
+				more = []provider.ImportedAccount{{Status: "failed", Error: err.Error()}}
+			}
+			res = append(res, more...)
 		}
 		agent.SyncCatalogSoon()
 		writeJSON(rw, struct {
