@@ -224,6 +224,10 @@ type agentJSON struct {
 	// Joined: connected with its own models still in its list (Codex
 	// signed in with ChatGPT, agent.Agent.Join)
 	Joined bool `json:"joined,omitempty"`
+	// AppOut: magpie is Codex's provider while the ChatGPT account it is
+	// signed in to is used up (agent.Agent.AppOut), which turns the Codex
+	// app's ChatGPT side off until the reset
+	AppOut *appOutJSON `json:"appOut,omitempty"`
 	// Failover: not connected, yet its requests go through magpie for
 	// account failover alone (agent.Agent.FailingOver, #1385)
 	Failover bool `json:"failover,omitempty"`
@@ -2459,6 +2463,9 @@ func state() stateJSON {
 			aj.StaleCopies = a.StaleCopies()
 			aj.Stale = len(aj.StaleCopies)
 			aj.Joined = a.Joined != nil && a.Joined()
+			if a.AppOut != nil && a.AppOut() {
+				aj.AppOut = codexAppOut()
+			}
 		} else {
 			aj.Source = a.Source()
 			aj.Failover = a.FailingOver != nil && a.FailingOver()
@@ -2829,4 +2836,27 @@ func countClient(m map[string]string, client, as string) (map[string]string, err
 var bunSaid = map[string]string{
 	"windows": "Bun, which runs plugins, can't start on this version of Windows: it needs Windows 10 version 1809 or later, or Windows Server 2019 or later. Update Windows to use plugins, or set MAGPIE_BUN to a bun that runs here.",
 	"cpu":     "Bun, which runs plugins, can't start on this computer's processor: it needs an x64 processor with SSE4.2 (Intel or AMD from 2008 on; in a virtual machine, a CPU type that passes it through). Run magpie on such a processor to use plugins, or set MAGPIE_BUN to a bun that runs here.",
+}
+
+// appOutJSON is Codex on magpie while its ChatGPT account is used up: the
+// account, when it has room again (zero when the reading doesn't say), and
+// whether a Codex app is left on the account, its app-server not
+// restarted (provider.CodexAppStuck), for the user to reopen it.
+type appOutJSON struct {
+	User  string     `json:"user,omitempty"`
+	Until *time.Time `json:"until,omitempty"`
+	Stuck bool       `json:"stuck,omitempty"`
+}
+
+func codexAppOut() *appOutJSON {
+	o := &appOutJSON{Stuck: provider.CodexAppStuck()}
+	for _, l := range provider.Logins("codex") {
+		if l.Active {
+			o.User = l.User
+		}
+	}
+	if u := provider.CodexOutUntil(); !u.IsZero() {
+		o.Until = &u
+	}
+	return o
 }

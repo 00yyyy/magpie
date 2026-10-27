@@ -46,6 +46,20 @@ func init() {
 	}
 	// a Copilot CLI signed in inside a running distro (#723)
 	provider.CopilotWSLHomes = copilotWSLHomes
+	// the Codex app's app-server is restarted when magpie becomes Codex's
+	// provider for its used-up ChatGPT account, and when it stops being it
+	provider.CodexAppOnMagpie = codexAppOnMagpie
+}
+
+// codexAppOnMagpie is whether magpie is Codex's provider for its used-up
+// ChatGPT account (AppOut); not known when Codex's config can't be read.
+func codexAppOnMagpie() (on, known bool) {
+	home, _ := homes()
+	a := codex(home)
+	if _, err := os.ReadFile(a.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return false, false
+	}
+	return a.AppOut != nil && a.AppOut(), true
 }
 
 // others are clients that reach the gateway without being agents magpie
