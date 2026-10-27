@@ -244,26 +244,84 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 	return pairs, compactions
 }
 
+// foldIDs are each chunk's Codex log calls by a hash of their response
+// id, kept by the chunk's serial (foldCodexRows). A page polled while one
+// session was live decoded every session file of the period again to
+// hash the same ids: ~40 MB a poll of today's page, and as much again
+// for Codex's effort.
+var foldIDs struct {
+	sync.Mutex
+	by   map[uint64]*foldedIDs
+	turn uint64
+}
+
+type foldedIDs struct {
+	// each call's hash shifted left by foldIndexBits, and its index in
+	// the bits that frees: calls whose hash is the same are told apart by
+	// their ids after, so a shortened hash only reads a few more rows
+	calls []uint64
+	turn  uint64 // the fold that used it last
+}
+
+const foldIndexBits = 24
+
+var foldSeed = maphash.MakeSeed()
+
+// foldKept is how many folds a chunk's ids outlive the last that read
+// them: the page's and Codex effort's are of different chunks.
+const foldKept = 4
+
+// foldHashing, in tests, is told each chunk foldCodexRows reads ids from.
+var foldHashing func(*rowChunk)
+
 func foldCodexRows(locals []*rowChunk) map[rowRef]bool {
 	// The calls are found by a hash of their response id, not the id: a map
 	// keyed by every Codex call's id held each decoded chunk's strings. Calls
 	// whose hash is the same are told apart by their ids after.
-	seed := maphash.MakeSeed()
 	first := map[uint64]rowRef{}
 	again := map[uint64][]rowRef{}
 	rows := lentRows() // an id is kept as its hash
 	defer rows.release()
+	foldIDs.Lock()
+	foldIDs.turn++
+	turn := foldIDs.turn
+	known := make(map[*rowChunk]*foldedIDs, len(locals))
 	for _, chunk := range locals {
-		open := rows.of(chunk)
-		for i := range open.Rows {
-			id := open.Strings[open.text(&open.Rows[i], rowResponseID)]
-			if id == "" {
-				continue
+		if f := foldIDs.by[chunk.serial]; chunk.serial != 0 && f != nil {
+			f.turn = turn
+			known[chunk] = f
+		}
+	}
+	foldIDs.Unlock()
+	var made map[uint64]*foldedIDs
+	for _, chunk := range locals {
+		f := known[chunk]
+		if f == nil {
+			if foldHashing != nil {
+				foldHashing(chunk)
 			}
-			if row := open.row(i); !isCodexRow(row) || row.Source != "log" {
-				continue
+			f = &foldedIDs{turn: turn}
+			open := rows.of(chunk)
+			for i := range open.Rows {
+				id := open.Strings[open.text(&open.Rows[i], rowResponseID)]
+				if id == "" {
+					continue
+				}
+				if row := open.row(i); !isCodexRow(row) || row.Source != "log" {
+					continue
+				}
+				f.calls = append(f.calls, maphash.String(foldSeed, id)<<foldIndexBits|uint64(i))
 			}
-			ref, h := rowRef{chunk, i}, maphash.String(seed, id)
+			if chunk.serial != 0 && len(open.Rows) < 1<<foldIndexBits {
+				if made == nil {
+					made = map[uint64]*foldedIDs{}
+				}
+				f.calls = slices.Clip(f.calls)
+				made[chunk.serial] = f
+			}
+		}
+		for _, call := range f.calls {
+			ref, h := rowRef{chunk, int(call & (1<<foldIndexBits - 1))}, call>>foldIndexBits
 			if f, ok := first[h]; !ok {
 				first[h] = ref
 			} else {
@@ -274,6 +332,19 @@ func foldCodexRows(locals []*rowChunk) map[rowRef]bool {
 			}
 		}
 	}
+	foldIDs.Lock()
+	if foldIDs.by == nil {
+		foldIDs.by = map[uint64]*foldedIDs{}
+	}
+	for serial, f := range made {
+		foldIDs.by[serial] = f
+	}
+	for serial, f := range foldIDs.by {
+		if f.turn+foldKept < foldIDs.turn {
+			delete(foldIDs.by, serial)
+		}
+	}
+	foldIDs.Unlock()
 	var refs []rowRef
 	for _, hashed := range again {
 		refs = append(refs, hashed...)
