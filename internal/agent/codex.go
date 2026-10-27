@@ -1163,7 +1163,7 @@ func codexIn(at place) *Agent {
 		if !through && (!onSignIn || codexFailover()) {
 			return append(own, viaMagpie("codex", "")...)
 		}
-		return append(own, viaMagpieFor("codex", "")...)
+		return append(own, codexViaMagpieFor(own)...)
 	}
 	// unroute takes magpie out as the way Codex reaches its models and puts
 	// back what the stash kept from before magpie was wired in (its
@@ -2010,7 +2010,7 @@ func ownCodex() []catalog.Model {
 
 // codexInMagpie marks Served those of Codex's own models that magpie's list
 // shows Codex on a ChatGPT account of the user's (codex/gpt-5.5): its
-// pickers leave out magpie's codex/… as only a hop (viaMagpieFor), so these
+// pickers leave out magpie's codex/… as only a hop (codexViaMagpieFor), so these
 // are how they are offered, and the agent's own models switched off
 // (provider.OwnModelsHidden) never takes them out. It did once a routing
 // group gave the picker a catalog entry, and Codex's picker was the group
@@ -2027,6 +2027,29 @@ func codexInMagpie(own []Option) []Option {
 		own[i].Served = on[own[i].Value]
 	}
 	return own
+}
+
+// codexViaMagpieFor is viaMagpieFor("codex") keeping the models magpie
+// serves on a ChatGPT account that own, Codex's own list, leaves out: one
+// Codex hides from its picker (gpt-6.1-terra) but the user ticked on the
+// subscription was offered nowhere (ysm119 on Discord), as the hop is all
+// that reaches it.
+func codexViaMagpieFor(own []Option) []Option {
+	in := map[string]bool{}
+	for _, o := range own {
+		in[o.Value] = true
+		if m := codexOwnOf(o.Value); m != "" {
+			in[m] = true
+		}
+	}
+	var out []Option
+	for _, o := range viaMagpie("codex", "") {
+		if strings.HasPrefix(o.Value, "codex/") && in[codexOwnOf(o.Value)] {
+			continue
+		}
+		out = append(out, o)
+	}
+	return out
 }
 
 // codexOwnViaMagpie is the catalog id magpie serves one of Codex's own
