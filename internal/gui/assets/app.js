@@ -22456,6 +22456,11 @@ function renderPort(s) {
         const n = res.port?.moved?.length || 0;
         if (res.port?.error) status(res.port.error, "err");
         else status(n ? t("Gateway on port {p}; {n} agents moved with it", { p, n }) : t("Gateway on port {p}", { p }), "ok", 2500);
+        // the sidebar's gateway line, and the list's address the pages
+        // copy, say where it is now, not the port before (noahhrreion on
+        // Discord: it kept the old one until Providers was opened)
+        if (res.settings?.gateway) renderSideGw({ ...sideGwAt, url: res.settings.gateway, running: true });
+        if (providers) loadProviders().catch(() => {});
         renderSettings();
       })
       .catch((e) => { d.value = field.value; d.err = portSays(e.message); status(d.err, "err"); renderSettings(); });
