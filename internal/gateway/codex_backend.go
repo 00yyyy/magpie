@@ -1915,6 +1915,18 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 			own = append(own, e)
 		}
 	}
+	all := codexMerged(own, cached)
+	// the list is the backend's and magpie's, and so is its ETag
+	w.Header().Set("ETag", codexcat.WithTag(etag, codexListTag()))
+	writeJSON(w, 200, map[string]any{"models": all})
+}
+
+// codexMerged is the list magpie hands a Codex beside its ChatGPT sign-in:
+// own, the backend's entries (cached when they are Codex's last list, not
+// the backend's answer), as the user narrowed and set them on the codex
+// provider, with magpie's models after them. The entries are written into.
+func codexMerged(own []any, cached bool) []any {
+	defer provider.Hold()()
 	// the windows the user set on the codex provider, as /v1/models says
 	// them (#674); a cached entry, which keeps what magpie handed Codex
 	// last, takes the account's own list's back when none is set
@@ -2015,8 +2027,6 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 	if !codexOwnOnly() {
 		ms = provider.CodexListed()
 	}
-	// the list is the backend's and magpie's, and so is its ETag
-	w.Header().Set("ETag", codexcat.WithTag(etag, codexListTag()))
 	all := append(own, codexcat.Entries(ms, len(own)+100)...)
 	if at, ok := provider.CodexOrder(); ok {
 		codexcat.Order(all, at)
@@ -2024,7 +2034,7 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 	// the Codex app and its VS Code extension read the first 100 alone:
 	// hidden ones go last, and the ones the user uses are among the 100
 	codexcat.Fit(all, usage.CodexUsed())
-	writeJSON(w, 200, map[string]any{"models": all})
+	return all
 }
 
 // modelsEtag is the X-Models-Etag of a backend reply as Codex should read
