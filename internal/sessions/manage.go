@@ -416,7 +416,7 @@ func sessionPaths(agent, id string, fs []file) []string {
 		}
 		for _, f := range fs {
 			add(dshSessionDir(f))
-			add(dshCacheRecord(f.sid))
+			add(dshCacheRecord(f.m().sid))
 		}
 		return out
 	}
@@ -446,16 +446,16 @@ func sessionPaths(agent, id string, fs []file) []string {
 	if agent == "droid" {
 		// each transcript's settings beside it: what it spent, its model
 		for _, f := range fs {
-			if f.manifest != "" && !inside(f.manifest, out) {
-				add(f.manifest)
+			if f.m().manifest != "" && !inside(f.m().manifest, out) {
+				add(f.m().manifest)
 			}
 		}
 	}
 	if agent == "claude" {
 		dir := ClaudeDir()
-		if fs[0].wsl != "" {
+		if fs[0].m().wsl != "" {
 			// the distro's own ~/.claude
-			if dir = wslHomeOf(fs[0].wsl); dir == "" {
+			if dir = wslHomeOf(fs[0].m().wsl); dir == "" {
 				return out
 			}
 			dir = filepath.Join(dir, ".claude")
