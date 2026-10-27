@@ -404,3 +404,55 @@ func TestCodexAppOwnServer(t *testing.T) {
 		}
 	}
 }
+
+// Switching Codex's ChatGPT account left the Codex app on the one before
+// until it was quit and opened again, and Windows has no Restart button
+// for it (zhibukaixinyao on Discord): the app's app-server keeps the
+// account it started with. A switch now ends that app-server once no
+// Codex turn runs, as a route change does, and the app starts another on
+// the new account.
+func TestCodexAppServerRestartedOnAccountSwitch(t *testing.T) {
+	signIn(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	s := stubCodexApp(t)
+	old := listProcesses
+	t.Cleanup(func() {
+		listProcesses = old
+		DismissCodexDaemon()
+		DismissCodexApp()
+	})
+	listProcesses = func(context.Context) ([]proc.Process, error) {
+		var ps []proc.Process
+		for _, p := range s.running {
+			ps = append(ps, proc.Process{PID: p, Args: codexWindowsAppServer})
+		}
+		return ps, nil
+	}
+	now := time.Now()
+	idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
+	step := func() []int { return codexAppStep(context.Background(), now, idle) }
+
+	s.running = []int{60}
+	if got := step(); got != nil {
+		t.Fatalf("nothing changed: ended %v", got)
+	}
+	noteCodexSwitch("a@x", "b@x")
+	s.turnOpen = true
+	if got := step(); got != nil {
+		t.Fatalf("a turn open in Codex's sessions: ended %v", got)
+	}
+	s.turnOpen = false
+	if got := step(); !slices.Equal(got, []int{60}) {
+		t.Fatalf("switched, idle: ended %v, want [60]", got)
+	}
+	if got := step(); got != nil {
+		t.Fatalf("the new app-server read the new account as it started: ended %v", got)
+	}
+	codexDaemonMu.Lock()
+	codexDaemonChecked = time.Time{}
+	codexDaemonMu.Unlock()
+	if got := CodexAppStale(); got != "" {
+		t.Fatalf("still said to be on %q after its restart", got)
+	}
+}

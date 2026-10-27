@@ -177,6 +177,9 @@ func noteCodexSwitch(from, to string) {
 	}
 	noteLeft(&codexDaemonLeft, findCodexDaemon(ps, codexHome()), from, to)
 	noteLeft(&codexAppLeft, findCodexApp(ps), from, to)
+	if codexAppLeft.pid != 0 {
+		codexAppAccountLeft(codexAppLeft.pid)
+	}
 }
 
 // noteLeft updates what is known of the app-server pid, running as Codex's
