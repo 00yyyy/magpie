@@ -227,6 +227,14 @@ func webGuard(cookie, key string, keep time.Duration, next http.Handler) http.Ha
 			signIn(rw, r, u.RequestURI())
 			return
 		}
+		// what a phone's home screen reads to add the page as an app
+		// (index.html's manifest and icons; ninja_s6114 on Discord):
+		// fixed bytes of the build, which a browser may ask for without
+		// the page's cookie. These paths alone, read alone.
+		if webAppFiles[r.URL.Path] && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			next.ServeHTTP(rw, r)
+			return
+		}
 		if r.URL.Path == webSignInPath && r.Method == http.MethodPost {
 			r.Body = http.MaxBytesReader(rw, r.Body, 4096)
 			back := localPath(r.PostFormValue("back"))
@@ -258,6 +266,17 @@ func webGuard(cookie, key string, keep time.Duration, next http.Handler) http.Ha
 		log.Printf("magpie web: turned away %s from %s: %s", r.URL.Path, r.RemoteAddr, short)
 		webTurnedAway(rw, r, r.URL.RequestURI(), why)
 	})
+}
+
+// webAppFiles are the files webGuard serves without the key: the web app
+// manifest and the icons it and index.html name, so "Add to Home Screen"
+// gets them whether or not the browser sends its cookie with them. Each is
+// a file of the build, the same for every magpie; nothing in it is the
+// user's.
+var webAppFiles = map[string]bool{
+	"/manifest.json":              true,
+	"/icons/apple-touch-icon.png": true,
+	"/icons/icon-512.png":         true,
 }
 
 // webSignInPath takes the key pasted into the form a page turned away shows.
