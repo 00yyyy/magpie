@@ -19581,9 +19581,11 @@ function renderSettings() {
   // portable (a data folder beside magpie, #508): everything is in there
   row(t("Config folder"), s.portable ? t("Portable: everything magpie keeps, in the data folder beside it") : t("providers, profiles and these settings"), s.dir, copyBtn(s.dir, t("Path")), open);
   renderCLI(row(t("Command line"), t("Checking your shells…"), ""));
-  row(t("Gateway URL"), t("the address every agent is pointed at"), s.gateway, copyBtn(s.gateway, t("Gateway URL")));
+  // served to other machines (magpie web), the one they reach (noahhrreion)
+  const gw = web && s.publicURL || s.gateway;
+  row(t("Gateway URL"), t("the address every agent is pointed at"), gw, copyBtn(gw, t("Gateway URL")));
   // MAGPIE_PUBLIC_URL, where other machines reach it (#1551)
-  if (s.publicURL) row(t("Public address"), t("MAGPIE_PUBLIC_URL: where other computers reach the gateway, with a gateway key"), s.publicURL, copyBtn(s.publicURL, t("Public address"))).id = "publicURLRow";
+  if (s.publicURL && gw !== s.publicURL) row(t("Public address"), t("MAGPIE_PUBLIC_URL: where other computers reach the gateway, with a gateway key"), s.publicURL, copyBtn(s.publicURL, t("Public address"))).id = "publicURLRow";
   const join = el("button", "discord");
   join.innerHTML = DISCORD_SVG;
   join.append(el("span", "", t("Join Discord")));
@@ -24294,8 +24296,11 @@ function renderSideGw(g) {
   g = sideGwAt;
   b.hidden = !g?.url;
   if (b.hidden) return;
-  let host = g.url;
-  try { host = new URL(g.url).host; } catch {}
+  // a page other machines open (magpie web) says where they reach it,
+  // MAGPIE_PUBLIC_URL, as the Gateway page does (#1551; noahhrreion)
+  const url = web && g.publicURL || g.url;
+  let host = url;
+  try { host = new URL(url).host; } catch {}
   b.classList.toggle("off", !g.running);
   const s = b.querySelector("span");
   s.textContent = g.running ? t("Gateway") + " " + host : t("Gateway stopped");
@@ -24303,7 +24308,7 @@ function renderSideGw(g) {
   // gateway leaves it no room ("Zugangspunkt") says the address alone, the
   // word kept in its tooltip
   if (g.running && s.scrollWidth > s.clientWidth) s.textContent = host;
-  b.title = g.running ? t("Gateway") + " " + g.url : g.url;
+  b.title = g.running ? t("Gateway") + " " + url : url;
 }
 if (mode === "window") {
   $("#sideGw").onclick = () => { show("gateway"); $("#sideGw").blur(); };

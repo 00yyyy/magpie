@@ -1878,7 +1878,8 @@ URL shown in the console and CLI, including connection examples. While
 other machines are let in (Share on local network, or a `MAGPIE_ADDR` on
 the network), the Gateway page's Connect starts at it until you pick
 another address there, Settings › About lists it beside the local URL, and
-`magpie web` shows it as the gateway's address. Local agent configs still
+`magpie web` shows it as the gateway's address: on the Gateway page, in
+About's Gateway URL and at the sidebar's foot. Local agent configs still
 use the local gateway address.
 
 Building an app or agent that should use magpie, or get a row on the
