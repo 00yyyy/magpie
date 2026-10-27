@@ -1418,6 +1418,7 @@ type anthropicEncoder struct {
 	// apart from the one open with what it says first
 	fresh   bool
 	started bool
+	pinged  time.Time // the last ping keepalive sent
 	col     collector
 	// cite cuts the text said after a search into lines, each naming a
 	// page found its own block with citations (search_cite.go); cited:
@@ -1659,8 +1660,17 @@ func (e *anthropicEncoder) event(ev Event) {
 }
 
 // keepalive is Anthropic's own: a ping event, which its SDKs skip and
-// Claude Code's stream watchdog counts.
+// Claude Code's stream watchdog counts, at most one each pingEvery
+// (Claude Code counts 30 in a row); a comment in between. Before
+// message_start it is a comment too: the SDKs' MessageStream fails on
+// any event before it ("Unexpected event order, got ping before
+// message_start"), and Anthropic sends none.
 func (e *anthropicEncoder) keepalive() {
+	if !e.started || !e.pinged.IsZero() && time.Since(e.pinged) < pingEvery {
+		e.w.comment("keepalive")
+		return
+	}
+	e.pinged = time.Now()
 	e.w.event("ping", map[string]any{"type": "ping"})
 }
 
