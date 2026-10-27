@@ -372,15 +372,28 @@ func TestCodexOutUntil(t *testing.T) {
 	}
 }
 
+// codexWindowsAppServer is the Windows Codex app's own app-server.
+const codexWindowsAppServer = `C:\Users\yeton\AppData\Local\OpenAI\Codex\bin\2993767bd1dfb009\codex.exe -c features.code_mode_host=true app-server --analytics-default-enabled -c plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled=true`
+
 // Only the app's own app-server is restarted: another program's, started
 // from the app's bundled codex with --listen (Miyi Helper's, seen on the
 // owner's Mac), is that program's.
 func TestCodexAppOwnServer(t *testing.T) {
-	own := "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex -c features.code_mode_host=true app-server --analytics-default-enabled -c plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled=true"
-	if !isCodexAppOwnServer(own) {
-		t.Fatalf("the app's own app-server not taken: %s", own)
+	for _, own := range []string{
+		"/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex -c features.code_mode_host=true app-server --analytics-default-enabled -c plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled=true",
+		// the Windows app's (OpenAI.Codex 26.1021, ChatGPT.exe's child),
+		// as Windows listed it on the Windows box: run from LOCALAPPDATA,
+		// not from its package (zhibukaixinyao on Discord)
+		codexWindowsAppServer,
+	} {
+		if !isCodexAppOwnServer(own) {
+			t.Errorf("the app's own app-server not taken: %s", own)
+		}
 	}
 	for _, other := range []string{
+		`C:\Users\me\AppData\Local\OpenAI\Codex\bin\2993767bd1dfb009\codex.exe app-server --listen stdio://`,
+		`C:\Users\me\AppData\Roaming\npm\node_modules\@openai\codex\vendor\x86_64-pc-windows-msvc\codex\codex.exe app-server`,
+		`C:\Users\me\AppData\Local\Microsoft\WinGet\Links\codex.exe app-server`,
 		"/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex app-server --listen stdio://",
 		"/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex app-server --listen=ws://127.0.0.1:4500",
 		"/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex -c forced_login_method=\"chatgpt\" exec-server --remote https://codex-cloud-environments.chatgpt.com/api",
