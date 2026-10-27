@@ -94,9 +94,13 @@ func TestModelFinds(t *testing.T) {
 	}
 	text := "联系人：张三，电话 13800138000，邮箱 zhangsan@example.com。\n" +
 		"go 1.26\nrequire github.com/clipperhouse/uax29/v2 v2.2.0\n"
+	// what masking keeps at the publisher's threshold: Find gives down
+	// to Floor (the module path is a common_secret at .79)
 	have := map[string]string{}
 	for _, s := range m.Find(text) {
-		have[text[s.Start:s.End]] = s.Label
+		if s.Score >= MinScore {
+			have[text[s.Start:s.End]] = s.Label
+		}
 	}
 	want := map[string]string{"张三": "private_person", "13800138000": "phone", "zhangsan@example.com": "email"}
 	if !reflect.DeepEqual(have, want) {
