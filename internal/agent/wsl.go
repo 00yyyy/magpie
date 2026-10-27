@@ -291,7 +291,7 @@ var wslKinds = []wslKind{
 		restart: newNotice("{agent} in WSL {distro} builds its model list at start-up — restart it, the app-server its sessions share ({command} there) and the Codex app's WSL connection to see this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			switch key {
-			case "model", "subagent":
+			case "model", "subagent", "memories":
 				return func(map[string]string) []Option {
 					// over several accounts magpie routes, so they are
 					// offered via magpie too, as on a live Codex (#1603)
@@ -304,6 +304,17 @@ var wslKinds = []wslKind{
 			case "effort":
 				return func(cur map[string]string) []Option {
 					return codexEfforts(append(catalog.Codex(), magpieModels("codex")...), cur["model"])
+				}
+			case "subagent_effort":
+				return func(cur map[string]string) []Option {
+					m := cur["subagent"]
+					if m == "" {
+						m = cur["model"]
+					}
+					if e := catalog.Efforts(append(catalog.Codex(), magpieModels("codex")...), m); len(e) > 0 {
+						return static(e...)
+					}
+					return static("low", "medium", "high", "xhigh")
 				}
 			}
 			return nil
@@ -425,7 +436,20 @@ var wslKinds = []wslKind{
 		restart: newNotice("{agent} in WSL {distro} uses this for new tasks in its Console — restart open morph chats to use it there.")},
 	// no bin: grok is also other tools' name, as on this machine
 	{id: "grok", name: "Grok Build", dir: ".grok", in: grokIn,
-		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open grok sessions to use this.")},
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open grok sessions to use this."),
+		asleep: func(key string) func(map[string]string) []Option {
+			if key != "model" {
+				return nil
+			}
+			// its models_cache.json and config.toml are the distro's files
+			return func(cur map[string]string) []Option {
+				opts := viaMagpie("grok", magpieID+"/")
+				for i := range opts {
+					opts[i].Same = opts[i].own
+				}
+				return append(grokOwnOptions("", "", cur["model"]), opts...)
+			}
+		}},
 	{id: "droid", name: "Droid", dir: ".factory", bin: "droid", in: droidIn,
 		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open droid sessions to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
@@ -460,6 +484,15 @@ var wslKinds = []wslKind{
 		asleep: func(key string) func(map[string]string) []Option {
 			// the thinking levels hang on which patch lists there are, the
 			// distro's files: a dsh of today's (0.1.5 on) is taken
+			if key == "model" {
+				return func(map[string]string) []Option {
+					own := append([]Option{}, dshModels...)
+					for i := range own {
+						own[i].Direct = "DeepSeek"
+					}
+					return append(own, viaMagpie("dsh", magpieID+"/")...)
+				}
+			}
 			if key != "effort" {
 				return nil
 			}
@@ -856,10 +889,12 @@ func wslAgents() []*Agent {
 func wslAgentsOf(ds []distro) []*Agent {
 	var out []*Agent
 	for _, d := range ds {
-		// only the agents it has: magpie writes nothing for one that isn't there
+		// only the agents it has: magpie writes nothing for one that isn't
+		// there, and doesn't make it, which reads its files: a stopped
+		// distro's files opened start it again (#3896)
 		for _, k := range wslKinds {
-			if a := wslAgent(k, d); a.Detected() {
-				out = append(out, a)
+			if k.found(d) {
+				out = append(out, wslAgent(k, d))
 			}
 		}
 		// the named omp profiles the probe remembered: the row is made

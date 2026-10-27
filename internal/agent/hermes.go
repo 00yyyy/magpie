@@ -299,6 +299,10 @@ func hermesActive(at place) string {
 	if at.getenv("HERMES_HOME") != "" && filepath.Base(filepath.Dir(home)) == "profiles" {
 		return home
 	}
+	// a stopped distro's file is never opened: that starts it (#3896)
+	if at.cold {
+		return home
+	}
 	root := hermesRoot(at)
 	b, err := os.ReadFile(filepath.Join(root, "active_profile"))
 	if err != nil {
