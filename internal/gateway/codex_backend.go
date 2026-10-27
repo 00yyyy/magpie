@@ -2021,6 +2021,9 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 	if at, ok := provider.CodexOrder(); ok {
 		codexcat.Order(all, at)
 	}
+	// the Codex app and its VS Code extension read the first 100 alone:
+	// hidden ones go last, and the ones the user uses are among the 100
+	codexcat.Fit(all, usage.CodexUsed())
 	writeJSON(w, 200, map[string]any{"models": all})
 }
 
@@ -2046,7 +2049,12 @@ func codexListTag() string {
 	if codexOwnOnly() {
 		return provider.CodexOwnListTag()
 	}
-	return provider.CodexListTag()
+	// with the models Codex used, which codexcat.Fit brings to the top
+	tag := provider.CodexListTag()
+	if used := usage.CodexUsed(); len(used) > 0 {
+		tag += "." + codexcat.UsedTag(used)
+	}
+	return tag
 }
 
 // codexInput restores summaries magpie made. For a magpie model, it also

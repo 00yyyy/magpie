@@ -30,6 +30,7 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // Codex talks the OpenAI Responses API. Signed in to ChatGPT, it is
@@ -269,8 +270,11 @@ func codexIn(at place) *Agent {
 	// kept, not written over by the next model switch or sync (#1450).
 	// Each model's default effort is the one this config starts new
 	// sessions at, or the model's nearest (codexcat.ModelDefault), which
-	// Codex takes on a switch to it.
-	list := func() []byte { return codexcat.CatalogAt(magpieModels("codex"), get("model_reasoning_effort")) }
+	// Codex takes on a switch to it. The models Codex used are among the
+	// first 100, which is all the Codex app reads (codexcat.Fit).
+	list := func() []byte {
+		return codexcat.CatalogUsed(magpieModels("codex"), get("model_reasoning_effort"), usage.CodexUsed())
+	}
 	ownList := func() []byte {
 		cur, _ := edit.Read(catalogPath)
 		return codexcat.Keep(cur, list())
