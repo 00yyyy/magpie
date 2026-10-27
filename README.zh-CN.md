@@ -312,3 +312,5 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
 ## 许可证
 
 [MIT](LICENSE)
+
+magpie 与 Apache Magpie 及 Apache 软件基金会没有隶属关系。
