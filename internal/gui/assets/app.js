@@ -17681,6 +17681,9 @@ function checkinRow(q, first, subs) {
   const on = vendor.plugin ? pluginCheckinOn(vendor.plugin) : !!state.settings?.[vendor.pref];
   const r = q.checkin;
   const today = wbToday();
+  // a reason an earlier card of the vendor's says is in the tooltip only
+  // (leeoswald368: many Qoder accounts, one long reason each)
+  const msg = r?.msg && subs.find((x) => (x.checkinBy || "") === by && x.checkin?.day === today && x.checkin.msg === r.msg) === q ? " · " + r.msg : "";
   const row = el("div", "wb-checkin");
   row.dataset.feature = "warmups";
   let kind = "", text;
@@ -17701,12 +17704,12 @@ function checkinRow(q, first, subs) {
         break;
       case "ineligible":
       case "inactive":
-        text = t(r.outcome === "inactive" ? "No check-in event now" : "Not eligible for the daily check-in") + (r.msg ? " · " + r.msg : "") + (r.again ? " · " + t("magpie asks again later") : "");
+        text = t(r.outcome === "inactive" ? "No check-in event now" : "Not eligible for the daily check-in") + msg + (r.again ? " · " + t("magpie asks again later") : "");
         if (r.msg) row.dataset.why = "";
         break;
       case "captcha":
         // the vendor wants a captcha, which magpie never solves
-        text = t("Asks for a captcha; check in in its own app") + (r.msg ? " · " + r.msg : "");
+        text = t("Asks for a captcha; check in in its own app") + msg;
         break;
       case "own-app":
         // to be done in the vendor's own app, not tried again today;
@@ -17719,7 +17722,7 @@ function checkinRow(q, first, subs) {
       default:
         kind = "bad";
         // why, in the row: a reason only in the tooltip read as no reason (#808)
-        text = t(on ? "Check-in failed; magpie tries again later" : "Check-in failed") + (r.msg ? " · " + r.msg : "");
+        text = t(on ? "Check-in failed; magpie tries again later" : "Check-in failed") + msg;
     }
   } else if (q.checkinOff) {
     // left out on its own in Settings (#1902)
@@ -17731,8 +17734,7 @@ function checkinRow(q, first, subs) {
   row.dataset.state = kind || "none";
   const say = el("span", "ci-say");
   say.append(el("i", "ci-dot" + (kind ? " " + kind : "")), el("span", "", text));
-  say.title = [t(vendor.say),
-    r?.outcome === "failed" || r?.outcome === "ineligible" || r?.outcome === "own-app" ? r.msg : ""].filter(Boolean).join("\n");
+  say.title = [t(vendor.say), r?.msg].filter(Boolean).join("\n");
   row.append(say);
   if (!first) return row;
   const auto = el("button", "text ci-auto" + (on ? " on" : ""), t("Auto check-in"));
@@ -19481,45 +19483,24 @@ function renderSettings() {
     (v) => savePrefs({ ...keep, claudeWarmAts: v, claudeWarmAt: v[0] || "" }));
   renderWarmAtOwn(s);
   renderAutoResetOwn(s);
-  // WorkBuddy's daily check-in pressed for each account, its tab shown
-  // while one is signed in
-  $("#warmTab-wb").hidden = !s.workbuddy && !s.workbuddyCheckin;
+  // each built-in vendor's daily check-in, its tab shown while one of its
+  // accounts is signed in (#694, #811): its switch, how each account went,
+  // and under it each account's own (#1902)
   $("#warmTabs").setAttribute("aria-label", t("Warm-up and check-in"));
-  setWarmTab(warmTab);
-  $("#wbCheckinSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.workbuddyCheckin ? "on" : "off",
-    (v) => savePrefs({ ...keep, workbuddyCheckin: v === "on" })));
-  $("#wbCheckinSub").textContent = [t("Claims each signed-in China account's check-in credits once a day"),
-    ...(s.workbuddyCheckins || []).map(wbCheckinLine)].filter(Boolean).join(" · ");
-  $("#wbCheckinSub").title = t("As pressing 签到 in WorkBuddy does");
-  // and Trae CN's (#694), its tab shown while a Trae CN account is signed in
-  $("#warmTab-trae").hidden = !s.trae && !s.traeCheckin;
-  setWarmTab(warmTab);
-  $("#traeCheckinSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.traeCheckin ? "on" : "off",
-    (v) => savePrefs({ ...keep, traeCheckin: v === "on" })));
-  $("#traeCheckinSub").textContent = [t("Claims each signed-in Trae CN account's check-in credits once a day"),
-    ...(s.traeCheckins || []).map(wbCheckinLine)].filter(Boolean).join(" · ");
-  $("#traeCheckinSub").title = t("As pressing 签到 in Trae does");
-  // and MiniMax Code's (#811), its tab shown while a MiniMax Code account is signed in
-  $("#warmTab-minimax").hidden = !s.minimax && !s.minimaxCheckin;
-  setWarmTab(warmTab);
-  $("#minimaxCheckinSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.minimaxCheckin ? "on" : "off",
-    (v) => savePrefs({ ...keep, minimaxCheckin: v === "on" })));
-  $("#minimaxCheckinSub").textContent = [t("Claims each signed-in MiniMax Code account's check-in credits once a day"),
-    ...(s.minimaxCheckins || []).map(wbCheckinLine)].filter(Boolean).join(" · ");
-  $("#minimaxCheckinSub").title = t("As pressing 签到 in MiniMax Code does");
-  // and Qoder's daily credits, its tab shown while a Qoder account is signed in
-  $("#warmTab-qoder").hidden = !s.qoder && !s.qoderCheckin;
-  setWarmTab(warmTab);
-  $("#qoderCheckinSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.qoderCheckin ? "on" : "off",
-    (v) => savePrefs({ ...keep, qoderCheckin: v === "on" })));
-  $("#qoderCheckinSub").textContent = [t("Claims each signed-in Qoder account's daily credits once a day"),
-    ...(s.qoderCheckins || []).map(wbCheckinLine)].filter(Boolean).join(" · ");
-  $("#qoderCheckinSub").title = t("As claiming the daily credits in Qoder does");
-  // and under each vendor's switch, its accounts', each on its own (#1902)
-  for (const [list, by] of [["#wbList", ""], ["#traeList", "trae"], ["#minimaxList", "minimax"], ["#qoderList", "qoder"]]) {
-    $(list).querySelectorAll(".ci-acct").forEach((x) => x.remove());
-    $(list).append(...checkinAccountRows(s, by));
+  for (const [id, k, say, as] of [
+    ["wb", "workbuddy", t("Claims each signed-in China account's check-in credits once a day"), t("As pressing 签到 in WorkBuddy does")],
+    ["trae", "trae", t("Claims each signed-in Trae CN account's check-in credits once a day"), t("As pressing 签到 in Trae does")],
+    ["minimax", "minimax", t("Claims each signed-in MiniMax Code account's check-in credits once a day"), t("As pressing 签到 in MiniMax Code does")],
+    ["qoder", "qoder", t("Claims each signed-in Qoder account's daily credits once a day"), t("As claiming the daily credits in Qoder does")]]) {
+    const on = k + "Checkin", sub = $(`#${id}CheckinSub`), list = $(`#${id}List`);
+    $("#warmTab-" + id).hidden = !s[k] && !s[on];
+    $(`#${id}CheckinSegs`).replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s[on] ? "on" : "off", (v) => savePrefs({ ...keep, [on]: v === "on" })));
+    sub.textContent = [say, ...ciLines(s[on + "s"])].filter(Boolean).join(" · ");
+    sub.title = as;
+    list.querySelectorAll(".ci-acct").forEach((x) => x.remove());
+    list.append(...checkinAccountRows(s, id === "wb" ? "" : id));
   }
+  setWarmTab(warmTab);
   // and the plugins that check in themselves, a row each, their tab shown
   // while one is signed in
   renderPluginCheckins(s);
@@ -22692,7 +22673,7 @@ function renderPluginCheckins(s) {
     row.dataset.provider = p.id;
     const who = el("div", "who");
     const sub = el("div", "sub", [t("Has the {name} plugin check each signed-in account in once a day", { name: p.name || p.id }),
-      ...(p.checkins || []).map(wbCheckinLine)].filter(Boolean).join(" · "));
+      ...ciLines(p.checkins)].filter(Boolean).join(" · "));
     who.append(el("div", "name", (p.name || p.id) + " · " + t("Daily check-in")), sub);
     const segBox = el("div");
     segBox.append(segs([["off", t("Off")], ["on", t("On")]], p.on ? "on" : "off", async (v) => {
@@ -22733,6 +22714,13 @@ function checkinAccountRows(s, by) {
     row.append(who, segBox);
     return row;
   });
+}
+
+// ciLines: wbCheckinLine's, the accounts of one line said once (leeoswald368)
+function ciLines(rs) {
+  const by = new Map();
+  for (const r of rs || []) { const k = wbCheckinLine({ ...r, user: "\0" }); if (k) by.set(k, [...by.get(k) || [], r.user]); }
+  return [...by].map(([k, us]) => k.replace("\0", us.join(t(", "))));
 }
 
 // wbCheckinLine is how an account's last WorkBuddy check-in went: today's
