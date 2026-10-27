@@ -51,7 +51,13 @@ settings `CodexTitles` and `CodexDescriptions` select their models separately;
 an empty setting preserves the requested model. On a Magpie model, both
 paths wrap plain model text in the object Codex requested. Titles use
 `{"title": ...}`; descriptions use `{"description": ...}` with nonempty text
-and no invented maximum length. Title Off mode does not disable descriptions.
+and no invented maximum length. Each has its own Off (`off`): magpie answers
+the request itself with a finished reply holding no message, sends nothing
+upstream and records it as answered here (`sentNowhere`); the Codex app reads
+that as no title or no description (its side-turn helper's "empty" result,
+not an error) and keeps the thread's as it was. Title Off does not turn
+descriptions off, nor the other way round (cybercaius on Discord asked for
+the description's).
 
 The Codex app asks for titles, descriptions and one-line thread summaries
 (`thread_summary`, after each message) on a model of its own (`gpt-6-luna`),

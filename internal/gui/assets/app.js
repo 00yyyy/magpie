@@ -20954,7 +20954,8 @@ function modelOpt(x) {
 }
 
 // renderCodexDescriptions picks the model for descriptions independently
-// of titles; an empty setting preserves Codex's requested model.
+// of titles; an empty setting preserves Codex's requested model, off
+// answers with no description.
 function renderCodexDescriptions(s) {
   const models = s.titleModels || [];
   const named = (id) => {
@@ -20965,10 +20966,12 @@ function renderCodexDescriptions(s) {
   const b = el("button", "rt-cond on");
   b.type = "button";
   b.setAttribute("aria-label", t("Codex thread descriptions"));
-  if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
+  if (v === "off") b.append(el("span", "", t("Off")));
+  else if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
   else b.append(icon("generic"), el("span", "", t(SAME_SESSION)));
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexDescriptions", label: "model", value: v, options: [
     { value: "", label: t(SAME_SESSION), note: t("as Codex sends them when the session is on Codex’s own model"), icon: "generic", reset: true },
+    { value: "off", label: t("Off"), note: t("no description, nothing sent"), reset: true },
     ...models.map(modelOpt)],
   onPick: (id) => {
     if (id === v) return;

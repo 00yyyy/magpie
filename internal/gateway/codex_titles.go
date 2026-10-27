@@ -66,8 +66,8 @@ func codexSideTo(body []byte, ours bool, session func() string) string {
 }
 
 // codexDescriptionsTo is where a request Codex makes for a thread's
-// description goes. "" leaves the request as Codex sent it; a model's id
-// writes it. A description is not a title: Codex asks for {"description"}
+// description goes. "" leaves the request as Codex sent it; "off" answers
+// it with no description, sent nowhere; a model's id writes it. A description is not a title: Codex asks for {"description"}
 // alone, which the title wrapper cannot answer.
 func codexDescriptionsTo(h http.Header, body []byte, ours bool, session func() string) string {
 	if !isDescriptionKind(requestCallKind(h, requestSessionMetadata(h, body))) {
@@ -193,11 +193,19 @@ func (s *Server) codexTitle(w http.ResponseWriter, r *http.Request, body []byte,
 	writeTitleReply(w, id, out, res.Usage)
 }
 
-// codexDescription answers a thread_description request with the model
-// CodexDescriptions names. The model's text comes back as the
+// codexDescription answers a thread_description request as
+// codexDescriptionsTo says: "off" here, with no description, as titles'
+// Off; a model's id by that model. The model's text comes back as the
 // {"description": ...} its schema asks for; a reply without one fails as a
 // description, not as a title.
 func (s *Server) codexDescription(w http.ResponseWriter, r *http.Request, body []byte, to string) {
+	if to == "off" {
+		// a finished reply with no message: the app's thread_description
+		// helper reads no {"description"} in it as none (an "empty" result,
+		// not an error) and leaves the thread's description as it was
+		s.sentNowhere(w, r, body, "Descriptions off", "Codex descriptions are off in Codex's settings on magpie's Agents page: answered with no description, sent nowhere", nil)
+		return
+	}
 	s.codexShaped(w, r, body, to, "description", true, descriptionJSON, noDescription)
 }
 
