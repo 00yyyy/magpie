@@ -473,6 +473,14 @@ type effortEntry struct {
 // own rows and totals are read as they change.
 var effortFresh = time.Minute
 
+// effortBehind: once an answer is past effortFresh and the history
+// changed, the ask that finds it is told it while the next is built behind
+// it. The build is the ledger of all history, and made inside the
+// Sessions page's request it held that poll 0.8 to 1.3 s every minute a
+// Codex or Claude Code was working; the next poll has the change. Only a
+// period's first answer, or one from another home, is waited for.
+var effortBehind = true
+
 // effortBuilt, in tests, is told each time CodexModelEffort reads the ledger.
 var effortBuilt func()
 
@@ -516,9 +524,20 @@ func CodexModelEffort(p Period) map[string][]sessions.ModelEffort {
 	}
 	done := make(chan struct{})
 	e.building = done
+	if effortBehind && e.have && e.root == st.root {
+		value := e.value
+		codexEffort.Unlock()
+		go buildEffort(e, st, p, now, done)
+		return cloneEffort(value)
+	}
 	codexEffort.Unlock()
+	return cloneEffort(buildEffort(e, st, p, now, done))
+}
+
+// buildEffort builds p's answer under st into e, and closes done when it
+// is kept.
+func buildEffort(e *effortEntry, st requestState, p Period, now time.Time, done chan struct{}) (value map[string][]sessions.ModelEffort) {
 	began := time.Now()
-	var value map[string][]sessions.ModelEffort
 	defer func() {
 		codexEffort.Lock()
 		e.building = nil
@@ -535,8 +554,7 @@ func CodexModelEffort(p Period) map[string][]sessions.ModelEffort {
 	if effortBuilt != nil {
 		effortBuilt()
 	}
-	value = codexEffortOfIndex(st, p, now)
-	return cloneEffort(value)
+	return codexEffortOfIndex(st, p, now)
 }
 
 // codexEffortRows are the rows of ledgerOfAt(p, Filter{}, now, reader) that
