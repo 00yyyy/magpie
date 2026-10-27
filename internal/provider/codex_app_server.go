@@ -31,13 +31,23 @@ import (
 // system the app runs on, with nothing for the user to do, once no Codex
 // turn is running: none through magpie, none open in Codex's sessions.
 //
+// The same holds for every change magpie makes to where Codex sends its
+// requests: a Disconnect that takes openai_base_url out, a Connect that
+// puts it in, failover, the gateway moved to another port. The app-server
+// read config.toml as it started, and a Codex app left running kept
+// sending to 127.0.0.1:3425 after Codex was disconnected (JiangLiuer222 on
+// X), so each such change restarts it the same way.
+//
 // The app-server is ended as a clean exit (proc.End): the app reads any
 // other exit as a crash and shows it.
 
-// CodexAppOnMagpie is set by the agent package: whether magpie is Codex's
-// provider for its used-up ChatGPT account (AppOut), known false when
-// Codex's config can't be read.
-var CodexAppOnMagpie func() (on, known bool)
+// CodexAppRoute is set by the agent package: what in Codex's config the
+// app-server reads as it starts and magpie writes (its provider, base URL
+// and model list: route, compared, never parsed), and whether magpie is
+// Codex's provider for its used-up ChatGPT account (out, AppOut); known
+// false when Codex's config can't be read. Nothing the Codex app writes
+// itself (its model pick) is in route, or a pick would restart it.
+var CodexAppRoute func() (route string, out, known bool)
 
 // codexAppEvery is how often KeepCodexAppOnItsProvider looks; codexAppIdle
 // how long after Codex's last request through magpie a turn counts ended
@@ -128,7 +138,8 @@ func sameDir(a, b string) bool {
 // codexApp is what KeepCodexAppOnItsProvider knows.
 var codexApp struct {
 	sync.Mutex
-	seen, on bool
+	seen  bool
+	route string
 	// stale: the app-servers started before Codex's provider last changed,
 	// each with how often it was ended
 	stale map[int]int
@@ -161,25 +172,28 @@ func KeepCodexAppOnItsProvider(ctx context.Context, busy func() (int, time.Time)
 	}
 }
 
-// codexAppStep notes the app-servers running as magpie becomes Codex's
-// provider for the used-up account, or stops being it, and ends each of
-// them once no Codex turn is running. Started with magpie on, the app may
+// codexAppStep notes the app-servers running as Codex's route changes
+// (magpie becomes Codex's provider for the used-up account, or stops being
+// it; Codex is connected or disconnected), and ends each of them once no
+// Codex turn is running. Started with magpie on, the app may
 // have opened before: its app-servers are ended too. It says which pids it
 // ended.
 func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Time)) []int {
-	if CodexAppOnMagpie == nil {
+	if CodexAppRoute == nil {
 		return nil
 	}
-	on, known := CodexAppOnMagpie()
+	route, out, known := CodexAppRoute()
 	if !known {
 		return nil
 	}
 	home := codexHome()
 	c := &codexApp
 	c.Lock()
-	changed := !c.seen && on || c.seen && c.on != on
+	// at the first look only a used-up account's app-servers are ended:
+	// what the others read before magpie started isn't known
+	changed := !c.seen && out || c.seen && c.route != route
 	if !changed {
-		c.seen, c.on = true, on
+		c.seen, c.route = true, route
 	}
 	c.Unlock()
 	if changed {
@@ -192,7 +206,7 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 			return nil
 		}
 		c.Lock()
-		c.seen, c.on = true, on
+		c.seen, c.route = true, route
 		c.stale, c.stuck = map[int]int{}, false
 		for _, p := range pids {
 			c.stale[p] = 0

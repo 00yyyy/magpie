@@ -17,11 +17,13 @@ import (
 // and their ends, for codexAppStep.
 type codexAppStub struct {
 	on, known bool
-	running   []int
-	listErr   error
-	endErr    error
-	turnOpen  bool
-	ended     []int
+	// route: where Codex's config sends it, beside on
+	route    string
+	running  []int
+	listErr  error
+	endErr   error
+	turnOpen bool
+	ended    []int
 	// next: the app-server the app starts after one is ended
 	next int
 }
@@ -29,17 +31,23 @@ type codexAppStub struct {
 func stubCodexApp(t *testing.T) *codexAppStub {
 	t.Helper()
 	s := &codexAppStub{known: true, next: 100}
-	oldOn, oldList, oldEnd, oldTurn := CodexAppOnMagpie, codexAppServersOn, endCodexAppServer, codexTurnRunning
+	oldOn, oldList, oldEnd, oldTurn := CodexAppRoute, codexAppServersOn, endCodexAppServer, codexTurnRunning
 	t.Cleanup(func() {
-		CodexAppOnMagpie, codexAppServersOn, endCodexAppServer, codexTurnRunning = oldOn, oldList, oldEnd, oldTurn
+		CodexAppRoute, codexAppServersOn, endCodexAppServer, codexTurnRunning = oldOn, oldList, oldEnd, oldTurn
 		codexApp.Lock()
-		codexApp.seen, codexApp.on, codexApp.stale, codexApp.stuck = false, false, nil, false
+		codexApp.seen, codexApp.route, codexApp.stale, codexApp.stuck = false, "", nil, false
 		codexApp.Unlock()
 	})
 	codexApp.Lock()
-	codexApp.seen, codexApp.on, codexApp.stale, codexApp.stuck = false, false, nil, false
+	codexApp.seen, codexApp.route, codexApp.stale, codexApp.stuck = false, "", nil, false
 	codexApp.Unlock()
-	CodexAppOnMagpie = func() (bool, bool) { return s.on, s.known }
+	CodexAppRoute = func() (string, bool, bool) {
+		r := s.route
+		if s.on {
+			r += "|out"
+		}
+		return r, s.on, s.known
+	}
 	codexAppServersOn = func(context.Context, string) ([]int, error) {
 		if s.listErr != nil {
 			return nil, s.listErr
@@ -104,6 +112,45 @@ func TestCodexAppServerRestartedEachWay(t *testing.T) {
 	}
 	if got := step(idle); got != nil || CodexAppStuck() {
 		t.Fatalf("after: ended %v, stuck %v", got, CodexAppStuck())
+	}
+}
+
+// Disconnecting Codex takes openai_base_url out of its config, and a
+// Codex app left running kept sending to 127.0.0.1:3425 (JiangLiuer222 on
+// X): its app-server read the config as it started. Each change to where
+// Codex's config sends it (a disconnect, a connect) restarts the app's
+// app-server once no Codex turn runs, as the used-up takeover does; a
+// look with nothing changed ends nothing.
+func TestCodexAppServerRestartedOnDisconnect(t *testing.T) {
+	signIn(t)
+	s := stubCodexApp(t)
+	now := time.Now()
+	idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
+	step := func() []int { return codexAppStep(context.Background(), now, idle) }
+
+	s.running = []int{60}
+	s.route = "openai_base_url=http://127.0.0.1:3425/backend-api/codex"
+	if got := step(); got != nil {
+		t.Fatalf("first look, connected: ended %v", got)
+	}
+	if got := step(); got != nil {
+		t.Fatalf("nothing changed: ended %v", got)
+	}
+	s.route = "openai_base_url=" // disconnected
+	s.turnOpen = true
+	if got := step(); got != nil {
+		t.Fatalf("a turn open in Codex's sessions: ended %v", got)
+	}
+	s.turnOpen = false
+	if got := step(); !slices.Equal(got, []int{60}) {
+		t.Fatalf("disconnected, idle: ended %v, want [60]", got)
+	}
+	if got := step(); got != nil {
+		t.Fatalf("the new app-server read the config as it started: ended %v", got)
+	}
+	s.route = "openai_base_url=http://127.0.0.1:3425/backend-api/codex" // connected again
+	if got := step(); !slices.Equal(got, []int{100}) {
+		t.Fatalf("connected again: ended %v, want [100]", got)
 	}
 }
 
