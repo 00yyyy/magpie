@@ -147,6 +147,49 @@ func (c candidate) who() string {
 	return c.restKey()
 }
 
+// remoteUpstream is, for a remote magpie's model, the provider there that
+// serves it, its id's first part (anthropic of anthropic/claude-…), or a
+// group of the remote's, its whole id; "" for any other provider's model,
+// and for a remote's model named without one. The remote magpie is one
+// key here, but each of its providers is a vendor of its own, with its
+// own cache and its own seals (fremontdango on Discord: a group of one
+// model from two of the remote's providers kept a conversation on the
+// second when the first was resting, as one account, where the same
+// group on the remote moved it as gone).
+func remoteUpstream(p provider.Provider, model string) string {
+	if !p.IsRemoteMagpie() {
+		return ""
+	}
+	if strings.HasPrefix(model, provider.GroupPrefix) {
+		return model
+	}
+	up, _, _ := strings.Cut(model, "/")
+	if up == model {
+		return ""
+	}
+	return up
+}
+
+// vendor is who as the vendor a conversation is with knows it: the key or
+// account, and behind a remote magpie the provider there (remoteUpstream).
+// What a vendor keeps of a conversation — its cache, the reasoning and
+// compactions it sealed — goes by it; what the user limits on the key
+// here — its lanes, requests a minute — still goes by who.
+func (c candidate) vendor() string {
+	if up := remoteUpstream(c.p, c.model); up != "" {
+		return c.who() + ">" + up
+	}
+	return c.who()
+}
+
+// sameVendor says whether c is with the vendor that who, asked for model,
+// was: the same key or account, and behind a remote magpie the same
+// provider there. With no model known (an answer the usage log has) it
+// is the key or account alone.
+func (c candidate) sameVendor(who, model string) bool {
+	return c.who() == who && (model == "" || remoteUpstream(c.p, c.model) == remoteUpstream(c.p, model))
+}
+
 // perKey is a provider once per key it has on, in order — or, for a
 // signed-in agent, once per account it has on, its own first. A key made
 // for one protocol only serves on that one's endpoint, and the keys that

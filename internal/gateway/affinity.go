@@ -380,7 +380,7 @@ func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate,
 	sticks.Lock()
 	st, had := stickOf(stickKey(scope, in, body))
 	sticks.Unlock()
-	if !had || time.Since(st.at) > stickKeep || slices.ContainsFunc(cs, func(c candidate) bool { return c.who() == st.who }) {
+	if !had || time.Since(st.at) > stickKeep || slices.ContainsFunc(cs, func(c candidate) bool { return c.sameVendor(st.who, st.model) }) {
 		return cs, pl, nil
 	}
 	// the left's line for c, as it was left out
@@ -392,7 +392,7 @@ func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate,
 	var back []candidate
 	var order []Weighed
 	for _, c := range pl.capped {
-		if c.who() != st.who {
+		if !c.sameVendor(st.who, st.model) {
 			continue
 		}
 		i := leftAt(c)
@@ -405,12 +405,12 @@ func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate,
 		back, order = append(back, c), append(order, w)
 	}
 	if len(back) > 0 {
-		pl.capped = slices.DeleteFunc(slices.Clone(pl.capped), func(c candidate) bool { return c.who() == st.who })
+		pl.capped = slices.DeleteFunc(slices.Clone(pl.capped), func(c candidate) bool { return c.sameVendor(st.who, st.model) })
 		return append(back, cs...), planned{order: append(order, pl.order...), left: pl.left, held: pl.held, capped: pl.capped}, nil
 	}
 	var held []Weighed
 	for _, c := range pl.held {
-		if c.who() != st.who {
+		if !c.sameVendor(st.who, st.model) {
 			continue
 		}
 		if i := slices.IndexFunc(pl.left, func(w Weighed) bool { return w.ID == c.rest && w.NoCredits }); i >= 0 {
@@ -419,7 +419,7 @@ func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate,
 	}
 	if len(held) > 0 {
 		// only its own reset, should it spend one by itself, brings it back
-		pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return c.who() != st.who })
+		pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return !c.sameVendor(st.who, st.model) })
 		return nil, planned{order: nil, left: pl.left, held: pl.held, capped: pl.capped}, held[:1]
 	}
 	return cs, pl, nil
@@ -430,10 +430,10 @@ func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate,
 // group has on it, which a rule may still pick between. Nobody else is
 // asked, nor a reset spent elsewhere: its error is the agent's.
 func strictOnly(cs []candidate, pl planned, at int) ([]candidate, planned) {
-	who := cs[at].who()
+	who, model := cs[at].who(), cs[at].model
 	keep := []int{at}
 	for i, c := range cs {
-		if i != at && c.who() == who {
+		if i != at && c.sameVendor(who, model) {
 			keep = append(keep, i)
 		}
 	}
@@ -448,7 +448,7 @@ func strictOnly(cs []candidate, pl planned, at int) ([]candidate, planned) {
 		}
 	}
 	pl.order = order
-	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return c.who() != who })
+	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return !c.sameVendor(who, model) })
 	return out, pl
 }
 
@@ -494,12 +494,13 @@ func affine(scope, mode string, rotate bool, in http.Header, from provider.Proto
 	// the account and the model that answered: a group with Opus and
 	// Sonnet both on one Claude account, a rule sending the turn to Opus,
 	// had the turn's next request kept to the account and so to Sonnet,
-	// its first member there; the account alone when the model is gone
+	// its first member there; the account alone when the model is gone,
+	// and behind a remote magpie the provider there alone (sameVendor)
 	at := -1
 	for _, same := range []func(candidate) bool{
 		func(c candidate) bool { return c.who() == st.who && c.model == st.model && c.effort == st.effort },
 		func(c candidate) bool { return c.who() == st.who && c.model == st.model },
-		func(c candidate) bool { return c.who() == st.who },
+		func(c candidate) bool { return c.sameVendor(st.who, st.model) },
 	} {
 		for i, c := range cs {
 			if had && at < 0 && same(c) {
@@ -710,7 +711,7 @@ func opened(key string) {
 func unanswered(key string, c candidate) {
 	sticks.Lock()
 	st, ok := stickOf(key)
-	ok = ok && st.who == c.who()
+	ok = ok && c.sameVendor(st.who, st.model)
 	if ok {
 		delete(sticks.m, key)
 	}

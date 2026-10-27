@@ -516,13 +516,13 @@ func leadFirst(scope, parent string, cands []candidate, pl planned) ([]candidate
 		}
 	}
 	for i, c := range cands {
-		if i > 0 && c.who() == st.who {
+		if i > 0 && c.sameVendor(st.who, st.model) {
 			cands = append(append([]candidate{c}, cands[:i]...), cands[i+1:]...)
 			pl.order = append(append([]Weighed{pl.order[i]}, pl.order[:i]...), pl.order[i+1:]...)
 			return cands, pl, c.rest
 		}
 	}
-	if len(cands) > 0 && cands[0].who() == st.who {
+	if len(cands) > 0 && cands[0].sameVendor(st.who, st.model) {
 		return cands, pl, cands[0].rest
 	}
 	return cands, pl, ""
