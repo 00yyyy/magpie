@@ -1275,7 +1275,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 // on Discord: "Remote Magpie: Claude Code: You've hit your session
 // limit" answered every model of it for the five hours it named).
 func remoteModelRest(c candidate, why string, header http.Header) bool {
-	if !c.p.IsRemoteMagpie() && header.Get(answeredThereHeader) == "" || header.Get(remoteKeyLimitHeader) != "" {
+	if !c.p.IsRemoteMagpie() && header.Get(answeredThereHeader) == "" || header.Get(remoteKeyLimitHeader) != "" || header.Get(keyLimitThereHeader) != "" {
 		return false
 	}
 	return why == failQuota || why == failCredit || why == failRate || why == failRestricted || why == failVerify
@@ -1453,6 +1453,15 @@ func keepRetry(dst, src http.Header, body []byte) {
 			dst.Set("Retry-After", strconv.Itoa(int(d.Seconds())))
 		}
 	}
+	if src.Get(remoteKeyLimitHeader) != "" {
+		// another magpie's gateway key is over its own limit: noted for
+		// restAfter, which rests that magpie whole (remoteModelRest), as
+		// the held try's header is all it reads (#2791, ggbdpq: the
+		// marker was left out, and the key's limit rested one model). A
+		// note, not the marker, so a magpie this one answers doesn't read
+		// another's key limit as this one's
+		dst.Set(keyLimitThereHeader, "1")
+	}
 	if who := src.Get(providerHeader); who != "" {
 		// another magpie refused it, naming its provider that did: this
 		// magpie's own name for the provider goes in the same header
@@ -1471,6 +1480,18 @@ func keepRetry(dst, src http.Header, body []byte) {
 		dst.Set(zdrHeader, "1")
 	}
 }
+
+// keepRetryOut is keepRetry onto a reply that goes to the client as it
+// is, with no holdWriter to drop magpie's own notes.
+func keepRetryOut(dst, src http.Header, body []byte) {
+	keepRetry(dst, src, body)
+	dst.Del(answeredThereHeader)
+	dst.Del(keyLimitThereHeader)
+}
+
+// keyLimitThereHeader carries, from keepRetry to restAfter, that another
+// magpie refused with its gateway key's own limit (remoteKeyLimitHeader).
+const keyLimitThereHeader = "X-Magpie-Key-Limit-There"
 
 // answeredThereHeader carries, from keepRetry to restAfter, the provider
 // another magpie named on its refusal (providerHeader): the refusal is
