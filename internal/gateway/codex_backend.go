@@ -1228,7 +1228,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			// models was picked, which goes out with Codex's own sign-in
 			msg, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 			writeError(w, provider.Responses, res.StatusCode, codexKeyRefused(msg))
-			s.record(Call{Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
+			s.record(Call{Route: routeOf(tr), Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
 				Provider: "openai", Agent: callerOf(r).agent, Status: res.StatusCode,
 				Millis: time.Since(start).Milliseconds(), Error: res.Status})
 			end(res.StatusCode, res.Status, 0, 0)
@@ -1251,7 +1251,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				// as its markup: said where the turn, or the compaction
 				// (outrageous_piglet on Discord), went
 				failWith(res.StatusCode, said)
-				s.record(Call{Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
+				s.record(Call{Route: routeOf(tr), Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
 					Provider: "openai", Agent: callerOf(r).agent, Kind: callKind(r.Header), Status: res.StatusCode,
 					Millis: time.Since(start).Milliseconds(), Error: said})
 				end(res.StatusCode, said, 0, 0)
@@ -1630,6 +1630,16 @@ func codexSaidNothing(rest, model, who string, res *http.Response, msg []byte) (
 	return who + " answered " + what + " for " + model + " " + res.Status + said +
 		". " + model + " is one of Codex's own models, which goes to OpenAI, not to a provider in magpie; try again later, " +
 		"or pick one of magpie's models in Codex (provider/model, or set it in magpie's Agents view)", true
+}
+
+// routeOf is the id of the route a Codex relay opened, so the call it
+// records is the one the Routing page's "Request and response" opens (#2481);
+// 0 for a compaction, which opens none.
+func routeOf(tr *Route) int64 {
+	if tr == nil {
+		return 0
+	}
+	return tr.ID
 }
 
 // apiKey reports whether Codex signed in with an API key rather than a
