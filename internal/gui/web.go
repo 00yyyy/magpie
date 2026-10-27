@@ -407,16 +407,21 @@ func isWeb(w Windows) bool { _, ok := w.(webHost); return ok }
 // /v1beta/…, /mcp/…) on the page's port to the gateway, so the page and the
 // agents share one address and a reverse proxy needs one location for both
 // (zgcwkj on Discord). Each such request is judged by the gateway's own
-// guards (Server.Front), not the page's key: an agent has no cookie, and a
-// request from another machine or through a proxy needs a gateway key
-// while magpie is shared, as on the gateway's port. Everything else (the
-// page, its /api/*) stays behind the page's allow list and key.
+// guards (Server.Front), not the page's key, and always as one from
+// another machine (gateway.FromPagePort): it needs a gateway key and
+// magpie shared, from loopback too. This port is the one put behind a
+// proxy or a forward, and a raw TCP forward or a proxy that adds no
+// forwarding header arrives from loopback looking like an agent here
+// (reported privately by Coffemon). Agents here use the gateway's own
+// port. Everything else (the page, its /api/*) stays behind the page's
+// allow list and key.
 func onePort(page http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if !gateway.ClientPath(r.URL.Path) {
 			page.ServeHTTP(rw, r)
 			return
 		}
+		r = gateway.FromPagePort(r)
 		if gw := served.Load(); gw != nil {
 			gw.Front().ServeHTTP(rw, r)
 			return
@@ -428,10 +433,11 @@ func onePort(page http.Handler) http.Handler {
 // toGateway passes a client route on to the gateway another magpie serves
 // here (the service, the app), as it came: its Host, so a rebound page's
 // name is still refused, and its forwarding headers, so a request a proxy
-// passed on is still one from another machine. One from another machine
-// straight to this port gets the peer's address added as X-Forwarded-For,
-// as the gateway would otherwise see this process's loopback call and ask
-// it no key.
+// passed on is still one from another machine. It carries the page
+// port's mark (gateway.PagePortHeader, set by onePort), so the gateway
+// judges it as from another machine wherever it came from; and it always
+// carries an X-Forwarded-For (the peer's address added), so a gateway of
+// an older magpie, which doesn't know the mark, still does.
 var toGateway = &httputil.ReverseProxy{
 	Rewrite: func(pr *httputil.ProxyRequest) {
 		u, _ := url.Parse(gateway.URL())
@@ -445,6 +451,9 @@ var toGateway = &httputil.ReverseProxy{
 		}
 		if !loopbackPeer(pr.In.RemoteAddr) {
 			pr.SetXForwarded()
+		} else if pr.Out.Header.Get("X-Forwarded-For") == "" {
+			h, _, _ := net.SplitHostPort(pr.In.RemoteAddr)
+			pr.Out.Header.Set("X-Forwarded-For", h)
 		}
 	},
 	FlushInterval: -1, // streams as they come
