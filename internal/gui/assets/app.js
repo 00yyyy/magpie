@@ -9987,7 +9987,7 @@ function contextPicks(p, cx) {
     });
   }
   const row = el("div", "cxpicks");
-  const same = (a, b) => JSON.stringify(parseContexts(a).map || {}) === JSON.stringify(parseContexts(b).map || {});
+  const same = sameContexts;
   const light = () => {
     for (const [i, b] of [...row.children].entries()) {
       const v = picks[i].value;
@@ -10022,7 +10022,7 @@ function outputField() {
   ox.classList.add("outputs");
   const sizes = [8e3, 16e3, 32e3, 64e3, 128e3].map((n) => contextsText({ "*": n }));
   const row = el("div", "cxpicks");
-  const same = (a, b) => JSON.stringify(parseContexts(a).map || {}) === JSON.stringify(parseContexts(b).map || {});
+  const same = sameContexts;
   const light = () => {
     for (const [i, b] of [...row.children].entries()) b.classList.toggle("on", !!ox.value.trim() && same(ox.value, sizes[i]));
   };
@@ -10062,7 +10062,7 @@ function compactField() {
   cp.classList.add("compacts");
   const sizes = [128e3, 200e3, 272e3, 500e3, 1e6].map((n) => contextsText({ "*": n }));
   const row = el("div", "cxpicks");
-  const same = (a, b) => JSON.stringify(parseContexts(a).map || {}) === JSON.stringify(parseContexts(b).map || {});
+  const same = sameContexts;
   const light = () => {
     for (const [i, b] of [...row.children].entries()) b.classList.toggle("on", !!cp.value.trim() && same(cp.value, sizes[i]));
   };
@@ -10091,6 +10091,8 @@ function outputError(ed, v) {
 
 // parseContexts reads "128k, gpt-6=1m" back: sizes by model id, "*" for
 // all; error is the first part that isn't a size.
+// two context lists with the same map
+const sameContexts = (a, b) => JSON.stringify(parseContexts(a).map || {}) === JSON.stringify(parseContexts(b).map || {});
 function parseContexts(text) {
   const map = {};
   for (const part of text.split(/[,，\n]/).map((x) => x.trim()).filter(Boolean)) {
@@ -20960,12 +20962,14 @@ function modelOpt(x) {
 // renderCodexDescriptions picks the model for descriptions independently
 // of titles; an empty setting preserves Codex's requested model, off
 // answers with no description.
+// a model id as "Name · Provider", else as is
+const namedIn = (models) => (id) => {
+  const m = models.find((x) => x.id === id);
+  return m ? `${m.name || m.id} · ${m.providerName}` : id;
+};
 function renderCodexDescriptions(s) {
   const models = s.titleModels || [];
-  const named = (id) => {
-    const m = models.find((x) => x.id === id);
-    return m ? `${m.name || m.id} · ${m.providerName}` : id;
-  };
+  const named = namedIn(models);
   const v = s.codexDescriptions || "";
   const b = el("button", "rt-cond on");
   b.type = "button";
@@ -20989,10 +20993,7 @@ function renderCodexDescriptions(s) {
 // answered by magpie with no prediction; or to a model of magpie's.
 function renderCodexPredictions(s) {
   const models = s.titleModels || [];
-  const named = (id) => {
-    const m = models.find((x) => x.id === id);
-    return m ? `${m.name || m.id} · ${m.providerName}` : id;
-  };
+  const named = namedIn(models);
   const v = s.codexPredictions || "";
   const b = el("button", "rt-cond on");
   b.type = "button";
@@ -21017,10 +21018,7 @@ function renderCodexPredictions(s) {
 // own, as Codex's subagents are.
 function renderCodexTitles(s) {
   const models = s.titleModels || [];
-  const named = (id) => {
-    const m = models.find((x) => x.id === id);
-    return m ? `${m.name || m.id} · ${m.providerName}` : id;
-  };
+  const named = namedIn(models);
   const v = s.codexTitles || "";
   const b = el("button", "rt-cond on");
   b.type = "button";
@@ -21121,10 +21119,7 @@ function renderImages(s, keep) {
   const box = $("#imagesList");
   box.replaceChildren();
   const models = s.visionModels || [];
-  const named = (id) => {
-    const m = models.find((x) => x.id === id);
-    return m ? `${m.name || m.id} · ${m.providerName}` : id;
-  };
+  const named = namedIn(models);
   const r = el("div", "row pref");
   const who = el("div", "who");
   const v = s.vision || "";
@@ -21180,10 +21175,7 @@ function renderImages(s, keep) {
 // one magpie picks, one named, or none — and where agents are given the tool.
 function renderImageGen(s, keep, box) {
   const models = s.imageGenModels || [];
-  const named = (id) => {
-    const m = models.find((x) => x.id === id);
-    return m ? `${m.name || m.id} · ${m.providerName}` : id;
-  };
+  const named = namedIn(models);
   const icOf = (id) => models.find((x) => x.id === id)?.icon;
   const v = s.imageGen || "";
   // a pick that stands for a listed model shows as it, and is kept as saved
