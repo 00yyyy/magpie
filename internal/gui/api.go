@@ -2546,6 +2546,10 @@ var sentRows struct {
 
 const sentRowsKept = 4
 
+// rowsSize is the size of the last answer writeJSONRows wrote of each key,
+// what the next one's buffer is made for.
+var rowsSize sync.Map
+
 // writeJSONRows is writeJSONSame for an answer that is a long list, key,
 // beside the fields of rest: one asked with the tag of a list sent before
 // that changed since gets X-Magpie-Delta: key, and its list holds only the
@@ -2554,30 +2558,38 @@ const sentRowsKept = 4
 // session's row changes every poll, and the Sessions tab read all ~5000
 // rows (~8 MB) again for it.
 func writeJSONRows[T any](rw http.ResponseWriter, r *http.Request, key string, rows []T, rest any) {
-	raw := make([][]byte, len(rows))
-	sums := make([][16]byte, len(rows))
-	for i, row := range rows {
-		b, err := json.Marshal(row)
-		if err != nil {
-			fail(rw, err)
-			return
-		}
-		raw[i] = b
-		sum := sha256.Sum256(b)
-		sums[i] = [16]byte(sum[:16])
-	}
 	tail, err := json.Marshal(rest)
 	if err != nil {
 		fail(rw, err)
 		return
 	}
 	k, _ := json.Marshal(key)
-	body := func(items [][]byte) []byte {
-		var b bytes.Buffer
-		b.WriteByte('{')
-		b.Write(k)
-		b.WriteString(":[")
-		b.Write(bytes.Join(items, []byte(",")))
+	// the rows are written once, into the answer itself: each row's
+	// Marshal, their Join and the answer's buffer were three copies of the
+	// ~8 MB list a poll, and the buffer grew to it from nothing
+	var whole bytes.Buffer
+	if n, ok := rowsSize.Load(key); ok {
+		whole.Grow(n.(int) + n.(int)/8)
+	}
+	whole.WriteByte('{')
+	whole.Write(k)
+	whole.WriteString(":[")
+	enc := json.NewEncoder(&whole)
+	ends := make([]int, len(rows)+1)
+	ends[0] = whole.Len()
+	for i := range rows {
+		if err := enc.Encode(rows[i]); err != nil {
+			fail(rw, err)
+			return
+		}
+		// Encode ends the row with a newline: it is the comma after it
+		whole.Bytes()[whole.Len()-1] = ','
+		ends[i+1] = whole.Len()
+	}
+	if len(rows) > 0 {
+		whole.Truncate(whole.Len() - 1)
+	}
+	end := func(b *bytes.Buffer) {
 		b.WriteByte(']')
 		if len(tail) > 2 {
 			b.WriteByte(',')
@@ -2586,10 +2598,27 @@ func writeJSONRows[T any](rw http.ResponseWriter, r *http.Request, key string, r
 			b.WriteByte('}')
 		}
 		b.WriteByte('\n')
+	}
+	end(&whole)
+	rowsSize.Store(key, whole.Len())
+	all := whole.Bytes()
+	raw := make([][]byte, len(rows))
+	sums := make([][16]byte, len(rows))
+	for i := range rows {
+		raw[i] = all[ends[i] : ends[i+1]-1]
+		sum := sha256.Sum256(raw[i])
+		sums[i] = [16]byte(sum[:16])
+	}
+	body := func(items [][]byte) []byte {
+		var b bytes.Buffer
+		b.WriteByte('{')
+		b.Write(k)
+		b.WriteString(":[")
+		b.Write(bytes.Join(items, []byte(",")))
+		end(&b)
 		return b.Bytes()
 	}
-	whole := body(raw)
-	sum := sha256.Sum256(whole)
+	sum := sha256.Sum256(all)
 	tag := hex.EncodeToString(sum[:16])
 	rw.Header().Set("X-Magpie-Tag", tag)
 	had := r.Header.Get("X-Magpie-Had")
@@ -2614,7 +2643,7 @@ func writeJSONRows[T any](rw http.ResponseWriter, r *http.Request, key string, r
 	sentRows.Unlock()
 	rw.Header().Set("Content-Type", "application/json")
 	if !ok || had == "" {
-		_, _ = rw.Write(whole)
+		_, _ = rw.Write(all)
 		return
 	}
 	at := make(map[[16]byte][]int, len(was))
