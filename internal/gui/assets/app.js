@@ -19615,6 +19615,9 @@ function renderSettings() {
   row(t("Gateway URL"), t("the address every agent is pointed at"), gw, copyBtn(gw, t("Gateway URL")));
   // MAGPIE_PUBLIC_URL, where other machines reach it (#1551)
   if (s.publicURL && gw !== s.publicURL) row(t("Public address"), t("MAGPIE_PUBLIC_URL: where other computers reach the gateway, with a gateway key"), s.publicURL, copyBtn(s.publicURL, t("Public address"))).id = "publicURLRow";
+  const site = el("button", "text", t("Open"));
+  site.onclick = () => api("open", { url: "https://usemagpie.ai" }).catch(() => {});
+  row(t("Website"), t("downloads, docs and what's new"), "usemagpie.ai", site);
   const join = el("button", "discord");
   join.innerHTML = DISCORD_SVG;
   join.append(el("span", "", t("Join Discord")));
