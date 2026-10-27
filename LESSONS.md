@@ -506,6 +506,13 @@ cause:
   change can only pass its package with those tests skipped.
   - A patch on a red issue is reviewed and merged, or answered with
     why not, the day it is posted.
+  - A red that kills its package hides every new red behind it.
+    6eb510f78 (10-26) made a Codex ask of the models list that three
+    TestFetch* tests counted as a second ask; its provider run died at
+    #3632 first, it then ran `-run Codex`, and the three were filed
+    only later as #3854. With #3632 fixed (4842f69be), #3854 and #3906
+    merged too (759b3b8c4, ed49d1b38), internal/provider passed whole
+    on 10-28 for the first time since 10-25.
 - A cancelled run tests nothing. On 10-14 nine pushes in ten minutes
   cancelled each other's runs, and 3c4b4dc97 never had a run of its own;
   its red showed first at 84f14e555.
