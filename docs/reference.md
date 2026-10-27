@@ -1628,7 +1628,11 @@ each of these groups ordered by the share used.
   (WorkBuddy's packages, each ending on its own day), count as renewing
   when they run out: of several WorkBuddy accounts, the one whose credits
   left end first goes first. The daily Free Plan credits aren't counted,
-  since they end at the same midnight on every account. A Claude account
+  since they end at the same midnight on every account. Accounts that
+  renew in the same hours (WorkBuddy's free accounts all at the month's
+  end) go by when their credits left run out after that: the one whose
+  credits are lost first goes first, and one with none that run out
+  after those whose do. A Claude account
   magpie knows nothing of yet goes first once, to learn what it has left
   from the answer; any other unknown account goes after those known,
   and is still tried when they fail, ahead of any at 90% or more.
