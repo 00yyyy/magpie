@@ -8,7 +8,8 @@
 // sheets, the notebook and the boxes are the page's, moved over her. The
 // video is fetched when the row is first opened, never before. It plays
 // while the row is open and on screen, once through, and rests on its last
-// step; with reduced motion it starts there.
+// step; with reduced motion it starts there. Where the app's webview would
+// crash on a video (state.settings.noVideo), she is her poster.
 
 const XQD_END = 27.5;
 const XQD_STEPS = [
@@ -368,7 +369,7 @@ function maskDemoBuild(body) {
     if (th === theme) return;
     theme = th;
     vid.poster = `plugins/redact/xq_${th}.jpg`;
-    vid.src = `plugins/redact/xq_${th}.webm`;
+    if (!state.settings?.noVideo) vid.src = `plugins/redact/xq_${th}.webm`;
     // a new source starts paused: it goes on where the old one was
     seek(T);
     wake();

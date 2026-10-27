@@ -18,8 +18,8 @@ const K = "1792987654321000001";
 const record = { key: K, t: new Date(Date.now() - 60e3).toISOString(), route: "messages", what: "chat", agent: "claude", provider: "anthropic", model: "claude-opus-4-1", n: 1,
   values: [{ p: "{{PERSON_bbbb2222}}", k: "PERSON", b: "model", h: "", l: 3, n: 1 }], snips: { "{{PERSON_bbbb2222}}": "ask {{PERSON_bbbb2222}} about it" } };
 
-function serve(lang, theme, fetched) {
-  const settings = { theme, lang, tray: "panel", currency: "usd", redact: true, redactPersonal: true };
+function serve(lang, theme, fetched, more) {
+  const settings = { theme, lang, tray: "panel", currency: "usd", redact: true, redactPersonal: true, ...more };
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
@@ -56,7 +56,7 @@ async function open(engine, lang, width, opts = {}) {
   page.setDefaultTimeout(8000);
   const errors = [], fetched = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.route("**/*", serve(lang, opts.theme || "light", fetched));
+  await page.route("**/*", serve(lang, opts.theme || "light", fetched, opts.settings));
   await page.goto("http://magpie.test/?view=masking");
   await page.locator("#mdRow").waitFor();
   return { browser, page, errors, fetched };
@@ -215,6 +215,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const a = await state(page);
     // the new take plays on from where the old one was, in step with the sheets
     await until(async () => { const s = await state(page); return !s.paused && s.ct > a.T + .5 && Math.abs(s.ct - s.T) < .3; }, 8000, page);
+    assert.deepEqual(errors, []);
+  });
+  // on Linux without gst-plugins-good WebKitGTK's web process aborts on any
+  // video (stock Omarchy), so there she is her poster and the sheets still move
+  test(`${engine}: where the app can't play video she is her poster, and the demo still plays`, async (t) => {
+    const { browser, page, errors, fetched } = await open(engine, "en", 1100, { motion: true, settings: { noVideo: true } });
+    t.after(() => browser.close());
+    await page.locator("#mdRow").click();
+    await until(async () => (await state(page)).T > 1, 8000, page);
+    await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+    await until(() => fetched.includes("xq_dark.jpg"));
+    assert.deepEqual(await page.evaluate(() => { const v = document.querySelector(".xqd video"); return [v.getAttribute("src"), v.poster.split("/").pop()]; }), [null, "xq_dark.jpg"]);
+    assert.deepEqual(fetched.filter((f) => f.endsWith(".webm")), []);
+    const a = await state(page);
+    await until(async () => (await state(page)).T > a.T + .5, 8000, page);
     assert.deepEqual(errors, []);
   });
 }
