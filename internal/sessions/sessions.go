@@ -416,7 +416,7 @@ func stat(f *file) bool {
 // is read in one listing where the system has one (dirent.Stats), and the
 // rest are stat()ed on a few goroutines.
 func statFiles(files []file, follow bool) []file {
-	dirs := map[string]map[string]dirent.Stat{}
+	dirs := map[string]dirent.Listing{}
 	var order []string
 	for _, f := range files {
 		d := filepath.Dir(f.path)
@@ -425,7 +425,7 @@ func statFiles(files []file, follow bool) []file {
 			order = append(order, d)
 		}
 	}
-	listed := make([]map[string]dirent.Stat, len(order))
+	listed := make([]dirent.Listing, len(order))
 	parallel(len(order), 8, func(i int) {
 		if s, ok := dirent.Stats(order[i]); ok {
 			listed[i] = s
@@ -438,7 +438,7 @@ func statFiles(files []file, follow bool) []file {
 	parallel(len(files), 256, func(i int) {
 		f := &files[i]
 		if in := dirs[filepath.Dir(f.path)]; in != nil {
-			s, there := in[filepath.Base(f.path)]
+			s, there := in.Get(filepath.Base(f.path))
 			if !there || s.Mode != 0 && (s.Mode != fs.ModeSymlink || !follow) {
 				return
 			}
@@ -676,7 +676,13 @@ func forgetWarmListing() {
 func listCodexFiles() []file {
 	var out []file
 	for _, dir := range CodexDirs() {
-		out = append(out, codexFilesIn(dir)...)
+		// one folder's listing is the whole of it: copied, it was ~65 MB
+		// of what eight Sessions polls allocated
+		if out == nil {
+			out = codexFilesIn(dir)
+		} else {
+			out = append(out, codexFilesIn(dir)...)
+		}
 	}
 	return distinctPaths(out)
 }
@@ -791,8 +797,8 @@ func listedRollouts(root string) (out []file, ok bool) {
 		if !ok {
 			return false
 		}
-		for _, name := range slices.Sorted(maps.Keys(entries)) {
-			e := entries[name]
+		for _, e := range entries {
+			name := e.Name
 			switch e.Mode {
 			case fs.ModeDir:
 				if !in(filepath.Join(real, name), filepath.Join(shown, name)) {
