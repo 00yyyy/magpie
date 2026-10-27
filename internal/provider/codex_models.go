@@ -672,7 +672,7 @@ func codexListed(shown []Entry, members func(id string) []Member, own bool) []ca
 		if CodexOwn(e) && !own {
 			continue
 		}
-		m := catalog.Model{ID: e.ID, Name: labels[i], Efforts: e.Efforts, Images: e.Images || seen, Context: e.Context, AgentsV2: e.AgentsV2}
+		m := catalog.Model{ID: e.ID, Name: labels[i], Efforts: e.Efforts, Images: e.Images || seen, Context: e.Context, AgentsV2: e.AgentsV2, Codex: e.Codex}
 		m.Compact = CompactFor(s, e, find)
 		CodexTiers(&m, e, members)
 		ms = append(ms, m)

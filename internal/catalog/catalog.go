@@ -129,6 +129,44 @@ type Model struct {
 	// doesn't, or didn't say. A plugin's model it says searches by itself
 	// (m.searches) is "native" too.
 	WebSearch string `json:",omitempty"`
+	// Codex, on a model a vendor lists the way Codex's own catalog does
+	// (a sub2api asked with Codex's client_version), is that entry as the
+	// vendor gave it (CodexEntry): Codex is handed it as it is, its
+	// instructions and window and all, rather than an entry magpie made up
+	// from models.dev (ctopsc on Discord). Its context_window,
+	// max_context_window, input_modalities and reasoning levels are read
+	// into the fields above too, so the rest of magpie says what it says.
+	Codex json.RawMessage `json:",omitempty"`
+}
+
+// CodexLevels are the efforts of a Codex catalog entry's
+// supported_reasoning_levels; false when raw is no such entry.
+func CodexLevels(raw json.RawMessage) ([]string, bool) {
+	if len(raw) == 0 || !CodexEntry(raw) {
+		return nil, false
+	}
+	var e struct {
+		Levels any `json:"supported_reasoning_levels"`
+	}
+	json.Unmarshal(raw, &e)
+	return levelsOf(e.Levels), true
+}
+
+// CodexEntry reports whether raw, one row of a model list, is a model as
+// Codex's own catalog lists it (/backend-api/codex/models, codex-rs's
+// ModelInfo): a slug, its reasoning levels, its shell and its
+// instructions. A plain OpenAI list's row has none of them.
+func CodexEntry(raw json.RawMessage) bool {
+	var e struct {
+		Slug         string          `json:"slug"`
+		Levels       json.RawMessage `json:"supported_reasoning_levels"`
+		Shell        json.RawMessage `json:"shell_type"`
+		Instructions json.RawMessage `json:"base_instructions"`
+	}
+	if json.Unmarshal(raw, &e) != nil {
+		return false
+	}
+	return e.Slug != "" && len(e.Levels) > 0 && len(e.Shell) > 0 && len(e.Instructions) > 0
 }
 
 func imageInput(modalities []string) *bool {
