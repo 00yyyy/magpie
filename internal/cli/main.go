@@ -66,6 +66,7 @@ const usage = `magpie — one place to pick every agent's model
 
   magpie backup [--no-keys] [--no-library] [file]    providers, keys, settings, profiles, agent models and the library in one file, sealed with a passphrase
   magpie restore [--no-agents] [--no-library] <file> put a backup in on this machine
+  magpie uninstall [--yes]                           disconnect every agent, putting back what each had, then remove magpie's service and files
   magpie webdav [on <address>|set k=v…|now|off]      the same, kept the same on every computer through a WebDAV folder (magpie webdav help)
   magpie s3 [on s3://<bucket>[/<prefix>]|set k=v…|now|off]   the same through an S3-compatible bucket: AWS, R2, B2, MinIO… (magpie s3 help)
   magpie github [on github://<owner>/<repo>[/<folder>]|set k=v…|now|off]   the same in an encrypted GitHub repository (magpie github help)
@@ -326,6 +327,12 @@ func run(args []string) error {
 			return toolCmd(args[1:])
 		case codexrelay.Command: // internal: what a quitting magpie leaves for Codex's open threads
 			return codexrelay.Main(args[1:], gateway.CodexRelay())
+		case "uninstall":
+			// what the app starts as it quits from Settings › Uninstall
+			// magpie: nothing is made again before its folders go
+			if len(args) > 1 && args[1] == "--data-after" {
+				return uninstallData(args[2:])
+			}
 		}
 	}
 	startUp()
@@ -488,6 +495,8 @@ func run(args []string) error {
 		return backupCmd(args[1:])
 	case "restore":
 		return restoreCmd(args[1:])
+	case "uninstall":
+		return uninstallCmd(args[1:])
 	case "webdav", "dav":
 		return webdavCmd(args[1:])
 	case "plugin", "plugins":

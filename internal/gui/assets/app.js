@@ -7665,6 +7665,27 @@ function confirmAction(title, message, action) {
     });
   });
 }
+// Settings › Uninstall magpie: the agents and the service first, each
+// failure said and nothing more removed; then magpie quits and its files go
+// once it has (uninstall.go).
+async function uninstallMagpie(btn) {
+  if (!(await confirmAction(t("Uninstall magpie?"), t("Every agent is disconnected and gets back what it had before magpie; what you changed by hand since stays. magpie's background service, opening at login and shortcuts are removed, and once it quits, its providers, keys, settings and usage are deleted. The app itself stays where it is: delete it to finish."), t("Uninstall")))) return;
+  btn.disabled = true;
+  try {
+    const r = await api("uninstall", {});
+    if (r.failed) {
+      const left = r.says.filter((l) => l.startsWith("!")).map((l) => l.slice(2)).join("; ");
+      if (await confirmAction(t("Some of magpie couldn't be taken off"), t("Nothing else was removed, and magpie keeps running. What is left: {left}", { left }), t("Try again"))) return uninstallMagpie(btn);
+      return;
+    }
+    if (r.codexApp && !(await confirmAction(t("Open the Codex app again"), t("The Codex app is still on the settings it read before: quit it and open it again. magpie quits now, and its files are deleted once it has."), t("Quit magpie")))) return;
+    await api("uninstall/finish", {});
+  } catch (e) {
+    status(t(e.message), "err");
+  } finally {
+    if (btn.isConnected) btn.disabled = false;
+  }
+}
 function confirmRemoval(name, consequence = "This removes the selected item. Continue?") {
   return confirmAction(t("Remove {name}?", { name }), t(consequence), t("Remove"));
 }
@@ -19813,6 +19834,14 @@ function renderSettings() {
   repo.title = "github.com/yetone/magpie";
   repo.onclick = () => api("open", { url: "https://github.com/yetone/magpie" }).catch(() => {});
   row(t("Community"), t("questions, ideas and feedback, on Discord or GitHub"), "", join, repo);
+  // magpie uninstall, from the app (Jevik_AI on X deleted magpie's folders
+  // by hand and Codex kept pointing at a gateway that was gone). Never in a
+  // browser: magpie web would be taken off the computer serving the page.
+  if (!web) {
+    const go = el("button", "text danger", t("Uninstall…"));
+    go.onclick = () => uninstallMagpie(go);
+    row(t("Uninstall magpie"), t("Disconnects every agent, putting back what each had, then removes magpie's service and files"), "", go).id = "uninstallRow";
+  }
   // gateway mode leaves out what is written into this computer's agents'
   // files, and the alerts its desktop would show
   for (const r of [$("#plainNamesSegs").parentElement, $("#usageAlertRow"), $("#balanceAlertRow"), $("#resetReminderRow"), $("#turnDoneRow"), $("#maskAlertRow")]) r.hidden = gatewayMode;
