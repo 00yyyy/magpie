@@ -3155,11 +3155,12 @@ function closeAgentModels() {
   // was put back comes with the state
   if (m.hidden) for (const f of m.a.fields || []) f.options = f.options.filter((o) => !o.ref || !m.hidden.has(o.ref) || o.value === f.value);
   // the agent's own, left out, go as the server leaves them out
-  // (agent.Picks): from a picker of magpie's models, but its default and
-  // the one it is set to
+  // (agent.Picks): from a picker of magpie's models, but its default, the
+  // one it is set to and those magpie's list shows it too (served: Codex's
+  // ChatGPT models)
   if (m.ownHidden) {
     for (const f of m.a.fields || []) {
-      if (f.options.some((o) => o.ref)) f.options = f.options.filter((o) => o.ref || !o.value || o.value === f.value);
+      if (f.options.some((o) => o.ref)) f.options = f.options.filter((o) => o.ref || o.served || !o.value || o.value === f.value);
     }
   }
   // the agents' pickers list what's left once the writes are in
