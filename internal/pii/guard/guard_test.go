@@ -92,6 +92,9 @@ func TestModelFinds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// bert.go's own; TestCoreMLMatchesGo holds CoreML to it. CoreML gives
+	// the module path .81, the publisher's fp32 model .785.
+	m.ml = nil
 	text := "联系人：张三，电话 13800138000，邮箱 zhangsan@example.com。\n" +
 		"go 1.26\nrequire github.com/clipperhouse/uax29/v2 v2.2.0\n"
 	// what masking keeps at the publisher's threshold: Find gives down
