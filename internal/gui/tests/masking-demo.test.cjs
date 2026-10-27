@@ -88,6 +88,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(await page.locator("#mdBody").isHidden(), "folded at first");
         // it sits between the card and the requests
         assert.deepEqual(await page.evaluate(() => [document.querySelector("#maskDemo").previousElementSibling?.id, document.querySelector("#maskDemo").nextElementSibling?.id]), ["maskCard", "maskList"]);
+        // with the same room above it as the list has below it
+        assert.deepEqual(await page.evaluate(() => {
+          const r = (s) => document.querySelector(s).getBoundingClientRect();
+          return [Math.round(r("#maskDemo").top - r("#maskCard").bottom), Math.round(r("#maskList").top - r("#maskDemo").bottom)];
+        }), [14, 14]);
         await page.waitForTimeout(300);
         assert(!fetched.some((f) => f.endsWith(".webm")), "a video fetched while folded: " + fetched);
 
