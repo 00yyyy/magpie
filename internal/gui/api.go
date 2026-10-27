@@ -2391,6 +2391,8 @@ func held(h http.Handler) http.Handler {
 			// a page waits on the session files: the warm-up reading
 			// them reads at full speed meanwhile
 			defer sessions.Ask()()
+			// and what the read threw away goes back once the page rests
+			defer readingPage()()
 		}
 		if !(api && r.Method == http.MethodGet) {
 			// anything that may have written drops what was held, once it
