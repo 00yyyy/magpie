@@ -9642,8 +9642,7 @@ function drawEditor(p, presetID) {
   // are served at their own: one selector, and the provider's base URLs follow it
   let refreshEndpoints = () => {}, onRegion = () => {};
   if (pr?.regions?.length) {
-    // Bedrock's ten regions (Mantle's seventeen) don't fit the editor's
-    // width: they scroll
+    // Bedrock's ten regions don't fit the width: they scroll
     const seg = el("div", "segs regions");
     const cur = regionAt(pr, draft) || pr.regions.find((r) => r.decide && (r.id === draft.region || (!draft.region && workspaceOf(r.decide, draft.decide ?? p?.decide ?? pr.decide) !== null))) || pr.regions[0];
     for (const r of pr.regions) {
@@ -9671,7 +9670,7 @@ function drawEditor(p, presetID) {
       const on = seg.querySelector(":scope > .on");
       if (on && seg.scrollWidth > seg.clientWidth) seg.scrollLeft = on.offsetLeft - (seg.clientWidth - on.offsetWidth) / 2;
     });
-    ed.append(...field(t(pr.regionLabel || "Region"), seg, t("which endpoint {p} is reached through", { p: pr.name })));
+    ed.append(...field(t(pr.regionLabel || "Region"), seg, t(pr.splitAccounts ? "pick the region of your {p} account" : "which endpoint {p} is reached through", { p: pr.name })));
   }
 
   if (p) ed.append(...field(t("Models"), renderModels(p), ""));
