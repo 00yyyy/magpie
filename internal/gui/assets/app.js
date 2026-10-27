@@ -11591,8 +11591,8 @@ function renderModels(p) {
     try {
       const r = await api("provider/test", { ...asTyped(), id: p.id, test: ids });
       r.results.forEach((x, i) => { got[ids[i]] = x; });
-      const bad = r.results.filter((x) => !x.ok).length;
-      status(bad ? t("{n} of {all} models didn't answer", { n: bad, all: ids.length }) : t("All {n} models answered", { n: ids.length }), bad ? "err" : "ok");
+      const i = r.results.findIndex((x) => !x.ok), x = r.results[i], bad = r.results.filter((x) => !x.ok).length;
+      status(x ? t("{n} of {all} models didn't answer; {model}: {error}", { n: bad, all: ids.length, model: ids[i], error: (x.status ? x.status + " · " : "") + x.error }) : t("All {n} models answered", { n: ids.length }), x ? "err" : "ok");
     } catch (e) { delete modelTests[p.id]; status(e.message, "err"); }
     testAll.classList.remove("busy");
     draw();
