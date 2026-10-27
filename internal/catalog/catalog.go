@@ -1555,10 +1555,11 @@ func draws(m mdModel) bool {
 // DrawsID is whether a model's id names one that makes images, for a model
 // the catalog doesn't know (one typed in, or a vendor's own list's). Banana
 // is the Nano Banana the Gemini image models are called on a relay, whatever
-// its spelling there (#2071).
+// its spelling there (#2071). SenseNova's U1 models (sensenova-u1.5-lite,
+// -fast) draw only, on its images API (lileo0668 on Discord).
 func DrawsID(id string) bool {
 	id = strings.ToLower(id)
-	for _, w := range []string{"image", "imagen", "imagine", "dall-e", "flux", "seedream", "cogview", "stable-diffusion", "sdxl", "wanx", "kolors", "hidream", "banana"} {
+	for _, w := range []string{"image", "imagen", "imagine", "dall-e", "flux", "seedream", "cogview", "stable-diffusion", "sdxl", "wanx", "kolors", "hidream", "banana", "sensenova-u1"} {
 		if strings.Contains(id, w) {
 			return true
 		}
@@ -1571,7 +1572,7 @@ func DrawsID(id string) bool {
 // gemini-*-image or gpt-5-image, which chat.
 func ImagesAPI(id string) bool {
 	id = strings.ToLower(id)
-	for _, w := range []string{"gpt-image", "chatgpt-image", "dall-e", "imagen", "imagine", "qwen-image", "wanx", "wan2", "seedream", "cogview", "flux", "stable-diffusion", "sdxl", "kolors", "hidream"} {
+	for _, w := range []string{"gpt-image", "chatgpt-image", "dall-e", "imagen", "imagine", "qwen-image", "wanx", "wan2", "seedream", "cogview", "flux", "stable-diffusion", "sdxl", "kolors", "hidream", "sensenova-u1"} {
 		if strings.Contains(id, w) {
 			return true
 		}
