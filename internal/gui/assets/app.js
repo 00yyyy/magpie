@@ -4252,9 +4252,9 @@ async function renderUpdateBadge() {
   };
   const restart = async () => {
     b.classList.add("busy");
-    label.textContent = t("Restarting…");
+    label.textContent = t("Updating…");
     // an answer means it didn't: the password prompt dismissed, the swap
-    // failed, or a newer version is out and downloading first
+    // failed, or a newer version is out and downloading first (dawnmarch7429)
     const a = await api("update/install", installFrom()).catch(() => ({}));
     if (!a) return backAsNew(u.current);
     if (a) {
