@@ -1870,24 +1870,22 @@ function daemonRestart() {
   return go;
 }
 
-// asked first: what runs in the app stops
-const confirmRestart = (name) => confirmAction(t("Restart {agent}?", { agent: name }), t("magpie quits {agent} and opens it again, so it reads the new settings. Anything running in it stops.", { agent: name }), t("Restart"));
+const confirmRestart = (name, why) => confirmAction(t("Restart {agent}?", { agent: name }), why || t("magpie quits {agent} and opens it again, so it reads the new settings. Anything running in it stops.", { agent: name }), t("Restart"));
 
-// appReopen is the Restart beside the Codex app left on the old list: magpie
-// asks, then quits it, as ⌘Q does, and opens it again
+// appReopen: ends the Codex app's app-server, not its window
 function appReopen(bundle) {
   const go = el("button", "ag-quiet accent", t("Restart"));
   go.type = "button";
   go.title = bundle;
   go.onclick = async () => {
-    if (!(await confirmRestart(t("The Codex app")))) return;
+    if (!(await confirmRestart(t("The Codex app"), t("Only its app-server restarts, for the new settings; its window stays. A running turn stops.")))) return;
     go.disabled = true;
     go.classList.add("busy");
     try {
       await api("codex/app/reopen", { bundle });
       state = await api("state");
       renderAgents();
-      status(t("The Codex app reopened"));
+      status(t("Codex app-server restarted"));
     } catch (e) {
       go.disabled = false;
       go.classList.remove("busy");
