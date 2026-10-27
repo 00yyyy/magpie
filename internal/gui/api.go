@@ -1240,6 +1240,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if _, sent := fields["redactWordsAnyCase"]; !sent {
 			in.RedactWordsAnyCase = cur.RedactWordsAnyCase
 		}
+		// nor whether they match only as whole words
+		if _, sent := fields["redactWordsWhole"]; !sent {
+			in.RedactWordsWhole = cur.RedactWordsWhole
+		}
 		// nor whether a key goes as a made-up one of its form
 		if _, sent := fields["redactShape"]; !sent {
 			in.RedactShape = cur.RedactShape
