@@ -1519,7 +1519,20 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
   const start = kind === "ok" && !listsMenu(a) ? startField(a) : null;
   if (start) fields.querySelector(`:scope > [data-key="${CSS.escape(start.key)}"]`)?.remove();
   if (kind === "ok") {
-    if (a.wired) row.append(expandLink(a));
+    if (a.wired) {
+      // a click anywhere on the row that isn't one of its controls opens or
+      // closes it, as a disclosure row does on the Mac (NG_shiyu on X: the
+      // space between the name and the model did nothing, only the small
+      // link did); the link stays the control the keyboard and a screen
+      // reader use, with its aria-expanded
+      const link = expandLink(a);
+      row.append(link);
+      row.onclick = (ev) => {
+        if (ev.target.closest("button, a, input, label, [role], .ag-exp, .ag-handle")) return;
+        if (!getSelection()?.isCollapsed) return; // words being selected
+        link.click();
+      };
+    }
     // the square copying the command that starts it on magpie (agy), the
     // only way it takes magpie: on the row, before the model
     const launch = a.wired && fields.querySelector(".field.launch");
