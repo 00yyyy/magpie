@@ -20552,11 +20552,8 @@ function proxyCheckText(c) {
   return [t("Works: through the proxy requests leave from {where}, {ms} ms; direct ones from {direct}", { where: where(via), ms: via.ms || 0, direct }), false];
 }
 
-// renderGitHubToken: the GitHub token the library's requests to GitHub's
-// API carry (checking skills for updates, installing from a private
-// repository), which raises GitHub's limit from
-// 60 requests an hour to 5,000. The page is told a masked one only, and
-// whether it is the one set here or GITHUB_TOKEN / GH_TOKEN's.
+// renderGitHubToken: the token requests to GitHub's API carry, masked,
+// and whether it is set here, GITHUB_TOKEN's / GH_TOKEN's, or refused.
 let githubTokenErr = "", githubTokenDraft = "";
 function renderGitHubToken(s) {
   const box = $("#githubList");
@@ -20573,7 +20570,8 @@ function renderGitHubToken(s) {
     .catch((e) => { githubTokenErr = t(e.message); status(t(e.message), "err"); renderSettings(); });
   const why = t("The library checks skills for updates with it: GitHub allows 5,000 requests an hour with a token, 60 without. It also installs skills from private repositories it can read; for public ones it needs no scopes.");
   if (s.githubTokenFrom === "settings") {
-    sub.textContent = sub.title = why;
+    sub.textContent = sub.title = s.githubTokenRefused ? t("GitHub refused this token: it may have expired or been revoked. Requests go without one (60 an hour) until it is replaced.") : why;
+    sub.classList.toggle("err", !!s.githubTokenRefused);
     const x = el("button", "text", t("Remove"));
     x.onclick = () => set("");
     val.append(el("code", "", s.githubTokenMask || ""), x);
