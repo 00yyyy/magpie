@@ -5450,6 +5450,22 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				r.Tier, req = tier, &r
 			}
 		}
+		if p.IsRemoteMagpie() && req.Tier == "" && req.Fast && (to == provider.Chat || to == provider.Responses) {
+			// fast mode in Claude's words (a fast pick from an agent on
+			// its API, littlekk88 on Discord) is the tier another magpie
+			// offers it at: priority, or ultrafast for a pick sent
+			// Ultrafast where it offers that. Its Chat or Responses reads
+			// service_tier alone
+			tiers := provider.RemoteTiers(p, model)
+			tier := "priority"
+			if (req.Ultrafast || isUltra(ctx)) && slices.Contains(tiers, "ultrafast") {
+				tier = "ultrafast"
+			}
+			if slices.Contains(tiers, tier) {
+				r := *req
+				r.Tier, req = tier, &r
+			}
+		}
 		if own := own && s.fits(p.ID, tierField, to); own != req.OwnTier {
 			r := *req
 			r.OwnTier, req = own, &r
