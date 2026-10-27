@@ -1223,12 +1223,18 @@ const MENU_FROM_LIST = new Set(["claude-desktop", "cursor-local"]);
 const listsMenu = (a) => MENU_FROM_LIST.has(a.id) || !!a.menu;
 const menuFromList = (a) => listsMenu(a) && a.wired && !!a.models;
 
-// menuSaid: the models such an agent lists, by name while they are few
+// menuSaid: the models such an agent lists, as its list's ticks are. Every
+// one ticked is said as all of them, a few picked by their names, and more
+// as how many of how many. Its first two names and +N (routing groups come
+// first) read as a pick of a group and a model while every model was on
+// (NG_shiyu on X: 「路由组，模型+数字」 here, one 「路由」 on the row above,
+// and every model in the list opened)
 function menuSaid(c) {
   if (!c.shown) return t("No models");
+  if (c.shown >= c.listed) return t("All {n} models", { n: c.listed });
   const names = c.names || [];
-  if (!names.length) return t("{n} models", { n: c.shown });
-  return names.slice(0, 2).join(", ") + (c.shown > 2 ? " +" + (c.shown - 2) : "");
+  if (c.shown <= 2 && names.length >= c.shown) return names.slice(0, c.shown).join(", ");
+  return t("Showing {shown} / {listed} models", { shown: c.shown, listed: c.listed });
 }
 
 // menuButton: where the model picker stands in another agent's row, the
