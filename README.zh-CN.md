@@ -313,4 +313,4 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
 
 [MIT](LICENSE)
 
-magpie 与 Apache Magpie 及 Apache 软件基金会没有隶属关系。
+magpie 与 [Apache Magpie](https://magpie.apache.org) 及 [Apache 软件基金会](https://apache.org)没有隶属关系。

@@ -313,4 +313,4 @@ If magpie saved you from editing one more config file, **a ⭐ helps others find
 
 [MIT](LICENSE)
 
-magpie is not affiliated with Apache Magpie or the Apache Software Foundation.
+magpie is not affiliated with [Apache Magpie](https://magpie.apache.org) or the [Apache Software Foundation](https://apache.org).
