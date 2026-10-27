@@ -342,6 +342,9 @@ func run(args []string) error {
 	// a Codex that reaches magpie for account failover alone is handed
 	// only its own models (#1385)
 	gateway.CodexOwnOnly = agent.CodexOwnOnly
+	// what magpie writes into an agent's TOML, YAML or dotenv config says
+	// so in a comment, for whoever reads it once magpie is gone
+	agent.MarkWritten()
 	// the Codex app's titles, descriptions and summaries, which it asks
 	// for on a model of its own, on the model of magpie's picked beside
 	// its ChatGPT sign-in rather than on that account (atom_Ray on X)
