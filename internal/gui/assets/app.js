@@ -1414,7 +1414,8 @@ function expandLink(a) {
   const b = el("button", "ag-link" + (open ? " open" : ""));
   b.type = "button";
   b.setAttribute("aria-expanded", String(open));
-  b.append(el("span", "", open ? t("Collapse") : a.id === "claude" ? t("Tiers") : a.models && !listsMenu(a) ? t("Models {n}", { n: a.models.shown }) : t("Details")));
+  // it opens more than models; their count is in the status line
+  b.append(el("span", "", open ? t("Collapse") : t("Details")));
   if (!open) {
     b.append(el("span", "chev", svg(CHEV_R, 10, 1.6)));
   }
