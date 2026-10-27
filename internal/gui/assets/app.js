@@ -21911,12 +21911,15 @@ function renderRedact(s, keep) {
 // privacyModelRow: the local masking model (internal/pii), downloaded when
 // it is turned on and then asked beside the rules. Its state is its own
 // (privacy-model): read when the row is drawn, and each second while it
-// downloads or starts.
+// downloads or starts. Under it, once the model can run, its threshold
+// (pmScore).
 let pmState = null, pmTimer = 0;
 function privacyModelRow(box, why) {
   const r = el("div", "row pref" + (why ? " pm-wait" : ""));
   r.id = "privacyModelRow";
   box.append(r);
+  const sr = el("div", "row pref");
+  sr.id = "pmScoreRow";
   const name = () => { const n = el("div", "name", t("Find with a local model")); n.append(el("span", "badge new", t("New"))); return n; };
   // nothing is masked: the model has nothing to find more of
   if (why) {
@@ -21947,13 +21950,21 @@ function privacyModelRow(box, why) {
       val.append(segs([["off", t("Off")], ["on", t("On")]], m.on || m.downloading ? "on" : "off", (v) => act(v)));
     }
     r.replaceChildren(who, val);
+    if (m && (m.supported || m.installed) && m.defaultScore) {
+      const sw = el("div", "who");
+      sw.append(el("div", "name", t("Confidence threshold")), el("div", "sub", t("What the model is less sure of goes as written. Higher masks less, with fewer false alarms")));
+      const sv = el("div", "val");
+      sv.append(pmScore(m, (score) => act("score", m.model, score)));
+      sr.replaceChildren(sw, sv);
+      if (!sr.isConnected) r.after(sr);
+    } else sr.remove();
     clearTimeout(pmTimer);
     // a download's progress, and where pf-serve runs once it has started
     const starting = m?.on && m.installed && !m.running && !m.failed && tries++ < 30;
     if (pmBusy(m) || starting) pmTimer = setTimeout(load, 1000);
   };
   const load = () => api("privacy-model").then((m) => { pmState = m; draw(m); }).catch(() => {});
-  const act = (doing, model) => { tries = 0; api("privacy-model", { do: doing, model }).then((m) => { pmState = m; draw(m); }).catch((e) => { status(t(e.message), "err"); load(); }); };
+  const act = (doing, model, score) => { tries = 0; api("privacy-model", { do: doing, model, score }).then((m) => { pmState = m; draw(m); }).catch((e) => { status(t(e.message), "err"); load(); }); };
   draw(pmState);
   load();
 }
@@ -21975,6 +21986,27 @@ function pmPick(m, pick) {
     const opts = (m.models || []).map((x) => ({ v: x.model, name: (PM_MODELS[x.model] || [x.model])[0], literalName: true,
       note: !x.supported && !x.installed ? t("Not available on this system yet") : t(PM_MODELS[x.model]?.[1] || "") + " · " + fmtBytes(x.size) + (x.installed ? " · " + t("downloaded") : "") }));
     openProtoMenu(b, opts, m.model, (v) => v !== m.model && pick(v), "The local model", "sess-menu", "right");
+  };
+  return b;
+}
+// pmScore picks the model's threshold (privacy-model's score) by the
+// app's menu: its default, or one of PM_SCORES
+const PM_SCORES = [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95];
+function pmScore(m, pick) {
+  const cur = m.minScore === m.defaultScore ? "0" : String(m.minScore);
+  const b = el("button", "sess-pick pm-score");
+  b.type = "button";
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  b.title = t("Confidence threshold");
+  b.append(el("span", "", String(m.minScore)), svg(CHEV, 11, 1.6));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    const note = (s) => s === PM_SCORES[0] ? "Masks the most" : s === PM_SCORES.at(-1) ? "Masks the least" : "";
+    const opts = [{ v: "0", name: t("Default ({score})", { score: m.defaultScore }), literalName: true, note: note(m.defaultScore) },
+      ...PM_SCORES.filter((s) => s !== m.defaultScore).map((s) => ({ v: String(s), name: String(s), literalName: true, note: note(s) }))];
+    openProtoMenu(b, opts, cur, (v) => v !== cur && pick(Number(v)), "Confidence threshold", "sess-menu", "right");
   };
   return b;
 }
