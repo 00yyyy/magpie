@@ -1816,7 +1816,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// that same name, went on unresolved, a 404 (Adam on Discord)
 		asked = grouped(at(m))
 	}
-	if m := s.codexMemoryStandIn(r, call.Agent, agent, call.Kind, asked); m != "" {
+	if m := s.codexMemoryStandIn(r, call.Agent, agent, call.Kind, asked, body); m != "" {
 		asked = m
 	}
 	// a Codex subagent on the model set for Codex's subagents, whatever
