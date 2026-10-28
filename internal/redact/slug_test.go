@@ -26,6 +26,7 @@ func TestSlugIsNoKey(t *testing.T) {
 		"sk-" + strings.Repeat("0123456789abcdef", 2),
 		"sk-or-v1-" + strings.Repeat("0123456789abcdef", 4), // built, as a literal one stops GitHub's push
 		"sk-ant-api03-Ab3dE-fGh1_jKl2mN-oPq3rSt4",
+		"sk-" + "1f0e3dad-9990-4b5c-8a1b-2c3d4e5f6a7b", // a UUID in lower case: no capital, no run of 16
 	} {
 		in := "url sk-hynix-third-quarter-profit key " + key
 		out, n := Mask(in, o)

@@ -404,9 +404,15 @@ func inUserinfo(s string, a int) bool {
 // (cnbc.com/…/sk-hynix-third-quarter-profit.html), which went to the model
 // as a key. A key's characters are random: it has a capital, or a run of
 // 16 or more with no hyphen (DeepSeek's sk- and 32 hex digits, OpenRouter's
-// sk-or-v1- and 64).
+// sk-or-v1- and 64), or hex digits alone, as a UUID's groups (sk- and a
+// UUID in lower case) are, which no word but a few like "face" is.
 func notASlug(v string) bool {
 	if strings.ContainsFunc(v, func(r rune) bool { return r >= 'A' && r <= 'Z' }) {
+		return true
+	}
+	if !strings.ContainsFunc(strings.TrimPrefix(v, "sk-"), func(r rune) bool {
+		return r != '-' && r != '_' && (r < '0' || r > '9') && (r < 'a' || r > 'f')
+	}) {
 		return true
 	}
 	for _, w := range strings.FieldsFunc(v, func(r rune) bool { return r == '-' || r == '_' }) {
