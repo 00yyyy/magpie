@@ -1447,16 +1447,27 @@ func getIn(body []byte, path string) gjson.Result {
 // 316 MiB, the buffers it outgrew being garbage until the next GC (#4004,
 // jihuayu's profile on a 2 GiB server). Here no buffer outgrows the
 // largest item. A value json.Marshal refuses gets json.Marshal's answer.
-func marshalBody(out map[string]any) ([]byte, error) {
+//
+// spent names the list the builder made for this body alone (its
+// messages, its input items): each of its items is let go once written,
+// so the built conversation, strings joined from the request's parts
+// among it, is garbage while the body fills instead of held beside it to
+// the end (#4004). A value json.Marshal refuses is refused still, and the
+// list is then left part spent.
+func marshalBody(out map[string]any, spent string) ([]byte, error) {
 	keys := make([]string, 0, len(out))
 	for k := range out {
+		// a key json.Marshal writes another way, before anything is spent
+		if _, ok := appendJSONKey(nil, k, true); !ok {
+			return json.Marshal(out)
+		}
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
 	vals := make([][]json.RawMessage, len(keys))
 	n := 2
 	for i, k := range keys {
-		items, ok := marshalItems(out[k])
+		items, ok := marshalItems(out[k], k == spent)
 		if !ok {
 			return json.Marshal(out)
 		}
@@ -1507,8 +1518,8 @@ func isSplitList(v any) bool {
 
 // marshalItems is v as json.Marshal writes it: its items each on their
 // own for a list isSplitList takes, or one piece; false when json.Marshal
-// refuses any of it.
-func marshalItems(v any) ([]json.RawMessage, bool) {
+// refuses any of it. spend sets each item written to its zero value.
+func marshalItems(v any, spend bool) ([]json.RawMessage, bool) {
 	if !isSplitList(v) {
 		b, err := json.Marshal(v)
 		return []json.RawMessage{b}, err == nil
@@ -1523,6 +1534,9 @@ func marshalItems(v any) ([]json.RawMessage, bool) {
 			return nil, false
 		}
 		items[i] = b
+		if spend {
+			rv.Index(i).SetZero()
+		}
 	}
 	return items, true
 }
