@@ -98,7 +98,7 @@ const tailItems = 8 * toolLoopRepeats
 // took ~30ms and 20MB a turn of 1.5MB; gjson finds the items without
 // decoding them. A body whose conversation isn't such a list is as it came.
 func tailOf(from provider.Protocol, body []byte) []byte {
-	list := gjson.GetBytes(body, conversationKey[from])
+	list := getIn(body, conversationKey[from])
 	if !list.IsArray() || list.Index <= 0 {
 		return body
 	}

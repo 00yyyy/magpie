@@ -16,6 +16,8 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 	"unsafe"
+
+	"github.com/tidwall/gjson"
 )
 
 // decodeJSON is json.Unmarshal(data, dst), made for a request body: one
@@ -1425,6 +1427,16 @@ func appendHTMLEscaped(dst, s []byte) []byte {
 		}
 	}
 	return append(dst, s[start:]...)
+}
+
+// getIn is gjson.GetBytes read in place: what it finds points into body
+// rather than into a copy. GetBytes copies the value it finds, and for a
+// conversation's list that is the conversation, 45 MiB of a Codex turn
+// for one look at its items (#4004). A string kept from the result keeps
+// all of body: clone one that outlives the request, and never change body
+// while one is held.
+func getIn(body []byte, path string) gjson.Result {
+	return gjson.Get(unsafe.String(unsafe.SliceData(body), len(body)), path)
 }
 
 // marshalBody is json.Marshal of a request body being built, byte for
