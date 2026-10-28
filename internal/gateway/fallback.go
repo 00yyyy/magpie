@@ -43,6 +43,10 @@ type candidate struct {
 	// effort is the reasoning the group's member it is of is fixed at
 	// ("provider/model:low"); "" for one that follows the agent or the group
 	effort string
+	// levels are the reasoning levels the member follows the agent among
+	// (Member.Levels, "provider/model:low+high"): what the agent asks is
+	// sent at the nearest of them. nil for one fixed or following the group.
+	levels []string
 	// fast is set on a member the group sends in its vendor's fast mode
 	// (Group.Fast); ultra on an agent's fast pick sent Ultrafast (#1954)
 	fast, ultra bool
@@ -112,7 +116,7 @@ func (c candidate) restKey() string {
 // seat is the candidate as one of a group's members has it: its key or
 // account, the model, and the effort the member is fixed at.
 func (c candidate) seat() string {
-	return provider.WithMemberEffort(c.rest+"/"+c.model, c.effort)
+	return provider.WithMemberEffort(c.rest+"/"+c.model, cmp.Or(c.effort, strings.Join(c.levels, "+")))
 }
 
 func (c candidate) isOpenRouterFree() bool {
@@ -502,7 +506,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		// the same model at another effort is another member's
 		for _, l := range [][]candidate{cs, aside, left, barred} {
 			for i := range l {
-				l[i].effort, l[i].fast = m.Effort, m.Fast
+				l[i].effort, l[i].levels, l[i].fast = m.Effort, m.Levels, m.Fast
 				l[i].firstToken = innerFirstToken(m)
 				l[i].patience = innerPatience(m)
 			}

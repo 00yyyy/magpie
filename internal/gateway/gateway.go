@@ -1357,6 +1357,9 @@ func unprefixed(id string) string {
 func askedAt(id string) (string, string) {
 	bare, marked := strings.CutSuffix(id, "[1m]")
 	m, e := provider.MemberEffort(bare)
+	if strings.Contains(e, "+") {
+		return id, "" // a group's member at several levels, not one asked
+	}
 	if i := strings.LastIndex(bare, ":"); e == "" && i > 0 && strings.EqualFold(bare[i+1:], "off") {
 		m, e = provider.MemberEffort(bare[:i] + ":none")
 	}
@@ -2813,7 +2816,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// One the user fixed at an effort is left as it is: that is the
 		// user saying this model does think, over a catalog that may be
 		// wrong about it (the Trae plugin's own model, #950)
-		quiet := isGroup && c.effort == "" && quietTo(c.p.ID, c.model)
+		quiet := isGroup && c.effort == "" && len(c.levels) == 0 && quietTo(c.p.ID, c.model)
 		if provider.Reasonless(c.p.ID, c.model) {
 			// a model the user said takes no reasoning ask is sent none,
 			// in a group or not, at a fixed effort or not: not even

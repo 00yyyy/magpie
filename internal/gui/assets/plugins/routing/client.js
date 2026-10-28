@@ -4777,13 +4777,17 @@ function routingPage(part) {
   }
   // a member may be a model at an effort of its own, "provider/model:low" —
   // unless the whole is a model's own id (a :free, a :7b); see
-  // provider.MemberEffort
+  // provider.MemberEffort. Several levels joined by "+" ("…:low+high",
+  // Garydesu on X) are those the agent picks among (provider.MemberLevels),
+  // kept each once, lowest first
   const LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]; // provider.MemberEfforts
   function splitMember(id) {
     id = id || "";
     if (id.startsWith("group/") || groups?.models.some((m) => m.id === id)) return [id, ""];
-    const m = /^(.+):(none|minimal|low|medium|high|xhigh|max)$/i.exec(id);
-    return m ? [m[1], m[2].toLowerCase()] : [id, ""];
+    const m = /^(.+):((?:none|minimal|low|medium|high|xhigh|max)(?:\+(?:none|minimal|low|medium|high|xhigh|max))*)$/i.exec(id);
+    if (!m) return [id, ""];
+    const parts = m[2].toLowerCase().split("+");
+    return [m[1], LEVELS.filter((v) => parts.includes(v)).join("+")];
   }
   // a decision model (Jev) is a member of a group of decision models only,
   // asked at /v1/systemone (provider/decide_group.go): it is in
@@ -4831,7 +4835,7 @@ function routingPage(part) {
   // patterns matched when it was read — they are found again each time
   const namedOf = (g) => (g.members || []).filter((x) => !(g.matched || []).includes(x));
   const fixedOf = (id) => subOf(id) ? "" : splitMember(id)[1];
-  const fixedWords = (level) => t("{level} reasoning", { level });
+  const fixedWords = (level) => t("{level} reasoning", { level: level.split("+").join(" / ") });
   // a routing group among a group's members: group/<id>
   const subOf = (id) => id?.startsWith("group/") ? groups?.groups.find((x) => "group/" + x.id === id && !x.hidden) : null;
   // a group's editor, its draft being the group as it is now. The group's own
@@ -5822,25 +5826,48 @@ function routingPage(part) {
         // a decision model reasons at no level of the group's or its own
         if (!s && !deciderOf(id)) {
           const [base, fixed] = splitMember(id);
+          const several = fixed.includes("+");
           const fx = el("button", "rt-cond rt-fixed" + (fixed ? " on" : ""), fixed ? fixedWords(fixed) : t("Group's reasoning"));
-          fx.title = fixed ? t("Sent at {level} reasoning whatever the agent asks, at the model's nearest level", { level: fixed }) : t("Reasons as the group's effort says");
+          fx.title = several ? t("The agent picks among {levels} reasoning, each sent at the model's nearest level", { levels: fixed.split("+").join(" / ") })
+            : fixed ? t("Sent at {level} reasoning whatever the agent asks, at the model's nearest level", { level: fixed }) : t("Reasons as the group's effort says");
           const levels = m?.efforts?.length ? m.efforts.filter((v) => LEVELS.includes(v)) : LEVELS.filter((v) => v !== "none" && v !== "minimal");
+          // the member under another id: its rules, fast, off, weight and
+          // pick go with it
+          const moveTo = (to) => {
+            const from = d.members[i];
+            if (to === from) return true;
+            if (d.members.includes(to)) { status(t("{name} at that reasoning is in the group already", { name: memberName(from) }), "err"); return false; }
+            d.members[i] = to;
+            d.matched = d.matched.filter((x) => x !== from); // named now, at its own reasoning
+            for (const r of d.rules) setUses(r, rUses(r).map((x) => x === from ? to : x));
+            d.fast = d.fast.map((x) => x === from ? to : x);
+            d.off = d.off.map((x) => x === from ? to : x);
+            if (d.weights[from]) { d.weights[to] = d.weights[from]; delete d.weights[from]; }
+            if (d.pick === from) d.pick = to;
+            return true;
+          };
+          // several levels the agent picks among (provider.MemberLevels): a
+          // menu that stays open, each level ticked or not; one left is a
+          // fixed effort again, none follows the group
+          const pickSeveral = (ev) => {
+            let have = fixed ? fixed.split("+") : [];
+            openPicker({ id: "", name: "", fields: [] }, { key: "rule", label: "reasoning", value: "", menu: true, multi: true,
+              options: levels.map((v) => ({ value: v, label: v })), picked: (v) => have.includes(v), onPick: (v) => {
+                const next = have.includes(v) ? have.filter((x) => x !== v) : LEVELS.filter((x) => x === v || have.includes(x));
+                const at = next.join("+");
+                if (!moveTo(at ? `${base}:${at}` : base)) return;
+                have = next;
+                draw(); drawRules();
+              } }, fx, ev);
+          };
           fx.onclick = (ev) => pickFrom("reasoning", fx, ev, [
             { value: "", label: t("Follow the group"), note: t("as the group's effort says") },
             ...levels.map((v) => ({ value: v, label: fixedWords(v), note: t("whatever the agent asks") })),
+            ...(levels.length > 1 ? [{ value: "+", label: t("Several levels…"), note: t("the agent picks among them") }] : []),
           ], (v) => {
-            const to = v ? `${base}:${v}` : base;
-            if (to === id) return;
-            if (d.members.includes(to)) { status(t("{name} at that reasoning is in the group already", { name: memberName(id) }), "err"); return; }
-            d.members[i] = to;
-            d.matched = d.matched.filter((x) => x !== id); // named now, at its own reasoning
-            for (const r of d.rules) setUses(r, rUses(r).map((x) => x === id ? to : x));
-            d.fast = d.fast.map((x) => x === id ? to : x);
-            d.off = d.off.map((x) => x === id ? to : x);
-            if (d.weights[id]) { d.weights[to] = d.weights[id]; delete d.weights[id]; }
-            if (d.pick === id) d.pick = to;
-            draw(); drawRules();
-          }, fixed);
+            if (v === "+") { pickSeveral(ev); return; }
+            if (moveTo(v ? `${base}:${v}` : base)) { draw(); drawRules(); }
+          }, several ? "+" : fixed);
           row.append(fx);
           // its vendor's fast mode, where the model has one: priority
           // processing, Claude's fast mode (provider.CanFast)
