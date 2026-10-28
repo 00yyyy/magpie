@@ -1028,10 +1028,32 @@ func modelObject(e provider.Entry) map[string]any {
 	return m
 }
 
+// toolsTold says, in an OpenAI-compatible list, that a chat model takes
+// tools, by the names clients read it under: models.dev's tool_call
+// (beside its reasoning, which modelObject gives) and OpenRouter's
+// supported_parameters, whose "tools" Cline, Kilo and kin read before they
+// offer a model their tools. Without either, a client that matches what a
+// model can do by its id (psikent on Discord: an SSH client) found none
+// for a routing group, whose id is the user's own name, and wouldn't hand
+// it a tool. Every chat model magpie lists takes tools — the gateway reads
+// one written as text back as a call (textcalls.go) — so a group, all of
+// whose members do, says so as well. The decision models and Claude
+// Desktop's and Claude Science's lists, shaped for their own readers, are
+// left as they were.
+func toolsTold(m map[string]any, e provider.Entry) {
+	m["tool_call"] = true
+	params := []string{"tools", "tool_choice"}
+	if e.Thinks() {
+		params = append(params, "reasoning")
+	}
+	m["supported_parameters"] = params
+}
+
 // pricedModelObject is modelObject with the model's pricing, as the list
 // gives it, for the callers the list tells it to.
 func pricedModelObject(r *http.Request, e provider.Entry) map[string]any {
 	m := modelObject(e)
+	toolsTold(m, e)
 	if local(r) || sharedWith(r) {
 		if pr, ok := provider.EntryPriceIn(settings.Load(), provider.GroupFinder(), e); ok {
 			m["pricing"] = catalog.OpenRouterPricing(pr)
@@ -1196,6 +1218,7 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 		}
 		for i, e := range rows {
 			m := modelObject(e)
+			toolsTold(m, e)
 			if id, ok := ids[i]; ok {
 				m["id"] = id
 			}
