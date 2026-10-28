@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -29,8 +30,9 @@ func Find(texts []string) ([][]redact.Found, error) {
 }
 
 // FindContext is Find for a caller that may stop waiting: when ctx ends
-// (the client went away) it returns at once, whether its turn hadn't come
-// or pf-serve is on it. The chunk pf-serve is on is finished all the same
+// (the client went away, or the caller's own bound) it returns at once,
+// whether its turn hadn't come or pf-serve is on it, with what was known
+// of the texts by then and a *Partial. The chunk pf-serve is on is finished all the same
 // and its answers kept, so the request sent again finds them; the chunks
 // after it are left. Between chunks the turn is given up and taken again,
 // so a short request waiting for it goes before the rest of a long one.
@@ -63,13 +65,13 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 		return out, nil
 	}
 	if ctx.Err() != nil {
-		return nil, waitErr(ctx)
+		return b.partial(ctx, texts)
 	}
 	if err := b.heldBack(); err != nil {
 		return nil, err
 	}
 	if !b.takeTurn(ctx) {
-		return nil, waitErr(ctx)
+		return b.partial(ctx, texts)
 	}
 	type result struct {
 		out [][]redact.Found
@@ -95,7 +97,7 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				// this one: the turn isn't taken again for them (a
 				// select on a free turn and an ended ctx picks either)
 				if ctx.Err() != nil {
-					done <- result{nil, waitErr(ctx)}
+					done <- result{nil, errWaitEnded}
 					return
 				}
 				// give way to a request waiting for the turn: it goes
@@ -103,7 +105,7 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				<-b.turn
 				held = false
 				if !b.takeTurn(ctx) {
-					done <- result{nil, waitErr(ctx)}
+					done <- result{nil, errWaitEnded}
 					return
 				}
 				held = true
@@ -152,10 +154,44 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 	}()
 	select {
 	case r := <-done:
+		if r.err == errWaitEnded {
+			return b.partial(ctx, texts)
+		}
 		return r.out, r.err
 	case <-ctx.Done():
-		return nil, waitErr(ctx)
+		return b.partial(ctx, texts)
 	}
+}
+
+// errWaitEnded is find's own word that its caller stopped waiting.
+var errWaitEnded = errors.New("the wait ended")
+
+// Partial is Find's error when its caller stopped waiting (ctx ended)
+// before the model had read every text. What Find returns with it is
+// what was known of each text by then, read before or meanwhile, by
+// this request or another's; a text the model hadn't read has nil, as
+// one it found nothing in has. Before, such a wait gave nothing at all,
+// not even for texts read turns ago, and a caller holding a request back
+// for the model held it back whole (xRayySummers on X: a burst of
+// requests with text the model hadn't read queued for up to 290s, and
+// each that stopped waiting was "masking failed, so nothing was sent").
+type Partial struct {
+	// Missing of Of texts the model hadn't read
+	Missing, Of int
+	Err         error
+}
+
+func (p *Partial) Error() string {
+	return fmt.Sprintf("the local masking model read %d of %d texts in time: %v", p.Of-p.Missing, p.Of, p.Err)
+}
+
+func (p *Partial) Unwrap() error { return p.Err }
+
+// partial is what is known of texts now that ctx ended, and a Partial
+// that says how much isn't.
+func (b *backend) partial(ctx context.Context, texts []string) ([][]redact.Found, error) {
+	out, miss := b.known(texts, nil)
+	return out, &Partial{Missing: len(miss), Of: len(texts), Err: waitErr(ctx)}
 }
 
 // takeTurn waits for the model's turn while ctx lives, counted as

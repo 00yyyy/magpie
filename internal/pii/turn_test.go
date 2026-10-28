@@ -318,3 +318,63 @@ func TestStoppedRequestLeavesTheRestOfItsChunks(t *testing.T) {
 	}
 	waitFor(t, "the turn free", func() bool { return len(b.turn) == 0 })
 }
+
+// xRayySummers on X: a request that stops waiting for the model (its
+// caller's bound, a burst ahead of it in the queue) gets what was known
+// of its texts, the history the model read turns ago with it, and a
+// Partial saying how much wasn't read. The old code gave nil and an
+// error, so its caller had no finds at all, and one holding the request
+// back for the model held it back whole.
+func TestStoppedRequestKeepsWhatWasRead(t *testing.T) {
+	dir := t.TempDir()
+	stall, release := make(chan struct{}), make(chan struct{})
+	b := &backend{turn: make(chan struct{}, 1), waiting: new(atomic.Int32), cache: newLRU(100), disk: new(diskState),
+		path:     func() string { return filepath.Join(dir, "found.bin") },
+		heldBack: func() error { return nil },
+		classify: func(texts []string) ([][]redact.Found, error) {
+			out := make([][]redact.Found, len(texts))
+			for i, s := range texts {
+				if strings.Contains(s, "new tool result") {
+					close(stall)
+					<-release // the model, slow on a long text
+				}
+				if k := strings.Index(s, "Alice"); k >= 0 {
+					out[i] = []redact.Found{{Start: k, End: k + 5, Label: "private_person", Score: 0.9}}
+				}
+			}
+			return out, nil
+		}}
+	t.Cleanup(func() {
+		close(release)
+		waitFor(t, "the turn free", func() bool { return len(b.turn) == 0 })
+		b.disk.mu.Lock()
+		if b.disk.timer != nil && b.disk.timer.Stop() {
+			b.disk.saves.Done()
+		}
+		b.disk.timer = nil
+		b.disk.mu.Unlock()
+		b.disk.saves.Wait()
+	})
+	history := "user: ask Alice about the deploy"
+	if got, err := b.find(context.Background(), []string{history}); err != nil || len(got[0]) != 1 {
+		t.Fatalf("history: %v %v", got, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	res := make(chan error, 1)
+	var got [][]redact.Found
+	go func() {
+		var err error
+		got, err = b.find(ctx, []string{history, "new tool result " + strings.Repeat("x ", 100)})
+		res <- err
+	}()
+	<-stall
+	cancel()
+	err := <-res
+	var p *Partial
+	if !errors.As(err, &p) || p.Missing != 1 || p.Of != 2 || !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want a Partial with 1 of 2 missing", err)
+	}
+	if len(got) != 2 || !reflect.DeepEqual(got[0], []redact.Found{{Start: 10, End: 15, Label: "private_person", Score: 0.9}}) || len(got[1]) != 0 {
+		t.Fatalf("got %v, want the history's Alice and nothing for the unread text", got)
+	}
+}
