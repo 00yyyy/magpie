@@ -964,14 +964,15 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 			c.serial = nextChunkSerial()
 			built++
 			builtRows += c.Count
+			c.Used = idx.tick
 			put = spill.put(c, i)
+		} else {
+			c = idx.use(c)
 		}
-		kept, next := *c, *c
-		kept.Used, next.Used = idx.tick, idx.tick
-		idx.chunks[s.Path] = &kept
-		chunks = append(chunks, &next)
+		idx.chunks[s.Path] = c
+		chunks = append(chunks, c)
 		if put {
-			spill.hand(&kept, &next)
+			spill.hand(c)
 		}
 	}
 	spill.done(func(i int) *rowChunk { return makeChunk()(sources[i]) })
@@ -1001,11 +1002,12 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 			c.dict, c.shapeIDs = nil, nil
 			c = c.pack()
 			c.serial = nextChunkSerial()
+			c.Used = idx.tick
+		} else {
+			c = idx.use(c)
 		}
-		kept, next := *c, *c
-		kept.Used, next.Used = idx.tick, idx.tick
-		idx.chunks[s.path] = &kept
-		others = append(others, &next)
+		idx.chunks[s.path] = c
+		others = append(others, c)
 	}
 	for path := range idx.chunks {
 		if !on[path] {
@@ -1044,6 +1046,20 @@ func (idx *requestIndex) adopt(st requestState) {
 		idx.pages = map[pageKey]RequestPage{}
 		idx.key = st.key
 	}
+}
+
+// use is c, a chunk of idx's, as used by this read. A chunk another read
+// published is copied, since that read's page may still hold it; one this
+// read made (fromDisk) is its own. Both the map and the page take the one
+// chunk: a copy for each was 13.5 MB of the live heap after 34k sessions'
+// start (#2278).
+func (idx *requestIndex) use(c *rowChunk) *rowChunk {
+	if c.Used == idx.tick {
+		return c
+	}
+	next := *c
+	next.Used = idx.tick
+	return &next
 }
 
 // private is a copy of idx's metadata and chunk map to read into without
