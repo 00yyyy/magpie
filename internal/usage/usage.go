@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -979,19 +980,37 @@ func Vias(since time.Time) ViaIndex {
 // A provider renamed since is listed by the id it has now (renames): the
 // Sessions tab named a renamed one by its old id (cybercaius).
 func buildVias(snapshot *logSnapshot, since time.Time, renames provider.Renames) *viaLists {
-	out := map[string][]Via{}
-	first := map[string]time.Time{}
-	keep := keptStrings{}
-	snapshot.visit(since, func(r Record) {
+	counted := map[string]viaAcc{}
+	countVias(snapshot.blocks, since, renames, nil, counted, keptStrings{})
+	return listedVias(&viaLists{m: map[string][]Via{}, first: map[string]time.Time{}}, counted)
+}
+
+// viaAcc is one session's lists as counted, in the order its calls first
+// named each, and when its first call was.
+type viaAcc struct {
+	vs    []Via
+	first time.Time
+}
+
+// countVias counts blocks' calls into own, a session's counts begun from
+// a copy of base's: base is never written.
+func countVias(blocks []*rowChunk, since time.Time, renames provider.Renames, base, own map[string]viaAcc, keep keptStrings) {
+	visitBlocks(blocks, since, func(r Record) {
 		if r.IsRejected() || r.IsReported() || r.Session == "" || r.Model == "" {
 			return
 		}
 		r.Provider, r.Model, r.Effort = keep.of(renames.Of(r.Provider, r.Time)), keep.of(r.Model), keep.of(r.Effort)
 		k := ReportedAs(r.Agent) + "|" + r.Session
-		vs := out[k]
-		if t, seen := first[k]; !seen || r.Time.Before(t) {
-			first[k] = r.Time
+		a, seen := own[k]
+		if !seen {
+			if b, ok := base[k]; ok {
+				a, seen = viaAcc{vs: slices.Clone(b.vs), first: b.first}, true
+			}
 		}
+		if !seen || r.Time.Before(a.first) {
+			a.first = r.Time
+		}
+		vs := a.vs
 		i := slices.IndexFunc(vs, func(v Via) bool { return v.Provider == r.Provider && v.Model == r.Model && v.Effort == r.Effort })
 		if i < 0 {
 			vs, i = append(vs, Via{Provider: r.Provider, Model: r.Model, Effort: r.Effort}), len(vs)
@@ -1005,12 +1024,24 @@ func buildVias(snapshot *logSnapshot, since time.Time, renames provider.Renames)
 		if r.Time.After(vs[i].Last) {
 			vs[i].Last = r.Time
 		}
-		out[k] = vs
+		a.vs = vs
+		own[k] = a
 	})
-	for _, vs := range out {
-		sort.SliceStable(vs, func(i, j int) bool { return vs[i].Calls > vs[j].Calls })
+}
+
+// listedVias is lists with each session counted in counted listed in
+// place of its own, the most calls first; lists itself is not written.
+func listedVias(lists *viaLists, counted map[string]viaAcc) *viaLists {
+	if len(counted) == 0 {
+		return lists
 	}
-	return &viaLists{m: out, first: first}
+	out := &viaLists{m: maps.Clone(lists.m), first: maps.Clone(lists.first)}
+	for k, a := range counted {
+		vs := slices.Clone(a.vs)
+		sort.SliceStable(vs, func(i, j int) bool { return vs[i].Calls > vs[j].Calls })
+		out.m[k], out.first[k] = vs, a.first
+	}
+	return out
 }
 
 // Saw notes a request from an agent arriving now.
