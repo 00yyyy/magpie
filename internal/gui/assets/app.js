@@ -6109,14 +6109,7 @@ function renderProviders() {
   const onList = $("#providers"), offList = $("#offProviders");
   onList.replaceChildren();
   offList.replaceChildren();
-  const offs = providers.providers.filter((p) => p.off).length;
-  onList.hidden = offs === providers.providers.length;
-  $("#offHead").hidden = !offs;
-  offList.hidden = !offs || offFolded;
-  const fold = $("#foldOff");
-  fold.setAttribute("aria-expanded", String(!offFolded));
-  fold.title = t(offFolded ? "Show the providers turned off" : "Fold the providers turned off away");
-  $("#offCount").textContent = offs ? String(offs) : "";
+  $("#foldOff").title = t(offFolded ? "Show the providers turned off" : "Fold the providers turned off away");
   let dialog = null; // the editor, if one is open
   for (const p of providers.providers) {
     const list = p.off ? offList : onList;
@@ -6283,18 +6276,20 @@ function openProviderMenu(anchor, p) {
 // Providers' search (#1614, ququdu: "供应商很多，然后经常需要翻找"): the
 // words typed keep the rows that say them all, on and off alike, matched on
 // the row's own text and on what it doesn't show: its id, preset, addresses,
-// every model's id and name, each account's user and plan, and the keys'
-// names. The ones turned off show unfolded while searching. Escape or
-// clearing the box brings back every row, the fold as it was.
+// each account's user and plan, and the keys' names. The words it doesn't
+// say are one model's it serves, separators aside ("opus 5.5" finds
+// claude-opus-5-5), named under the row (frankdeng, Neo). The ones turned
+// off show unfolded while searching. Escape or clearing the box brings back
+// every row, the fold as it was.
 let pvQuery = "";
 function providerText(p, row) {
   const a = p.account;
   return [row.textContent, p.id, p.name, p.preset, p.host, p.chat, p.responses, p.anthropic, p.gemini,
-    ...(p.models || []).flatMap((m) => [m.id, m.name]),
     a?.user, a?.agentName, a?.plan, ...(a?.logins || []).flatMap((l) => [l.user, l.plan]),
     ...Object.values(p.accountNames || {}), ...(p.keyList || []).map((k) => k.name),
   ].filter(Boolean).join(" ").toLowerCase();
 }
+const pvSq = (s) => (s || "").toLowerCase().replace(/[\s._-]+/g, "");
 function findProviders() {
   const view = $("#view-providers"), q = $("#pvQ"), none = $("#pvNone");
   q.setAttribute("aria-label", t("Find a provider"));
@@ -6304,26 +6299,22 @@ function findProviders() {
   let on = 0, off = 0;
   for (const row of view.querySelectorAll("#providers > .row.provider, #offProviders > .row.provider")) {
     const p = byId.get(row.dataset.id);
-    const hit = !p || words.every((w) => providerText(p, row).includes(w));
+    row.querySelector(".pv-hits")?.remove();
+    const own = p ? providerText(p, row) : "", rest = words.filter((w) => !own.includes(w));
+    const hits = rest.length ? (p?.models || []).filter((m) => m.on && rest.every((w) => (pvSq(m.id) + "|" + pvSq(m.name)).includes(pvSq(w)))).map((m) => m.id) : [];
+    const hit = !p || !rest.length || hits.length;
+    if (hits.length) row.querySelector(".who").append(el("div", "sub pv-hits", t("Serves {models}", { models: hits.join(", ") })));
     row.hidden = !hit;
     if (hit) p?.off ? off++ : on++;
   }
-  const offs = providers.providers.filter((p) => p.off).length;
   // while searching, the ones off that match show, whatever the fold says
-  const fold = $("#foldOff");
+  const fold = $("#foldOff"), offs = pvQuery ? off : providers.providers.filter((p) => p.off).length;
   fold.disabled = !!pvQuery;
   fold.setAttribute("aria-expanded", String(!!pvQuery || !offFolded));
-  if (pvQuery) {
-    $("#providers").hidden = !on;
-    $("#offHead").hidden = !off;
-    $("#offProviders").hidden = !off;
-    $("#offCount").textContent = off ? String(off) : "";
-  } else {
-    $("#providers").hidden = offs === providers.providers.length;
-    $("#offHead").hidden = !offs;
-    $("#offProviders").hidden = !offs || offFolded;
-    $("#offCount").textContent = offs ? String(offs) : "";
-  }
+  $("#providers").hidden = pvQuery ? !on : offs === providers.providers.length;
+  $("#offHead").hidden = !offs;
+  $("#offProviders").hidden = !offs || !pvQuery && offFolded;
+  $("#offCount").textContent = offs || "";
   none.hidden = !pvQuery || on + off > 0;
   none.textContent = none.hidden ? "" : t("No provider matches “{q}”", { q: q.value.trim() });
 }
