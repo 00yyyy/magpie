@@ -513,6 +513,12 @@ cause:
     only later as #3854. With #3632 fixed (4842f69be), #3854 and #3906
     merged too (759b3b8c4, ed49d1b38), internal/provider passed whole
     on 10-28 for the first time since 10-25.
+  - A red step hides every step after it. CI's Race step runs only
+    when Test passes, so 9a888323a's allocation bound (#3472), red
+    every time under -race, first showed on 10-28 once Test was green
+    (#3956, fafce6545). A test that bounds bytes runs once under
+    -race before it lands: sync.Pool drops a quarter of what is put in
+    it there, and regexp and zstd take their state from one.
 - A cancelled run tests nothing. On 10-14 nine pushes in ten minutes
   cancelled each other's runs, and 3c4b4dc97 never had a run of its own;
   its red showed first at 84f14e555.
