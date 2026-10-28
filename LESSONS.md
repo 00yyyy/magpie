@@ -184,7 +184,13 @@ protocol, never by a key's name.**
   never keeps anything under a tool call's arguments.
 - Test the exemption with the protected key placed where the user's data
   goes: tool arguments, message text, a nested object.
-- Seen 1× (2026-10-09).
+- 10-28: 3e96197da let an sk- value with no capital and no run of 16
+  between hyphens go unmasked, so SK hynix article addresses are no key.
+  Its tests held four key shapes, none of them the closest to a slug: sk-
+  and a UUID in lower case passed as words and went to the vendor
+  (bad05e1b7). An exemption by shape is tested with the real secret that
+  looks most like what it lets through.
+- Seen 2× (2026-10-09, 2026-10-28).
 
 **A security gap a doc names is an open bug, not a description.**
 - docs/subsystems/gateway-routing.md said "There is no `Host` check, so a
