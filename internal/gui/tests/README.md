@@ -2565,4 +2565,8 @@ and zh, two sizes), and boxes of each kind added to the same page (calls'
 bodies, Sessions' talk, model lists, Library picks, diffs, and a new box
 naming no rule). A list too short to scroll and boxes that scroll only
 sideways still let the wheel move the page, and the model chips in a short
-window still pass it on (#833). Chromium and WebKit.
+window still pass it on (#833). Every rule in every stylesheet under assets
+that scrolls a box vertically is built from its selector, filled and pointed
+at, and has to hold the wheel; one that doesn't is named by file and
+selector. With the engine made to lack overscroll-behavior (Safari 15),
+compat.js still keeps Requests' list's wheel. Chromium and WebKit.

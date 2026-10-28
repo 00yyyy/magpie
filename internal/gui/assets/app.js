@@ -360,6 +360,8 @@ function icon(name, lazy) {
   return e;
 }
 
+// a change done: its line, with the agent's notice (a warning) when there is one
+const saidOk = (msg, ms) => state.notice ? status(withNotice(msg, state.notice), "warn", 9000) : status(msg, "ok", ms);
 function status(msg, kind = "", ms = kind === "err" ? 8000 : 3500) {
   const s = $("#status");
   s.textContent = msg;
@@ -1156,9 +1158,7 @@ function connectSwitch(a) {
       state = await api("agents/connect/" + a.id, {});
       renderAgents();
       const msg = connectedSaid(a, state.connected);
-      if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
-      else if (msg !== t("{agent} is connected to magpie", { agent: a.name })) status(msg, "ok", 7000);
-      else status(msg, "ok");
+      saidOk(msg, msg !== t("{agent} is connected to magpie", { agent: a.name }) ? 7000 : undefined);
     } catch (err) {
       s.disabled = false;
       s.classList.remove("on");
@@ -1753,8 +1753,7 @@ async function guideConnect(a, ev) {
     guideBusy = "";
     renderAgents();
     const msg = connectedSaid(a, state.connected);
-    if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
-    else status(msg, "ok", 7000);
+    saidOk(msg, 7000);
   } catch (err) {
     guideBusy = "";
     guideRedraw();
@@ -2262,8 +2261,7 @@ function askDisconnect(a) {
       if (agentExpanded === a.id) agentExpanded = null;
       renderAgents();
       const msg = t(offline ? "Saved settings restored; magpie was removed from {agent}" : "{agent} no longer goes through magpie; its own settings are back", { agent: a.name });
-      if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
-      else status(msg, "ok");
+      saidOk(msg);
     } catch (err) {
       go.disabled = false;
       go.classList.remove("busy");
@@ -2300,8 +2298,7 @@ async function reapplyAgent(a, btn) {
     renderAgents();
     document.querySelector(`.agent[data-id="${CSS.escape(a.id)}"] .field`)?.classList.add("flash");
     const msg = t("{agent} goes through magpie again", { agent: a.name });
-    if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
-    else status(msg, "ok");
+    saidOk(msg);
   } catch (e) {
     btn?.classList.remove("busy");
     status(e.message, "err");
@@ -4775,8 +4772,7 @@ function ultracodeToggle(a, f) {
       state = await api("set", { agent: a.id, field: f.key, value: on ? "" : "on" });
       renderAgents();
       const msg = t("{agent} ultracode → {value}", { agent: a.name, value: t(on ? "off" : "on") });
-      if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
-      else status(msg, "ok");
+      saidOk(msg);
     } catch (e) { status(e.message, "err"); }
   };
   return b;
@@ -5058,8 +5054,7 @@ function effortSeg(a, f) {
 // open Claude Code session keeps the level it started with.
 function effortSaid(a, f, o) {
   const msg = `${a.name} ${t(f.label)} → ${effortName(o)}`;
-  if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
-  else status(msg, "ok");
+  saidOk(msg);
 }
 
 function renderEffortPicker() {
