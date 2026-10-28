@@ -730,6 +730,7 @@ body.window .row.agent .who .ag-cli { flex: 0 1 auto; overflow: hidden; }
 /* the agents plugins add: one row, its way to Plugins */
 .ag-install-plugins { width: 100%; align-items: center; font: inherit; color: var(--accent); text-align: left; cursor: pointer; transition: background .2s; }
 .ag-install-plugins:hover { background: var(--accent-soft); }
+.ag-install-head + .ag-install-plugins { margin-top: 6px; }
 .ag-install-plugins:focus-visible { outline: 1.5px solid var(--fg-2); outline-offset: 1px; }
 .ag-install-plugins .ag-install-who { flex: none; padding-top: 0; }
 .ag-install-plugins .puzzle { flex: none; width: 18px; height: 18px; display: grid; place-items: center; }

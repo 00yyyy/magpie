@@ -2602,14 +2602,14 @@ function paintInstalls() {
   head.type = "button";
   head.setAttribute("aria-expanded", String(open));
   head.dataset.unrolls = ""; // it stays put, and its commands open beneath it
-  head.append(el("span", "", t("Install another agent ({n})", { n: items.length + pluginAgents.length })), el("span", "chev", svg(CHEV, 10, 1.8)));
+  head.append(el("span", "", t("Install another agent ({n})", { n: items.length })), el("span", "chev", svg(CHEV, 10, 1.8)));
   head.onclick = (e) => {
     e.stopPropagation();
     installsOpen = !open;
     paintInstalls();
     $("#agentsInstall .ag-install-head")?.focus({ preventScroll: true });
   };
-  const parts = [head];
+  const parts = items.length ? [head] : [];
   if (open) {
     if (items.length) parts.push(el("p", "ag-install-note", installNote(items)));
     for (const x of items) {
@@ -2634,9 +2634,10 @@ function paintInstalls() {
       r.append(who, cmds);
       parts.push(r);
     }
-    // the agents plugins add, installed from Plugins as every plugin is
-    if (pluginAgents.length) parts.push(pluginAgentsRow());
   }
+  // the agents plugins add, installed from Plugins as every plugin is: in
+  // sight with the commands folded (the owner: not folded away with them)
+  if (pluginAgents.length) parts.push(pluginAgentsRow());
   box.replaceChildren(...parts);
 }
 
