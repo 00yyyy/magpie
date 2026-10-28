@@ -1807,7 +1807,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	asked = call.Model
 	if agent == "claude-desktop" {
 		sub, _ := subagentOf(r.Header)
+		probe := desktopProbe(body)
 		asked = desktopTurn(asked, body, fromClaudeCode(r.Header), sub != "")
+		if probe {
+			// its check, asked for room every model answers in
+			if b, ok := withTokenFloor(body, desktopProbeTokens); ok {
+				body = b
+			}
+			if b, ok := withTokenFloor(plain, desktopProbeTokens); ok {
+				plain = b
+			}
+		}
 	} else if agent == ScienceID {
 		asked = scienceTurn(asked, body)
 	}
