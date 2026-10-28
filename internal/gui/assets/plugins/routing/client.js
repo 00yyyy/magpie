@@ -680,10 +680,20 @@ function routingPage(part) {
       ? t("{who} goes first: of those alike, its wallet has the most left — {n}, where {other} has {m}.", { who: who(f), n: balText(f), other: who(o), m: balText(o) }) : null;
   }
 
+  // why a request has no one weighed for it: magpie holds it before
+  // routing (masking it, or still reading it), or nothing took it
+  function noneWhy(r) {
+    if (!r.done) return r.phase === "redact"
+      ? t("magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.")
+      : t("magpie hasn't routed this request yet, so who takes it isn't picked yet.");
+    if (r.error) return t("Nothing took this request: {error}", { error: r.error });
+    return t("Nothing could take {model}.", { model: r.model });
+  }
+
   // why routing put the first where it did
   function firstWhy(r) {
     const f = r.order[0];
-    if (!f) return t("Nothing could take {model}.", { model: r.model });
+    if (!f) return noneWhy(r);
     const w = who(f);
     if (r.sealedTask && r.leadAccount === f.id) return t("{who} goes first: it answered the parent agent and may be needed to read this encrypted task.", { who: w });
     if (r.compaction && r.order.length === 1) return t("{who} compacted this conversation natively, and only it can read that compaction, so the conversation stays on it: other accounts aren't asked. Start a new conversation to use them.", { who: w });
@@ -2326,19 +2336,25 @@ function routingPage(part) {
     const m = modeOf(routing);
     const on = r.order.filter((x) => !x.fallback).length;
     const pool = !g && f ? poolOf(f.provider) : null;
-    const lone = !g && on <= 1 && !pool;
+    // none weighed: a request magpie holds before routing it (masked
+    // first, or still read), or one nothing took. It says so, not "0 on"
+    // over the one-account hint (Jason on Discord: a held Codex turn read
+    // "magpie · 0 on" and "only one account is on")
+    const none = !r.order.length;
+    const lone = !g && on === 1 && !pool;
     // the head is told again every second: a chip whose text node is
     // swapped while it is pressed gets no click in WebKit (#2151), so
     // only what changed is written
     setText(chip, t(m[0]));
-    chip.hidden = lone;
+    chip.hidden = lone || (none && !g);
     goTo(chip, g ? "group:" + g.id : pool ? "pool:" + f.provider : "", g ? g.name : f?.name || r.provider);
     hubText();
-    const name = g ? g.name : f?.name || r.provider, tail = (g ? " · " + t("routing group") : "") + " · " + t(on === 1 ? "one on" : "{n} on", { n: on })
+    const name = g ? g.name : f?.name || r.provider, tail = (g ? " · " + t("routing group") : "")
+      + (none ? (r.done ? "" : " · " + waitWord(r)) : " · " + t(on === 1 ? "one on" : "{n} on", { n: on }))
       + (many > 1 ? " · " + t("{n} agents at once", { n: many }) : "");
     if (what.childElementCount !== 2 || what.firstChild.textContent !== name || what.lastChild.textContent !== tail) what.replaceChildren(el("b", "", name), el("span", "", tail));
     // keys that read their own windows are weighed as accounts are
-    setText(mode, lone ? t(LONE) : g && routing === "order" ? t(GROUP_ORDER) : g && routing === "weight" ? t(GROUP_WEIGHT) : t(!routing && f?.kind === "key" && !r.order.some((x) => x.known) && !g ? KEYS_SMART : m[1]));
+    setText(mode, none ? noneWhy(r) : lone ? t(LONE) : g && routing === "order" ? t(GROUP_ORDER) : g && routing === "weight" ? t(GROUP_WEIGHT) : t(!routing && f?.kind === "key" && !r.order.some((x) => x.known) && !g ? KEYS_SMART : m[1]));
   }
   // goTo makes what names a routing a way to where it is set: a provider's
   // own under Several accounts or keys, a group's its card

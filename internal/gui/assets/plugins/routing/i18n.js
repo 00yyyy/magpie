@@ -2,6 +2,9 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie 正在给这个请求脱敏（设置 › 隐私），脱敏完才路由，所以还没选出由谁处理。",
+    "magpie hasn't routed this request yet, so who takes it isn't picked yet.": "magpie 还没开始路由这个请求，所以还没选出由谁处理。",
+    "Nothing took this request: {error}": "没有谁处理这个请求：{error}",
     "Go to the routing groups, below the requests": "跳到请求下方的路由组",
     "Filter, or type an agent's name…": "筛选，或输入 Agent 名称…",
     "the name its User-Agent begins with": "User-Agent 开头的名称",
@@ -579,6 +582,9 @@ magpie.strings({
     "{h} h {m} min": "{h} 小时 {m} 分钟",
   },
   "zh-TW": {
+    "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie 正在為這個請求脫敏（設定 › 隱私），脫敏完才路由，所以還沒選出由誰處理。",
+    "magpie hasn't routed this request yet, so who takes it isn't picked yet.": "magpie 還沒開始路由這個請求，所以還沒選出由誰處理。",
+    "Nothing took this request: {error}": "沒有誰處理這個請求：{error}",
     "Go to the routing groups, below the requests": "跳到請求下方的路由組",
     "Filter, or type an agent's name…": "篩選，或輸入 Agent 名稱…",
     "the name its User-Agent begins with": "User-Agent 開頭的名稱",
@@ -1156,6 +1162,9 @@ magpie.strings({
     "{h} h {m} min": "{h} 小時 {m} 分鐘",
   },
   ja: {
+    "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie はルーティングの前にこのリクエストをマスクしています（設定 › プライバシー）。誰が処理するかはまだ決まっていません。",
+    "magpie hasn't routed this request yet, so who takes it isn't picked yet.": "magpie はまだこのリクエストをルーティングしていないため、誰が処理するかはまだ決まっていません。",
+    "Nothing took this request: {error}": "このリクエストを処理したものはありません: {error}",
     "Go to the routing groups, below the requests": "リクエストの下にあるルーティンググループへ移動",
     "Filter, or type an agent's name…": "絞り込み、またはエージェント名を入力…",
     "the name its User-Agent begins with": "User-Agent の先頭の名前",
@@ -1733,6 +1742,9 @@ magpie.strings({
     "These routing groups will no longer be available to agents.": "これらのルーティンググループはエージェントから利用できなくなります。",
   },
   de: {
+    "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie maskiert diese Anfrage vor der Weiterleitung (Einstellungen › Datenschutz), daher steht noch nicht fest, wer sie übernimmt.",
+    "magpie hasn't routed this request yet, so who takes it isn't picked yet.": "magpie hat diese Anfrage noch nicht weitergeleitet, daher steht noch nicht fest, wer sie übernimmt.",
+    "Nothing took this request: {error}": "Niemand hat diese Anfrage übernommen: {error}",
     "Go to the routing groups, below the requests": "Zu den Weiterleitungsgruppen unter den Anfragen springen",
     "Filter, or type an agent's name…": "Filtern oder Namen eines Agenten eingeben…",
     "the name its User-Agent begins with": "der Name, mit dem sein User-Agent beginnt",
