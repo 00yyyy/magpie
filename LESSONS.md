@@ -496,6 +496,12 @@ cause:
     subtest of the same test. 27 issues titled "under load" were opened
     on 10-16 and 10-17. Fix the class (wait on state, room on both sides) instead
     of filing one a test.
+  - 10-28: the same on a third day. JoeyWu-tech posted a patch for
+    #3568 (TestHandedOverGatewayFinishesItsStream, a real handover drop)
+    on 10-25, with a reproduction and red-on-old tests. Nobody ported it
+    for three days, and it went red on ubuntu CI again at 0a7633136. It
+    was ported unchanged as 11c427eaa. Before filing or skipping a red,
+    read its issue to the end: a posted patch is ported first.
 - 10-27: the #1794 pattern on a third day. internal/provider has died
   on main since 10-25 in TestUnreadLoginsWriteErrorsKeepCredentials
   (#3632, a synctest fatal, 2 of 2 on mote at 4b0a32e0f). The issue has
