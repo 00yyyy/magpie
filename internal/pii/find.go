@@ -60,6 +60,9 @@ type backend struct {
 	// sent are the texts and pieces a Bounded request went without the
 	// model's reading (by hash): what a request sent unread before.
 	sent sentSet
+	// queue are the requests waiting for turn, the least left to read
+	// first
+	queue queue
 }
 
 func (b *backend) size() int {
@@ -139,13 +142,25 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 		}
 		backlog = b.sent.mark(ks)
 	}
+	// how much of the texts this request has left for the model to read
+	left := func(got map[[32]byte][]redact.Found, miss []int, read int) int {
+		n, old := 0, 0
+		for _, u := range b.missing(texts, miss, got) {
+			if backlog[sha256.Sum256([]byte(u))] {
+				old += len(u)
+			} else {
+				n += len(u)
+			}
+		}
+		return n + min(old, max(0, backlogCap-read))
+	}
 	if ctx.Err() != nil {
 		return b.partial(ctx, texts)
 	}
 	if err := b.heldBack(); err != nil {
 		return nil, err
 	}
-	if !b.takeTurn(ctx) {
+	if !b.takeTurn(ctx, left(nil, miss, 0)) {
 		return b.partial(ctx, texts)
 	}
 	type result struct {
@@ -176,11 +191,13 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 					done <- result{nil, errWaitEnded}
 					return
 				}
-				// give way to a request waiting for the turn: it goes
-				// before the next chunk
+				// give way to a request waiting for the turn with less
+				// to read than this one has left: it goes before the
+				// next chunk
+				n := left(got, miss, read)
 				<-b.turn
 				held = false
-				if !b.takeTurn(ctx) {
+				if !b.takeTurn(ctx, n) {
 					done <- result{nil, errWaitEnded}
 					return
 				}
@@ -289,16 +306,98 @@ func (b *backend) partial(ctx context.Context, texts []string) ([][]redact.Found
 }
 
 // takeTurn waits for the model's turn while ctx lives, counted as
-// waiting; false when ctx ended first.
-func (b *backend) takeTurn(ctx context.Context) bool {
+// waiting, for a request with left bytes still to read; false when ctx
+// ended first. Of the requests waiting, the one with the least left takes
+// the turn next (the first to come of those with as little): a request of
+// a few lines goes before the next chunk of a long one, and of every
+// other long one waiting. Before, they took it in the order they came,
+// and a short request waited a chunk of each long one ahead of it: on a
+// 4-core CPU, a second or more apiece, past masking's default wait of 2s
+// with two ahead (wangwu25685333 on X, 10-29: requests of 1.4K tokens
+// waited 8.5s behind a fresh session's 31.5K, and their client gave up at
+// 20s).
+func (b *backend) takeTurn(ctx context.Context, left int) bool {
 	b.waiting.Add(1)
 	defer b.waiting.Add(-1)
-	select {
-	case b.turn <- struct{}{}:
-		return true
-	case <-ctx.Done():
-		return false
+	w := b.queue.add(left)
+	defer b.queue.remove(w)
+	for {
+		next, changed := b.queue.next(w)
+		if !next {
+			select {
+			case <-changed:
+				continue
+			case <-ctx.Done():
+				return false
+			}
+		}
+		select {
+		case b.turn <- struct{}{}:
+			return true
+		case <-changed:
+		case <-ctx.Done():
+			return false
+		}
 	}
+}
+
+// queue are the requests waiting for a backend's turn. Its zero value is
+// empty.
+type queue struct {
+	mu      sync.Mutex
+	seq     uint64
+	waiters map[*waiter]bool
+	// changed is closed when a request comes or goes, and made again
+	changed chan struct{}
+}
+
+// waiter is a request in a queue: left bytes to read, seq-th to come.
+type waiter struct {
+	left int
+	seq  uint64
+}
+
+// add puts a request with left bytes to read in q.
+func (q *queue) add(left int) *waiter {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.seq++
+	w := &waiter{left, q.seq}
+	if q.waiters == nil {
+		q.waiters = map[*waiter]bool{}
+	}
+	q.waiters[w] = true
+	q.changedLocked()
+	return w
+}
+
+// remove takes w out of q.
+func (q *queue) remove(w *waiter) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	delete(q.waiters, w)
+	q.changedLocked()
+}
+
+// changedLocked wakes those waiting on q to look again; q.mu is held.
+func (q *queue) changedLocked() {
+	if q.changed != nil {
+		close(q.changed)
+	}
+	q.changed = make(chan struct{})
+}
+
+// next says whether w is the one to take the turn next, and gives what
+// is closed when that may have changed.
+func (q *queue) next(w *waiter) (bool, <-chan struct{}) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for o := range q.waiters {
+		if o.left < w.left || o.left == w.left && o.seq < w.seq {
+			return false, q.changed
+		}
+	}
+	return true, q.changed
 }
 
 // waitErr is a request's that stopped waiting for the model.
