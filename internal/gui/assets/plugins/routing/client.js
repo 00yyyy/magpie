@@ -291,11 +291,15 @@ function routingPage(part) {
     const kept = [], under = colA.classList.contains("meta-under");
     for (let p = reqs; p; p = p.parentElement) if (p.scrollTop) kept.push([p, p.scrollTop]);
     colA.classList.remove("meta-under");
+    inMetaFit = true;
+    fitCols(); // the rows' columns for the layout measured, not the one before
     const wraps = [...reqs.querySelectorAll(".rt-req .meta:not([hidden])")].some((m) => {
       const k = m.children;
       return k.length > 1 && k[k.length - 1].getBoundingClientRect().top - k[0].getBoundingClientRect().top > 2;
     });
     colA.classList.toggle("meta-under", wraps);
+    fitCols();
+    inMetaFit = false;
     for (const [p, top] of kept) if (p.scrollTop !== top) p.scrollTop = top;
     if (colA.classList.contains("meta-under") !== under) redrawList(); // the rows' heights changed
   }); };
@@ -3399,17 +3403,49 @@ function routingPage(part) {
   // taken as tall as the average drawn.
   //
   // The columns are as wide as the widest of all the requests, drawn or
-  // not, as before: a row unlike any drawn — another time's shape, model,
-  // kind or numbers — is in the list too, with no height and unseen (a
-  // probe), so the grid sizes its columns by it. Digits are as wide as
-  // each other there (tabular-nums), so a probe stands for every row of
-  // its shape.
+  // not: one row of each shape — its time's, model's, kind's and numbers' —
+  // is in a hidden grid at the list's foot (a probe in the sizer), which
+  // sizes its columns by them, and every row takes the widths it found
+  // (fitCols). Digits are as wide as each other there (tabular-nums), so a
+  // probe stands for every row of its shape. The rows were a subgrid of
+  // the list once, and Safari 16 crashed sizing them (#3731).
   const WIN_MIN = 300;
   let listItems = [], winKey = "", winAvg = 0, winSoon = 0, rowsMoved = false;
   const heights = new Map(); // a request's id, or a session's head → its height
   const gapAbove = el("div", "rt-gap"), gapBelow = el("div", "rt-gap");
   for (const g of [gapAbove, gapBelow]) g.setAttribute("aria-hidden", "true");
   const probes = new Map(), probeShapes = new WeakMap();
+  const sizer = el("div", "rt-sizer");
+  sizer.setAttribute("aria-hidden", "true");
+  sizer.inert = true;
+  // fitCols: the sizer's columns, measured, for the rows to take; each
+  // fixed but the one taking what is left (the third of four, else the
+  // last), which stays a share so a pixel rounded over never pushes a row
+  // wider. Told whenever a probe's cell changes size, as a column moving
+  // does: a new width, another layout, a font come in.
+  let colsAt = "", inMetaFit = false;
+  const fitCols = () => {
+    if (!reqs.offsetWidth) return; // out of sight: left as it is, the list untouched
+    const c = getComputedStyle(sizer).gridTemplateColumns;
+    if (c === colsAt) return;
+    colsAt = c;
+    const w = c.split(" ");
+    if (!w.every((x) => /^[\d.]+px$/.test(x))) reqs.style.removeProperty("--rt-cols"); // no probe: unsized
+    else {
+      // up to the layout's 1/64px: the width read back is rounded, and a
+      // hair narrower than its numbers wraps them (meta-under)
+      const px = w.map((x) => Math.ceil(parseFloat(x) * 64) / 64 + "px");
+      px[w.length === 4 ? 2 : w.length - 1] = "minmax(0, 1fr)";
+      reqs.style.setProperty("--rt-cols", px.join(" "));
+    }
+    redrawList(); // the rows' heights measured in the columns before are dropped (listKey)
+    if (!inMetaFit) metaFit(); // new columns, not metaFit's own: whether the numbers fit asked again
+  };
+  // told a frame later: the rows taking their columns can move the list's
+  // scrollbar and with it the probes, which within the observer's own turn
+  // is a loop WebKit reports
+  let colsSoon = 0;
+  const colsSeen = new ResizeObserver(() => { if (!colsSoon) colsSoon = requestAnimationFrame(() => { colsSoon = 0; fitCols(); }); });
   const isHead = (x) => x instanceof Element;
   const itemKey = (x) => isHead(x) ? x : x.id;
   const itemEl = (x) => isHead(x) ? x : rowOf(x);
@@ -3433,7 +3469,8 @@ function routingPage(part) {
     probeShapes.set(r, { key, s });
     return s;
   }
-  function probesFor(rs) {
+  // fillSizer: a probe of each shape the rows have, in the sizer
+  function fillSizer(rs) {
     const key = document.documentElement.lang + "|" + visibleMetrics.join(), seen = new Set(), want = new Map();
     for (const r of rs) {
       const s = shapes(r, key);
@@ -3443,20 +3480,23 @@ function routingPage(part) {
       if (!want.has(id)) want.set(id, r);
     }
     for (const id of probes.keys()) if (!want.has(id)) probes.delete(id);
-    return [...want].map(([id, r]) => {
-      let b = probes.get(id);
-      if (!b) {
+    const els = [...want].map(([id, r]) => {
+      let p = probes.get(id);
+      if (!p) {
         const [said, how, tr] = outcome(r), meta = r.tries.length > 1 ? [t("{n} tries", { n: r.tries.length })] : [];
-        b = reqRow(r, said, how, tr, agentOf(r.agent), meta, requestMetrics(r, how), "");
-        b.classList.add("probe");
-        b.removeAttribute("title");
-        b.tabIndex = -1;
-        b.inert = true;
-        b.setAttribute("aria-hidden", "true");
-        probes.set(id, b);
+        const b = reqRow(r, said, how, tr, agentOf(r.agent), meta, requestMetrics(r, how), "");
+        p = el("div", b.className.replace(/^rt-req /, "rt-probe ") + " probe"); // not a row to anything that asks for one
+        p.append(...b.childNodes);
+        probes.set(id, p);
       }
-      return b;
+      return p;
     });
+    // only the probes come and go: their order measures nothing, and the
+    // rest are kept in place for a request going on (its numbers' shape
+    // changing) not to put every probe in again on each update
+    const keep = new Set(els);
+    for (const k of [...sizer.children]) if (!keep.has(k)) { for (const c of k.children) colsSeen.unobserve(c); k.remove(); }
+    for (const p of els) if (p.parentNode !== sizer) { sizer.append(p); for (const c of p.children) colsSeen.observe(c); }
   }
   // placeRows puts the list's children in order, moving only those out of
   // place: the list scrolls on its own, and WebKit, a row taken out for a
@@ -3488,27 +3528,30 @@ function routingPage(part) {
   }
   function drawList() {
     const n = listItems.length;
+    fillSizer(listItems.filter((x) => !isHead(x)));
     if (n < WIN_MIN) {
       reqs.classList.remove("win");
-      probes.clear();
-      return placeRows(listItems.map(itemEl));
+      return placeRows([...listItems.map(itemEl), sizer]);
     }
     reqs.classList.add("win");
     // out of sight (another view, the window hidden) nothing has a height:
     // drawn as last measured, and measured once in sight again
     const live = !!reqs.offsetParent;
-    const listKey = [colA.className, reqs.clientWidth, document.documentElement.lang, visibleMetrics.join()].join("|");
-    if (live && listKey !== winKey) { winKey = listKey; heights.clear(); winAvg = 0; }
+    const listKey = [colA.className, reqs.clientWidth, reqs.style.getPropertyValue("--rt-cols"), document.documentElement.lang, visibleMetrics.join()].join("|");
+    // other columns (a wider probe come in): the heights measured in the
+    // old ones dropped, their average kept for the rows not drawn again
+    if (live && listKey !== winKey) { if (winKey.split("|").filter((x, i) => i !== 2).join() !== listKey.split("|").filter((x, i) => i !== 2).join()) winAvg = 0; winKey = listKey; heights.clear(); }
     const pad = parseFloat(getComputedStyle(reqs).paddingTop) || 0;
     // the first row in sight, and where: it stays there
     const box = reqs.getBoundingClientRect();
     let anchor = null, anchorAt = 0;
     for (const e of reqs.children) {
-      if (e.classList.contains("rt-gap") || e.classList.contains("probe")) continue;
+      if (e.classList.contains("rt-gap") || e === sizer) continue;
       const r = e.getBoundingClientRect();
       if (r.bottom > box.top) { anchor = e; anchorAt = r.top - box.top; break; }
     }
-    const est = winAvg || 31, off = new Float64Array(n + 1);
+    let est = winAvg || 31;
+    const off = new Float64Array(n + 1);
     const sum = () => { for (let i = 0; i < n; i++) off[i + 1] = off[i] + (heights.get(itemKey(listItems[i])) ?? est); };
     sum();
     const view = reqs.clientHeight, over = Math.max(view, 300), y = reqs.scrollTop - pad;
@@ -3518,7 +3561,7 @@ function routingPage(part) {
     const drawn = listItems.slice(i0, i1).map(itemEl);
     gapAbove.style.height = off[i0] + "px";
     gapBelow.style.height = off[n] - off[i1] + "px";
-    placeRows([gapAbove, ...drawn, gapBelow, ...probesFor(listItems.filter((x) => !isHead(x)))]);
+    placeRows([gapAbove, ...drawn, gapBelow, sizer]);
     if (!live) return;
     // measured as drawn: each one's slot in the grid, its margins with it
     drawn.forEach((e, i) => {
@@ -3528,6 +3571,7 @@ function routingPage(part) {
     let total = 0;
     for (const h of heights.values()) total += h;
     winAvg = heights.size ? total / heights.size : 0;
+    est = winAvg || 31; // the rows not drawn as tall as those just measured, not as the average before
     sum();
     const above = off[i0] + "px", below = off[n] - off[i1] + "px";
     if (gapAbove.style.height !== above) gapAbove.style.height = above;
