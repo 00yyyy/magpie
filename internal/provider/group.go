@@ -942,9 +942,10 @@ func unpicked(find entryOf, p Provider, m string) bool {
 	return len(p.Models) > 0 && find(p.ID, m) < 0 && !p.DecidesModel(m)
 }
 
-// ResolveRoute is Resolve for a model a route names, as a routing
-// group's member, as the group reaches it: not one the user unchecked
-// (unpicked).
+// ResolveRoute is Resolve for a model a route names, a routing group's
+// member or a provider's fallback, as routing reaches it: not one the
+// user unchecked (unpicked). A request naming the model itself goes by
+// Resolve, which still takes it.
 func ResolveRoute(id string) (Provider, string, bool) {
 	entries := providerEntries()
 	p, m, ok := resolveIn(entries, strings.TrimSuffix(strings.TrimSpace(id), "[1m]"))

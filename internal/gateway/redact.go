@@ -305,7 +305,7 @@ func unredactedRoute(p provider.Provider, isGroup bool, ms []provider.Member) bo
 	}
 	for _, id := range p.Fallback {
 		// one that resolves to nothing isn't tried (plan)
-		if fp, _, ok := provider.Resolve(id); ok && !fp.SkipsRedaction() {
+		if fp, _, ok := provider.ResolveRoute(id); ok && !fp.SkipsRedaction() {
 			return false
 		}
 	}

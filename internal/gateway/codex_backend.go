@@ -1415,7 +1415,7 @@ func (s *Server) codexFallsBack(model string, body []byte) bool {
 		return false
 	}
 	for _, id := range p.Fallback {
-		if _, _, ok := provider.Resolve(id); ok {
+		if _, _, ok := provider.ResolveRoute(id); ok {
 			return true
 		}
 	}
