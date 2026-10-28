@@ -17908,12 +17908,9 @@ function panelAge() {
 }
 if (mode === "panel") setInterval(panelAge, 30000);
 
-// quotaFit puts every window's count under its name once one's doesn't fit
-// beside it, so windows side by side read alike rather than one count up
-// by its name and the next a line below (#90). Stacked or not changes the
-// windows' own height, so it is decided on the next frame: changed in the
-// observer's own call, the observer is owed that change in the same frame,
-// which WebKit reports as a ResizeObserver loop (account-mask's page error).
+// quotaFit stacks every window's count once one's doesn't fit (#90) and
+// lines up the bars beside each other (#3955), on the next frame: in the
+// observer's call WebKit reports a ResizeObserver loop (account-mask).
 const quotaFitting = new Set();
 const quotaFit = new ResizeObserver((es) => {
   if (!quotaFitting.size) requestAnimationFrame(fitQuotas);
@@ -17932,6 +17929,10 @@ function fitQuota(g) {
     return name.getBoundingClientRect().width + 6 + wide(n) > l.clientWidth;
   });
   g.classList.toggle("stacked", wraps);
+  const ls = g.querySelectorAll(":scope > .quota > .quota-labels"), top = {}, h = (l) => l.getBoundingClientRect().height;
+  for (const l of ls) l.style.minHeight = "";
+  for (const l of ls) top[l.offsetTop] = Math.max(top[l.offsetTop] || 0, h(l));
+  for (const l of ls) if (top[l.offsetTop] > h(l) + 0.5) l.style.minHeight = top[l.offsetTop] + "px";
 }
 
 // balanceRow: what is left on an account, as a figure; a balance field
