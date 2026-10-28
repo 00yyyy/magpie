@@ -4370,3 +4370,6 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 :is(.ag-prefs, .agent-prefs) .compact-at { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; row-gap: 6px; }
 /* Settings' search finds them; not searching, the links stay out */
 #view-settings:not(.set-searching) #agentPrefLinks { display: none; }
+.sess-pick.led-more { padding: 0 6px; }
+.sess-pick.led-more svg { transform: none; }
+.sess-tools .led-rename { flex: none; width: 180px; height: 26px; padding: 0 8px; border-radius: 7px; font-size: 12px; }

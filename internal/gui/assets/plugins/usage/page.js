@@ -1782,6 +1782,90 @@ function ledFit() {
   hint.hidden = !tight;
 }
 
+// ledProviderMore is the menu beside the Provider filter while a deleted
+// provider is picked in it (CyberCaius on Discord): its requests merged
+// into a provider there is now, or shown by a name of the reader's. With
+// a provider picked that has deleted ones merged in, it parts each again.
+// Nothing in the log is rewritten (POST /api/usage/deleted), and a merged
+// request costs what it did.
+function ledProviderMore(p) {
+  const b = $("#ledProviderMore");
+  const merged = p?.merged || [];
+  b.hidden = !p || (!p.deleted && !merged.length);
+  if (b.hidden) return;
+  b.replaceChildren(svg(DOTS, 14, 2));
+  const tip = t(p.deleted ? "Merge or rename this deleted provider" : "Providers merged into this one");
+  b.title = tip;
+  b.setAttribute("aria-label", tip);
+  const reload = () => { ledOffset = 0; return loadLedger(); };
+  const send = (body) => api("usage/deleted", Object.assign({ id: p.id }, body));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    if (!p.deleted) {
+      openProtoMenu(b, merged.map((m) => ({ v: m.id, name: t("Separate {name}", { name: m.name }), literalName: true, note: "List its requests on their own again" })), "", async (id) => {
+        const m = merged.find((x) => x.id === id);
+        try {
+          await api("usage/deleted", { id, into: "" });
+          ledProvider = id;
+          ledOwn("provider");
+          await reload();
+          status(t("{name}'s requests are listed on their own again", { name: m.name }));
+        } catch (err) { status(err.message, "err"); }
+      }, "Merged providers", "sess-menu", "right");
+      return;
+    }
+    openProtoMenu(b, [
+      { v: "merge", name: "Merge into…", note: "List its requests under a provider you have" },
+      { v: "rename", name: "Rename…", note: "The name this page shows it by" },
+    ], "", (v) => (v === "merge" ? mergeInto() : renameDeleted()), "Deleted provider", "sess-menu", "right");
+  };
+  // a provider there is now, picked from a menu of them
+  const mergeInto = async () => {
+    let into;
+    try { into = await api("usage/deleted/into"); } catch (err) { return status(err.message, "err"); }
+    const opts = into.map((x) => ({ v: x.id, name: x.name, literalName: true, note: x.name === x.id ? "" : x.id }));
+    if (!opts.length) return status(t("No provider to merge into"), "err");
+    openProtoMenu(b, opts, "", async (id) => {
+      const to = opts.find((o) => o.v === id);
+      try {
+        await send({ into: id });
+        ledProvider = id;
+        ledOwn("provider");
+        await reload();
+        status(t("{from}'s requests are listed under {to} now", { from: p.name, to: to.name }));
+      } catch (err) { status(err.message, "err"); }
+    }, "Merge into", "sess-menu", "right", false, opts.length > 8 ? "Search providers…" : "");
+  };
+  // the filter's own button takes the name, as a key's row does
+  const renameDeleted = () => {
+    const pick = $("#ledProvider");
+    const i = input(p.name, t("Name"));
+    i.className = "rename-in led-rename";
+    i.setAttribute("aria-label", t("Rename"));
+    let over = false;
+    const done = async (save) => {
+      if (over) return;
+      over = true;
+      i.remove();
+      pick.hidden = false;
+      b.hidden = false;
+      if (!save || i.value.trim() === p.name) return;
+      try {
+        await send({ name: i.value });
+        await reload();
+      } catch (err) { status(err.message, "err"); }
+    };
+    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") done(true); else if (e.key === "Escape") done(false); };
+    i.onblur = () => done(true);
+    pick.hidden = true;
+    b.hidden = true;
+    pick.after(i);
+    i.focus();
+    i.select();
+  };
+}
+
 function renderLedger() {
   const l = ledger;
   const callers = l.callerKeys || [];
@@ -1821,6 +1905,7 @@ function renderLedger() {
   sessPick($("#ledComputer"), "All computers", ledComputer, computers, "Computer", (v) => { ledComputer = v; ledOwn("computer"); ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   sessPick($("#ledAgent"), "All agents", ledAgent, l.agents.map((a) => ({ v: a.id, name: a.name, note: "" })), "Agent", (v) => { ledAgent = v; ledOwn("agent"); ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   sessPick($("#ledProvider"), "All providers", ledProvider, providers.map((p) => ({ v: p.id, name: t(p.name), note: p.deleted ? t("Deleted {date}", { date: new Date(p.deleted).toLocaleDateString(intlLang(), { year: "numeric", month: "short", day: "numeric" }) }) : "" })), "Provider", (v) => { ledProvider = v; ledOwn("provider"); ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
+  ledProviderMore(providers.find((p) => p.id === ledProvider));
   sessPick($("#ledAccount"), "All accounts", ledAccount, accounts.map((a) => ({ v: a.id, name: a.name || a.id, note: [a.name && a.id, ...(a.providers || []).map((p) => t(p))].filter(Boolean).join(" · ") })), "Account", (v) => { ledAccount = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   sessPick($("#ledKey"), "All gateway keys", ledCallerKey, callers.map((k) => ({
     v: k.id, name: k.name, note: "",

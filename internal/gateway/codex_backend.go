@@ -442,7 +442,9 @@ func loggedAnswers(convs ...string) []loggedAnswer {
 	// from itself)
 	renamed := provider.UsageRenames()
 	usage.Visit(time.Now().Add(-sealerKeep), func(r usage.Record) {
-		r.Provider = renamed.Of(r.Provider, r.Time)
+		// the provider that answered, not one a deleted provider's
+		// calls were merged into on the Usage page (Renames.Own)
+		r.Provider = renamed.Own(r.Provider, r.Time)
 		if r.Provider == "" || r.Provider == "magpie" || r.IsRejected() || r.IsReported() || r.Status <= 0 || r.Status >= 400 || r.Computer != "" || isTitleKind(r.Kind) {
 			return
 		}
