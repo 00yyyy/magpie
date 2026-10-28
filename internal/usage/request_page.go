@@ -767,6 +767,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	idx = shared.private()
 	shared.Unlock()
 	b := readRequestBlocks(idx, st, p, now, readSource)
+	defer b.priced.release() // on a panic too: a shared block is held until let go
 	var names map[string]string
 	if someShared {
 		names = sharedNames()
@@ -819,6 +820,7 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 	idx := shared.private()
 	shared.Unlock()
 	b := readRequestBlocks(idx, st, p, now, sessions.ReadCallSource)
+	defer b.priced.release()
 	sums := effortSums{}
 	ps, next := pairRowsMemo(p, now, b.gateways, b.chunks, b.others, st.codexIdentities, memo)
 	ps.visitActors(func(r *Row) { sums.add(r) })
@@ -893,6 +895,7 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 	var gateways []*rowChunk
 	renames := provider.UsageRenames()
 	priced := newBlockPricer(renames, cfg.ModelWires, price)
+	priced.share(st.root + "|" + st.meta)
 	for _, packed := range snapshot.blocks {
 		if !gatewaySince.IsZero() && packed.Latest.Before(gatewaySince) {
 			continue
