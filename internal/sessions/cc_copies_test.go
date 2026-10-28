@@ -16,10 +16,25 @@ import (
 // fork-other.jsonl another such fork with a different third prompt. Both
 // forks start with every message of the original again, under the same
 // uuids and their own sessionId.
+//
+// compacted.jsonl is another session of that run, of six prompts, with a
+// /compact after the fourth, a /rewind that restored the conversation to
+// before the sixth and sent a prompt again, and a /rewind that summarized
+// from the fifth, all of it in the one file. compacted-branch.jsonl is a
+// /branch of it made then, which Claude Code starts from the first
+// compaction's summary: only that and what follows, under the same uuids.
+// compacted.jsonl went on with "rw prompt eight" after the branch, and
+// compacted-branch-on.jsonl is the branch after `claude --resume <it> -p`
+// went on with "the branch goes on". compacted-branch-last.jsonl is a
+// /branch made after "rw prompt eight", holding the session's last message.
 const (
 	ccOriginal  = "fb0bf5a9-e23f-4c29-b71c-a184c38bb005"
 	ccForkOn    = "7e99b4bb-7d93-4b3c-9453-901a1a9298d1"
 	ccForkOther = "c2141c85-7cf5-46c0-a389-d584029233fb"
+	ccCompacted = "7b1e0c2a-3f4d-4e5a-8b6c-1d2e3f4a5b6c"
+	ccBranch    = "e68bf017-47a8-4a3a-8ea7-053006ca6201"
+	// compacted-branch-last.jsonl: a /branch made after "rw prompt eight"
+	ccLastBranch = "edc82b93-a527-4e55-b00a-89fcbf31c8cf"
 )
 
 // ccForkFixture writes the fixtures named (by file, to the id it is saved
@@ -45,6 +60,12 @@ func ccForkFixture(t *testing.T, dir string, files ...[2]string) {
 			from = ccOriginal
 		case "fork-on.jsonl":
 			from = ccForkOn
+		case "compacted.jsonl":
+			from = ccCompacted
+		case "compacted-branch.jsonl", "compacted-branch-on.jsonl":
+			from = ccBranch
+		case "compacted-branch-last.jsonl":
+			from = ccLastBranch
 		default:
 			from = ccForkOther
 		}
@@ -162,6 +183,74 @@ func TestClaudeForkThatWentOnIsItsOwnRow(t *testing.T) {
 	}
 	if got := ccPrompts(t, "claude", ccForkOther); !slices.Equal(got, []string{"first prompt", "second prompt resumed", "a different turn"}) {
 		t.Errorf("the other fork's prompts = %q", got)
+	}
+}
+
+// Neo (#feedback, after v0.1.1803): with /compact and /rewind the copies
+// were rows again. A copy Claude Code makes after a compaction starts with
+// the compaction's summary, not the conversation's first message, and it
+// is the conversation's copy all the same.
+func TestClaudeCopyAfterCompactIsOneRow(t *testing.T) {
+	claude, _ := setup(t)
+	ccForkFixture(t, claude,
+		[2]string{"compacted-branch.jsonl", ccBranch},
+		[2]string{"compacted-branch.jsonl", ccCopyIDs[0]},
+		[2]string{"compacted.jsonl", ccCompacted})
+	if got := ccRows("claude"); !slices.Equal(got, []string{ccCompacted}) {
+		t.Fatalf("rows = %v, want only the session the branches were made of, %s", got, ccCompacted)
+	}
+	if got := ccPrompts(t, "claude", ccCompacted); !slices.Contains(got, "rw prompt one") {
+		t.Errorf("the row's prompts = %q, want the conversation from its first", got)
+	}
+	var copies []string
+	for _, m := range ListAgent("claude") {
+		if m.ID == ccCompacted {
+			copies = m.Copies
+		}
+	}
+	want := []string{ccCopyIDs[0], ccBranch}
+	slices.Sort(want)
+	if !slices.Equal(copies, want) {
+		t.Errorf("copies = %v, want %v", copies, want)
+	}
+	mu.Lock()
+	var compacts []string
+	for p, st := range cache {
+		if strings.HasSuffix(p, ccCompacted+".jsonl") {
+			compacts = st.Compacts
+		}
+	}
+	mu.Unlock()
+	if !slices.Equal(compacts, []string{"970fe039-320a-4dfd-a458-e7461c071a30", "777236a8-c3ff-4729-a182-170a8705bf5e"}) {
+		t.Errorf("the session's compactions = %v, want /compact's summary and /rewind's", compacts)
+	}
+}
+
+// A copy made after a compaction and written last is still the copy: the
+// row is the session that holds the conversation from its first message,
+// not the newest file, which reads from the summary on.
+func TestClaudeNewerCopyAfterCompactIsNotTheRow(t *testing.T) {
+	claude, _ := setup(t)
+	ccForkFixture(t, claude,
+		[2]string{"compacted.jsonl", ccCompacted},
+		[2]string{"compacted-branch-last.jsonl", ccLastBranch})
+	if got := ccRows("claude"); !slices.Equal(got, []string{ccCompacted}) {
+		t.Fatalf("rows = %v, want the session that holds it all, %s", got, ccCompacted)
+	}
+}
+
+// A branch made after a compaction that went on with a turn of its own is
+// a row of its own, beside the session it was made of.
+func TestClaudeBranchAfterCompactThatWentOnIsItsOwnRow(t *testing.T) {
+	claude, _ := setup(t)
+	ccForkFixture(t, claude,
+		[2]string{"compacted.jsonl", ccCompacted},
+		[2]string{"compacted-branch.jsonl", ccCopyIDs[0]},
+		[2]string{"compacted-branch-on.jsonl", ccBranch})
+	want := []string{ccCompacted, ccBranch}
+	slices.Sort(want)
+	if got := ccRows("claude"); !slices.Equal(got, want) {
+		t.Fatalf("rows = %v, want the session and the branch that went on, %v", got, want)
 	}
 }
 

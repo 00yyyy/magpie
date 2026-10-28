@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,6 +38,8 @@ type ccLine struct {
 			Creation   *ccCacheCreation `json:"cache_creation"`
 		} `json:"usage"`
 	} `json:"message"`
+	// a compaction's summary, the first message of what follows it
+	IsCompactSummary bool `json:"isCompactSummary"`
 }
 
 var (
@@ -330,6 +333,9 @@ func claudeFull(s *state, b []byte, main bool) {
 	}
 	if main && !l.IsSidechain && (l.Type == "user" || l.Type == "assistant") {
 		s.link(l.UUID)
+		if l.IsCompactSummary && l.Type == "user" && ccRandomUUID(l.UUID) && !slices.Contains(s.Compacts, l.UUID) {
+			s.Compacts = append(s.Compacts, l.UUID)
+		}
 	}
 	switch l.Type {
 	case "ai-title":

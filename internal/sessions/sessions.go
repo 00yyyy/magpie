@@ -215,6 +215,10 @@ type state struct {
 	// file's own conversation (ccLink)
 	Root string `json:"root,omitempty"`
 	Leaf string `json:"leaf,omitempty"`
+	// Claude Code: the uuids of the summaries its compactions (/compact,
+	// /rewind's summarize) left in the file. A copy made after one starts
+	// with that summary, so its Root is one of these (ccCopies).
+	Compacts []string `json:"compacts,omitempty"`
 	// Codex: the model in use, and its running total (input with cache) last seen
 	Model string  `json:"model,omitempty"`
 	Total *Tokens `json:"total,omitempty"`
@@ -346,6 +350,7 @@ func (s *state) clone() *state {
 	c.Codex = s.Codex.clone()
 	c.Claude = s.Claude.clone()
 	c.Models = slices.Clone(s.Models)
+	c.Compacts = slices.Clone(s.Compacts)
 	if s.Total != nil {
 		t := *s.Total
 		c.Total = &t
@@ -930,7 +935,8 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // 21: Codex subagent nicknames and parent spawn task names.
 // 22: dsh's gateway conversation ids (Convs).
 // 23: Claude Code's first and last message uuids (Root, Leaf).
-const cacheVersion = 23
+// 24: Claude Code's compact summaries' uuids (Compacts).
+const cacheVersion = 24
 
 type cacheFile struct {
 	Version int               `json:"version"`

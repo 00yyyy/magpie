@@ -18,7 +18,10 @@ import (
 // holds is such a copy: everything it says is in that file too, so it is
 // not a row of its own. A fork that went on with a turn of its own has a
 // last message no other file holds, and stays its own row, as Claude
-// Code's /resume lists it.
+// Code's /resume lists it. A copy made after a compaction (/compact, or
+// /rewind's summarize) holds only the compaction's summary and what
+// follows it, so it starts with the summary, not with the conversation's
+// first message; it is judged with the files that hold that summary.
 
 // ccCopies is, for each session (by key) that is a copy, the key of the
 // session it is a copy of, which no other holds. Only the files cache has
@@ -28,7 +31,19 @@ func ccCopies(files []file) map[string]string {
 		f  file
 		st *state
 	}
-	groups := map[string][]one{}
+	// files start alike when they start with the same message, or one
+	// starts with a compaction's summary the other holds: a copy made
+	// after /compact holds only what follows the summary
+	var all []one
+	up := []int{} // each file's group, by its index in all (union-find)
+	find := func(i int) int {
+		for up[i] != i {
+			up[i] = up[up[i]]
+			i = up[i]
+		}
+		return i
+	}
+	at := map[string]int{} // a message a file starts with or holds a summary as
 	for _, f := range files {
 		if !f.main || !parserFor(f.agent).claude {
 			continue
@@ -37,8 +52,22 @@ func ccCopies(files []file) map[string]string {
 		if st == nil || st.Root == "" || st.Leaf == "" {
 			continue
 		}
-		k := f.agent + "\x00" + f.m().wsl + "\x00" + st.Root
-		groups[k] = append(groups[k], one{f, st})
+		i := len(all)
+		all = append(all, one{f, st})
+		up = append(up, i)
+		in := f.agent + "\x00" + f.m().wsl + "\x00"
+		for _, u := range append([]string{st.Root}, st.Compacts...) {
+			if j, ok := at[in+u]; ok {
+				up[find(i)] = find(j)
+			} else {
+				at[in+u] = i
+			}
+		}
+	}
+	groups := map[int][]one{}
+	for i, o := range all {
+		r := find(i)
+		groups[r] = append(groups[r], o)
 	}
 	var out map[string]string
 	used := map[string]bool{}
@@ -50,9 +79,15 @@ func ccCopies(files []file) map[string]string {
 			used[b.f.path] = true
 			return b.st.Leaf == uuid || ccUUIDsOf(b.f)[uuid]
 		}
-		// before reports whether b is kept over a: the newer file, then
-		// the later key, so of two files that hold each other one stays
+		// before reports whether b is kept over a: the one that holds
+		// the other's first message too (a copy made after a compaction
+		// starts with its summary, and the conversation holds what came
+		// before), then the newer file, then the later key, so of two
+		// files that hold each other one stays
 		before := func(b, a one) bool {
+			if ab, ba := holds(a, b.st.Root), holds(b, a.st.Root); ab != ba {
+				return ba
+			}
 			if c := b.f.mod.Compare(a.f.mod); c != 0 {
 				return c > 0
 			}
