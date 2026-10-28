@@ -824,7 +824,7 @@ func Mask(s string, o Options) (string, int) {
 
 // Preview is Mask with nothing remembered: each value goes as the
 // placeholder, or with Options.Shape the made-up key, it would have (a
-// user name its made-up name), which
+// user name its made-up name, an IP address its documentation one), which
 // isn't kept for Restore or as a value seen before (known.go).
 func Preview(s string, o Options) string {
 	put := tag
@@ -841,6 +841,11 @@ func Preview(s string, o Options) string {
 	put = func(kind, v string) string {
 		if kind == "USERNAME" {
 			return standInOf(v) // a user name's made-up name (shape.go)
+		}
+		if kind == "IP" {
+			if at, _, ok := ipStandIns(v); ok {
+				return at(0) // an address's documentation one (shape.go)
+			}
 		}
 		return tagOrShape(kind, v)
 	}
