@@ -4,6 +4,8 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "MCP hub": "MCP 聚合",
+    "in {agents}": "用于 {agents}",
     "Browser access": "浏览器访问",
     "Open magpie in a browser": "在浏览器中打开 magpie",
     "The app serves this window’s page with a key in its link, as magpie web does, while it runs. For a tunnel such as Cloudflare Tunnel, point it at http://127.0.0.1:{port}": "App 运行时会把本窗口的页面提供给浏览器，链接里带着 Key，和 magpie web 一样。用 Cloudflare Tunnel 这类隧道时，把它指向 http://127.0.0.1:{port}",
@@ -4057,6 +4059,8 @@ const I18N = {
     "Where": "位置",
   },
   "zh-TW": {
+    "MCP hub": "MCP 聚合",
+    "in {agents}": "用於 {agents}",
     "Browser access": "瀏覽器存取",
     "Open magpie in a browser": "在瀏覽器中開啟 magpie",
     "The app serves this window’s page with a key in its link, as magpie web does, while it runs. For a tunnel such as Cloudflare Tunnel, point it at http://127.0.0.1:{port}": "App 執行時會把本視窗的頁面提供給瀏覽器，連結裡帶著 Key，和 magpie web 一樣。用 Cloudflare Tunnel 這類通道時，把它指向 http://127.0.0.1:{port}",
@@ -8095,6 +8099,8 @@ const I18N = {
     "Where": "位置",
   },
   ja: {
+    "MCP hub": "MCP ハブ",
+    "in {agents}": "{agents} で使用",
     "Browser access": "ブラウザからのアクセス",
     "Open magpie in a browser": "ブラウザで magpie を開く",
     "The app serves this window’s page with a key in its link, as magpie web does, while it runs. For a tunnel such as Cloudflare Tunnel, point it at http://127.0.0.1:{port}": "アプリの実行中、このウィンドウのページをブラウザにも提供します。magpie web と同じく、リンクにキーが含まれます。Cloudflare Tunnel などのトンネルは http://127.0.0.1:{port} に向けてください",
@@ -12135,6 +12141,8 @@ const I18N = {
     "Where": "場所",
   },
   de: {
+    "MCP hub": "MCP-Hub",
+    "in {agents}": "in {agents}",
     "Browser access": "Browserzugriff",
     "Open magpie in a browser": "magpie im Browser öffnen",
     "The app serves this window’s page with a key in its link, as magpie web does, while it runs. For a tunnel such as Cloudflare Tunnel, point it at http://127.0.0.1:{port}": "Solange die App läuft, liefert sie die Seite dieses Fensters auch an Browser aus, mit einem Schlüssel im Link, wie magpie web. Einen Tunnel wie Cloudflare Tunnel richtest du auf http://127.0.0.1:{port}",

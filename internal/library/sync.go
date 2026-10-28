@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/mcpauth"
 )
 
@@ -224,9 +225,25 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 		res.changed(id)
 		return true
 	}
+	// with the hub on, the agent is given magpie's one entry in place of
+	// the servers behind it (mcp_hub.go); one that can't take it keeps
+	// each server's own
+	hub, _ := l.hubFor(t, a, entries)
+	if t.Gone {
+		// nor is a gone agent given the hub anew
+		hub = nil
+		if l.MCPHub && slices.Contains(a.MCP, HubEntry) && l.server(HubEntry) == nil &&
+			slices.ContainsFunc(l.MCP, func(s *Server) bool { return slices.Contains(s.Agents, id) && inHub(s) }) {
+			hub = hubServerFor(t)
+		}
+	}
+	hubbed := func(s *Server) bool { return hub != nil && inHub(s) }
 	var mine []string
 	for _, name := range a.MCP {
-		if s := l.server(name); s != nil && slices.Contains(s.Agents, id) && t.MCP.supports(s) == nil {
+		if s := l.server(name); s != nil && slices.Contains(s.Agents, id) && t.MCP.supports(s) == nil && !hubbed(s) {
+			continue
+		}
+		if name == HubEntry && hub != nil {
 			continue
 		}
 		e, ok := entries[name]
@@ -241,10 +258,16 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 			res.dropped = append(res.dropped, had)
 		}
 	}
+	given := []*Server{}
 	for _, s := range l.MCP {
-		if !slices.Contains(s.Agents, id) {
-			continue
+		if slices.Contains(s.Agents, id) && !hubbed(s) {
+			given = append(given, s)
 		}
+	}
+	if hub != nil {
+		given = append(given, hub)
+	}
+	for _, s := range given {
 		// an agent gone from here is given nothing: what it has still
 		// stays its, until unticked
 		if t.Gone {
@@ -255,7 +278,9 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 			}
 			continue
 		}
-		s := through(s, base)
+		if s != hub {
+			s = through(s, base)
+		}
 		if err := t.MCP.supports(s); err != nil {
 			res.fail(id, "mcp:"+s.Name, err)
 			continue
@@ -360,6 +385,12 @@ type AgentView struct {
 	// startup_timeout_sec)
 	Startup bool   `json:"startup,omitempty"`
 	MCPVia  string `json:"mcpVia,omitempty"`
+	// Hub, with the MCP hub on, is "on" for an agent given magpie's one
+	// entry in place of its servers, or why it keeps theirs: no-remote
+	// (it reaches no server over HTTP), taken (a library server is called
+	// magpie) or own (it has an entry called magpie of its own); "" for one
+	// given none of the hub's servers
+	Hub string `json:"hub,omitempty"`
 	// How is the way it is given its skills, link or copy, and HowOwn its
 	// own over the library's; MustCopy is one that can only take copies
 	// (in WSL)
@@ -434,6 +465,10 @@ type View struct {
 	Backups      string            `json:"backups"`
 	SkillGroups  []SkillGroup      `json:"skillGroups"`
 	CopySkills   bool              `json:"copySkills"` // the library gives skills as copies (#896)
+	// MCPHub: the agents are given magpie's one MCP server in place of
+	// the library's (#2679), at HubPath<agent> on the gateway
+	MCPHub  bool   `json:"mcpHub"`
+	HubPath string `json:"hubPath"`
 	// CheckDue is set when the skills from GitHub weren't checked for
 	// updates since magpie started, or not for a while: the page checks
 	// them as it shows them (#1449)
@@ -473,7 +508,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	// the agents are found once for the whole read: finding them looks
 	// through every agent's folders, in WSL too (#1624)
 	targets := Targets()
-	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, Partial: glance}
+	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, MCPHub: l.MCPHub, HubPath: gateway.HubMCPPath, Partial: glance}
 	for _, t := range targets {
 		av := AgentView{ID: t.Agent.ID, Name: t.Agent.Name, Icon: t.Agent.Icon, Instructions: t.Instructions, Skills: t.Skills,
 			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID),
@@ -492,6 +527,18 @@ func readView(problems []Problem, glance bool) (*View, error) {
 			av.NoEnvRefs = t.MCP.refsOf() == envSyntax{}
 			av.ToolsOff = toolsOffOf(t) != toolsNone
 			av.Startup = t.MCP.Format == fmtCodex
+			if l.MCPHub {
+				a := l.Applied[t.Agent.ID]
+				if a == nil {
+					a = &Applied{}
+				}
+				entries, _ := t.MCP.entries()
+				if hs, why := l.hubFor(t, a, entries); hs != nil {
+					av.Hub = "on"
+				} else {
+					av.Hub = why
+				}
+			}
 		}
 		v.Agents = append(v.Agents, av)
 	}
