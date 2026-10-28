@@ -382,6 +382,9 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 
 	groups := byKey(files, func(f *file) bool { return shares[f.key] != nil })
 	first, _ := time.ParseInLocation(time.DateOnly, out.From, time.Local)
+	// made to size: grown by append, 34k sessions' list held a quarter
+	// more than its rows, and every copy it was grown through (#2278)
+	out.Sessions = make([]Summary, 0, len(shares))
 	for key, sh := range shares {
 		if len(sh.dates) == 0 {
 			continue
@@ -441,6 +444,7 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 		return a.Key < b.Key
 	})
 	// keys after the sort, so they name the sessions in the order they are in
+	out.Keys = make([]string, 0, len(out.Sessions))
 	for _, s := range out.Sessions {
 		out.Keys = append(out.Keys, s.Key)
 	}
