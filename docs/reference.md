@@ -874,7 +874,9 @@ shows them, so magpie shows no plan usage for these keys.
 
 Google Vertex AI (`google-vertex`), which Google's documentation now calls
 Gemini Enterprise Agent Platform, serves Google's Gemini models from your own
-Google Cloud project, which is billed for them. It takes no API key: each
+Google Cloud project, which is billed for them. It serves the
+[partner and open models](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/call-open-model-apis)
+too, such as DeepSeek, GLM and gpt-oss. It takes no API key: each
 request is signed with a token minted from your Google credentials. First turn
 on the Agent Platform API (`aiplatform.googleapis.com`) in the project (billing
 has to be on there), then sign in with `gcloud auth application-default login`
@@ -910,7 +912,7 @@ so magpie gives each location the models it answered with on 2026-10-06
 
 | Location | Models |
 | --- | --- |
-| `global` | `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-4-argon`, `gemini-3.1-pro-preview`, `gemini-3.1-pro-preview-customtools`, `gemini-3.1-flash-lite`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
+| `global` | `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-4-argon`, `gemini-3.1-pro-preview`, `gemini-3.1-pro-preview-customtools`, `gemini-3.1-flash-lite`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `deepseek-ai/deepseek-v4.1-flash-maas`, `zai-org/glm-5.2-maas`, `openai/gpt-oss-120b-maas` |
 | `us`, `eu` | `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite` |
 | A region | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
 
@@ -924,6 +926,26 @@ magpie provider models google-vertex all     # back to the location's list
 
 `magpie provider set google-vertex location=…` keeps the models picked, so pick
 again after a move.
+
+A partner model is one whose id names its publisher before a slash, as
+`deepseek-ai/deepseek-v4.1-flash-maas` does. magpie asks it on Google's
+OpenAI-compatible chat completions in your project
+(`…/locations/<location>/endpoints/openapi/chat/completions`) with the same
+credentials, and asks a Gemini model on generateContent, with nothing to set.
+The three in the `global` row are the ones Google's docs list as live there on
+2026-10-28. Another partner model (one in preview, or one Google lists later,
+such as `google/gemma-4-26b-a4b-it-maas`) is typed in under its full id, as
+any model is:
+
+```sh
+magpie provider models google-vertex gemini-3.8-flash deepseek-ai/deepseek-v4.1-flash-maas google/gemma-4-26b-a4b-it-maas
+```
+
+Turn each partner model on for the project in Model Garden first: until then
+Google refuses it. `magpie provider test google-vertex` tests Gemini, and a
+partner model is tested on its own (right-click it in the app, or
+`magpie provider test google-vertex <model>`). Claude on Vertex AI isn't
+served: it takes a request of its own (`rawPredict`), not chat completions.
 
 Google's [Priority PayGo](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/priority-paygo)
 and [Flex PayGo](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/flex-paygo)

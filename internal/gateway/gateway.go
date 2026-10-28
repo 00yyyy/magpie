@@ -5453,7 +5453,9 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.Effort, req = e, &r
 		}
 	}
-	if p.IsVertex() {
+	if p.IsVertex() && !provider.VertexPartner(model) {
+		// Gemini's levels; a partner model on chat completions is sent
+		// its effort as any OpenAI-compatible vendor is
 		req = vertexEffort(req, p.Efforts(model))
 	}
 	// the names in force, read once however many endpoints the request is

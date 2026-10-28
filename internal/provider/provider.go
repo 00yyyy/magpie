@@ -1537,6 +1537,14 @@ func (p Provider) baseOf(api string) string {
 func (p Provider) Base(proto Protocol) string {
 	switch proto {
 	case Chat:
+		// Vertex AI's partner models, on Google's OpenAI-compatible chat
+		// completions at the project (VertexPartner)
+		if p.IsVertex() {
+			if b := p.vertexBase(); b != "" {
+				return b + "/endpoints/openapi"
+			}
+			return ""
+		}
 		return p.Chat
 	case Responses:
 		return p.Responses
@@ -1579,7 +1587,9 @@ func (p Provider) Speaks() []Protocol {
 	// Factory's Gemini models, on generateContent. A model droid didn't
 	// list stays on the other three (factoryAPIs); this is not one of them.
 	// A custom provider's Gemini API comes after the others it has.
-	// Vertex AI's, on generateContent alone, at its project.
+	// Vertex AI's Gemini models, on generateContent at its project, after
+	// the chat completions its partner models are served on (ListedAPIs
+	// gives each model its one).
 	if p.IsVertex() {
 		if p.vertexBase() != "" {
 			out = append(out, Gemini)

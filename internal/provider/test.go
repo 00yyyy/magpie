@@ -70,6 +70,12 @@ func (p Provider) Test(ctx context.Context) []Result {
 	}
 	var out []Result
 	for _, proto := range p.Speaks() {
+		if p.IsVertex() && proto == Chat {
+			// a partner model answers only once the project has turned it
+			// on in Model Garden: the provider is tested on Gemini, and a
+			// partner model by its own test (TestModel)
+			continue
+		}
 		q, ok := p.keyFor(proto)
 		model := p.testModel(q, proto)
 		if !ok {
@@ -192,7 +198,7 @@ func tinyBody(q Provider, proto Protocol, model string) (url, body string) {
 		if q.IsBedrock() || q.IsAzure() {
 			return q.mantleBase(q.Chat, model) + "/chat/completions", fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_completion_tokens":16}`, model)
 		}
-		return q.Chat + "/chat/completions", fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_tokens":16}`, model)
+		return q.Base(Chat) + "/chat/completions", fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_tokens":16}`, model)
 	case Responses:
 		return q.mantleBase(q.Responses, model) + "/responses", fmt.Sprintf(`{"model":%q,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}],"max_output_tokens":16}`, model)
 	case Anthropic:
