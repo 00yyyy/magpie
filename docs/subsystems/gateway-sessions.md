@@ -546,7 +546,14 @@ for: `provider_test`, `api_detect` or `model_list`
   full of 0-token rows no agent sent. A list that failed is still a row,
   under the Failed filter too, as is every Test and Detect APIs. Older
   lines stay in `usage.jsonl`, read by nothing.
-  `TestAnsweredModelListIsNoRow` covers it.
+  `TestAnsweredModelListIsNoRow` covers it. A request that is only a step
+  towards a list is no row either (`probelog.Taken`): an Antigravity
+  account's `fetchAvailableModels` with its tier named, which Google
+  answers 400 for a Google AI Pro account before the request without one
+  lists its models (ferock4669 on Discord, a 400 "Model list" row beside
+  every list). That tier isn't named again for a day (`tierRefusedFor`);
+  the request without one is written down as any list.
+  `TestAntigravityRefusedTierAskedOnceAndNoRow`.
 - **Whose:** a row recorded under its host, sent before its provider had
   an id, is listed under the provider saved on that host now
   (`Renames.ProbeOf`), and with none on it, a deleted one's, under the id
