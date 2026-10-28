@@ -78,6 +78,8 @@ let adding = false; // the preset sheet is open
 // the partners counted as shown since the sheet opened: once an opening,
 // however often it is drawn (countPartner)
 let partnersCounted = null;
+// the Partners heading's light has run since the sheet opened (shinePartners)
+let partnersShone = false;
 let importing = null; // a magpie://import link waiting for a yes: { provider, error, replaces }
 let importingApps = null; // the Import from other apps dialog: { sources, picks }
 let providerDiscovery = []; // only opaque fingerprints and app names, never credentials
@@ -7029,6 +7031,25 @@ function pickForAgent(a, p, btn, ev) {
   openPicker(agent, field, btn, ev, (o) => pre.test(o.value));
 }
 
+// shinePartners: a hairline of light runs once round the Partners heading
+// when the sheet opens, as the reader reaches it (the owner picked it, of
+// three). Once an opening: a search or a reload drawing it again doesn't.
+function shinePartners(k) {
+  if (partnersShone || calm()) return;
+  k.classList.add("shine");
+  k.append(el("i", "glow"), el("i", "ring"));
+  const seen = new IntersectionObserver(([en]) => {
+    // a redraw's new heading takes over from this one
+    if (!k.isConnected) return seen.disconnect();
+    if (!en.isIntersecting || !adding) return;
+    seen.disconnect();
+    if (partnersShone) return;
+    partnersShone = true;
+    k.classList.add("lit");
+  }, { root: $("#view-providers"), threshold: 1 });
+  seen.observe(k);
+}
+
 // The add sheet: presets first (a key is all they need), custom last.
 let presetQuery = "", addReturnPick = null;
 function renderAdd() {
@@ -7049,7 +7070,7 @@ function renderAdd() {
     setRoom(view, 0);
   }
   sheet.hidden = !adding;
-  if (!adding) partnersCounted = null;
+  if (!adding) { partnersCounted = null; partnersShone = false; }
   // Duplicate and Add another open a new provider's editor with no sheet
   if (!adding) return editing && typeof editing === "object" ? renderEditor(null, editing.preset) : null;
   const head = el("div", "row-head");
@@ -7108,6 +7129,7 @@ function renderAdd() {
     if (partners.length) {
       any = true;
       const grid = section("Partners", "magpie's sponsors");
+      shinePartners(grid.previousElementSibling);
       // a new one's tile keeps a dot until opened (partnerTile)
       newPartnerTiles ??= new Set();
       for (const p of partners) if (p.new && !p.added) newPartnerTiles.add(p.id);
