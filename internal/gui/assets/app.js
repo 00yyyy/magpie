@@ -1058,7 +1058,7 @@ function explainDrift(a) {
   ed.append(el("p", "lib-confirm drift-why", tNotice(a.drift.detail)));
   const bar = el("div", "bar");
   const ok = el("button", "text primary", t("OK"));
-  ok.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  ok.onclick = cancelAsk;
   bar.append(el("span", "grow"));
   if (a.wired) {
     const off = el("button", "text drift-off", t("Disconnect from magpie"));
@@ -2279,7 +2279,7 @@ function askDisconnect(a) {
     }
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  cancel.onclick = cancelAsk;
   bar.append(STARTS_WITH.has(a.id) ? el("span", "ag-bar-note", t("Running {agent} copies take it once reopened", { agent: a.name })) : el("span"), el("span", "grow"), cancel, go);
   ed.append(bar);
   confirmAsk = ed;
@@ -4411,7 +4411,7 @@ function cliBehindOnce() {
     closeConfirmAsk();
   };
   const ok = el("button", "text primary", t("OK"));
-  ok.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  ok.onclick = cancelAsk;
   bar.append(el("span", "grow"), quiet, ok);
   ed.append(bar);
   confirmAsk = ed;
@@ -4516,7 +4516,7 @@ function showWhatsNew(releases, auto, more = {}) {
   }
   const bar = el("div", "bar");
   const ok = el("button", "text primary", t("Close"));
-  ok.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  ok.onclick = cancelAsk;
   if (auto) {
     // told at once, so Escape or a click outside keeps it as well as Close
     const [quiet, box] = tick(t("Don't show again today"), false);
@@ -4673,7 +4673,7 @@ async function confirmUpdate(u, go) {
   draw(u.notes ? [{ version: u.latest, notes: u.notes }] : []);
   const bar = el("div", "bar");
   const later = el("button", "text", t("Later"));
-  later.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  later.onclick = cancelAsk;
   const ok = el("button", "text primary", t("Restart to update"));
   ok.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); go(); };
   bar.append(el("span", "grow"), later, ok);
@@ -5658,7 +5658,7 @@ function askLeave(a, field, value, opt) {
   const go = el("button", "text primary", value === "" ? t("Use default") : t("Use {model}", { model }));
   go.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); setPick(a, field, value, opt); };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  cancel.onclick = cancelAsk;
   bar.append(STARTS_WITH.has(a.id) ? el("span", "ag-bar-note", t("Running {agent} copies take it once reopened", { agent: a.name })) : el("span"), el("span", "grow"), cancel);
   if (value === "") {
     const restore = el("button", "text", t("Disconnect and restore"));
@@ -6590,7 +6590,7 @@ function askForgetSaved(x) {
     closeConfirmAsk();
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  cancel.onclick = cancelAsk;
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
   confirmAsk = ed;
@@ -6623,7 +6623,7 @@ function askForgetAccount(x) {
     else go.disabled = false;
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  cancel.onclick = cancelAsk;
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
   confirmAsk = ed;
@@ -6652,7 +6652,7 @@ function askSignOutLogin(a, l) {
     else go.disabled = false;
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  cancel.onclick = cancelAsk;
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
   ed.back = renderProviders; // the provider's editor it was asked from
@@ -11871,6 +11871,7 @@ function fallbackHint(p) {
 // such a built-in's sign-in on the Go side doesn't reach those users; see
 // AGENTS.md (PLUGIN-SERVED).
 
+const QODER_RISK = "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose.";
 const SUBS = [
   // both can also come from CLIProxyAPI's auth files or the agent's own (importing below)
   // Anthropic has banned accounts it saw used from other tools: said before one is added
@@ -11905,10 +11906,10 @@ const SUBS = [
   // hint says which accounts each is for
   { agent: "qoder", get name() { return t("Qoder (international)"); }, icon: "qoder", plans: "Pro", own: true, risk: true,
     hint: "For accounts on qoder.com, the international site.",
-    riskNote: "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose." },
+    riskNote: QODER_RISK },
   { agent: "qoder-cn", name: "Qoder CN", icon: "qoder", plans: "Pro", own: true, risk: true,
     hint: "For accounts on qoder.cn: signed in with an Alibaba Cloud account or a phone number.",
-    riskNote: "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose." },
+    riskNote: QODER_RISK },
   // the devin CLI's own account is read; more are signed in beside it, each in a data folder of magpie's
   { agent: "devin", name: "Devin", icon: "devin", plans: "Pro · Enterprise", own: true },
   // Zed's hosted models (Zed Pro, its trial), signed in at zed.dev as the editor is
@@ -17847,7 +17848,7 @@ function askReset(q) {
     }
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  cancel.onclick = cancelAsk;
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
   confirmAsk = ed;
@@ -17855,6 +17856,8 @@ function askReset(q) {
   $("#modal").classList.add("lib");
   go.focus();
 }
+// closes a confirmation, nothing more (its Cancel, or an OK that only dismisses)
+function cancelAsk(e) { e.stopPropagation(); closeConfirmAsk(); }
 function closeConfirmAsk() {
   if (!confirmAsk) return;
   // Escape and the backdrop must not expose row actions while a bulk write
@@ -19844,7 +19847,7 @@ function askRestore(v, parts) {
     }
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  cancel.onclick = cancelAsk;
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
   confirmAsk = ed;
@@ -19901,7 +19904,7 @@ function askUpload(f) {
     }
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  cancel.onclick = cancelAsk;
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
   confirmAsk = ed;
