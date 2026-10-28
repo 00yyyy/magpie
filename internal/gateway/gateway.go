@@ -5371,6 +5371,13 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 	web := req.WebSearch
 	// the cache key was left out to see if it was what the upstream refused
 	dropped := false
+	// the conversation's cache key given a provider that may need one when
+	// the client named none (ownCacheKey); "" once it was left out for a
+	// refusal
+	ownKey := ""
+	if req.CacheKey == "" && ownCacheKey(p) {
+		ownKey = cacheKeyOf(in, req)
+	}
 	// Codex's image tool was left out to see if it was (#949), and the
 	// request with it, to go back to when it wasn't; tried once
 	var withImage *Request
@@ -5398,6 +5405,17 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		if want := web && searchesFor(p, to, model, req); want != req.WebSearch {
 			r := *req
 			r.WebSearch, req = want, &r
+		}
+		if ownKey != "" {
+			// only Chat and Responses carry it
+			want := ""
+			if (to == provider.Chat || to == provider.Responses) && s.fits(p.ID, cacheKeyField, to) {
+				want = ownKey
+			}
+			if req.CacheKey != want {
+				r := *req
+				r.CacheKey, req = want, &r
+			}
 		}
 		if req.CacheKey != "" && !s.fits(p.ID, cacheKeyField, to) {
 			r := *req
@@ -5811,7 +5829,10 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.Tier, req = "", &r
 			continue
 		}
-		if req.CacheKey != "" && badRequest(res.StatusCode) && !wrongEndpoint(res.StatusCode, b) && !provider.CopilotRefusal(b) {
+		// magpie's own key is what a refusal is about only when it says so:
+		// another 400 is not asked again for it
+		ownKeyKept := ownKey != "" && req.CacheKey == ownKey && !refusesField(res.StatusCode, b, cacheKeyField)
+		if req.CacheKey != "" && !ownKeyKept && badRequest(res.StatusCode) && !wrongEndpoint(res.StatusCode, b) && !provider.CopilotRefusal(b) {
 			// a vendor that turns away fields it doesn't know is asked again
 			// without the cache key, and not sent it again once that works —
 			// at once when its error names the key; not every error does
@@ -5820,6 +5841,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			} else {
 				dropped = true
 			}
+			ownKey = ""
 			r := *req
 			r.CacheKey, req = "", &r
 			continue
@@ -5891,6 +5913,61 @@ func loadsInPlace(p provider.Provider) bool {
 // cacheKeyField is the client's prompt cache key as a request carries it
 // upstream; a provider that refused it is remembered under it in unfit.
 const cacheKeyField = "prompt_cache_key"
+
+// ownCacheKey says a request translated for p goes with a prompt cache
+// key for its conversation when the client sent none (an Anthropic
+// client's never has one): OpenAI's API routes a conversation by it to
+// where its prompt is cached, and a relay in front of it can refuse a
+// request without it ("prompt_cache_key is required", CyberCaius's
+// AnyRouter on Discord). Only OpenAI's own API with a key, and a provider
+// the user added by its address, which may be such a relay: a vendor's
+// preset, a signed-in account (the ChatGPT backend gets its own, as Codex
+// CLI sends it), a plugin, Bedrock and Vertex are sent nothing they didn't
+// get before, nor is a provider whose extraBody names the field: the
+// user's value is the one sent. One whose 400 names the field is asked again without it and
+// not sent it again (forwardTranslated); another 400 is not retried for
+// it.
+func ownCacheKey(p provider.Provider) bool {
+	if p.Account != nil || p.IsPlugin() || p.IsBedrock() || p.IsVertex() {
+		return false
+	}
+	if _, ok := p.ExtraBody[cacheKeyField]; ok {
+		return false // the user's own extraBody key (#1604) is theirs to fill
+	}
+	if _, ok := p.ExtraBody["!"+cacheKeyField]; ok {
+		return false
+	}
+	if p.AddedByAddress() {
+		return true
+	}
+	h := p.Host()
+	return h == "api.openai.com" || strings.HasSuffix(h, ".api.openai.com")
+}
+
+// cacheKeyOf is the prompt cache key of the conversation req is a turn
+// of: the session the client names (sessionOf), else its first user
+// message, which every later turn repeats, hashed into a UUID's shape, so
+// it is the same for every turn and names nothing of the client, the
+// user or magpie.
+func cacheKeyOf(in http.Header, req *Request) string {
+	h := sha256.New()
+	if v := sessionOf(in); v != "" {
+		io.WriteString(h, "session\x00"+v)
+	} else {
+		io.WriteString(h, "first\x00")
+		for _, m := range req.Messages {
+			if m.Role != "user" {
+				continue
+			}
+			for _, pt := range m.Parts {
+				fmt.Fprintf(h, "%v\x00%s\x00%s\x00%s\x00%s\x00", pt.Kind, pt.Text, pt.MediaType, pt.Data, pt.URL)
+			}
+			break
+		}
+	}
+	x := hex.EncodeToString(h.Sum(nil)[:16])
+	return x[:8] + "-" + x[8:12] + "-" + x[12:16] + "-" + x[16:20] + "-" + x[20:]
+}
 
 // refusesField recognizes a vendor turning a request away for a field it
 // doesn't take — Gemini's "Unknown name", Mistral's extra_forbidden,
