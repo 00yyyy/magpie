@@ -83,7 +83,7 @@ func modelSpans(s string, o Options) []span {
 		if kind == "PERSON" {
 			a, b = zhTrim(s, a, b)
 		}
-		if a < b && utf8.ValidString(s[a:b]) && modelTakes(kind, s[a:b]) && modelFits(s, a, b, kind) {
+		if a < b && utf8.ValidString(s[a:b]) && modelTakes(kind, s[a:b]) && modelFits(s, a, b, kind) && !(kind == "PERSON" && zhWordNotName(s, a, b)) {
 			out = append(out, span{a, b, kind, ByModel, f.Score})
 		}
 	}
@@ -123,8 +123,9 @@ func modelTakes(kind, v string) bool {
 	case "SECRET":
 		return len(v) >= 8 && !madeID(v) && !namesThing(v)
 	case "PERSON":
-		// nor a word that starts with a surname, as a whole (文案)
-		return utf8.RuneCountInString(v) >= 2 && strings.IndexFunc(v, unicode.IsLetter) >= 0 && !snakeWord(v) && !zhWords[v]
+		// (an ordinary Chinese word, 文案 or 关键词, is left where it is
+		// read: zhWordNotName)
+		return utf8.RuneCountInString(v) >= 2 && strings.IndexFunc(v, unicode.IsLetter) >= 0 && !snakeWord(v)
 	case "ACCOUNT":
 		return !madeID(v)
 	case "EMAIL":

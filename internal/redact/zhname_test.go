@@ -191,3 +191,64 @@ func TestChineseNamesByModelOnlyNicks(t *testing.T) {
 		}
 	}
 }
+
+// A word the model takes for a name is left as written (v0.1.1850 on X):
+// colours (黄绿色, hh05928822), 关键词 (wangjunxiao128) and the words
+// that start with a surname, as Guard took 边…, 应…, 关… and 尚… in
+// hh05928822's screenshot. Each sentence is asked of the model's span and
+// of the cues alone.
+func TestModelWordsAreNoNames(t *testing.T) {
+	words := []string{"黄绿色", "黄绿", "红色", "金黄色", "浅蓝色", "蓝绿色", "关键词", "关键字", "关键点", "边界", "边界线", "边距", "应用层", "应该", "尚可", "尚无", "毛利率", "温度计", "程序员", "文件名", "时间戳", "关心", "包括", "管理", "连接"}
+	shapes := []string{"%s", "把按钮改成%s", "提取这段文本的%s", "帮我改一下这段%s，谢谢", "%s已经好了", "%s说明", "请%s", "发给%s。", "检查一下%s。", "张伟和%s", "%s：首页"}
+	f := &fakeModel{values: map[string]string{}}
+	o := Options{Personal: true, Model: f.find}
+	for _, w := range words {
+		for _, sh := range shapes {
+			s := strings.ReplaceAll(sh, "%s", w)
+			for _, said := range []map[string]string{{}, {w: "private_person"}} {
+				f.values = said
+				out, _ := Mask(s, o)
+				if strings.Contains(sh, "张伟") {
+					out = strings.Replace(out, out[:strings.Index(out, "和")], "张伟", 1)
+				}
+				if out != s {
+					t.Errorf("%q (model said %v) masked: %q", s, said, out)
+				}
+			}
+		}
+	}
+}
+
+// Names stay masked, the model's and the cues': 黄 starts 黄绿色 and
+// 黄晓明, 关 starts 关键词 and 关羽, 毛利 starts 毛利率 and 毛利兰. A
+// name that is also a word (方圆, 高歌, 江山) is masked where a role
+// before it or a title after it says a person is meant.
+func TestModelNamesBesideWords(t *testing.T) {
+	f := &fakeModel{values: map[string]string{"黄晓明": "private_person", "关羽": "private_person", "毛利兰": "private_person", "方圆": "private_person", "高歌": "private_person", "江山": "private_person", "黄蓉": "private_person"}}
+	o := Options{Personal: true, Model: f.find}
+	for _, c := range []struct{ s, name string }{
+		{"我叫黄晓明，衣服是黄绿色的", "黄晓明"},
+		{"关羽的关键词是忠义", "关羽"},
+		{"毛利兰的毛利率", "毛利兰"},
+		{"黄蓉穿着红色的衣服", "黄蓉"},
+		{"客户方圆反馈导出失败", "方圆"},
+		{"联系人：高歌", "高歌"},
+		{"感谢江山老师的帮助", "江山"},
+	} {
+		out, _ := Mask(c.s, o)
+		if strings.Contains(out, c.name) {
+			t.Errorf("%q: %q not masked: %q", c.s, c.name, out)
+		}
+		for _, w := range []string{"黄绿色", "关键词", "毛利率", "红色"} {
+			if strings.Contains(c.s, w) && !strings.Contains(out, w) {
+				t.Errorf("%q: %q masked: %q", c.s, w, out)
+			}
+		}
+	}
+	// and with no one meant, the word is a word
+	for _, s := range []string{"天下方圆百里", "江山如画"} {
+		if out, _ := Mask(s, o); out != s {
+			t.Errorf("%q masked: %q", s, out)
+		}
+	}
+}

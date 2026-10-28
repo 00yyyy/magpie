@@ -1,6 +1,7 @@
 package redact
 
 import (
+	_ "embed"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -57,7 +58,74 @@ var zhWords = runes2(
 	"符号", "景色", "费用", "舒服", "辛苦", "纪律", "席位", "车间", "管道", "何时", "何况", "于是",
 	"余下", "杜绝", "罗列", "程式", "叶片", "涂层", "沙发", "池子", "巩固", "迟到", "仲裁", "钟点",
 	"钟表", "向导", "史诗", "易懂", "马路", "马虎", "汤汁", "朱红", "阳光", "任职", "董事",
+	"边距", "边栏", "尚需",
 )
+
+// zhDict are some 1,500 more such words, from a dictionary
+// (zhdict.txt says which and how): 边界, 应该, 尚可, 关心, 高兴.
+//
+//go:embed zhdict.txt
+var zhDictText string
+
+var zhDict = func() map[string]bool {
+	m := map[string]bool{}
+	for _, l := range strings.Split(zhDictText, "\n") {
+		if strings.HasPrefix(l, "#") {
+			continue
+		}
+		for _, w := range strings.Fields(l) {
+			m[w] = true
+		}
+	}
+	return m
+}()
+
+// zhColours are the colour characters: a word of them alone (黄绿, 红蓝)
+// or one that ends in 色 (黄绿色, 金黄色, 红色) is a colour, no name.
+// 青 is left out, a given name's as often (王青).
+const zhColours = "红橙黄绿蓝紫黑白灰褐棕粉赤"
+
+// zhNounEnds are what makes a word a longer one (关键 → 关键词, 边界 →
+// 边界线, 毛利 → 毛利率), and no given name ends with (毛利兰 does not).
+const zhNounEnds = "词字性率值码型键框栏库器类表量度点线层期区图版式页数论员价计费件名夹帧戳"
+
+// zhWordShaped says v, a Chinese name the model or the cues took, is an
+// ordinary word: a colour (黄绿色, hh05928822 on X), a word that starts
+// with a surname (zhWords, zhDict: 边界, 尚可), or one of those with what
+// makes a longer word after it (关键词, 关键字, wangjunxiao128 on X;
+// 应用层). The surnames stay: 黄 starts 黄绿色 and 黄晓明 both.
+func zhWordShaped(v string) bool {
+	rs := []rune(v)
+	if len(rs) < 2 {
+		return false
+	}
+	colour := true
+	for _, r := range rs {
+		if !unicode.Is(unicode.Han, r) {
+			return false
+		}
+		colour = colour && strings.ContainsRune(zhColours, r)
+	}
+	if colour || rs[len(rs)-1] == '色' {
+		return true
+	}
+	two := string(rs[:2])
+	switch len(rs) {
+	case 2:
+		return zhWords[two] || zhDict[two]
+	case 3:
+		return (zhWords[two] || zhDict[two]) && strings.ContainsRune(zhNounEnds, rs[2])
+	}
+	return false
+}
+
+// zhWordNotName says s[a:b], taken for a Chinese name, is an ordinary
+// word there (zhWordShaped): unless a role before it or a title after it
+// says a person is meant (客户方圆, 我叫高歌, 江山老师), where a name
+// that is also a word is masked.
+func zhWordNotName(s string, a, b int) bool {
+	return zhWordShaped(s[a:b]) && !endsAny(s[:a], zhRoles, true) && !startsAny(s[b:], zhTitles)
+}
 
 // zhRoles before a name say it is one: 客户陈建国, 联系人：赵丽颖,
 // 我叫黄晓明, 提交者是欧阳娜娜.
@@ -141,8 +209,8 @@ func zhNameSpans(s string, person []span, nicks bool) []span {
 			continue
 		}
 		i = b
-		if nicks && !zhNick(s[a:b]) {
-			continue
+		if nicks && !zhNick(s[a:b]) || zhWordNotName(s, a, b) {
+			continue // a word, nor joined to a name: 张伟和边界
 		}
 		kind := ""
 		if ok {
