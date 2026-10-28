@@ -18885,9 +18885,10 @@ async function loadFonts(refresh = false) {
   if (fontFlight || (fontList !== null && !refresh)) return fontFlight;
   fontListError = false;
   fontFlight = api("fonts" + (refresh ? "?refresh=1" : ""))
-    .then((list) => {
+    .then(async (list) => {
       if (!Array.isArray(list)) throw new Error("invalid font collection");
-      window.desktopFonts.catalogue(fontList = web ? window.desktopFonts.here(list) : list);
+      // a browser tab's own fonts: only a tab loads webfonts.js
+      window.desktopFonts.catalogue(fontList = web ? await import("./webfonts.js").then(() => webFonts.list(list)) : list);
       window.desktopFonts.apply(fontChoices(prefs || window.bootPrefs));
     })
     .catch(() => { fontListError = true; })
@@ -18939,9 +18940,10 @@ function renderFonts(s) {
     paint(style, chosen?.name || t("System default"), "Font style");
     style.disabled = !family?.styles.length;
     row.querySelector(".font-preview").textContent = t("Aa 0123 · 中文");
-    pill.onclick = (e) => {
+    pill.onclick = async (e) => {
       e.stopPropagation();
       if (pill.classList.contains("open")) return closeProtoMenu();
+      if (web) await window.webFonts?.ask();
       const options = [{ v: "", name: t("System default"), note: "", literalName: true },
         ...(fontList || []).map((f) => ({ v: "family:" + f.name, name: f.name, note: "", literalName: true })),
         { v: "refresh", name: t("Refresh fonts"), note: fontListError ? t("Couldn't read installed fonts") : "", literalName: true, always: true }];
@@ -18951,6 +18953,7 @@ function renderFonts(s) {
         const next = fontList.find((f) => "family:" + f.name === v);
         if (next?.styles.length) chooseFont(key, closestFont(next.styles, chosen));
       }, label, "sess-menu font-menu", "right", false, "Search fonts…");
+      if (web) window.webFonts?.typing(key);
     };
     style.onclick = (e) => {
       e.stopPropagation();

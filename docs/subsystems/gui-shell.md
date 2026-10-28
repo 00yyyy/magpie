@@ -268,10 +268,25 @@ it neither changes nor takes the app's `settings.UIFont`/`CodeFont`. A
 tab's `/api/fonts` is the server's families (none in a nogui build such as
 Docker or `magpie-cli`, and none when reading them fails, never an error)
 plus `commonFamilies` in `internal/gui/fonts.go`, in regular and bold.
-The tab keeps those it draws (`desktopFonts.here`: text in the family
-measures apart from a generic family's on a canvas), so another computer's
-fonts, and Safari's user-installed ones, aren't offered. When none is
-kept, the rows still offer System default. Until 10-28 the rows were
+The tab keeps those it draws (`webFonts.drawn` in `webfonts.js`: text in
+the family measures apart from a generic family's on a canvas), so another
+computer's fonts, and Safari's user-installed ones, aren't offered. When
+none is kept, the rows still offer System default.
+
+Those are the server's names, so fonts installed only on the browser's
+computer were missing (Norcleeh again, magpie in Docker). `webfonts.js`,
+which only a tab loads (app.js `loadFonts` imports it; the app's windows never
+need it, and it is outside the core script budget), adds them: where the
+Local Font Access API is (Chromium on https or localhost),
+`queryLocalFonts()` is called in the press that opens a family menu, once
+a page, and at load when the `local-fonts` permission is already given;
+its style names ("SemiBold Condensed Italic") become weight, slope and
+width. Elsewhere (Safari, Firefox, a plain-http LAN address, a refused
+permission) the menu's search also takes a typed family: "Use “name”" is
+offered when the canvas probe says this browser draws it, and greyed out
+when not. A chosen family the server doesn't list stays in the tab's list
+on later loads while the browser draws it, so `desktopFonts.available`
+keeps applying it. Until 10-28 the rows were
 gated on a boot `fonts` flag, so a nogui server had none, and what
 "flashed and vanished" on a refresh was Text size: the rows a tab never
 shows (Text size, the tray click, Open at login, the menu bar's
