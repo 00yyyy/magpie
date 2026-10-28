@@ -2959,18 +2959,42 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		writeError(w, provider.Responses, 502, msg)
 		return
 	}
+	if local == "" && strings.TrimSpace(res.summary()) == "" && calledTool(res.Output) {
+		// a model deep in a conversation of tool calls goes on calling
+		// them, offered none or not: DeepSeek through a group answered the
+		// summary request with reasoning and an exec_command call, 3 times
+		// in a row (Lucy on Discord, auto-deepseek-v4-1-flash). Whatever
+		// let it — an upstream that reads calls out of its text with no
+		// tools offered, a history tool declared as a stub that it calls
+		// anyway — the history's calls are what it follows. Asked again
+		// with the conversation as text, there's no exchange of calls to
+		// go on with; when it still writes no summary, magpie compacts
+		// without a model, so Codex goes on rather than failing over and
+		// over
+		who, _ := compactFailure(body, rec)
+		called := answeredWith(res.Output)
+		log.Printf("codex compaction: %s wrote no summary%s; asking again with the conversation as text", who, called)
+		prec, pres, perr := ask(plainCompact(body))
+		switch {
+		case perr == nil && prec.status < 400 && pres.Status != "incomplete" && strings.TrimSpace(pres.summary()) != "":
+			rec, res = prec, pres
+		default:
+			again := "no summary" + answeredWith(pres.Output)
+			if perr != nil {
+				again = perr.Error()
+			} else if prec.status >= 400 {
+				_, msg := compactFailure(body, prec)
+				again = fmt.Sprintf("%d: %s", prec.status, msg)
+			}
+			log.Printf("codex compaction: %s asked again as text: %s; compacting locally", who, again)
+			local = localSummary(body, who+" wrote no summary"+called+", asked again as text: "+again)
+		}
+	}
 	var sum strings.Builder
 	if local != "" {
 		sum.WriteString(local)
 	} else {
-		for _, o := range res.Output {
-			if o.Type != "message" {
-				continue
-			}
-			for _, c := range o.Content {
-				sum.WriteString(c.Text)
-			}
-		}
+		sum.WriteString(res.summary())
 	}
 	if strings.TrimSpace(sum.String()) == "" {
 		why := "the model wrote no summary" + answeredWith(res.Output)
@@ -3205,6 +3229,26 @@ type compactResult struct {
 	Error             *struct {
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+// summary is the text of a summary reply's messages.
+func (res compactResult) summary() string {
+	var b strings.Builder
+	for _, o := range res.Output {
+		if o.Type != "message" {
+			continue
+		}
+		for _, c := range o.Content {
+			b.WriteString(c.Text)
+		}
+	}
+	return b.String()
+}
+
+// calledTool is whether a summary reply called a tool: a function_call,
+// custom_tool_call, tool_search_call, a hosted tool's call.
+func calledTool(out []compactOutput) bool {
+	return slices.ContainsFunc(out, func(o compactOutput) bool { return strings.HasSuffix(o.Type, "_call") })
 }
 
 // answeredWith says what a summary reply without a summary held instead
