@@ -138,15 +138,36 @@ func toGuard() {
 	})
 }
 
+// defaultWait is how long a request waits for the local model on by
+// default (not turned on by the user): its turn, its loading, its reading.
+// Past it the rules mask alone. AstrLink Guard reads on the CPU, a long
+// history it hasn't seen takes minutes there, and one request at a time
+// is read: unbounded, every request queued behind the first (shensmart
+// on Discord, 10-28: Codex's requests sat "masking…" once the default's
+// download finished). What the model read meanwhile is kept, so the next
+// request finds it. A var for tests.
+var defaultWait = 2 * time.Second
+
 // model is the local model m (internal/pii) as redact's Model, waited for
 // until ctx ends, keeping what it is at least min sure of. One that can't
 // answer, or isn't waited for any longer, panics where the user turned it
 // on (strict), and the request is held back (gwmw.Safely) rather than
 // sent with only the rules' masking: the user asked for the model's. On
-// by default, it finds nothing then, and the rules mask alone.
+// by default, it is waited for defaultWait at most, from now, and finds
+// nothing when it fails or that runs out: the rules mask alone.
 func model(ctx context.Context, m pii.Model, min float64, strict bool) redact.Model {
+	var by time.Time
+	if !strict {
+		by = time.Now().Add(defaultWait)
+	}
 	return func(texts []string) [][]redact.Found {
-		got, err := m.Find(ctx, texts)
+		ctx := ctx
+		if !strict {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithDeadline(ctx, by)
+			defer cancel()
+		}
+		got, err := find(ctx, m, texts, strict)
 		if err != nil && strict {
 			panic(err)
 		} else if err != nil {
@@ -161,6 +182,30 @@ func model(ctx context.Context, m pii.Model, min float64, strict bool) redact.Mo
 			}
 		}
 		return out
+	}
+}
+
+// find is m.Find; on by default, it is given up when ctx ends even where
+// m doesn't stop for it (a read of its cache from disk, a load), and m
+// finishes on its own.
+func find(ctx context.Context, m pii.Model, texts []string, strict bool) ([][]redact.Found, error) {
+	if strict {
+		return m.Find(ctx, texts)
+	}
+	type res struct {
+		got [][]redact.Found
+		err error
+	}
+	ch := make(chan res, 1)
+	go func() {
+		got, err := m.Find(ctx, texts)
+		ch <- res{got, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.got, r.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 

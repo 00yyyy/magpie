@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/pii"
 	"github.com/yetone/magpie/internal/redact"
@@ -149,4 +150,81 @@ func TestDefaultModelFailingIsTheRules(t *testing.T) {
 		}
 	}()
 	model(context.Background(), m, 0.8, true)([]string{"a"})
+}
+
+// hangs is a model on disk that never answers: one loading or reading a
+// long history on a slow CPU (a Docker container's), or stuck. Find
+// ignores ctx, as a read of its cache from disk or a load does.
+type hangs struct {
+	fake
+	asked, release chan struct{}
+}
+
+func (h hangs) Find(context.Context, []string) ([][]redact.Found, error) {
+	h.asked <- struct{}{}
+	<-h.release // the test's end
+	return nil, errors.New("released")
+}
+
+// shensmart on Discord (10-28): with the model on by default, a request
+// waited for it as long as its client did, "masking…" on the Requests
+// page, every one after it queued behind. On by default, it is waited for
+// defaultWait at most and the rules mask alone; turned on by the user, the
+// request still waits for it (and is held back when ctx ends).
+func TestDefaultModelHangingIsTheRules(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	if err := settings.Save(settings.Settings{Redact: true, RedactPersonal: true, RedactModelAuto: true, RedactModelName: pii.AstrLinkGuard}); err != nil {
+		t.Fatal(err)
+	}
+	m := hangs{fake{installed: true}, make(chan struct{}, 8), make(chan struct{})}
+	t.Cleanup(func() { close(m.release) })
+	wasPicked, wasFetch, wasDisk, wasWait := picked, fetch, onDisk, defaultWait
+	picked = func(settings.Settings) pii.Model { return m }
+	fetch = func(pii.Model, bool) {}
+	onDisk = func() bool { return true }
+	defaultWait = 200 * time.Millisecond
+	t.Cleanup(func() { picked, fetch, onDisk, defaultWait = wasPicked, wasFetch, wasDisk, wasWait })
+
+	body := []byte(`{"input":[{"role":"user","content":"张伟 key sk-ant-api03-` + strings.Repeat("a", 40) + `"}]}`)
+	type res struct {
+		b []byte
+		n int
+	}
+	got := make(chan res, 1)
+	began := time.Now()
+	go func() {
+		b, hits := Masker{}.JSONHitsContext(context.Background(), body)
+		got <- res{b, len(hits)}
+	}()
+	select {
+	case r := <-got:
+		if took := time.Since(began); took > 5*time.Second {
+			t.Fatalf("held %s", took)
+		}
+		if strings.Contains(string(r.b), "aaaa") || r.n == 0 {
+			t.Fatalf("the rules didn't mask: %s", r.b)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("on by default, a model that never answers held the request")
+	}
+	select {
+	case <-m.asked:
+	default:
+		t.Fatal("the model was never asked")
+	}
+
+	// turned on by the user, the request waits for the model: no bound
+	done := make(chan any, 1)
+	go func() {
+		defer func() { done <- recover() }()
+		model(context.Background(), m, 0.8, true)([]string{"a"})
+	}()
+	<-m.asked
+	select {
+	case <-done:
+		t.Fatal("turned on by the user, the model wasn't waited for")
+	case <-time.After(3 * defaultWait):
+	}
 }
