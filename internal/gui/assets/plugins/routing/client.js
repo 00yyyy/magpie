@@ -314,7 +314,22 @@ function routingPage(part) {
   // setAttr: an attribute written only when it changes, as setText: the
   // list's head is told again on every trace answer (#3731)
   const setAttr = (e, k, v) => { if (e.getAttribute(k) !== v) e.setAttribute(k, v); };
-  const tick = (e) => { e.classList.remove("tick"); void e.offsetWidth; e.classList.add("tick"); };
+  // rerun: a class's animation played again from its start. Taking the
+  // class off and reading offsetWidth to start it again laid the whole page
+  // out, three or four times a request (gpboyer2, #3731): a running one is
+  // rewound, and the class comes off when it ends, so putting it on again
+  // starts it with no layout
+  const replaying = new WeakSet();
+  const rerun = (e, cls, name) => {
+    const a = e.getAnimations?.().find((x) => x.animationName === name);
+    if (a) { a.currentTime = 0; return; }
+    if (!replaying.has(e)) {
+      replaying.add(e);
+      e.addEventListener("animationend", (ev) => { if (ev.target === e && ev.animationName === name) e.classList.remove(cls); });
+    }
+    e.classList.add(cls);
+  };
+  const tick = (e) => rerun(e, "tick", "rttick");
 
   // ---------- words ----------
 
@@ -1593,7 +1608,7 @@ function routingPage(part) {
     if (capQ.length > 3) capQ.shift();
     kick();
   }
-  function show(c) { capLo = !!c.lo; cap.textContent = c.s; cap.classList.remove("in"); void cap.offsetWidth; cap.classList.add("in"); capAt = performance.now(); }
+  function show(c) { capLo = !!c.lo; cap.textContent = c.s; rerun(cap, "in", "rtin"); capAt = performance.now(); }
 
   // curve is a wire's S from (x0, y0) to (x3, y3), its bends at mx: one
   // cubic, cut into exact pieces of it about 1000 px tall (the middle ones
@@ -3569,6 +3584,9 @@ function routingPage(part) {
       heights.set(itemKey(listItems[i0 + i]), e.getBoundingClientRect().height + parseFloat(s.marginTop) + parseFloat(s.marginBottom));
     });
     let total = 0;
+    // the rows gone from the list leave the average: kept, every row ever
+    // measured was summed again on each draw (gpboyer2, #3731)
+    if (heights.size > n) { const keep = new Set(listItems.map(itemKey)); for (const k of heights.keys()) if (!keep.has(k)) heights.delete(k); }
     for (const h of heights.values()) total += h;
     winAvg = heights.size ? total / heights.size : 0;
     est = winAvg || 31; // the rows not drawn as tall as those just measured, not as the average before
@@ -4060,7 +4078,7 @@ function routingPage(part) {
           tick(A.node);
           break;
         }
-        row.li.classList.remove("hit"); void row.li.offsetWidth; row.li.classList.add("hit", "tagged");
+        rerun(row.li, "hit", "rthit"); row.li.classList.add("tagged");
         row.tg.textContent = `${tr.status} · ${failWord(tr.fail)}`;
         setTimeout(() => row.li.classList.remove("tagged"), 1800);
         say(tryWhy(r, i));
