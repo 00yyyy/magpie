@@ -122,7 +122,8 @@ func modelTakes(kind, v string) bool {
 	case "SECRET":
 		return len(v) >= 8 && !madeID(v) && !namesThing(v)
 	case "PERSON":
-		return utf8.RuneCountInString(v) >= 2 && strings.IndexFunc(v, unicode.IsLetter) >= 0 && !snakeWord(v)
+		// nor a word that starts with a surname, as a whole (文案)
+		return utf8.RuneCountInString(v) >= 2 && strings.IndexFunc(v, unicode.IsLetter) >= 0 && !snakeWord(v) && !zhWords[v]
 	case "ACCOUNT":
 		return !madeID(v)
 	case "EMAIL":

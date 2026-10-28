@@ -28,8 +28,33 @@ const zhNickSurnames = "王李张刘陈杨黄赵吴周徐孙马朱胡郭何高�
 // with after a name.
 const zhNotGiven = "的了在是和与跟同说他她它我你您们这那个不也都就还把被给到对从向为以等及或并而吗呢吧啊去来有没要会能让请已将再又很更最先后上下里外时年日号发打回写问讲叫找用做看想知道得地着过之其此每各某该所反表认提负"
 
-// zhWords begin with a surname but are words, not names.
-var zhWords = []string{"张量", "张开", "张贴", "高度", "高效", "高级", "高速", "高亮", "高手", "高兴", "王国", "王者", "黄河", "黄色", "方法", "方向", "方式", "方案", "方便", "方面", "程序", "程度", "温度", "白色", "金额", "金融", "江湖", "石头", "马上", "周期", "周末", "周围", "周边", "文件", "文本", "文档", "文字", "文章", "余额", "安全", "安装", "安排", "钱包", "叶子", "毛病", "万一", "雷达", "宋体", "常量", "常用", "常见", "向量", "向上", "全部", "全局", "全面", "史上", "易用", "武器", "时间", "时候", "明天", "明确", "明白", "任何", "任务", "任意", "华为", "管理", "简单", "简介", "范围", "许多", "许可", "包括", "包含", "关于", "关系", "关闭", "连接", "成功", "成为", "应用", "应该", "单位", "单元", "单独", "司机", "车辆", "车子", "路径", "路由", "林业", "龙头", "柏林", "米饭", "宁可", "师傅", "老师", "老板", "老婆", "老公", "老家", "小时", "小心", "小说", "小姐", "小孩", "小组", "周一", "周二", "周三", "周四", "周五", "周六", "周日", "周天"}
+// zhWords begin with a surname but are words, not names: 文案 in
+// "改一下文案" is no one (zeewell on X). Each is two characters, so a
+// candidate's first two are looked up (zhWord).
+var zhWords = runes2(
+	"张量", "张开", "张贴", "高度", "高效", "高级", "高速", "高亮", "高手", "高兴", "王国", "王者",
+	"黄河", "黄色", "方法", "方向", "方式", "方案", "方便", "方面", "程序", "程度", "温度", "白色",
+	"金额", "金融", "江湖", "石头", "马上", "周期", "周末", "周围", "周边", "文件", "文本", "文档",
+	"文字", "文章", "余额", "安全", "安装", "安排", "钱包", "叶子", "毛病", "万一", "雷达", "宋体",
+	"常量", "常用", "常见", "向量", "向上", "全部", "全局", "全面", "史上", "易用", "武器", "时间",
+	"时候", "明天", "明确", "明白", "任何", "任务", "任意", "华为", "管理", "简单", "简介", "范围",
+	"许多", "许可", "包括", "包含", "关于", "关系", "关闭", "连接", "成功", "成为", "应用", "应该",
+	"单位", "单元", "单独", "司机", "车辆", "车子", "路径", "路由", "林业", "龙头", "柏林", "米饭",
+	"宁可", "师傅", "老师", "老板", "老婆", "老公", "老家", "小时", "小心", "小说", "小姐", "小孩",
+	"小组", "周一", "周二", "周三", "周四", "周五", "周六", "周日", "周天", "文案", "文风", "文化",
+	"文学", "文明", "文献", "文法", "文具", "方块", "方针", "方程", "方框", "关键", "关注", "关联",
+	"关心", "关掉", "项目", "成本", "成员", "成果", "成绩", "成熟", "成就", "解决", "解析", "解释",
+	"解码", "段落", "章节", "颜色", "蓝色", "查询", "查看", "查找", "单词", "单个", "单击", "包装",
+	"包名", "时区", "时长", "时段", "时刻", "时代", "季度", "严格", "严重", "曾经", "麻烦", "安卓",
+	"谷歌", "常规", "常数", "边框", "边界", "边缘", "付费", "付款", "路线", "简洁", "简历", "简化",
+	"范例", "游戏", "游客", "商品", "商店", "商业", "左边", "左侧", "焦点", "毕竟", "尚未",
+	"陆续", "连续", "连线", "林间", "林区", "谢谢", "顾客", "顾问", "房间", "房子", "高端", "高层",
+	"古代", "古典", "农业", "司法", "施工", "卫生", "荣誉", "宗旨", "齐全", "凌晨", "冷却", "蒙版",
+	"曲线", "黄金", "白天", "白板", "金钱", "石油", "夏天", "夏季", "唐朝", "宋朝", "秦朝", "申请",
+	"符号", "景色", "费用", "舒服", "辛苦", "纪律", "席位", "车间", "管道", "何时", "何况", "于是",
+	"余下", "杜绝", "罗列", "程式", "叶片", "涂层", "沙发", "池子", "巩固", "迟到", "仲裁", "钟点",
+	"钟表", "向导", "史诗", "易懂", "马路", "马虎", "汤汁", "朱红", "阳光", "任职", "董事",
+)
 
 // zhRoles before a name say it is one: 客户陈建国, 联系人：赵丽颖,
 // 我叫黄晓明, 提交者是欧阳娜娜.
@@ -42,6 +67,17 @@ var zhBefore = []string{"给", "找", "问", "让", "告诉", "通知", "联系"
 // zhAfter are words that follow a person (张伟先生, 马云说, 张三反馈).
 var zhAfter = []string{"先生", "女士", "小姐", "老师", "同学", "同志", "经理", "总监", "主任", "师傅", "医生", "律师", "教授", "博士", "说", "讲", "表示", "认为", "反馈", "提到", "提交", "负责", "告诉", "回复", "发", "打", "明天", "今天", "昨天", "已经", "他", "她"}
 
+// zhAnyAfter are those of zhAfter that follow any subject, a thing as
+// well as a person (文案已经改好了, 文案明天给你, 文档提交): at a
+// sentence's start, with nothing before it that says a person, they say
+// nothing.
+var zhAnyAfter = []string{"提交", "负责", "回复", "明天", "今天", "昨天", "已经", "他", "她"}
+
+// zhAskVerbs take a person before 一下 (问一下张伟, 联系一下李娜); after
+// any other verb what 一下 is followed by is a thing (改一下文案,
+// 检查一下文档).
+var zhAskVerbs = []string{"问", "找", "叫", "喊", "催", "请", "联系", "通知", "告诉", "提醒", "回复", "答复", "拜访", "采访", "抄送", "转告", "感谢", "谢谢", "艾特", "@"}
+
 // zhTitles are what the model takes in after a name and isn't it.
 var zhTitles = []string{"先生", "女士", "小姐", "老师", "同学", "同志", "经理", "总监", "主任", "师傅", "医生", "律师", "教授", "博士"}
 
@@ -51,6 +87,22 @@ var (
 	isSurname, isNick, notGiven = runes(zhSurnames), runes(zhNickSurnames), runes(zhNotGiven)
 	mayStart                    = runes(zhSurnames + zhFirsts() + "小老")
 )
+
+// runes2 is a set of two-character words.
+func runes2(ws ...string) map[string]bool {
+	m := map[string]bool{}
+	for _, w := range ws {
+		m[w] = true
+	}
+	return m
+}
+
+// zhWord says s starts with a word of zhWords.
+func zhWord(s string) bool {
+	_, n := utf8.DecodeRuneInString(s)
+	_, n2 := utf8.DecodeRuneInString(s[n:])
+	return zhWords[s[:n+n2]]
+}
 
 func runes(s string) map[rune]bool {
 	m := map[rune]bool{}
@@ -178,10 +230,8 @@ func zhName(s string, i int) (a, b int, ok bool) {
 	if len(ends) == 0 {
 		return 0, 0, false
 	}
-	for _, w := range zhWords {
-		if strings.HasPrefix(rest, w) {
-			return 0, 0, false
-		}
+	if zhWord(rest) {
+		return 0, 0, false
 	}
 	// a Han character before it that is no cue makes it part of a word
 	// (建国路), unless a cue ends there
@@ -193,6 +243,11 @@ func zhName(s string, i int) (a, b int, ok bool) {
 		if t, ok := strings.CutSuffix(before, j); ok && verb {
 			verb = personBefore(t)
 		}
+	}
+	// 一下 takes a person only after a verb that asks one (问一下张伟),
+	// not 改一下文案
+	if t, ok := strings.CutSuffix(before, "一下"); ok && verb {
+		verb = endsAny(t, zhAskVerbs, false)
 	}
 	start := sentenceStart(before)
 	if !role && !verb && !start {
@@ -209,7 +264,7 @@ func zhName(s string, i int) (a, b int, ok bool) {
 	// the longest that ends where something after it says so
 	for k := len(ends) - 1; k >= 0; k-- {
 		e := ends[k]
-		if after := s[e:]; startsAny(after, zhAfter) && !wordAfter(after) {
+		if after := s[e:]; startsAny(after, zhAfter) && !wordAfter(after) && (role || verb || !startsAny(after, zhAnyAfter)) {
 			return i, e, true
 		} else if (role || verb) && endsWord(after) {
 			return i, e, true
@@ -276,8 +331,14 @@ func sentenceStart(s string) bool {
 }
 
 // wordAfter says the 发 or 打 that s starts with begins a word (发现,
-// 打开), not the verb a person does (发了个消息, 打给他).
+// 打开), not the verb a person does (发了个消息, 打给他); and so do
+// 说明 and 讲解 (文案说明要简短), but for 说明天 (张伟说明天来).
 func wordAfter(s string) bool {
+	for _, w := range []string{"说明", "说法", "讲解", "讲座", "讲义", "讲究"} {
+		if strings.HasPrefix(s, w) {
+			return !strings.HasPrefix(s, "说明天")
+		}
+	}
 	for _, v := range []string{"发", "打"} {
 		if t, ok := strings.CutPrefix(s, v); ok {
 			r, _ := utf8.DecodeRuneInString(t)
@@ -300,11 +361,7 @@ func personBefore(s string) bool {
 		if !mayStart[rs[len(rs)-n]] || !hasHan(u) {
 			continue
 		}
-		word := false
-		for _, w := range zhWords {
-			word = word || strings.HasPrefix(u, w)
-		}
-		if !word {
+		if !zhWord(u) {
 			return true
 		}
 	}

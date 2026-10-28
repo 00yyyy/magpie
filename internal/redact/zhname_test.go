@@ -70,6 +70,26 @@ func TestChineseNames(t *testing.T) {
 		{"### 张伟发了个消息", []string{"张伟"}, []string{"发了个消息"}},
 		{"我和张伟，还有他。", []string{"张伟"}, []string{"我和"}},
 		{"这件事。 李娜说过。", []string{"李娜"}, []string{"说过"}},
+		// zeewell on X: 文案 (文 a surname) masked as a name; prompts it
+		// is in, each with a cue that was taken for a person's: 一下
+		// before it, 已经, 明天 or 他们 after it at a sentence's start, 说
+		// of 说明 after it
+		{"帮我改一下这段文案", nil, []string{"文案"}},
+		{"润色一下文案。", nil, []string{"文案"}},
+		{"检查一下文案，看看有没有错别字", nil, []string{"文案"}},
+		{"文案：首页标题换成「更快的网关」", nil, []string{"文案"}},
+		{"把首页文案换成英文", nil, []string{"文案"}},
+		{"### 文案\n\n- 文案和图片都要改", nil, []string{"文案"}},
+		{"文案已经改好了，你再看看。", nil, []string{"文案"}},
+		{"文案明天给你，图片今天先发。", nil, []string{"文案"}},
+		{"文案说明要简短，不超过两行。", nil, []string{"文案说明"}},
+		{"文案他们说下午定稿", nil, []string{"文案他们"}},
+		{"这张图发给文案。", nil, []string{"文案"}},
+		// and names in the same places still are
+		{"问一下张伟，这段谁来写", []string{"张伟"}, []string{"问一下"}},
+		{"张伟说明天来改。", []string{"张伟"}, []string{"说明天"}},
+		{"客户张伟已经到了。", []string{"张伟"}, []string{"已经到了"}},
+		{"这张图发给张伟。", []string{"张伟"}, []string{"发给"}},
 	} {
 		out, _ := Mask(c.s, o)
 		for _, n := range c.names {
@@ -84,6 +104,40 @@ func TestChineseNames(t *testing.T) {
 		}
 		if back := Restore(out, false); back != c.s {
 			t.Errorf("round trip: %q", back)
+		}
+	}
+}
+
+// A word that starts with a surname is no name in the places 文案 was
+// taken for one (zeewell on X), whichever word it is: zhName's cues, and
+// the model's own PERSON label on the word as a whole.
+func TestChineseWordsAreNoNames(t *testing.T) {
+	words := []string{"文案", "文档", "文风", "方案", "高度", "安全", "马上", "程序", "林间", "关键", "项目", "成本", "段落", "颜色", "查询", "时区", "季度", "边框", "简历", "游戏", "严格", "曾经", "谢谢", "解析", "付费"}
+	shapes := []string{"改一下%s", "检查一下%s。", "%s已经好了", "%s明天给你", "%s说明", "%s他们定", "请%s", "发给%s", "%s：", "把%s换成英文"}
+	f := &fakeModel{values: map[string]string{}}
+	o := Options{Personal: true, Model: f.find}
+	for _, w := range words {
+		for _, sh := range shapes {
+			s := strings.ReplaceAll(sh, "%s", w)
+			if out, _ := Mask(s, o); out != s {
+				t.Errorf("%q masked: %q", s, out)
+			}
+		}
+		f.values = map[string]string{w: "private_person"}
+		s := "帮我改一下这段" + w + "，谢谢"
+		if out, _ := Mask(s, o); out != s {
+			t.Errorf("%q, the model's: masked: %q", s, out)
+		}
+		f.values = map[string]string{}
+	}
+	// words not in zhWords are left by the cues alone, but for one
+	// a person's verb is before (请文创, 发给文创)
+	for _, w := range []string{"文创", "方位", "高铁", "安防", "林荫"} {
+		for _, sh := range shapes[:6] {
+			s := strings.ReplaceAll(sh, "%s", w)
+			if out, _ := Mask(s, o); out != s {
+				t.Errorf("%q masked: %q", s, out)
+			}
 		}
 	}
 }
