@@ -203,3 +203,57 @@ func TestShortRequestGoesBetweenPieces(t *testing.T) {
 		t.Fatalf("the short request was request %d of %d (%d pieces)", at, len(reqs), n)
 	}
 }
+
+// prose is about n bytes of lines of varied length, as a system prompt's
+// are, each its own.
+func prose(n int) string {
+	words := []string{"the", "agent", "reads", "files", "before", "it", "edits", "them,", "and", "runs", "tests", "on", "mote", "when", "Alice", "asks."}
+	var b strings.Builder
+	x := uint32(7)
+	for line := 0; b.Len() < n; line++ {
+		fmt.Fprintf(&b, "%d.", line)
+		x = x*1664525 + 1013904223
+		for w := range 4 + x>>27 {
+			x = x*1664525 + 1013904223
+			b.WriteString(" " + words[(x>>20+uint32(w))%uint32(len(words))])
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// wangwu25685333 on X (10-29): every fresh session of an agent sends its
+// system prompt again, a line of it changed (a date, a memory, a file in
+// its workspace), and the model reads again only the pieces around that
+// line, not every piece after it.
+func TestEditedTextReadsItsPiecesAgainOnly(t *testing.T) {
+	text := prose(40 << 10)
+	for at := 500; at < 20000; at += 1499 {
+		for _, ins := range []string{"x", "Conversation started: Thursday, October 29", "memory: the user likes tea\n", strings.Repeat("y ", 300)} {
+			at := strings.IndexByte(text[at:], '\n') + at + 1
+			edited := text[:at] + ins + text[at:]
+			r := newReader(t, guardChunk)
+			if _, err := r.find(context.Background(), []string{text}); err != nil {
+				t.Fatal(err)
+			}
+			r.asked = nil
+			got, err := r.find(context.Background(), []string{edited})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := alices(edited)
+			for i := range got[0] {
+				if i < len(want) && (got[0][i].Start != want[i].Start || got[0][i].End != want[i].End) {
+					t.Fatalf("edit at %d: span %d %v, want %v", at, i, got[0][i], want[i])
+				}
+			}
+			if len(got[0]) != len(want) {
+				t.Fatalf("edit at %d: found %d, want %d", at, len(got[0]), len(want))
+			}
+			read, _ := r.bytes()
+			if read > 3*guardChunk {
+				t.Fatalf("%q at %d of %d bytes: %d bytes read again, want at most 3 pieces' (%d)", ins, at, len(text), read, 3*guardChunk)
+			}
+		}
+	}
+}
