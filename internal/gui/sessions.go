@@ -106,6 +106,10 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		nativeKeys := map[string]bool{}
 		for _, s := range list {
 			nativeKeys[s.Agent+"|"+s.ID] = true
+			// a copy of its conversation is the agent's own too
+			for _, id := range s.Copies {
+				nativeKeys[s.Agent+"|"+id] = true
+			}
 		}
 		gateway := listedGateway(usage.GatewaySessions(time.Time{}, nativeKeys))
 		ext := make([]sessions.ExternalSession, 0, len(gateway))
