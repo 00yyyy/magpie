@@ -1354,7 +1354,18 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 	byRequest := map[string][]timedRef{}
 	rows := lentRows() // a kept request id is cloned; a key is looked up
 	defer rows.release()
-	for _, c := range chunks {
+	hints := hintsOf(chunks, &rows)
+	ids := make(map[uint32]struct{}, len(byID))
+	for id := range byID {
+		ids[uint32(matchHash(id))] = struct{}{}
+	}
+	for n, c := range chunks {
+		if hints[n].latest.Before(since) || !namesAny(hints[n].ids, ids) {
+			continue
+		}
+		if matchOpening != nil {
+			matchOpening(c)
+		}
 		open := rows.of(c)
 		for i := range open.Rows {
 			p := &open.Rows[i]
@@ -1424,8 +1435,18 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 		slices.SortFunc(g.ends, func(a, b matchEnd) int { return a.at.Compare(b.at) })
 		g.counts = make([]int, len(g.ends)+1)
 	}
+	named := make(map[uint64]struct{}, len(groups))
+	for key := range groups {
+		named[matchHash(key.session)] = struct{}{}
+	}
 	candidates := map[rowRef]rowRef{}
-	for _, chunk := range chunks {
+	for n, chunk := range chunks {
+		if hints[n].latest.Before(since) || !namesAny(hints[n].sessions, named) {
+			continue
+		}
+		if matchOpening != nil {
+			matchOpening(chunk)
+		}
 		c := rows.of(chunk)
 		for j := range c.Rows {
 			p := &c.Rows[j]
