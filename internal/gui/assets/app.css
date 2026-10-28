@@ -3628,7 +3628,9 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
 }
 /* Full-window filtering stalls provider tests and sign-in dialogs on some
    WebView2 GPUs. Keep the veil, without filtering the page behind it. */
-.win body:not(.web) .modal { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* The Remove/Sign out confirmation's backdrop covers the window the same way. */
+.win body:not(.web) .modal,
+.win body:not(.web) .action-confirm::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
 /* opening and closing are animated from app.js (openModal, closeModal) */
 .modal.out { pointer-events: none; }
 /* open, it holds its place from a top app.js gives it (holdModal) */

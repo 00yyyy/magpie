@@ -16,7 +16,7 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
           t.after(() => browser.close());
           const page = await browser.newPage({ viewport: { width: 1552, height: 905 } });
           await page.route("**/*", (route) => route.request().isNavigationRequest()
-            ? route.fulfill({ contentType: "text/html", body: '<div class="modal"><div class="dialog">Provider editor</div></div>' })
+            ? route.fulfill({ contentType: "text/html", body: '<div class="modal"><div class="dialog">Provider editor</div></div><dialog class="action-confirm"><h2>Remove?</h2></dialog>' })
             : route.abort());
           await page.goto(`http://magpie.test/?mode=${mode}`);
           await page.evaluate(({ platform, web }) => {
@@ -30,11 +30,19 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
             return { filter: style.backdropFilter || style.webkitBackdropFilter,
               background: style.backgroundColor, pointerEvents: style.pointerEvents };
           });
+          // the confirmation dialog's ::backdrop covers the window too
+          const confirm = await page.locator("dialog.action-confirm").evaluate((element) => {
+            element.showModal();
+            const style = getComputedStyle(element, "::backdrop");
+            return style.backdropFilter || style.webkitBackdropFilter;
+          });
           if (platform === "Win32" && !web) {
             assert.equal(backdrop.filter, "none", "the Windows app must not filter the full-window backdrop");
+            assert.equal(confirm, "none", "nor the confirmation's");
           } else {
             assert.match(backdrop.filter, /blur\(8px\)/, "other surfaces keep their existing blur");
             assert.match(backdrop.filter, /saturate\(1\.1\)/);
+            assert.match(confirm, /blur\(4px\)/, "the confirmation keeps its blur");
           }
           assert.equal(backdrop.background, "rgba(0, 0, 0, 0.28)", "the dimming veil remains");
           assert.equal(backdrop.pointerEvents, "auto", "the backdrop still receives clicks");
