@@ -548,6 +548,12 @@ cause:
 - A cancelled run tests nothing. On 10-14 nine pushes in ten minutes
   cancelled each other's runs, and 3c4b4dc97 never had a run of its own;
   its red showed first at 84f14e555.
+  - 10-28: of main's last 58 Test runs, 49 were cancelled by the next
+    push. 0b99b8fbe's new allocation bound went red in macOS's Race job
+    (sync.Pool lets go under -race) at 25df3187b, the first run after it
+    that finished, and sat red until d3f3f3381. A test that bounds
+    allocations or a pool's savings checks `raceOn` (race_on_test.go)
+    and is run once with -race before it is pushed.
 - Done right: 2bd49cc5's race was fixed at its cause in 25 minutes
   (28049bd2, -race -count=40 -cpu 1,2). 60f87223, b1cba654, 443f1cbc and
   395c4bc5 fixed flakes at their cause instead of retrying. 06420a71 fixed
