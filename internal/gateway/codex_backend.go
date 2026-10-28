@@ -108,7 +108,13 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		noteAsked(r.Context(), model)
 		// a turn of the conversation's own: the model its side calls may
 		// follow (codexFollowTo)
-		kind := requestCallKind(r.Header, requestSessionMetadata(r.Header, body))
+		meta := requestSessionMetadata(r.Header, body)
+		kind := requestCallKind(r.Header, meta)
+		// a subagent resume_agent brought back on its lead's model goes
+		// back on the one it was spawned with (codexResumeTo)
+		if to := s.codexResumeTo(r, agentOf(r), kind, model, meta); to != "" {
+			body, model = withModel(body, to), to
+		}
 		s.codexLeads.saw(r, kind, model)
 		// a thread's title, where Settings sends it (#705) — the request
 		// still on Codex's own model, through its sign-in, when it says
