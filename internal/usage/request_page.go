@@ -115,7 +115,7 @@ type rowChunk struct {
 	// row of the period at once. 364k calls had 7300 shapes.
 	Shapes           [][rowTexts]uint32
 	shapeIDs         map[[rowTexts]uint32]uint32
-	codexActors      []string
+	codexActors      codexActors
 	codexCompactions map[int]*bool
 	codexIdentities  map[string]sessions.CodexIdentity
 	dict             map[string]uint32
@@ -275,21 +275,19 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 		}
 	}
 	c.Rows = append(c.Rows, p)
-	if c.codexActors != nil || r.codexActor != "" {
-		if c.codexActors == nil {
-			c.codexActors = make([]string, len(c.Rows)-1)
-			c.Bytes += int64(len(c.codexActors)) * int64(unsafe.Sizeof(""))
+	if c.codexActors.ids != nil || r.codexActor != "" {
+		before := c.codexActors.bytes()
+		if c.codexActors.ids == nil {
+			c.codexActors.ids = make([]uint32, len(c.Rows)-1)
 		}
-		c.codexActors = append(c.codexActors, r.codexActor)
+		c.codexActors.add(r.codexActor)
+		c.Bytes += c.codexActors.bytes() - before
 	}
 	c.Count = len(c.Rows)
 	if r.Time.After(c.Latest) {
 		c.Latest = r.Time
 	}
 	c.Bytes += int64(unsafe.Sizeof(packedRow{}))
-	if c.codexActors != nil {
-		c.Bytes += int64(unsafe.Sizeof("")) + int64(len(r.codexActor))
-	}
 }
 func (c *rowChunk) row(i int) Row {
 	p := &c.Rows[i]
@@ -331,11 +329,7 @@ func (c *rowChunk) row(i int) Row {
 	}
 	r.Computer = c.Computer
 	if c.codexIdentities != nil {
-		actor := ""
-		if i < len(c.codexActors) {
-			actor = c.codexActors[i]
-		}
-		r = codexIdentityRow(r, actor, c.codexIdentities)
+		r = codexIdentityRow(r, c.codexActors.at(i), c.codexIdentities)
 	}
 	return r
 }
@@ -1554,11 +1548,7 @@ func pairRows(p Period, now time.Time, gateways, chunks, others []*rowChunk, ide
 	since, until := p.Since(now), p.Until(now)
 	matched := matchedBlocks(gateways, chunks, skip, pairs, since, true)
 	for gateway, local := range pairs {
-		actor := ""
-		if local.Index < len(local.Chunk.codexActors) {
-			actor = local.Chunk.codexActors[local.Index]
-		}
-		setCodexActor(gateway.Chunk, gateway.Index, actor)
+		setCodexActor(gateway.Chunk, gateway.Index, local.Chunk.codexActors.at(local.Index))
 		gateway.Chunk.setCodexCompaction(gateway.Index, compactions[local])
 	}
 	all := append(append(slices.Clone(gateways), chunks...), others...)
@@ -1588,7 +1578,7 @@ func (ps *pairedRows) visitActors(fn func(*Row)) {
 	defer rows.release()
 	var r Row
 	for _, c := range ps.all {
-		if slices.ContainsFunc(c.codexActors, func(a string) bool { return a != "" }) {
+		if c.codexActors.some() {
 			if visitingActors != nil {
 				visitingActors(c)
 			}

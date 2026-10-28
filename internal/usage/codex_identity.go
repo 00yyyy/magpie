@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/yetone/magpie/internal/sessions"
 )
@@ -172,7 +171,7 @@ func cloneCodexChunks(chunks []*rowChunk) []*rowChunk {
 	out := make([]*rowChunk, len(chunks))
 	for i, chunk := range chunks {
 		copy := *chunk
-		copy.codexActors = slices.Clone(chunk.codexActors)
+		copy.codexActors = chunk.codexActors.clone()
 		copy.codexCompactions = nil
 		copy.codexIdentities = nil
 		out[i] = &copy
@@ -426,9 +425,7 @@ func foldCodexCall(refs []rowRef, read map[rowRef]Row, skip map[rowRef]bool) {
 	actorConflict := false
 	for i, ref := range refs {
 		rows[i] = read[ref]
-		if ref.Index < len(ref.Chunk.codexActors) {
-			actors[i] = ref.Chunk.codexActors[ref.Index]
-		}
+		actors[i] = ref.Chunk.codexActors.at(ref.Index)
 		if i == 0 {
 			actor = actors[i]
 		} else {
@@ -460,20 +457,7 @@ func foldCodexCall(refs []rowRef, read map[rowRef]Row, skip map[rowRef]bool) {
 }
 
 func setCodexActor(chunk *rowChunk, index int, actor string) {
-	if n := rowsIn(chunk); len(chunk.codexActors) != n {
-		actors := make([]string, n)
-		copy(actors, chunk.codexActors)
-		chunk.codexActors = actors
-	}
-	chunk.codexActors[index] = actor
-}
-
-func codexActorBytes(actors []string) int64 {
-	bytes := int64(cap(actors)) * int64(unsafe.Sizeof(""))
-	for _, actor := range actors {
-		bytes += int64(len(actor))
-	}
-	return bytes
+	chunk.codexActors.set(rowsIn(chunk), index, actor)
 }
 
 // codexEffort keeps CodexModelEffort's last answer for each period: the

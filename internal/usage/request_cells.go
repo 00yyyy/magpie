@@ -287,8 +287,8 @@ func (ps *pairedRows) sigs(identities map[string]sessions.CodexIdentity) map[*ro
 		if c.codexIdentities != nil {
 			h += mix(3)
 		}
-		for i, a := range c.codexActors {
-			if a != "" {
+		for i := range c.codexActors.len() {
+			if a := c.codexActors.at(i); a != "" {
 				h += mix(4, uint64(i), actor(a))
 			}
 		}
