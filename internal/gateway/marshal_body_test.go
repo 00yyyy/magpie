@@ -53,6 +53,9 @@ func TestMarshalBodyIsJSONMarshal(t *testing.T) {
 // and its items: json.Marshal's doubling buffer took it from 45 to 316
 // MiB (#4004).
 func TestMarshalBodyAllocatesTwoBodies(t *testing.T) {
+	if raceOn {
+		t.Skip("under -race sync.Pool drops what json.Marshal's encoders keep, so each item allocates afresh")
+	}
 	big := strings.Repeat("tool output line\n", 1<<14)
 	msgs := make([]any, 0, 170)
 	for range 170 {
