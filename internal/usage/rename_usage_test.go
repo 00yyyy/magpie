@@ -25,7 +25,7 @@ func TestRenamedProviderShownOnce(t *testing.T) {
 	}
 	then := time.Now().Add(-time.Hour)
 	Append(Record{Time: then, Agent: "codex", Session: "s1", Provider: "myrelay", Model: "gpt-9", Input: 100, Output: 10, Status: 200})
-	probelog.Sink(probelog.Row{Time: then.Add(time.Second), Kind: probelog.KindList, Provider: "myrelay", Host: "relay.example", Endpoint: "GET /v1/models", Status: 200, Millis: 30})
+	probelog.Sink(probelog.Row{Time: then.Add(time.Second), Kind: probelog.KindList, Provider: "myrelay", Host: "relay.example", Endpoint: "GET /v1/models", Status: 502, Millis: 30, Error: "bad gateway"})
 	// read once under the old id, so what is kept of it is built again
 	if p := QueryPage(All, Filter{}, 0, 50); !slices.Equal(p.Providers, []string{"myrelay"}) {
 		t.Fatalf("before: %v", p.Providers)
@@ -183,7 +183,7 @@ func TestProbesOfAProviderOnAnotherHostOfItsSiteListIt(t *testing.T) {
 		"https://leee.baby/v1/models", "https://Leee.Baby/v1/models", "https://www.leee.baby:443/v1/models",
 		"https://two.example/v1/models", "https://mine.vercel.app/v1/models", "http://127.0.0.1:7/v1/models",
 	} {
-		probelog.Note(adding, u, http.MethodGet, then, 200, nil)
+		probelog.Note(adding, u, http.MethodGet, then, 401, nil) // an answered list is no row (quietProbe)
 	}
 	id, err := provider.Add(provider.Provider{Name: "Leee", Key: "k", Chat: "https://api.leee.baby/v1", Models: []string{"gpt-9"}})
 	if err != nil {
