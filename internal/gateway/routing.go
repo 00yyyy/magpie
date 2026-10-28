@@ -1618,6 +1618,11 @@ type left struct {
 	// credits: a Codex account that goes on on its credits once its
 	// allowance is used up (spendsCredits)
 	credits bool
+	// bal is a prepaid wallet's balance in balUnit (Allowance.Left,
+	// #3950); balIn says whose wallet it is, provider and unit, and is
+	// empty when no balance was told: routes.Seat.LeftIn
+	bal            float64
+	balUnit, balIn string
 }
 
 // learns: c is a subscription whose allowance isn't known yet, of an agent
@@ -1673,12 +1678,14 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 	for _, c := range cs {
 		var a provider.Allowance
 		var ok bool
+		whose := c.p.ID // whose wallet a balance is in
 		if c.p.Account == nil {
 			// a key that reads its own windows is weighed by them as an
 			// account is; any other key isn't known
 			a, ok = keyAllowance(c.p)
 		} else {
 			ag := c.p.Account.UsageAgent()
+			whose = ag
 			if _, had := known[ag]; !had {
 				known[ag] = allowances(ag)
 			}
@@ -1689,8 +1696,14 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 			pc, due := a.Pace(c.model, now)
 			amt, of, unit := a.Count(c.model, now)
 			rs := a.Restarts(now)
-			wg.lefts[c.allowanceKey()] = left{used: u, renews: r, fullest: a.Fullest(c.model, now), soon: a.Renewal(c.model, now), lapse: a.Lapse(c.model, now), pace: pc, due: due, amount: amt, of: of, unit: unit,
+			l := left{used: u, renews: r, fullest: a.Fullest(c.model, now), soon: a.Renewal(c.model, now), lapse: a.Lapse(c.model, now), pace: pc, due: due, amount: amt, of: of, unit: unit,
 				restarts: rs, dueRestart: !rs.IsZero() && due.Equal(rs), credits: spendsCredits(c.p, a)} // one not known counts as unused
+			if b, bu, has := a.Left(c.model); has {
+				// a wallet's figure is weighed only against the same
+				// provider's in the same unit (routes.Seat.LeftIn)
+				l.bal, l.balUnit, l.balIn = b, bu, whose+"\x00"+bu
+			}
+			wg.lefts[c.allowanceKey()] = l
 		}
 	}
 	if len(cs) < 2 {
@@ -1711,7 +1724,8 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 			pace = provider.FreshPace
 		}
 		seats[i] = routes.Seat{Key: c.rest, Account: c.p.Account != nil, Known: known, Learns: learns(c, wg.lefts),
-			Used: l.used, Soon: l.soon, Lapse: l.lapse, Pace: pace, Weight: keyWeight(c), Resting: resting(c), Tokens: routed.used[c.restKey()].now(now), Credits: l.credits}
+			Used: l.used, Soon: l.soon, Lapse: l.lapse, Pace: pace, Weight: keyWeight(c), Resting: resting(c), Tokens: routed.used[c.restKey()].now(now), Credits: l.credits,
+			Left: l.bal, LeftIn: l.balIn}
 	}
 	routed.Unlock()
 	if st.ByUse {

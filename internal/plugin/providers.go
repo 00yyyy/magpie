@@ -1095,6 +1095,9 @@ type UsageWindow struct {
 	// apart from the window's reset (WorkBuddy's packages)
 	RunsOutAt string  `json:"runsOutAt"`
 	RunsOut   float64 `json:"runsOut"`
+	// Balance is how much is left in Unit, a prepaid wallet's reading,
+	// with no share to tell (#3950); nil when the plugin didn't say.
+	Balance *float64 `json:"balance"`
 }
 
 // Checkin is what came of an account's daily check-in, as the plugin's

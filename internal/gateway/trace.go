@@ -258,9 +258,12 @@ type Weighed struct {
 	Used     float64 `json:"used"`             // share of the allowance counting the model, used
 	// Amount of Limit in Unit: the count that share is of, when the
 	// vendor counts it so (WorkBuddy's credits, #659)
-	Amount   float64           `json:"amount,omitempty"`
-	Limit    float64           `json:"limit,omitempty"`
-	Unit     string            `json:"unit,omitempty"`
+	Amount float64 `json:"amount,omitempty"`
+	Limit  float64 `json:"limit,omitempty"`
+	Unit   string  `json:"unit,omitempty"`
+	// Balance is a prepaid wallet's left in Unit (left.bal, #3950): the
+	// Routing page tells the figure, not a share
+	Balance  *float64          `json:"balance,omitempty"`
 	Renews   []time.Time       `json:"renews,omitempty"`   // when those windows renew, the biggest first
 	Pace     float64           `json:"pace,omitempty"`     // remaining allowance per hour until its window resets
 	Due      *time.Time        `json:"due,omitempty"`      // when the allowance window used for pace resets
@@ -461,6 +464,10 @@ func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from 
 		}
 		if l.of > 0 {
 			w.Amount, w.Limit, w.Unit = l.amount, l.of, l.unit
+		}
+		if l.balIn != "" {
+			b := l.bal
+			w.Balance, w.Unit = &b, l.balUnit
 		}
 		if !l.due.IsZero() {
 			due := l.due

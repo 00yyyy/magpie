@@ -189,6 +189,9 @@ type Limit struct {
 	// Credits: the account goes on past this window on its credits
 	// (QuotaWindow.Credits)
 	Credits bool
+	// Balance is how much is left in Unit, a wallet's reading with no
+	// share (QuotaWindow.Balance); nil when not told
+	Balance *float64
 }
 
 // OnCredits says whether the account goes on past its allowance on its
@@ -364,6 +367,23 @@ func (a Allowance) Renewal(model string, now time.Time) []time.Time {
 		out[i] = l.Resets
 	}
 	return out
+}
+
+// Left is how much a wallet that counts model has left, in unit
+// (Limit.Balance): the least of its windows that tell a balance. ok is
+// false when none does. Only balances in the same unit of one provider are
+// compared (routes.Seat.Left).
+func (a Allowance) Left(model string) (left float64, unit string, ok bool) {
+	model = strings.ToLower(model)
+	for _, l := range a {
+		if l.Balance == nil || !l.applies(model) {
+			continue
+		}
+		if !ok || *l.Balance < left {
+			left, unit, ok = *l.Balance, l.Unit, true
+		}
+	}
+	return left, unit, ok
 }
 
 // Lapse is the soonest moment credits left in a window that counts model
@@ -802,6 +822,15 @@ func allowanceOf(ws []QuotaWindow, now time.Time) Allowance {
 		}
 		if w.RunsOutAt != nil {
 			l.RunsOut = *w.RunsOutAt
+		}
+		if w.Balance != nil {
+			// a wallet is known by its balance, with no share invented:
+			// one with nothing left is used up, as the vendor refuses it
+			b := *w.Balance
+			l.Balance = &b
+			if b <= 0 {
+				l.Used = max(l.Used, 100)
+			}
 		}
 		a = append(a, l)
 	}

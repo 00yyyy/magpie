@@ -13859,16 +13859,14 @@ async function refreshLanes() {
   for (const pill of document.querySelectorAll(".alane")) laneText(pill);
 }
 
-// A window reads as how much of it is used, or — as the vendors' own apps
-// show it — how much is left, the bar filling with that; one choice for
-// every meter and the menu bar, kept in the settings (#122). The vendor's
-// own count, where it gives one, stands before the percentage.
+// A window reads as used or, as the vendors' apps show it, left, the bar
+// filling with that: one setting for every meter and the menu bar (#122).
+// The vendor's count, if any, stands before the percentage.
 let quotaLeft = false;
 function to100(v) { return Math.max(0, Math.min(100, v)); }
-// quotaNoShare: the plugin didn't say how much of the window is used. Its
-// text is all there is, and no percentage may be read from it: 0 is a
-// reading, absent is not (#3650)
-function quotaNoShare(w) { return !!w.text || w.used == null; }
+// quotaNoShare: no share was said (0 is one, absent is not, #3650), or the
+// window is a wallet's balance (#3950): its text or figure is all there is
+function quotaNoShare(w) { return !!w.text || w.used == null || w.balance != null; }
 function tipLines(...a) { return a.filter(Boolean).join("\n"); }
 function quotaFill(w) {
   if (w.used == null) return 0;
@@ -13877,6 +13875,7 @@ function quotaFill(w) {
 }
 function quotaText(w) {
   if (w.unlimited) return t("Unlimited");
+  if (w.balance != null) return t("{n} left", { n: (countFormat.format(w.balance) + " " + t(w.unit || "")).trim() });
   if (quotaNoShare(w)) return w.display || t("No allowance reported");
   const used = to100(w.used);
   const n = quotaLeft ? 100 - used : used;
@@ -13914,9 +13913,8 @@ function paceLine(w) {
     : t("Right on an even pace through this window");
   return span;
 }
-// quotaCount: a window's own count, when its vendor counts in amounts
-// (WorkBuddy's credits, #659) — "355 / 500 credits" used, or what is left
-// of them, as the share beside it says; the vendor's own text otherwise.
+// quotaCount: a window's own count in amounts (WorkBuddy's credits, #659),
+// "355 / 500 credits" used or left as the share says; else the vendor's text
 const countFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 function quotaCount(w) {
   if (!(w.limit > 0)) return w.display || "";
