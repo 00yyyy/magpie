@@ -1329,9 +1329,13 @@ type matchEnd struct {
 	at    time.Time
 	index rowRef
 }
+
+// matchGroup is a key's gateway calls, ends[off:off+n] of one slab, by
+// their end; its range counts are counts[off+k:off+k+n+1] for the k-th
+// group. A key holds a call or two, a slice each was ~1 GB of what 80 s
+// of polls allocated while calls came in, on a year's history (#2278).
 type matchGroup struct {
-	ends   []matchEnd
-	counts []int
+	off, n int32
 }
 
 // agyMatchSession stands for the session of an Antigravity CLI (agy) call
@@ -1454,48 +1458,91 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			matched[ref.rowRef], used[calls[k].at(j)] = true, true
 		}
 	}
-	groupOf := map[matchKey]int32{} // a key's place in groups
-	var groups []matchGroup
+	// keyOf is the key of a gateway call the local calls left without a
+	// request id may match, ok false for one they never do
+	keyOf := func(gateway *rowChunk, i int) (matchKey, bool) {
+		if reserved[rowRef{gateway, i}] || used[rowRef{gateway, i}] {
+			return matchKey{}, false
+		}
+		p := &gateway.Rows[i]
+		if (p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) || p.Time.Before(gatewaySince) {
+			return matchKey{}, false
+		}
+		session := gateway.Strings[gateway.text(p, 14)]
+		if session == "" {
+			session = gateway.Strings[gateway.text(p, 13)]
+		}
+		if session == "" && gateway.Strings[gateway.text(p, 0)] == "agy" {
+			session = agyMatchSession
+		}
+		if session == "" {
+			return matchKey{}, false
+		}
+		return matchKey{session, matchTokens(p.Tokens), p.Status >= 400 || gateway.text(p, 9) != 0, gateway.text(p, 11) != 0}, true
+	}
+	kept := 0
 	for _, gateway := range gateways {
 		for i := range gateway.Rows {
-			ref := rowRef{gateway, i}
-			if reserved[ref] {
+			if _, ok := keyOf(gateway, i); ok {
+				kept++
+			}
+		}
+	}
+	groupOf := make(map[matchKey]int32, kept) // a key's place in groups
+	var groups []matchGroup
+	ks := make([]int32, 0, kept) // each kept call's group, in the order read
+	for _, gateway := range gateways {
+		for i := range gateway.Rows {
+			key, ok := keyOf(gateway, i)
+			if !ok {
 				continue
 			}
-			p := &gateway.Rows[i]
-			if used[ref] || (p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) || p.Time.Before(gatewaySince) {
-				continue
-			}
-			session := gateway.Strings[gateway.text(p, 14)]
-			if session == "" {
-				session = gateway.Strings[gateway.text(p, 13)]
-			}
-			if session == "" && gateway.Strings[gateway.text(p, 0)] == "agy" {
-				session = agyMatchSession
-			}
-			if session == "" {
-				continue
-			}
-			key := matchKey{session, matchTokens(p.Tokens), p.Status >= 400 || gateway.text(p, 9) != 0, gateway.text(p, 11) != 0}
 			k, ok := groupOf[key]
 			if !ok {
 				k = int32(len(groups))
 				groupOf[key] = k
 				groups = append(groups, matchGroup{})
 			}
-			groups[k].ends = append(groups[k].ends, matchEnd{p.Time.Add(time.Duration(p.Millis) * time.Millisecond), rowRef{gateway, i}})
+			groups[k].n++
+			ks = append(ks, k)
 		}
 	}
-	for i := range groups {
-		g := &groups[i]
-		slices.SortFunc(g.ends, func(a, b matchEnd) int { return a.at.Compare(b.at) })
-		g.counts = make([]int, len(g.ends)+1)
+	off := int32(0)
+	for k := range groups {
+		groups[k].off, off = off, off+groups[k].n
+		groups[k].n = 0
 	}
+	ends := make([]matchEnd, len(ks))
+	next := 0
+	for _, gateway := range gateways {
+		for i := range gateway.Rows {
+			if _, ok := keyOf(gateway, i); !ok {
+				continue
+			}
+			g := &groups[ks[next]]
+			next++
+			p := &gateway.Rows[i]
+			ends[g.off+g.n] = matchEnd{p.Time.Add(time.Duration(p.Millis) * time.Millisecond), rowRef{gateway, i}}
+			g.n++
+		}
+	}
+	ks = nil
+	for k := range groups {
+		g := groups[k]
+		slices.SortFunc(ends[g.off:g.off+g.n], func(a, b matchEnd) int { return a.at.Compare(b.at) })
+	}
+	counts := make([]int32, len(ends)+len(groups))
 	named := make(map[uint64]struct{}, len(groups))
 	for key := range groupOf {
 		named[matchHash(key.session)] = struct{}{}
 	}
-	candidates := map[rowRef]rowRef{}
+	// a local call with one gateway call in its range, and that call's
+	// place in ends
+	type candidate struct {
+		ref rowRef
+		at  int32
+	}
+	var candidates []candidate
 	for n, chunk := range chunks {
 		if hints[n].latest.Before(since) || !namesAny(hints[n].sessions, named) {
 			continue
@@ -1519,7 +1566,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			if c.Strings[c.text(p, 0)] == "agy" {
 				key.session, to = agyMatchSession, p.Time.Add(agyStepLongest)
 			}
-			count, candidate := 0, (rowRef{})
+			count, at := 0, int32(0)
 			// Without a local ID either gateway partition can match. With an ID,
 			// only an unnamed gateway call can match (different IDs stay distinct).
 			for _, hasID := range []bool{false, true} {
@@ -1531,37 +1578,38 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 				if !ok {
 					continue
 				}
-				g := &groups[k]
-				lo := sort.Search(len(g.ends), func(i int) bool { return !g.ends[i].at.Before(from) })
-				hi := sort.Search(len(g.ends), func(i int) bool { return g.ends[i].at.After(to) })
+				g := groups[k]
+				in := ends[g.off : g.off+g.n]
+				lo := sort.Search(len(in), func(i int) bool { return !in[i].at.Before(from) })
+				hi := sort.Search(len(in), func(i int) bool { return in[i].at.After(to) })
 				if hi > lo {
 					count += hi - lo
-					candidate = g.ends[lo].index
+					at = g.off + int32(lo)
 					// Range counts preserve ambiguity even for thousands of identical
 					// retries, without enumerating their Cartesian product.
-					g.counts[lo]++
-					g.counts[hi]--
+					counts[g.off+k+int32(lo)]++
+					counts[g.off+k+int32(hi)]--
 				}
 			}
 			if count == 1 {
-				candidates[ref] = candidate
+				candidates = append(candidates, candidate{ref, at})
 			}
 		}
 	}
-	unique := map[rowRef]bool{}
-	for i := range groups {
-		g := &groups[i]
-		count := 0
-		for i, end := range g.ends {
-			count += g.counts[i]
+	unique := make([]bool, len(ends))
+	for k := range groups {
+		g := groups[k]
+		count := int32(0)
+		for i := int32(0); i < g.n; i++ {
+			count += counts[g.off+int32(k)+i]
 			if count == 1 {
-				unique[end.index] = true
+				unique[g.off+i] = true
 			}
 		}
 	}
-	for ref, i := range candidates {
-		if unique[i] {
-			matched[ref] = true
+	for _, c := range candidates {
+		if unique[c.at] {
+			matched[c.ref] = true
 		}
 	}
 	return matched

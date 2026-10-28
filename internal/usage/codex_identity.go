@@ -194,28 +194,42 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 		compaction         *bool
 	}
 	// the picks are one slice the map points into: a pick each was ~300 MB
-	// of what two minutes of polls allocated while an agent worked (#2278)
-	picks := map[string]int32{}
-	var slab []pick
+	// of what two minutes of polls allocated while an agent worked (#2278).
+	// Both are made the size of the gateway's ids, and a gateway call is
+	// judged by the few strings that decide it, not made a Row: grown
+	// from nothing, and a Row each, they were ~2.4 GB of what 80 s of
+	// polls allocated while calls came in, on a year's history.
 	var rows chunkRows
 	defer rows.release()
+	withID := 0
 	for _, chunk := range gateways {
 		open := rows.of(chunk)
 		for i := range open.Rows {
-			if open.text(&open.Rows[i], rowResponseID) == 0 {
+			if open.text(&open.Rows[i], rowResponseID) != 0 {
+				withID++
+			}
+		}
+	}
+	picks := make(map[string]int32, withID)
+	slab := make([]pick, 0, withID)
+	for _, chunk := range gateways {
+		open := rows.of(chunk)
+		for i := range open.Rows {
+			p := &open.Rows[i]
+			id := open.Strings[open.text(p, rowResponseID)]
+			if id == "" {
 				continue
 			}
-			row := open.row(i)
-			k, ok := picks[row.ResponseID]
+			k, ok := picks[id]
 			if !ok {
 				k = int32(len(slab))
-				picks[row.ResponseID] = k
+				picks[id] = k
 				slab = append(slab, pick{})
 			}
-			p := &slab[k]
-			p.gateways++
-			p.gateway = rowRef{chunk, i}
-			p.gatewayOK = isCodexRow(row) && !row.IsRejected() && row.Source != SourceReported
+			pk := &slab[k]
+			pk.gateways++
+			pk.gateway = rowRef{chunk, i}
+			pk.gatewayOK = open.codexGatewayCall(p)
 		}
 	}
 	lent := lentRows() // picks are looked up by a local's id, not keyed
@@ -261,6 +275,24 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 		}
 	}
 	return pairs, compactions
+}
+
+// codexGatewayCall is whether p, a row of c, is a Codex call the gateway
+// served and logged itself: isCodexRow, not IsRejected and not
+// SourceReported of c.row(p's index), read from p's strings alone.
+func (c *rowChunk) codexGatewayCall(p *packedRow) bool {
+	str := func(slot int) string { return c.Strings[c.text(p, slot)] }
+	if client := str(rowClient); client != "" {
+		if client != "codex" {
+			return false
+		}
+	} else if str(0) != "codex" {
+		return false
+	}
+	if p.Flags&4 != 0 || str(1) == "" && p.Status >= 400 {
+		return false
+	}
+	return str(16) != SourceReported
 }
 
 // foldIDs are each chunk's calls by a hash of their response id, kept by
