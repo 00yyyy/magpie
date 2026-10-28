@@ -154,7 +154,8 @@ func Sync() (*Result, error) {
 		return nil
 	}
 	// the agents are found under the lock, as a change finds them
-	if err := step(func(l *Library) { all = Targets(); gone = l.held(all) }); err != nil {
+	var npxDirs map[string]bool
+	if err := step(func(l *Library) { all = Targets(); gone = l.held(all); npxDirs = l.npxDirs() }); err != nil {
 		return nil, err
 	}
 	for _, f := range syncSteps(all, gone, b, res) {
@@ -171,6 +172,7 @@ func Sync() (*Result, error) {
 	if len(res.dropped) > 0 {
 		ending(res.dropped)
 	}
+	npxPrune(npxDirs)
 	return res, nil
 }
 
@@ -245,6 +247,9 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 			continue
 		}
 		s, _ = t.MCP.side(s)
+		if !t.MCP.WSL {
+			s = npxDirect(s)
+		}
 		s = wroteStartup(s, a.Startup[s.Name])
 		old := entries[s.Name]
 		if err := t.MCP.foreign(old); err != nil {

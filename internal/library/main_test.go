@@ -27,6 +27,8 @@ func TestMain(m *testing.M) {
 	}
 	// never the machine's own processes (mcp_reap.go)
 	ending = func([]*Server) {}
+	// never the registry (mcp_npx.go)
+	npxInstall = nil
 	code := testenv.Run(m)
 	forgetProbes()
 	if left := leftDownloads(tmp); len(left) > 0 && code == 0 {
