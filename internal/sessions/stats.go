@@ -553,9 +553,13 @@ func (st Stats) Overview(agent, model, cwd string, n int) Overview {
 		out.Days = make([]int, int(math.Round(last.Sub(first).Hours()/24))+1)
 	}
 	out.Messages, out.Output = make([]int, len(out.Days)), make([]int, len(out.Days))
-	var in []Summary
-	var spent []int
-	for _, s := range st.Sessions {
+	// the sessions are pointed to, not copied: a Summary is ~400 bytes, and
+	// the Sessions page's poll copied all of them four times, ~1.5 GB in
+	// two minutes over 34k sessions while an agent worked (#2278)
+	in := make([]*Summary, 0, len(st.Sessions))
+	spent := make([]int, 0, len(st.Sessions))
+	for i := range st.Sessions {
+		s := &st.Sessions[i]
 		if agent != "" && s.Agent != agent || cwd != "" && s.Cwd != cwd || model != "" && !slices.Contains(s.Models, model) {
 			continue
 		}
@@ -583,25 +587,29 @@ func (st Stats) Overview(agent, model, cwd string, n int) Overview {
 		rank := func(p float64) int { return spent[max(0, int(math.Ceil(p*float64(len(spent))))-1)] }
 		out.Median, out.P90 = rank(0.5), rank(0.9)
 	}
-	for by, v := range map[string]func(Summary) float64{
-		"tokens": func(s Summary) float64 { return float64(s.Input + s.Output) },
-		"cost":   func(s Summary) float64 { return s.Cost },
-		"active": func(s Summary) float64 { return float64(s.Active) },
+	top := make([]*Summary, len(in))
+	for by, v := range map[string]func(*Summary) float64{
+		"tokens": func(s *Summary) float64 { return float64(s.Input + s.Output) },
+		"cost":   func(s *Summary) float64 { return s.Cost },
+		"active": func(s *Summary) float64 { return float64(s.Active) },
 	} {
-		top := slices.Clone(in)
+		copy(top, in)
 		sort.SliceStable(top, func(i, j int) bool { return v(top[i]) > v(top[j]) })
 		k := 0
 		for k < len(top) && k < n && v(top[k]) > 0 {
 			k++
 		}
-		out.Top[by] = top[:k]
+		out.Top[by] = make([]Summary, k)
+		for i, s := range top[:k] {
+			out.Top[by][i] = *s
+		}
 	}
 	return out
 }
 
 // shapes buckets the sessions that told their messages, or for minutes
 // those that were at work.
-func shapes(in []Summary) map[string]Shape {
+func shapes(in []*Summary) map[string]Shape {
 	out := map[string]Shape{}
 	for by, edges := range shapeEdges {
 		sh := Shape{Edges: edges, Counts: make([]int, len(edges))}
@@ -636,7 +644,7 @@ func shapes(in []Summary) map[string]Shape {
 }
 
 // toolUse sums up the sessions' tool calls, the n most called.
-func toolUse(in []Summary, first time.Time, n int) ToolUse {
+func toolUse(in []*Summary, first time.Time, n int) ToolUse {
 	out := ToolUse{Top: []ToolStat{}, Categories: []ToolStat{}, Weeks: []ToolWeek{}}
 	tools, cats := map[string]*ToolStat{}, map[string]*ToolStat{}
 	weeks := map[string]map[string]int{}
@@ -701,7 +709,7 @@ func toolUse(in []Summary, first time.Time, n int) ToolUse {
 }
 
 // skillUse sums up the skills the sessions called up, the n most called.
-func skillUse(in []Summary, n int) SkillUse {
+func skillUse(in []*Summary, n int) SkillUse {
 	out := SkillUse{Top: []Skill{}}
 	skills := map[string]*Skill{}
 	projects := map[string]map[string]int{}
