@@ -60,6 +60,10 @@ type Options struct {
 	// value only the model found, masked before at a lower score, isn't
 	// masked again as known under it (knownSpans).
 	MinScore float64
+	// NamesByModel says Model finds Chinese names itself (AstrLink
+	// Guard): beside it only a nickname (小王, 老李) is found by the
+	// words around it (zhNameSpans)
+	NamesByModel bool
 	// Shape sends a key as a made-up key of its form, not a placeholder
 	// (shape.go)
 	Shape bool

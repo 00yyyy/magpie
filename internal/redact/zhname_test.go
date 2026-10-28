@@ -171,3 +171,23 @@ func TestMaoliIsAMargin(t *testing.T) {
 		t.Errorf("the model's name not masked: %q", out)
 	}
 }
+
+// Where the model finds Chinese names itself (AstrLink Guard,
+// NamesByModel), only a nickname is found beside it: a surname with a
+// cue around it is the model's to find, and the cues took words for
+// names (关键发现, 易触发; xuanwo on X).
+func TestChineseNamesByModelOnlyNicks(t *testing.T) {
+	f := &fakeModel{values: map[string]string{"龚秋实": "private_person"}}
+	o := Options{Personal: true, Model: f.find, NamesByModel: true}
+	for _, c := range []struct{ s, masked, kept string }{
+		{"小邵说他明天到", "小邵", "说他明天到"},
+		{"客户龚秋实和小邵反馈导出失败", "龚秋实和小邵", "反馈导出失败"},
+		{"客户钟离夏反馈导出失败", "", "钟离夏"},
+		{"## 关键发现", "", "关键发现"},
+	} {
+		out, _ := Mask(c.s, o)
+		if strings.Contains(out, c.masked) && c.masked != "" || !strings.Contains(out, c.kept) {
+			t.Errorf("%q: %q", c.s, out)
+		}
+	}
+}

@@ -125,8 +125,10 @@ func zhFirsts() string {
 }
 
 // zhNameSpans are the Chinese names in s the model didn't find, as
-// PERSON spans; person are those it did.
-func zhNameSpans(s string, person []span) []span {
+// PERSON spans; person are those it did. With nicks, only a nickname
+// (小王, 老李): AstrLink Guard finds the rest itself, and the cues here
+// took words for names it didn't (关键发现, 易触发; xuanwo on X).
+func zhNameSpans(s string, person []span, nicks bool) []span {
 	if !hasHan(s) {
 		return nil
 	}
@@ -138,12 +140,15 @@ func zhNameSpans(s string, person []span) []span {
 			i += n
 			continue
 		}
+		i = b
+		if nicks && !zhNick(s[a:b]) {
+			continue
+		}
 		kind := ""
 		if ok {
 			kind = "PERSON"
 		}
 		cs = append(cs, span{a, b, kind, ByModel, 0})
-		i = b
 	}
 	// a name joined by 和, 与, 跟, 及 or 、 to one that is a name is one
 	// too: 李娜和刘洋, where only 刘洋 has a word after it that says so
@@ -172,6 +177,13 @@ func zhNameSpans(s string, person []span) []span {
 		}
 	}
 	return out
+}
+
+// zhNick says name is a nickname: 小 or 老 and a surname (小王, 老李).
+func zhNick(name string) bool {
+	r, n := utf8.DecodeRuneInString(name)
+	r2, n2 := utf8.DecodeRuneInString(name[n:])
+	return (r == '小' || r == '老') && isNick[r2] && n+n2 == len(name)
 }
 
 // joined says only 和, 与, 跟, 及 or 、 is between c and a name, one

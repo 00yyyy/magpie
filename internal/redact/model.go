@@ -50,7 +50,8 @@ func modelCat(kind string) string {
 // modelSpans are o.found's spans for s that o covers, trimmed of the
 // spaces the model takes in with a word (and a Chinese name of what it
 // ran on into, zhTrim), and with what it gets wrong often left out
-// (modelTakes); and the Chinese names it missed (zhNameSpans).
+// (modelTakes); and the Chinese names it missed (zhNameSpans: only
+// nicknames where the model finds names itself, o.NamesByModel).
 func modelSpans(s string, o Options) []span {
 	if o.Model == nil || !o.covers(catPersonal) && len(o.found[s]) == 0 {
 		return nil
@@ -93,7 +94,7 @@ func modelSpans(s string, o Options) []span {
 				person = append(person, f)
 			}
 		}
-		out = append(out, zhNameSpans(s, person)...)
+		out = append(out, zhNameSpans(s, person, o.NamesByModel)...)
 	}
 	return out
 }
