@@ -154,3 +154,20 @@ func TestChineseNamesNeedModel(t *testing.T) {
 		t.Fatalf("personal data off: %q", out)
 	}
 }
+
+// 毛利 is a gross margin: 毛利低 is no one (_kaichen on X, 10-28), in the
+// sentences that made it a name. The rules leave 毛利兰 and 毛利小五郎 to
+// the model too, which reads the sentence; what it finds is masked.
+func TestMaoliIsAMargin(t *testing.T) {
+	f := &fakeModel{values: map[string]string{}}
+	o := Options{Personal: true, Model: f.find}
+	for _, s := range []string{"毛利低", "毛利低说", "我是毛利低", "这个产品毛利低说明定价有问题", "我是毛利低的那个品类负责人", "毛利低说明成本高", "告诉毛利低的门店先别补货", "毛利率下降了", "毛利额是多少", "看一下毛利润"} {
+		if out, _ := Mask(s, o); out != s {
+			t.Errorf("%q masked: %q", s, out)
+		}
+	}
+	f.values = map[string]string{"毛利小五郎": "private_person"}
+	if out, _ := Mask("毛利小五郎姓什么", o); strings.Contains(out, "毛利小五郎") {
+		t.Errorf("the model's name not masked: %q", out)
+	}
+}

@@ -34,7 +34,8 @@ func optionsCtx(ctx context.Context) redact.Options {
 		Actions: st.RedactActions, Allow: st.RedactAllow, Shape: st.RedactShape}
 	if st.RedactModel {
 		m := picked(st)
-		o.Model = model(ctx, m, pii.Threshold(st.RedactModelScore, m))
+		o.MinScore = pii.Threshold(st.RedactModelScore, m)
+		o.Model = model(ctx, m, o.MinScore)
 	}
 	return o
 }

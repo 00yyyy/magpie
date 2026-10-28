@@ -55,6 +55,11 @@ type Options struct {
 	Kinds map[string]bool
 	// Model, where set, finds more in the texts to mask (model.go)
 	Model Model
+	// MinScore is the score the user has Model's finds need (Settings →
+	// Privacy's slider), which Model's own finds are held to already. A
+	// value only the model found, masked before at a lower score, isn't
+	// masked again as known under it (knownSpans).
+	MinScore float64
 	// Shape sends a key as a made-up key of its form, not a placeholder
 	// (shape.go)
 	Shape bool
@@ -183,8 +188,8 @@ var rules = append([]rule{
 
 	{kind: "EMAIL", re: regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`), markers: []string{"@"}, bound: alnum + "_%+-", ok: realEmail, at: emailAt, cat: catPersonal},
 	{kind: "ID_CARD", re: regexp.MustCompile(`[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]`), bound: alnum, ok: chineseID, cat: catPersonal},
-	{kind: "PHONE", re: regexp.MustCompile(`(?:\+?86[- ]?)?1[3-9]\d{9}`), bound: digits, cat: catPersonal},
-	{kind: "BANK_CARD", re: regexp.MustCompile(`[3-6]\d{3}(?:[ -]?\d{4}){2,3}(?:[ -]?\d{1,3})?`), bound: digits, ok: luhn, cat: catPersonal},
+	{kind: "PHONE", re: regexp.MustCompile(`(?:\+?86[- ]?)?1[3-9]\d{9}`), bound: alnum, at: phoneAt, cat: catPersonal},
+	{kind: "BANK_CARD", re: regexp.MustCompile(`[3-6]\d{3}(?:[ -]?\d{4}){2,3}(?:[ -]?\d{1,3})?`), bound: alnum, ok: luhn, cat: catPersonal},
 }, moreRules...)
 
 // cjkPasswordNames are what a password is called in Chinese, Japanese and
@@ -637,9 +642,9 @@ func makeRoom() {
 // its form (Shape).
 func (o Options) put() func(kind, v string) string {
 	if o.Shape {
-		return shaped
+		return standIn(shaped)
 	}
-	return placeholder
+	return standIn(placeholder)
 }
 
 // ---- masking --------------------------------------------------------------------
@@ -647,7 +652,8 @@ func (o Options) put() func(kind, v string) string {
 type span struct {
 	start, end int
 	kind       string
-	by         string // which finder found it: one of the By constants
+	by         string  // which finder found it: one of the By constants
+	score      float64 // the model's score for one it found, else 0
 }
 
 // Which finder found a value (Hit.By): magpie's rules, the user's own
@@ -782,7 +788,8 @@ func Mask(s string, o Options) (string, int) {
 }
 
 // Preview is Mask with nothing remembered: each value goes as the
-// placeholder, or with Options.Shape the made-up key, it would have, which
+// placeholder, or with Options.Shape the made-up key, it would have (a
+// user name its made-up name), which
 // isn't kept for Restore or as a value seen before (known.go).
 func Preview(s string, o Options) string {
 	put := tag
@@ -794,6 +801,13 @@ func Preview(s string, o Options) string {
 			}
 			return tag(kind, v)
 		}
+	}
+	tagOrShape := put
+	put = func(kind, v string) string {
+		if kind == "USERNAME" {
+			return standInOf(v) // a user name's made-up name (shape.go)
+		}
+		return tagOrShape(kind, v)
 	}
 	out, _ := mask(s, withModel(o, []string{s}), put, false)
 	return out
@@ -857,7 +871,7 @@ func mask(raw string, o Options, put func(kind, v string) string, escaped bool) 
 				i = a + max(n, 1)
 				continue
 			}
-			found = append(found, span{a, b, "TERM", ByWord})
+			found = append(found, span{a, b, "TERM", ByWord, 0})
 			i = max(b, a+1)
 		}
 	}
@@ -892,12 +906,12 @@ func mask(raw string, o Options, put func(kind, v string) string, escaped bool) 
 				took := false
 				for g, kind := range r.groups {
 					if a, b := m[2*g+2], m[2*g+3]; a >= 0 && r.takes(s, a, b, r.groupOK[g]) {
-						found = append(found, span{a, b, kind, r.by()})
+						found = append(found, span{a, b, kind, r.by(), 0})
 						took = true
 					}
 				}
 				if took {
-					split = append(split, span{m[2], m[1], "", ""})
+					split = append(split, span{m[2], m[1], "", "", 0})
 				}
 				continue
 			}
@@ -920,7 +934,7 @@ func mask(raw string, o Options, put func(kind, v string) string, escaped bool) 
 				ok = nil
 			}
 			if r.takes(s, a, b, ok) {
-				found = append(found, span{a, b, r.kind, r.by()})
+				found = append(found, span{a, b, r.kind, r.by(), 0})
 			}
 		}
 	}
@@ -940,7 +954,11 @@ func mask(raw string, o Options, put func(kind, v string) string, escaped bool) 
 	if escaped {
 		found = outsideEscapes(raw, found)
 	}
-	return apply(raw, noNumbers(s, noIDs(s, found)), put, o)
+	found = noNumbers(s, noIDs(s, found))
+	if o.sent {
+		noteScores(raw, found) // what is masked for a vendor, not a preview
+	}
+	return apply(raw, found, put, o)
 }
 
 // unescapedView is s, JSON text, as long as s and read as the vendor reads

@@ -30,12 +30,15 @@ const zhNotGiven = "的了在是和与跟同说他她它我你您们这那个不
 
 // zhWords begin with a surname but are words, not names: 文案 in
 // "改一下文案" is no one (zeewell on X). Each is two characters, so a
-// candidate's first two are looked up (zhWord).
+// candidate's first two are looked up (zhWord). 毛利 is a gross margin
+// (毛利低 went as a name, _kaichen on X, 10-28) and a Japanese surname
+// too (毛利兰): the rules leave both, and the model, which reads the
+// sentence, finds the name.
 var zhWords = runes2(
 	"张量", "张开", "张贴", "高度", "高效", "高级", "高速", "高亮", "高手", "高兴", "王国", "王者",
 	"黄河", "黄色", "方法", "方向", "方式", "方案", "方便", "方面", "程序", "程度", "温度", "白色",
 	"金额", "金融", "江湖", "石头", "马上", "周期", "周末", "周围", "周边", "文件", "文本", "文档",
-	"文字", "文章", "余额", "安全", "安装", "安排", "钱包", "叶子", "毛病", "万一", "雷达", "宋体",
+	"文字", "文章", "余额", "安全", "安装", "安排", "钱包", "叶子", "毛病", "毛利", "毛重", "毛坯", "毛巾", "毛衣", "万一", "雷达", "宋体",
 	"常量", "常用", "常见", "向量", "向上", "全部", "全局", "全面", "史上", "易用", "武器", "时间",
 	"时候", "明天", "明确", "明白", "任何", "任务", "任意", "华为", "管理", "简单", "简介", "范围",
 	"许多", "许可", "包括", "包含", "关于", "关系", "关闭", "连接", "成功", "成为", "应用", "应该",
@@ -139,7 +142,7 @@ func zhNameSpans(s string, person []span) []span {
 		if ok {
 			kind = "PERSON"
 		}
-		cs = append(cs, span{a, b, kind, ByModel})
+		cs = append(cs, span{a, b, kind, ByModel, 0})
 		i = b
 	}
 	// a name joined by 和, 与, 跟, 及 or 、 to one that is a name is one
