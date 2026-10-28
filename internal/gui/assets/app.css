@@ -159,6 +159,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 input { font: inherit; color: var(--fg); }
 .grow { flex: 1; }
 [hidden] { display: none !important; }
+/* the app's own rows (Text size, the tray, login, the menu bar's allowances)
+   never paint in a browser tab, before renderSettings hides them too */
+body.web .app-only { display: none !important; }
 code { font: var(--code-style, normal) var(--code-weight, 400) 11.5px var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); }
 
 /* ---- brand icons: colour ones are images, mono ones take the text colour --- */
