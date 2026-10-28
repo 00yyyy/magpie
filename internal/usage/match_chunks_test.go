@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -89,5 +90,35 @@ func TestMatchOpensAgyChunks(t *testing.T) {
 	}
 	if len(opened) != 1 || opened[0] != agy {
 		t.Fatalf("decoded %d chunks; want the agy transcript alone", len(opened))
+	}
+}
+
+// A request id's calls are a place in one slice, not a slice of their own
+// in two maps: over a year's calls a poll's matching allocated ~1.5 GB in
+// two minutes while an agent worked (#2278). It matches every call by its
+// id as before.
+func TestMatchByIDAllocatesNoSliceAnID(t *testing.T) {
+	const n = 4000
+	now := time.Now().Truncate(time.Second)
+	gateway, local := &rowChunk{}, &rowChunk{Source: sessions.CallSource{Path: "/local/s"}}
+	for i := range n {
+		r := Record{Time: now.Add(-time.Duration(i) * time.Second), Agent: "claude", Provider: "relay", Session: "s", Input: 1 + i%7, Output: 1, Millis: 1000, RequestID: fmt.Sprint("req-", i)}
+		gateway.add(Row{Record: r}, "", int64(i), false)
+		if i%3 == 0 {
+			r.RequestID = fmt.Sprint("req-", i/3) // a later call names an earlier id again
+		}
+		local.add(Row{Record: r, Source: "log"}, "", int64(i), false)
+	}
+	local.serial = nextChunkSerial()
+	got := matchedBlocks([]*rowChunk{gateway}, []*rowChunk{local}, nil, nil, time.Time{}, false)
+	if want := matchedLocalLegacy(gateway, []*rowChunk{local}, nil, time.Time{}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("%d matches, want %d", len(got), len(want))
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	matchedBlocks([]*rowChunk{gateway}, []*rowChunk{local}, nil, nil, time.Time{}, false)
+	runtime.ReadMemStats(&after)
+	if mallocs := after.Mallocs - before.Mallocs; mallocs > n/10 {
+		t.Fatalf("matching %d calls by id made %d allocations", n, mallocs)
 	}
 }

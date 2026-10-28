@@ -1280,6 +1280,31 @@ func visibleLocal(chunks []*rowChunk) map[rowRef]bool {
 
 var msgSeeds = [2]maphash.Seed{maphash.MakeSeed(), maphash.MakeSeed()}
 
+// idCalls are the gateway's calls of one request id, in the gateway's
+// order: first, then more, which most ids have none of. last is the place
+// after the last local call found that names the id, 0 for none.
+type idCalls struct {
+	first rowRef
+	more  []rowRef
+	last  int32
+}
+
+func (c *idCalls) len() int { return 1 + len(c.more) }
+
+func (c *idCalls) at(j int) rowRef {
+	if j == 0 {
+		return c.first
+	}
+	return c.more[j-1]
+}
+
+// idLocal is a local call that names a request id, and the place after
+// the call found before it that names the id, 0 for none
+type idLocal struct {
+	before int32
+	timedRef
+}
+
 // matchKey narrows candidates before comparing their end times. Request IDs
 // are consumed first; fallback matching still requires uniqueness both ways.
 // The agent isn't in it: a session's id names the one conversation, and a
@@ -1335,24 +1360,45 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 	if !since.IsZero() {
 		gatewaySince = since.Add(-24 * time.Hour)
 	}
-	byID := map[string][]rowRef{}
+	// A request id's gateway calls are its place in calls, and the local
+	// calls that name it are found, not a slice an id each: over a year's
+	// calls those slices and the maps' growth were ~1.5 GB of what two
+	// minutes of polls allocated while an agent worked (#2278).
+	matchable := func(gateway *rowChunk, i int) bool {
+		p := &gateway.Rows[i]
+		return !(p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) && !p.Time.Before(gatewaySince)
+	}
+	withID := 0
 	for _, gateway := range gateways {
 		for i := range gateway.Rows {
-			ref := rowRef{gateway, i}
-			if reserved[ref] {
-				continue
-			}
-			p := &gateway.Rows[i]
-			if (p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) || p.Time.Before(gatewaySince) {
-				continue
-			}
-			if id := gateway.Strings[gateway.text(p, 11)]; id != "" {
-				byID[id] = append(byID[id], rowRef{gateway, i})
+			if gateway.text(&gateway.Rows[i], 11) != 0 && matchable(gateway, i) {
+				withID++
 			}
 		}
 	}
-	byRequest := map[string][]timedRef{}
-	rows := lentRows() // a kept request id is cloned; a key is looked up
+	byID := make(map[string]int32, withID)
+	calls := make([]idCalls, 0, withID)
+	for _, gateway := range gateways {
+		for i := range gateway.Rows {
+			ref := rowRef{gateway, i}
+			if reserved[ref] || !matchable(gateway, i) {
+				continue
+			}
+			p := &gateway.Rows[i]
+			if id := gateway.Strings[gateway.text(p, 11)]; id != "" {
+				if k, ok := byID[id]; ok {
+					calls[k].more = append(calls[k].more, ref)
+				} else {
+					byID[id] = int32(len(calls))
+					calls = append(calls, idCalls{first: ref})
+				}
+			}
+		}
+	}
+	// the local calls that name an id, chained from its calls[k].last in
+	// the order they were found
+	var found []idLocal
+	rows := lentRows() // a key is looked up
 	defer rows.release()
 	hints := hintsOf(chunks, &rows)
 	ids := make(map[uint32]struct{}, len(byID))
@@ -1373,16 +1419,23 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			if skip[ref] || reserved[ref] || p.Time.Before(since) {
 				continue
 			}
-			if id := open.Strings[open.text(p, 11)]; len(byID[id]) > 0 {
-				if _, ok := byRequest[id]; !ok {
-					id = strings.Clone(id)
-				}
-				byRequest[id] = append(byRequest[id], timedOf(ref, p))
+			if open.text(p, 11) == 0 {
+				continue
+			}
+			if k, ok := byID[open.Strings[open.text(p, 11)]]; ok {
+				found = append(found, idLocal{calls[k].last, timedOf(ref, p)})
+				calls[k].last = int32(len(found))
 			}
 		}
 	}
-	used := map[rowRef]bool{}
-	for id, refs := range byRequest {
+	used := make(map[rowRef]bool, len(found))
+	var refs []timedRef
+	for k := range calls {
+		refs = refs[:0]
+		for j := calls[k].last; j != 0; j = found[j-1].before {
+			refs = append(refs, found[j-1].timedRef)
+		}
+		slices.Reverse(refs)
 		if newestIDs {
 			slices.SortFunc(refs, func(a, b timedRef) int {
 				if a.newer(b) {
@@ -1395,13 +1448,14 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			})
 		}
 		for j, ref := range refs {
-			if j >= len(byID[id]) {
+			if j >= calls[k].len() {
 				break
 			}
-			matched[ref.rowRef], used[byID[id][j]] = true, true
+			matched[ref.rowRef], used[calls[k].at(j)] = true, true
 		}
 	}
-	groups := map[matchKey]*matchGroup{}
+	groupOf := map[matchKey]int32{} // a key's place in groups
+	var groups []matchGroup
 	for _, gateway := range gateways {
 		for i := range gateway.Rows {
 			ref := rowRef{gateway, i}
@@ -1423,20 +1477,22 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 				continue
 			}
 			key := matchKey{session, matchTokens(p.Tokens), p.Status >= 400 || gateway.text(p, 9) != 0, gateway.text(p, 11) != 0}
-			g := groups[key]
-			if g == nil {
-				g = &matchGroup{}
-				groups[key] = g
+			k, ok := groupOf[key]
+			if !ok {
+				k = int32(len(groups))
+				groupOf[key] = k
+				groups = append(groups, matchGroup{})
 			}
-			g.ends = append(g.ends, matchEnd{p.Time.Add(time.Duration(p.Millis) * time.Millisecond), rowRef{gateway, i}})
+			groups[k].ends = append(groups[k].ends, matchEnd{p.Time.Add(time.Duration(p.Millis) * time.Millisecond), rowRef{gateway, i}})
 		}
 	}
-	for _, g := range groups {
+	for i := range groups {
+		g := &groups[i]
 		slices.SortFunc(g.ends, func(a, b matchEnd) int { return a.at.Compare(b.at) })
 		g.counts = make([]int, len(g.ends)+1)
 	}
 	named := make(map[uint64]struct{}, len(groups))
-	for key := range groups {
+	for key := range groupOf {
 		named[matchHash(key.session)] = struct{}{}
 	}
 	candidates := map[rowRef]rowRef{}
@@ -1471,10 +1527,11 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 					continue
 				}
 				key.hasID = hasID
-				g := groups[key]
-				if g == nil {
+				k, ok := groupOf[key]
+				if !ok {
 					continue
 				}
+				g := &groups[k]
 				lo := sort.Search(len(g.ends), func(i int) bool { return !g.ends[i].at.Before(from) })
 				hi := sort.Search(len(g.ends), func(i int) bool { return g.ends[i].at.After(to) })
 				if hi > lo {
@@ -1492,7 +1549,8 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 		}
 	}
 	unique := map[rowRef]bool{}
-	for _, g := range groups {
+	for i := range groups {
+		g := &groups[i]
 		count := 0
 		for i, end := range g.ends {
 			count += g.counts[i]
