@@ -70,6 +70,30 @@ func SetSink(id string, sink bool) error {
 	return Save(*p)
 }
 
+// SetCapStop has a subscription answer 429 while every account is held at
+// its usage cap, rather than go on to its fallbacks (Provider.CapStop), or
+// go on to them again.
+func SetCapStop(id string, on bool) error {
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.CapStop = on
+	return Save(*p)
+}
+
+// SetCapCareful has a subscription's capped accounts read again near
+// their cap and held while their usage can't be told
+// (Provider.CapCareful), or go by the last reading again.
+func SetCapCareful(id string, on bool) error {
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.CapCareful = on
+	return Save(*p)
+}
+
 // SetKeepLogin keeps Codex or Claude Code signed in to the account the
 // user made first (Provider.KeepLogin), or lets magpie move it on again.
 // Either way it is no longer kept on one of the user's choosing
@@ -155,6 +179,9 @@ var usedCache struct {
 	// agent; that reading was asked before an account said it was out,
 	// so what it tells is kept only until the next ask reads again
 	stale map[string]bool
+	// read: when each account's allowance was last read well, and whether
+	// the last try failed, by agent/user (UsageRead)
+	read map[string]readState
 }
 
 // firstWait is how long a request waits for an agent's allowances the
@@ -555,7 +582,7 @@ func Allowances(agent string) map[string]Allowance {
 			defer cancel()
 			share := renewalShare(agent) // read before the lock: it reads providers.json
 			all := map[string]Allowance{}
-			readings, readAt := loginUsageAt(ctx, agent)
+			readings, readAt, states := loginUsageAt(ctx, agent)
 			for user, q := range readings {
 				if q.Error != "" || len(q.Windows) == 0 {
 					continue
@@ -573,6 +600,16 @@ func Allowances(agent string) map[string]Allowance {
 			at := readAt
 			if c.seen == nil {
 				c.seen = map[string]reading{}
+			}
+			if c.read == nil {
+				c.read = map[string]readState{}
+			}
+			for user, st := range states {
+				key := agent + "/" + strings.ToLower(user)
+				if was := c.read[key].at; st.failed && was.After(st.at) {
+					st.at = was // the last good one's time stands
+				}
+				c.read[key] = st
 			}
 			var renewed []string
 			for user, a := range all {
@@ -622,6 +659,50 @@ func Allowances(agent string) map[string]Allowance {
 		return lastAllowances(agent)
 	}
 	return m
+}
+
+// UsageRead is when user's allowance under agent was last read well, and
+// whether the last try to read it failed (or was held back); ok is false
+// when it hasn't been tried since magpie started. A careful provider holds
+// an account whose reading is too old or failed (Provider.CapCareful).
+func UsageRead(agent, user string) (at time.Time, failed, ok bool) {
+	c := &usedCache
+	c.Lock()
+	defer c.Unlock()
+	st, ok := c.read[agent+"/"+strings.ToLower(user)]
+	return st.at, st.failed, ok
+}
+
+// ReadUsageNow has agent's accounts users read again now, past the
+// minute their readings are kept and though allowances are read only when
+// asked, and waits, till ctx ends, for a reading begun after it asked. It
+// says whether one came back (UsageRead then tells how it went).
+func ReadUsageNow(ctx context.Context, agent string, users ...string) bool {
+	for _, u := range users {
+		StaleAllowance(agent, u)
+	}
+	c := &usedCache
+	for range 3 {
+		Allowances(agent)
+		c.Lock()
+		done, back := c.loading[agent], !c.at[agent].IsZero()
+		c.Unlock()
+		if done == nil {
+			return back // read already, the first ask waiting for it; or nothing to read it with
+		}
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return false
+		}
+		c.Lock()
+		back = !c.at[agent].IsZero() // zero: asked before it went stale
+		c.Unlock()
+		if back {
+			return true
+		}
+	}
+	return false
 }
 
 // OnRenewed has f told when an account's usage windows were started again

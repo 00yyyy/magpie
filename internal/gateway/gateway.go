@@ -2092,6 +2092,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			return
 		}
 	}
+	// a careful provider's capped accounts read again now where what is
+	// known of their usage is too old to send on (plugins#349)
+	if isGroup {
+		if ps, models := carefulOf(p, model, ms); anyCareful(ps) {
+			readCareful(r.Context(), ps, models)
+		}
+	} else if p.CapCareful || len(p.Fallback) > 0 {
+		if ps, models := carefulOf(p, model, nil); anyCareful(ps) {
+			readCareful(r.Context(), ps, models)
+		}
+	}
 	// the primary, then its fallbacks while it can't take the request and
 	// nothing has been sent yet
 	var cands []candidate

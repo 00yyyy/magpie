@@ -12890,6 +12890,13 @@ function renderAccounts(a, p) {
   for (const l of ls) {
     const on = !unusable(l) && !l.paused && (l.active || l.on);
     const row = el("div", "acc" + (on ? " in-use" : " off") + (l.user === justAdded ? " new" : ""));
+    // its Remove, titled as given; true: the own account's, else the plain one
+    const forgetOf = (title) => {
+      const f = el("button", "text quiet", t("Remove"));
+      if (title) f.title = title !== true ? title : l.own ? forgetOwnTitle(a) : t("magpie forgets this account's sign-in; the account itself is untouched");
+      f.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
+      return f;
+    };
     row.dataset.accountId = l.user;
     const dot = el("button", "dot tick");
     if (on) dot.append(svg(CHECK, 10, 2.2));
@@ -12933,19 +12940,14 @@ function renderAccounts(a, p) {
       row.append(again);
       // the one Claude Code is signed in to can't be forgotten (ForgetLogin)
       if (!l.active) {
-        const forget = el("button", "text quiet", t("Remove"));
-        forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
-        row.append(forget);
+        row.append(forgetOf());
       }
     } else if (signedOut(l)) {
       row.classList.add("signed-out");
       row.append(el("span", "using", t("Sign-in required")));
       const again = el("button", "text", t("Sign in again"));
       again.onclick = () => startSignIn(a.agent, false, againSite(l), { user: l.user });
-      const forget = el("button", "text quiet", t("Remove"));
-      forget.title = l.own ? forgetOwnTitle(a) : t("magpie forgets this account's sign-in; the account itself is untouched");
-      forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
-      row.append(again, forget);
+      row.append(again, forgetOf(true));
     } else if (l.active && kept && l.user !== firstUser) {
       // signed in to, kept so, and tried at its place in the order
       const signed = el("span", "using", l.paused ? t("Paused") : t("Signed in"));
@@ -12957,10 +12959,7 @@ function renderAccounts(a, p) {
       if (back && !l.paused) using.title = t("{user} was nearly used up, so magpie signed {agent} in to this one; it goes back to {user} once that has room again", { user: back.user, agent: a.agentName });
       row.append(using);
       if (a.agent === "qoder" || a.agent === "qoder-cn" || l.own) {
-        const forget = el("button", "text quiet", t("Remove"));
-        if (l.own) forget.title = forgetOwnTitle(a);
-        forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
-        row.append(forget);
+        row.append(forgetOf(l.own));
       } else if (a.agent === "codex" && ls.length === 1) {
         // Codex's only account: no other to sign it in to first, so it is
         // signed out, as codex logout does (ForgetLogin)
@@ -12971,15 +12970,10 @@ function renderAccounts(a, p) {
       } else if (a.agent === "codex") {
         // Codex is signed in to another of its accounts first, then this
         // one goes (ForgetLogin), rather than Codex signed out
-        const forget = el("button", "text quiet", t("Remove"));
-        forget.title = t("Codex is signed in to another of its accounts, and magpie forgets this one; the account itself is untouched");
-        forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
-        row.append(forget);
+        row.append(forgetOf(t("Codex is signed in to another of its accounts, and magpie forgets this one; the account itself is untouched")));
       }
     } else {
-      const forget = el("button", "text quiet", t("Remove"));
-      forget.title = l.own ? forgetOwnTitle(a) : t("magpie forgets this account's sign-in; the account itself is untouched");
-      forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
+      const forget = forgetOf(true);
       if (l === back) {
         const again = el("span", "using", t("First again once it has room"));
         again.title = t("magpie signs {agent} back in to this account once it has room again", { agent: a.agentName });
@@ -13060,24 +13054,30 @@ function renderAccounts(a, p) {
     box.append(only);
     list.append(box);
   }
+  // how a pool ends at its caps (plugins#349)
+  const capped = (l) => accountCapOf(p, l.user) || windowCapsOf(p, l.user);
+  if (p && (ls.some(capped) || p.capStop || p.capCareful)) {
+    const box = el("div", "pool-ends");
+    for (const [k, say, tip] of [["capStop", "Stop when every account is at its cap", "On: once every account in use is at its cap, requests get 429 instead of going to the fallbacks."],
+      ["capCareful", "Check usage again near a cap", "On: an account within 5 points of its cap has its usage read again if older than 15s (any account: 5m) before a request, waiting up to 10s; one whose usage can't be read is held."]]) {
+      const [l, c] = tick(t(say), !!p[k]);
+      l.title = t(tip);
+      c.onchange = () => accountAction("provider/" + k.toLowerCase(), { id: p.id, [k]: c.checked }, t("Saved"));
+      box.append(l);
+    }
+    const open = ls.filter((l) => !unusable(l) && !l.paused && (l.active || l.on) && !capped(l)).map((l) => l.user);
+    if (open.length) box.append(el("span", "note", t("No cap on {users}: used to 100% of each window", { users: open.join(", ") })));
+    list.append(box);
+  }
   const pv = a.agent === "codex" ? providers || {} : {};
   if (pv.codexDaemon) list.append(renderCodexDaemon(pv.codexDaemon));
   if (pv.codexApp) list.append(renderCodexApp(pv.codexApp));
   if (signing?.agent === a.agent) list.append(renderSigning(sub));
   else {
-    const add = el("button", "acc add");
-    const ic = el("span", "dot");
-    ic.append(svg(PLUS, 10, 1.8));
-    add.append(ic, el("span", "n", t(sub.single && sub.plugin ? "Sign in again" : sub.single ? "Sign in to another {name} account" : "Add another {name} account", { name: sub.name })));
-    add.onclick = () => startSignIn(a.agent);
-    list.append(add);
+    list.append(addRow(t(sub.single && sub.plugin ? "Sign in again" : sub.single ? "Sign in to another {name} account" : "Add another {name} account", { name: sub.name }), () => startSignIn(a.agent)));
     if (sub.importable) {
-      const imp = el("button", "acc add");
-      const ic2 = el("span", "dot");
-      ic2.append(svg(PLUS, 10, 1.8));
-      imp.append(ic2, el("span", "n", importSay(a.agent).row || t("Import accounts from a file…")));
+      const imp = addRow(importSay(a.agent).row || t("Import accounts from a file…"), () => startImport(a.agent));
       imp.title = importSay(a.agent).from;
-      imp.onclick = () => startImport(a.agent);
       list.append(imp);
     }
   }
@@ -13573,6 +13573,14 @@ function accountNameButton(p, user) {
   }
   wrap.append(hideAccounts.eye(user));
   return wrap;
+}
+// an account or key list's last row, adding one
+function addRow(say, go) {
+  const b = el("button", "acc add"), ic = el("span", "dot");
+  ic.append(svg(PLUS, 10, 1.8));
+  b.append(ic, el("span", "n", say));
+  b.onclick = go;
+  return b;
 }
 function accountCapOf(p, user) { return p?.accountCaps?.[String(user).toLowerCase()] || 0; }
 // A window's own cap (provider.AccountWindowCaps, willz on Discord): a
@@ -14433,12 +14441,7 @@ function renderKeyAccounts(p) {
     list.append(box);
     queueMicrotask(() => key.focus());
   } else {
-    const add = el("button", "acc add");
-    const ic = el("span", "dot");
-    ic.append(svg(PLUS, 10, 1.8));
-    add.append(ic, el("span", "n", t("Add another key")));
-    add.onclick = () => { addingKey = { id: p.id, name: "", key: "" }; renderProviders(); };
-    list.append(add);
+    list.append(addRow(t("Add another key"), () => { addingKey = { id: p.id, name: "", key: "" }; renderProviders(); }));
   }
   // rows folded away keep their places when the shown ones are dragged
   if (fold.folded) list.accountOrder = p.keyList.map((k) => k.id);
