@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -155,13 +156,25 @@ func TestCursorEditorCopiedOncePerChange(t *testing.T) {
 // copied a ~10.6 GB state.vscdb to the temp folder each time Cursor had
 // written since the last copy. The store is read where it is, as one more
 // of the readers Cursor's own processes are: nothing is copied, a row
-// Cursor writes is read at once, and Cursor can still write after it.
+// Cursor writes is read at once, and Cursor can still write after it. A
+// copy an older magpie left is still swept.
 func TestCursorEditorReadInPlaceWhileLive(t *testing.T) {
 	cursorSetup(t)
 	cursorTempDir(t)
 	minWas := cursorSnapMin
 	cursorSnapMin = 0
 	t.Cleanup(func() { cursorSnapMin = minWas })
+
+	// a copy an older magpie left, from before reads were in place
+	left := filepath.Join(os.TempDir(), "magpie-cursor-left")
+	if err := os.MkdirAll(left, 0700); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * cursorSnapStale)
+	if err := os.Chtimes(left, old, old); err != nil {
+		t.Fatal(err)
+	}
+	cursorSnaps.sweep = sync.Once{}
 
 	put, ids, at := cursorLiveEditor(t)
 	copies, inPlace := cursorCopies.Load(), cursorInPlace.Load()

@@ -54,6 +54,8 @@ func openCursorEditorDB(path string) *sql.DB {
 // live -wal there is no Cursor running to share it with, and it is opened
 // as a chat's store is (openCursorStore).
 func openCursorEditorStore(path string) (*sql.DB, func(), error) {
+	// copies an older magpie left, which no copy made here would sweep
+	cursorSnaps.sweep.Do(sweepCursorSnaps)
 	wal, werr := os.Stat(path + "-wal")
 	_, serr := os.Stat(path + "-shm")
 	if !cursorReadInPlace || werr != nil || wal.Size() == 0 || serr != nil {
