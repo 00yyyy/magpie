@@ -52,6 +52,70 @@ type backend struct {
 	path     func() string
 	classify func([]string) ([][]redact.Found, error)
 	heldBack func() error
+	// chunk is how long a chunk of joined texts grows, and a long text's
+	// piece is at most: chunkSize where 0. A request that stops waiting
+	// leaves the model finishing the chunk it is on, so a model that reads
+	// on the CPU has short ones.
+	chunk int
+	// sent are the texts and pieces a Bounded request went without the
+	// model's reading (by hash): what a request sent unread before.
+	sent sentSet
+}
+
+func (b *backend) size() int {
+	if b.chunk > 0 {
+		return b.chunk
+	}
+	return chunkSize
+}
+
+// Bounded is ctx for a request that doesn't wait for every text it has
+// to be read: masking's default, which waits a short while and lets the
+// rules mask alone after it (internal/masking). Of what a request before
+// it already went without the model's reading (an agent's history,
+// resumed or never read, sent again on every turn), it reads backlogCap
+// at most, after what is new, and answers with nothing found for the
+// rest. Before, each request read such a history oldest first on every
+// core, and a long one kept the CPU busy for as long as requests came
+// while what was new in them waited behind it (xinvxueyuan and shensmart
+// on Discord, 10-28: 13 cores of a 32-core Linux box).
+func Bounded(ctx context.Context) context.Context { return context.WithValue(ctx, boundedKey{}, true) }
+
+type boundedKey struct{}
+
+// IsBounded says whether ctx is Bounded.
+func IsBounded(ctx context.Context) bool { v, _ := ctx.Value(boundedKey{}).(bool); return v }
+
+// backlogCap is how much of what was sent unread before a Bounded request
+// reads: one chunk of AstrLink Guard's, so a backlog is still read, a
+// little a request.
+const backlogCap = guardChunk
+
+// sentSet is a set of hashes, the newest sentMax or more of those added.
+type sentSet struct {
+	mu        sync.Mutex
+	cur, prev map[[32]byte]bool
+}
+
+const sentMax = 50000
+
+// mark adds ks, and says which were in the set already.
+func (s *sentSet) mark(ks [][32]byte) map[[32]byte]bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	was := map[[32]byte]bool{}
+	for _, k := range ks {
+		if s.cur[k] || s.prev[k] {
+			was[k] = true
+		}
+	}
+	for _, k := range ks {
+		if s.cur == nil || len(s.cur) >= sentMax {
+			s.prev, s.cur = s.cur, map[[32]byte]bool{}
+		}
+		s.cur[k] = true
+	}
+	return was
 }
 
 // pf is Privacy Filter's, run by pf-serve.
@@ -63,6 +127,17 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 	out, miss := b.known(texts, nil)
 	if len(miss) == 0 {
 		return out, nil
+	}
+	// what a Bounded request goes without the model's reading, or with
+	// it, is sent now: what was sent unread before is the backlog
+	lenient := IsBounded(ctx)
+	var backlog map[[32]byte]bool
+	if lenient {
+		var ks [][32]byte
+		for _, u := range b.missing(texts, miss, nil) {
+			ks = append(ks, sha256.Sum256([]byte(u)))
+		}
+		backlog = b.sent.mark(ks)
 	}
 	if ctx.Err() != nil {
 		return b.partial(ctx, texts)
@@ -91,6 +166,7 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 		// read again: the requests before this one in turn had most of a
 		// history in common with it, and asked already
 		out, miss := b.known(texts, got)
+		read := 0 // of the backlog
 		for c := 0; len(miss) > 0; c++ {
 			if c > 0 {
 				// a caller that stopped waiting leaves the chunks after
@@ -116,12 +192,27 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				done <- result{nil, err}
 				return
 			}
-			chunks, parts := join(b.missing(texts, miss, got))
+			units := b.missing(texts, miss, got)
+			if lenient {
+				// the backlog past its cap is left: its texts go with
+				// what the rules find
+				var keep []string
+				for _, u := range units {
+					if !backlog[sha256.Sum256([]byte(u))] || read < backlogCap {
+						keep = append(keep, u)
+					}
+				}
+				if len(keep) == 0 {
+					break
+				}
+				units = keep
+			}
+			chunks, parts := joinAt(units, b.size())
 			if len(chunks) == 0 {
 				done <- result{nil, fmt.Errorf("the local masking model has no text to read for %d texts", len(miss))}
 				return
 			}
-			read, err := b.classify(chunks[:1])
+			found, err := b.classify(chunks[:1])
 			if err != nil {
 				done <- result{nil, err}
 				return
@@ -129,7 +220,10 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 			b.cache.mu.Lock()
 			for _, p := range parts[0] {
 				k := sha256.Sum256([]byte(p.s))
-				got[k] = within(read[0], p.at, p.at+len(p.s))
+				if backlog[k] {
+					read += len(p.s)
+				}
+				got[k] = within(found[0], p.at, p.at+len(p.s))
 				b.cache.put(k, got[k])
 			}
 			b.cache.mu.Unlock()
@@ -235,7 +329,7 @@ func (b *backend) known(texts []string, got map[[32]byte][]redact.Found) (out []
 			out[i] = fs
 			continue
 		}
-		ps := pieces(t)
+		ps := cut(t, b.size())
 		if len(ps) < 2 {
 			miss = append(miss, i)
 			continue
@@ -273,8 +367,13 @@ func fits(fs []redact.Found, t string) bool {
 	return true
 }
 
-// chunkSize is how long a chunk of joined texts grows.
+// chunkSize is how long a chunk of joined texts grows, by default
+// (Privacy Filter's: backend.chunk).
 const chunkSize = 12 << 10
+
+// guardChunk is AstrLink Guard's: about 1,200 tokens, three of its
+// windows, a second on 4 cores where 12 KB took several.
+const guardChunk = 4 << 10
 
 // pieceSize is how long a piece of a long text is at most, and
 // pieceOverlap how much of the piece before it each piece after the first
@@ -297,20 +396,23 @@ type span struct{ at, end int }
 // rune's start; the next begins after a line's end in the first half of
 // the overlap, else after a space there, else at a rune's start. A text of pieceSize
 // or less is one piece; an empty one none.
-func pieces(t string) []span {
+func pieces(t string) []span { return cut(t, pieceSize) }
+
+// cut is pieces, of at most size each.
+func cut(t string, size int) []span {
 	if t == "" {
 		return nil
 	}
-	if len(t) <= pieceSize {
+	if len(t) <= size {
 		return []span{{0, len(t)}}
 	}
 	var out []span
 	for at := 0; ; {
-		end := at + pieceSize
+		end := at + size
 		if end >= len(t) {
 			return append(out, span{at, len(t)})
 		}
-		half := at + pieceSize/2
+		half := at + size/2
 		if i := strings.LastIndexByte(t[half:end], '\n'); i >= 0 {
 			end = half + i + 1
 		} else if i := strings.LastIndexByte(t[half:end], ' '); i >= 0 {
@@ -366,15 +468,19 @@ func merge(fs []redact.Found) []redact.Found {
 }
 
 // missing are what of texts[miss] neither got nor the cache has, to ask
-// the model about: the texts whole, and the long ones' pieces, each once.
+// the model about: the texts whole, and the long ones' pieces, each once,
+// the last text's first: an agent's history is oldest first, and what is
+// new in a request is at its end.
 func (b *backend) missing(texts []string, miss []int, got map[[32]byte][]redact.Found) []string {
 	var out []string
 	seen := map[[32]byte]bool{}
 	b.cache.mu.Lock()
 	defer b.cache.mu.Unlock()
-	for _, i := range miss {
-		t := texts[i]
-		for _, p := range pieces(t) {
+	for j := len(miss) - 1; j >= 0; j-- {
+		t := texts[miss[j]]
+		ps := cut(t, b.size())
+		for q := len(ps) - 1; q >= 0; q-- {
+			p := ps[q]
 			s := t[p.at:p.end]
 			k := sha256.Sum256([]byte(s))
 			if seen[k] {
@@ -412,7 +518,10 @@ type part struct {
 }
 
 // join puts texts into chunks, and says where in which each is.
-func join(texts []string) (chunks []string, parts [][]part) {
+func join(texts []string) (chunks []string, parts [][]part) { return joinAt(texts, chunkSize) }
+
+// joinAt is join, its chunks up to size.
+func joinAt(texts []string, size int) (chunks []string, parts [][]part) {
 	cur, curParts := "", []part(nil)
 	flush := func() {
 		if curParts != nil {
@@ -421,7 +530,7 @@ func join(texts []string) (chunks []string, parts [][]part) {
 		}
 	}
 	for _, t := range texts {
-		if curParts != nil && len(cur)+len(sep)+len(t) > chunkSize {
+		if curParts != nil && len(cur)+len(sep)+len(t) > size {
 			flush()
 		}
 		if curParts != nil {

@@ -321,3 +321,30 @@ func TestStrictModelStalledIsTheRulesForWhatItDidntRead(t *testing.T) {
 		t.Fatalf("what the model read wasn't masked with its find, or the rest not by the rules: %s", b)
 	}
 }
+
+// bounds is a model that says whether it was asked Bounded.
+type bounds struct {
+	fake
+	got *bool
+}
+
+func (b bounds) Find(ctx context.Context, texts []string) ([][]redact.Found, error) {
+	*b.got = pii.IsBounded(ctx)
+	return make([][]redact.Found, len(texts)), nil
+}
+
+// On by default the model is asked Bounded: what a request adds first,
+// and of a history it went without reading, a little a request
+// (xinvxueyuan and shensmart on Discord, 10-28). Turned on by the user,
+// it reads all of it.
+func TestDefaultModelIsBounded(t *testing.T) {
+	var got bool
+	model(context.Background(), bounds{fake{installed: true}, &got}, 0.8, false)([]string{"a"})
+	if !got {
+		t.Fatal("on by default, the model wasn't asked Bounded")
+	}
+	model(context.Background(), bounds{fake{installed: true}, &got}, 0.8, true)([]string{"a"})
+	if got {
+		t.Fatal("turned on by the user, the model was asked Bounded")
+	}
+}

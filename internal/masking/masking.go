@@ -182,6 +182,10 @@ func model(ctx context.Context, m pii.Model, min float64, strict bool) redact.Mo
 	}
 	by := time.Now().Add(wait)
 	return func(texts []string) [][]redact.Found {
+		if !strict {
+			// what is new in it first, a backlog a little a request
+			ctx = pii.Bounded(ctx)
+		}
 		ctx, cancel := context.WithDeadline(ctx, by)
 		defer cancel()
 		got, err := find(ctx, m, texts)
