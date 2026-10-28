@@ -301,8 +301,10 @@ func keyValue(v string) bool {
 // time.
 func keyAt(s string, a, b int) bool {
 	v := s[a:b]
-	if pathValue(v) {
-		return false // where a key is kept: 私钥 ~/.ssh/id_ed25519 (fieldvalue.go)
+	if pathValue(v) || versionValue(v) {
+		// where a key is kept: 私钥 ~/.ssh/id_ed25519, or a release's
+		// version: token 是 0.15.0-rc1 (fieldvalue.go)
+		return false
 	}
 	if keyValue(v) {
 		return true
