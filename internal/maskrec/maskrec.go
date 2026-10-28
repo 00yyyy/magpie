@@ -46,6 +46,10 @@ const (
 	dayForm    = "2006-01-02"
 )
 
+// SentMax is the longest request a record keeps as sent; a longer one is
+// kept as nothing, so a caller need not copy it.
+const SentMax = sentMax
+
 // Value is one value a request had masked, as often as it had it.
 type Value struct {
 	Placeholder string `json:"p"`

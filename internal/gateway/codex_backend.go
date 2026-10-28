@@ -951,7 +951,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	var tools *toolScan // whether the reply calls a tool, for a turn's end
 	if rest != "/responses" {
 		// no route of its own (a compaction, a memory): recorded alone
-		noteMasked(r, "chat", maskedHits, string(body), 0, "openai", modelOf(body))
+		noteMasked(r, "chat", maskedHits, sentOf(maskedHits, body), 0, "openai", modelOf(body))
 	}
 	if rest == "/responses" {
 		imageProvider := ""
@@ -972,7 +972,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		tools = scan
 		tr = s.trace.beginFor(r, Route{turn: turn, dirOf: dirOf(provider.Responses, body), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, callerOf(r).agent), imageProvider: imageProvider, TitleLink: link, Time: start, Agent: callerOf(r).agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Effort: effort, Tier: bodyTier(provider.Responses, body), Provider: "openai", Subagent: subagentPickOf(r),
 			Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Effort: effort, Start: start}}})
-		if m := noteMasked(r, "chat", maskedHits, string(body), tr.ID, "openai", model); m != nil {
+		if m := noteMasked(r, "chat", maskedHits, sentOf(maskedHits, body), tr.ID, "openai", model); m != nil {
 			s.trace.update(tr, func(t *Route) { t.Masked = m })
 		}
 		promptRead := s.inspectPrompt(tr, provider.Responses, body, body, false)

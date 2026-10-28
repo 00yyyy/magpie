@@ -123,3 +123,21 @@ func TestSnipSharedByNearValues(t *testing.T) {
 		t.Fatalf("snips = %q", got)
 	}
 }
+
+// A body is copied for a masked record only when the record keeps it:
+// with nothing masked there is no record, and one over maskrec.SentMax
+// keeps none of it. Converting every chat body to a string for it copied
+// a 45 MiB Codex turn whole on each request (#4004).
+func TestMaskedBodyCopiedOnlyWhenKept(t *testing.T) {
+	body := []byte(strings.Repeat("x", 2<<20))
+	if n := allocated(func() { _ = sentOf(maskHits{}, body) }); n > 64<<10 {
+		t.Fatalf("nothing masked: %d bytes allocated for a %d byte body", n, len(body))
+	}
+	if got := sentOf(maskHits{n: 1}, body); got != string(body) {
+		t.Fatal("a masked body under SentMax isn't kept as sent")
+	}
+	big := []byte(strings.Repeat("y", maskrec.SentMax+1))
+	if n := allocated(func() { _ = sentOf(maskHits{n: 1}, big) }); n > 64<<10 {
+		t.Fatalf("over SentMax: %d bytes allocated", n)
+	}
+}
