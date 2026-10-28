@@ -125,7 +125,10 @@ let usageRead = 0;
 async function loadUsage(asked) {
   renderUsageTab();
   renderUsageEvery(); // the refresh's tooltip says what it reads on this tab
-  if (asked) quotasOpened();
+  // only the Overview shows the allowances: the page opened on another
+  // tab asks no vendor, nor reads their history, beside its own read and
+  // the page's way in (#4064)
+  if (asked && usageTab === "usage") quotasOpened();
   if (usageTab === "sessions") return loadSessions();
   if (usageTab === "requests") return loadLedger();
   if (usageTab === "context") return window.loadContext?.();
