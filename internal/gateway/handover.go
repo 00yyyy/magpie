@@ -206,7 +206,9 @@ func (s *Server) drainFor() time.Duration {
 var unreadWait = 5 * time.Second
 
 // unreadConns are the connections the gateway took whose next request it
-// hasn't read yet: new ones, and kept-alive ones idle between requests.
+// hasn't read yet: new ones, and kept-alive ones idle between requests or
+// still answering one (net/http notes one idle after its reply is out, so
+// an agent can have read the reply and sent its next request first).
 // Shutdown closes such a connection unanswered, and a request the agent
 // sent on it just then is cut ("connection reset", #3451), so a
 // handover's end waits for them first: each one's next request is
@@ -215,29 +217,30 @@ var unreadWait = 5 * time.Second
 type unreadConns struct {
 	mu    sync.Mutex
 	conns map[net.Conn]bool
-	idle  map[net.Conn]bool
+	kept  map[net.Conn]bool // answering a request, or idle after one
 	// stopped: the server takes none from here on, its Serve returned
 	stopped bool
 }
 
-// note is the server's ConnState: a connection is unread from StateNew,
-// and from StateIdle, to its next state, whichever it is.
+// note is the server's ConnState: a connection is unread from StateNew
+// to its next state, and kept from StateActive until it is closed or
+// hijacked.
 func (u *unreadConns) note(c net.Conn, state http.ConnState) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	delete(u.conns, c)
-	delete(u.idle, c)
+	delete(u.kept, c)
 	switch state {
 	case http.StateNew:
 		if u.conns == nil {
 			u.conns = map[net.Conn]bool{}
 		}
 		u.conns[c] = true
-	case http.StateIdle:
-		if u.idle == nil {
-			u.idle = map[net.Conn]bool{}
+	case http.StateActive, http.StateIdle:
+		if u.kept == nil {
+			u.kept = map[net.Conn]bool{}
 		}
-		u.idle[c] = true
+		u.kept[c] = true
 	}
 }
 
@@ -258,7 +261,7 @@ func (u *unreadConns) stop() {
 func (u *unreadConns) wait(ctx context.Context) {
 	for deadline := time.Now().Add(unreadWait); ; time.Sleep(10 * time.Millisecond) {
 		u.mu.Lock()
-		done := u.stopped && len(u.conns) == 0 && len(u.idle) == 0
+		done := u.stopped && len(u.conns) == 0 && len(u.kept) == 0
 		u.mu.Unlock()
 		if done || time.Now().After(deadline) || ctx.Err() != nil {
 			return

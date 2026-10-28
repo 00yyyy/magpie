@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -410,6 +411,126 @@ func TestHandedOffGatewayAnswersAKeptAliveConnection(t *testing.T) {
 			r, b, err := ask()
 			if err != nil || r.StatusCode != 200 || !strings.Contains(b, "quick") {
 				t.Fatalf("a request on a kept-alive connection, sent once the end began: %q %v", b, err)
+			}
+			if !r.Close {
+				t.Fatal("the reply kept the connection alive, for a request the old one's end would cut")
+			}
+			select {
+			case err := <-oldDone:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("the old one never ended once its connections were answered")
+			}
+			if n := len(old.Recent()); n != 2 {
+				t.Fatalf("the old one answered %d of its 2 requests", n)
+			}
+		})
+	}
+}
+
+// lagListener's connections, once told to, sit a second after the write
+// that ends the next chunked reply: as a busy machine can hold the
+// goroutine that wrote a reply, its agent reading it, before net/http
+// notes the connection idle.
+type lagListener struct {
+	net.Listener
+	lag atomic.Bool
+}
+
+func (l *lagListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &lagConn{Conn: c, lag: &l.lag}, nil
+}
+
+type lagConn struct {
+	net.Conn
+	lag *atomic.Bool
+}
+
+func (c *lagConn) Write(b []byte) (int, error) {
+	n, err := c.Conn.Write(b)
+	if bytes.HasSuffix(b, []byte("0\r\n\r\n")) && c.lag.Swap(false) {
+		time.Sleep(time.Second)
+	}
+	return n, err
+}
+
+// A kept-alive connection whose reply its agent has read, which net/http
+// notes idle only once the end has begun (the goroutine that wrote it was
+// held), has its next request answered there too: the end waited for new
+// and idle connections only, so Shutdown closed this one as idle when
+// net/http noted it, and the agent's next request was cut (ubuntu CI,
+// 56602426d). So too for a `make dev` backend.
+func TestHandedOffGatewayAnswersAConnectionStillAnswering(t *testing.T) {
+	for _, dev := range []bool{false, true} {
+		name := "handed off"
+		if dev {
+			name = "make dev"
+		}
+		t.Run(name, func(t *testing.T) {
+			was := Handover
+			Handover = dev
+			defer func() { Handover = was }()
+			quickChat(t)
+			tcp, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			addr := tcp.Addr().String()
+			t.Setenv("MAGPIE_ADDR", addr)
+			lagged := &lagListener{Listener: tcp}
+			Inherit(lagged, func() {})
+			old := New()
+			stopOld, oldDone := listening(t, old)
+			t.Cleanup(stopOld)
+
+			c, err := net.Dial("tcp", addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Close()
+			rd := bufio.NewReader(c)
+			ask := func() (*http.Response, string, error) {
+				chatOn(t, c, addr)
+				c.SetReadDeadline(time.Now().Add(10 * time.Second))
+				r, err := http.ReadResponse(rd, nil)
+				if err != nil {
+					return nil, "", err
+				}
+				defer r.Body.Close()
+				b, err := io.ReadAll(r.Body)
+				return r, string(b), err
+			}
+			lagged.lag.Store(true)
+			if r, b, err := ask(); err != nil || r.StatusCode != 200 || r.Close {
+				t.Fatalf("the request before the handover: %v %q %v", r, b, err)
+			}
+			// read, while the gateway's goroutine still sits in its write
+			if !dev {
+				f, err := tcp.(*net.TCPListener).File()
+				if err != nil {
+					t.Fatal(err)
+				}
+				ln, err := net.FileListener(f) // the new one's copy, keeping the socket open
+				f.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer ln.Close()
+				old.HandOff()
+			}
+			stopOld()
+			// past the write's second, net/http has noted it idle: inside
+			// the 5s the end waits (unreadWait)
+			time.Sleep(1500 * time.Millisecond)
+			r, b, err := ask()
+			if err != nil || r.StatusCode != 200 || !strings.Contains(b, "quick") {
+				t.Fatalf("a request on a connection still answering as the end began: %q %v", b, err)
 			}
 			if !r.Close {
 				t.Fatal("the reply kept the connection alive, for a request the old one's end would cut")
