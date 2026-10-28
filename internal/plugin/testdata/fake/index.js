@@ -275,6 +275,13 @@ export const FakePlugin = async ({ client }) => ({
             const a = await getAuth()
             const fs = await import("node:fs")
             fs.appendFileSync(process.env.FAKE_CHECKIN, (a.key ?? (a.uid ? a.accountId + "/" + a.uid : a.accountId) ?? "") + "\n")
+            // $FAKE_CHECKIN_URL: the vendor's check-in, asked at
+            // <url>/<key>; a press it doesn't answer 200 failed (#2777)
+            if (process.env.FAKE_CHECKIN_URL) {
+              const r = await fetch(process.env.FAKE_CHECKIN_URL + "/" + a.key)
+              if (!r.ok) throw new Error(`FakeCo's check-in answered ${r.status}`)
+              return { outcome: "claimed", credit: 1 }
+            }
             switch (a.key) {
               case "ck-claim":
                 return { outcome: "claimed", credit: 50, streak: 3 }
