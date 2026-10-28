@@ -1117,6 +1117,14 @@ reload; DeepSeek's keys fold too, four keys aren't folded, a subscription's
 accounts aren't keys, an unread key leaves the sum out, and at 440px nothing
 is cut; in Chromium and WebKit, English and Chinese.
 
+`usage-shared-balance.test.cjs` checks that keys found to read one account's
+balance (`sharedBalance`, mimi on Discord: a site's three keys each showed
+the account's $8.39 and its curve) show it once: one row with one balance
+and one curve, "+2 keys" beside the key with the keys on hover, and the
+head's sum counting the account once; a key with the same amount not found
+to be that account's, and another provider's keys, stay their own rows, and
+at 440px nothing is cut; in Chromium and WebKit, English and Chinese.
+
 `upstream-status.test.cjs` checks the vendors' status pages on the
 Providers and Usage pages (#971): with Anthropic's page saying its API is
 down, the Anthropic provider's row and the Claude subscription's row and

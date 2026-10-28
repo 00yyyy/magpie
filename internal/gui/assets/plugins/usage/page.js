@@ -350,6 +350,35 @@ function renderCosts() {
   if (sessions) renderSessions();
   document.dispatchEvent(new Event("magpie-costs-changed"));
 }
+// sharedBalances (keyCards): the keys magpie found to read one account's
+// balance (sharedBalance, the first one's name) as one card, the first's,
+// with the keys it stands for (sharedKeys): mimi on Discord, a site's three
+// keys each showing the account's $8.39 and its curve. Keys that read
+// their own, or another account's, stay each its own.
+function sharedBalances(list) {
+  if (!list.some((q) => q.sharedBalance)) return list;
+  const same = (a, b) => a.provider === b.provider && (a.from || "") === (b.from || "") && a.sharedBalance === b.sharedBalance;
+  const out = [];
+  for (const q of list) {
+    if (!q.sharedBalance) { out.push(q); continue; }
+    const of = list.filter((x) => x.sharedBalance && same(x, q));
+    if (of[0] !== q) continue;
+    out.push(of.length > 1 ? { ...q, sharedKeys: of.map((x) => x.user) } : q);
+  }
+  return out;
+}
+// beside such a card's key, how many more keys its balance is for, and on
+// hover which
+function sharedKeysNote(q) {
+  const n = q.sharedKeys.length - 1;
+  const s = el("span", "quota-of quota-shared", t(n === 1 ? "+1 key" : "+{n} keys", { n }));
+  s.title = t("One balance for the account these keys share: {keys}", { keys: q.sharedKeys.join(", ") });
+  return s;
+}
+// the keys' sum's tooltip: an account several keys share counted once
+function keysSumTip(subs) {
+  return subs.some((q) => q.sharedKeys) ? t("The balances added up, each account's once") : t("The {n} keys' balances added up", { n: subs.length });
+}
 // quotaWho is how an account's card names it (#1515): by the name the user
 // gave it, the account beside it, else the account; and the key plan it
 // stands in for (seat) when that isn't already its name. A team's GLM
@@ -375,6 +404,7 @@ function quotaWho(q) {
     s.title = t("The same seat as the key plan {name}, shown once, on this account's card", { name: q.seat });
     out.push(s);
   } else if (q.seat) out[0].title += "\n" + t("The same seat as the key plan {name}, shown once, on this account's card", { name: q.seat });
+  if (q.sharedKeys) out.push(sharedKeysNote(q));
   if (q.user || q.alias) out.push(hideAccounts.eye(q.user || q.alias));
   return out;
 }

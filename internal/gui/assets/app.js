@@ -15536,7 +15536,7 @@ function renderQuotas(lazy) {
     const sum = keys && keysSum(subs);
     if (sum) {
       const s = el("span", "quota-sum", t("{sum} in all", { sum }));
-      s.title = t("The {n} keys' balances added up", { n: subs.length });
+      s.title = keysSumTip(subs);
       head.append(s);
     }
     // many accounts (Linx on X: twenty-odd on one plugin, 顶成擎天柱):
@@ -15812,6 +15812,7 @@ function byUsageOrder(list) {
 // balance's card id goes with it (balanceCard), for a menu bar cell
 // that opens it.
 function keyCards(list) {
+  list = sharedBalances(list);
   const plan = (q) => q.windows?.length && !q.balance && !q.error;
   const bal = (q) => q.balance && !q.windows?.length && !q.plan;
   const merged = new Map(), gone = new Set();
