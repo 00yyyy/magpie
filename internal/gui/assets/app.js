@@ -4272,7 +4272,7 @@ function updatePath(p) {
 async function renderUpdateBadge() {
   const b = $("#update"), label = b.querySelector("span");
   const u = await api(updatePath("update")).catch(() => null);
-  if (u) updateLast = u;
+  if (u) updateLast = u, u.at = Date.now();
   // pulling: a click is downloading it again, and restarts once it's in
   const pulling = !!u && !!b.dataset.pulling && ["checking", "downloading", "ready"].includes(u.state);
   if (b.dataset.pulling && !pulling) {
@@ -22486,25 +22486,23 @@ function editRedactRule(r, n, row) {
 }
 
 // renderUpdate fills in the version row: whether a newer magpie is out.
-// The app checks and downloads on its own, so usually the row just offers
-// the restart; a check can also be asked for. That check leaves the button
-// where it is, dimmed, and a second click does nothing. A read still out
-// from before the answer is not drawn over it. A row drawn again draws the
-// last state at once, but in a check (#3469), and reads while a check or a
-// download is under way.
+// A check asked for dims its button, ignores a second click, and isn't
+// drawn over by an older read. A row drawn again draws a state read in the
+// last 30s at once (#3469); an older one may be stale, so it waits (#4057).
 let updateBusy = false, updateLast = null;
 const updateSeq = new WeakMap(), seqOf = (r) => updateSeq.get(r) || 0;
 
 async function renderUpdate(r, u) {
   const seq = seqOf(r);
   if (u == null) {
-    const early = !updateBusy && updateLast && !r.querySelector(".sub");
+    const bare = !r.querySelector(".sub"), early = bare && !updateBusy && Date.now() - updateLast?.at < 3e4;
     if (early) renderUpdate(r, updateLast);
+    else if (bare) r.querySelector(".who").append(el("div", "sub", "\u00a0"));
     u = await api(updatePath("update?fresh=1")).catch(() => null);
     if (!u || !r.isConnected || seqOf(r) !== seq) return;
     if (early) updateSeq.set(r, seq + 1); // stops timers
   } else if (!r.isConnected) return;
-  updateLast = u;
+  updateLast = u, u.at ??= Date.now();
   const who = r.querySelector(".who"), val = r.querySelector(".val");
   const sub = who.querySelector(".sub") || who.appendChild(el("div", "sub"));
   sub.title = "";
