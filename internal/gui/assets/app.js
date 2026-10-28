@@ -3,6 +3,11 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const params = new URLSearchParams(location.search);
 const mode = params.get("mode") || "window";
+// kept: magpie.<k> in localStorage, read as JSON; d when it holds none, or
+// not d's kind, or can't be read. keep writes one, for this time only if
+// it can't be kept
+function kept(k, d) { try { const v = JSON.parse(localStorage.getItem("magpie." + k)); return v && typeof v == typeof d && Array.isArray(v) == Array.isArray(d) ? v : d; } catch { return d; } }
+function keep(k, v) { try { localStorage.setItem("magpie." + k, JSON.stringify(v)); } catch {} }
 // The panel loads Wails for ExecJS readiness, but stays attached to the tray.
 // On Linux it is dragged by its header like the window: a Wayland window
 // can't be put by the icon, so KWin places it, and since it has no KWin
@@ -84,11 +89,8 @@ let importing = null; // a magpie://import link waiting for a yes: { provider, e
 let importingApps = null; // the Import from other apps dialog: { sources, picks }
 let providerDiscovery = []; // only opaque fingerprints and app names, never credentials
 let discoveryAt = 0, discoveryRun = 0, discoveryPending = false;
-let discoveryIgnored = new Set();
-try { discoveryIgnored = new Set(JSON.parse(localStorage.getItem("magpie.discoveryIgnored") || "[]")); } catch {}
-let savedModelFavorites = [];
-try { savedModelFavorites = JSON.parse(localStorage.getItem("magpie.modelFavorites") || "[]"); } catch {}
-const modelFavorites = new Set(Array.isArray(savedModelFavorites) ? savedModelFavorites : []);
+let discoveryIgnored = new Set(kept("discoveryIgnored", []));
+const modelFavorites = new Set(kept("modelFavorites", []));
 // A model through magpie is starred as its catalog id, which is the same in
 // every agent; the agent's own models by their value. Stars kept by value
 // before still count.
@@ -5433,7 +5435,7 @@ function renderList() {
         ev.stopPropagation();
         const key = favoriteKey(o);
         if (isFavorite(o)) { modelFavorites.delete(key); modelFavorites.delete(o.value); } else modelFavorites.add(key);
-        localStorage.setItem("magpie.modelFavorites", JSON.stringify([...modelFavorites]));
+        keep("modelFavorites", [...modelFavorites]);
         filter();
       };
       li.append(star);
@@ -10186,9 +10188,9 @@ $("#reviewProviderDiscovery").onclick = () => openImportApps(new Set(providerDis
 $("#dismissProviderDiscovery").onclick = () => {
   // Merge other windows' choices before saving, without forgetting candidates
   // that happen to be unavailable or already imported during this scan.
-  try { for (const id of JSON.parse(localStorage.getItem("magpie.discoveryIgnored") || "[]")) discoveryIgnored.add(id); } catch {}
+  for (const id of kept("discoveryIgnored", [])) discoveryIgnored.add(id);
   for (const c of providerDiscovery) discoveryIgnored.add(c.fingerprint);
-  try { localStorage.setItem("magpie.discoveryIgnored", JSON.stringify([...discoveryIgnored])); } catch {}
+  keep("discoveryIgnored", [...discoveryIgnored]);
   renderProviderDiscovery();
 };
 window.addEventListener("storage", (e) => {
@@ -15313,10 +15315,7 @@ let quotas = null;
 let quotasAt = 0; // when they came in
 // the panel's last read, drawn at once, turning, until the read lands (#3160)
 let quotasKept = false;
-if (mode === "panel") try {
-  const kept = JSON.parse(localStorage.getItem("magpie.panelQuotas"));
-  if (Array.isArray(kept)) { quotas = kept; quotasKept = true; }
-} catch {}
+if (mode === "panel") { const none = [], k = kept("panelQuotas", none); if (k !== none) { quotas = k; quotasKept = true; } }
 let quotaHist = []; // each account's windows over time, for the curves (#651)
 // quotasOpened: the reader opened what shows the allowances (the Usage
 // page's Overview, the tray panel's Allowances tab, a menu bar cell, either
@@ -15659,16 +15658,11 @@ function renderQuotas(lazy) {
 // (magpie.usageAcctsOpened), so that its fold puts those back in brief,
 // and only those (WuSix on Discord: with both accounts in brief, 展开 opened
 // both and 收起其余账号 folded only the second).
-let usageOpen = new Set(), usageAccts = {}, usageByMore = new Set();
-try { usageOpen = new Set(JSON.parse(localStorage.getItem("magpie.usageOpen") || "[]")); } catch {}
-try { usageAccts = JSON.parse(localStorage.getItem("magpie.usageAccounts") || "{}") || {}; } catch {}
-try { usageByMore = new Set(JSON.parse(localStorage.getItem("magpie.usageAcctsOpened") || "[]")); } catch {}
+let usageOpen, usageAccts, usageByMore;
+const usageFolds = () => { usageOpen = new Set(kept("usageOpen", [])); usageAccts = kept("usageAccounts", {}); usageByMore = new Set(kept("usageAcctsOpened", [])); };
+usageFolds();
 addEventListener("storage", (e) => {
-  if (e.key !== "magpie.usageOpen" && e.key !== "magpie.usageAccounts" && e.key !== "magpie.usageAcctsOpened") return;
-  try { usageOpen = new Set(JSON.parse(localStorage.getItem("magpie.usageOpen") || "[]")); } catch {}
-  try { usageAccts = JSON.parse(localStorage.getItem("magpie.usageAccounts") || "{}") || {}; } catch {}
-  try { usageByMore = new Set(JSON.parse(localStorage.getItem("magpie.usageAcctsOpened") || "[]")); } catch {}
-  renderQuotas();
+  if (["magpie.usageOpen", "magpie.usageAccounts", "magpie.usageAcctsOpened"].includes(e.key)) { usageFolds(); renderQuotas(); }
 });
 function usageShown(subs) {
   let pick = subs[0];
@@ -15690,8 +15684,8 @@ function setUsageAccts(list, open, byMore = false) {
     usageAccts[usageAcctKey(q)] = typeof open === "function" ? open(q) : open;
     if (byMore) usageByMore.add(usageAcctKey(q)); else usageByMore.delete(usageAcctKey(q));
   }
-  try { localStorage.setItem("magpie.usageAccounts", JSON.stringify(usageAccts)); } catch {}
-  try { localStorage.setItem("magpie.usageAcctsOpened", JSON.stringify([...usageByMore])); } catch {}
+  keep("usageAccounts", usageAccts);
+  keep("usageAcctsOpened", [...usageByMore]);
   renderQuotas();
 }
 // A card of a provider's keys shows the first three, and any in full,
@@ -15699,8 +15693,7 @@ function setUsageAccts(list, open, byMore = false) {
 // place; remembered by provider (magpie.usageKeysAll). One more alone
 // isn't folded: the button would take the room the key does.
 const KEYS_SHOWN = 3;
-let usageKeysAll = new Set();
-try { usageKeysAll = new Set(JSON.parse(localStorage.getItem("magpie.usageKeysAll") || "[]")); } catch {}
+const usageKeysAll = new Set(kept("usageKeysAll", []));
 function keysFolded(subs) {
   if (usageKeysAll.has(subs[0].provider)) return new Set();
   const shown = new Set(subs.filter((q) => usageAcctOpen(q, subs)));
@@ -15714,7 +15707,7 @@ function keysMore(provider, n) {
   b.setAttribute("aria-expanded", String(!n));
   b.onclick = () => {
     if (n) usageKeysAll.add(provider); else usageKeysAll.delete(provider);
-    try { localStorage.setItem("magpie.usageKeysAll", JSON.stringify([...usageKeysAll])); } catch {}
+    keep("usageKeysAll", [...usageKeysAll]);
     renderQuotas();
     backToReader($("#view-usage"));
   };
@@ -15726,8 +15719,7 @@ function keysMore(provider, n) {
 // provider (magpie.usageAcctsAll). The tray panel leaves the ones in brief
 // out already.
 const ACCTS_FOLD = 8, ACCTS_SHOWN = 5;
-let usageAcctsAll = new Set();
-try { usageAcctsAll = new Set(JSON.parse(localStorage.getItem("magpie.usageAcctsAll") || "[]")); } catch {}
+const usageAcctsAll = new Set(kept("usageAcctsAll", []));
 function acctsFolded(subs) {
   if (usageAcctsAll.has(subs[0].provider)) return new Set();
   const shown = new Set(subs.slice(0, ACCTS_SHOWN));
@@ -15744,7 +15736,7 @@ function acctsMore(provider, n) {
   b.setAttribute("aria-expanded", String(!n));
   b.onclick = () => {
     if (n) usageAcctsAll.add(provider); else usageAcctsAll.delete(provider);
-    try { localStorage.setItem("magpie.usageAcctsAll", JSON.stringify([...usageAcctsAll])); } catch {}
+    keep("usageAcctsAll", [...usageAcctsAll]);
     renderQuotas();
     backToReader($("#view-usage"));
   };
@@ -17345,7 +17337,7 @@ function panelQuotaCard(q) {
     fold.onclick = (e) => {
       e.stopPropagation();
       if (folded) panelOptsFolded.delete(id); else panelOptsFolded.add(id);
-      try { localStorage.setItem("magpie.panelOptsFolded", JSON.stringify([...panelOptsFolded])); } catch {}
+      keep("panelOptsFolded", [...panelOptsFolded]);
       renderPanelQuota();
       $(`#panelQuota .pq-card[data-card="${CSS.escape(id)}"] .pq-opts-fold`)?.focus({ preventScroll: true });
     };
@@ -17372,8 +17364,7 @@ function panelQuotaCard(q) {
   return card;
 }
 // panelOptsFolded: the panel cards, by id, whose options are folded.
-let panelOptsFolded = new Set();
-try { panelOptsFolded = new Set(JSON.parse(localStorage.getItem("magpie.panelOptsFolded") || "[]")); } catch {}
+const panelOptsFolded = new Set(kept("panelOptsFolded", []));
 
 // resetsWords: a Codex account's rate-limit resets, "↺ 2 resets · until
 // Sat 22:30", the date only when one of them runs out. A GLM Coding team
