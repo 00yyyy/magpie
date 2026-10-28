@@ -24360,6 +24360,8 @@ window.noteAccounts = noteAccounts;
   // itself watched, so it can't set itself off again
   const OBS = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["title"] };
   const SKIP = new Set(["SCRIPT", "STYLE", "OPTION", "TEXTAREA"]);
+  // a demo's made-up text (data-no-pii) is never hidden (outloudvi)
+  const KEEP = "[data-no-pii]";
   // Usage's Sessions and Context are read from the agents' own logs, which
   // name no account (their answers aren't looked through for one, see api):
   // a project, a session or a prompt there that has an account's name in
@@ -24386,7 +24388,7 @@ window.noteAccounts = noteAccounts;
       const all = finder(), reOf = (e) => e?.closest(NAMELESS) ? EMAIL : all;
       const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), found = [];
       for (let n; (n = walk.nextNode());) {
-        if (n.data.length < 2 || SKIP.has(n.parentElement?.tagName) || n.parentElement?.closest(".pii")) continue;
+        if (n.data.length < 2 || SKIP.has(n.parentElement?.tagName) || n.parentElement?.closest(".pii, " + KEEP)) continue;
         const re = reOf(n.parentElement);
         re.lastIndex = 0;
         if (re.test(n.data)) found.push(n);
@@ -24410,7 +24412,7 @@ window.noteAccounts = noteAccounts;
       }
       for (const e of [root, ...root.querySelectorAll("[title]")]) {
         // one masked already reads as an account too, its stars and all
-        if (!e.dataset || "piiTitle" in e.dataset || !e.title) continue;
+        if (!e.dataset || "piiTitle" in e.dataset || !e.title || e.closest(KEEP)) continue;
         let out = "", last = 0;
         for (const m of hits(e.title, reOf(e), e)) {
           out += e.title.slice(last, m.index) + m[0].replace(m[0].includes("@") ? /[^@.]/g : /./gu, "•"); // a tooltip can't blur
