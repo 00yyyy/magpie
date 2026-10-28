@@ -130,18 +130,15 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			// a subagent on one of Codex's own models, put on the model
 			// set for Codex's subagents, a ChatGPT account's in magpie;
 			// the request on the model asked for when it can't be, the
-			// trace saying why (codexUpstreamOn, serve). One with nothing
-			// set for it, a subagent's or a memory call,
-			// on the model its conversation is on when that is one of
-			// magpie's, not on the ChatGPT sign-in (codexFollowTo)
+			// trace saying why (codexUpstreamOn, serve). With none set,
+			// it stays on the model it was named (codexFollowTo). A
+			// memory call with nothing set for it goes on the model its
+			// conversation is on when that is one of magpie's, not on
+			// the ChatGPT sign-in (codexFollowTo)
 			if !strings.Contains(model, "/") {
 				pick := codexSubagentPick(r, agentOf(r), kind, model, body)
-				if to := s.codexFollowTo(r, agentOf(r), kind, model, body); to != "" && pick == nil {
-					if usage.PurposeOf(kind) == "kind:collab_spawn" {
-						pick = &SubagentPick{Asked: model, To: to}
-					} else {
-						body, model = withModel(body, to), to
-					}
+				if to := s.codexFollowTo(r, agentOf(r), kind, model, body); to != "" {
+					body, model = withModel(body, to), to
 				}
 				r = withSubagentPick(r, pick)
 				if pick.Moved() {
