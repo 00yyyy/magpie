@@ -257,3 +257,55 @@ func TestEditedTextReadsItsPiecesAgainOnly(t *testing.T) {
 		}
 	}
 }
+
+// wangwu25685333 on X (10-29): an address on 400 lines alike was found by
+// the model on every line, sure (0.90) on some and unsure (0.50) on most,
+// so masking left most as they were. A value found sure once in a text is
+// sure wherever it is found again there, in one piece or many; one never
+// found sure stays unsure, and a short one (a house number) isn't looked
+// for.
+func TestValueFoundSureOnceIsSureThroughoutItsText(t *testing.T) {
+	addr, other, short := "1600 Amphitheatre Parkway", "Elm Street 42", "1600"
+	r := newReader(t, guardChunk)
+	r.classify = func(texts []string) ([][]redact.Found, error) {
+		out := make([][]redact.Found, len(texts))
+		for i, s := range texts {
+			for v, score := range map[string]float64{addr: .5, other: .5, short: .5} {
+				for at := 0; ; {
+					j := strings.Index(s[at:], v)
+					if j < 0 {
+						break
+					}
+					f := redact.Found{Start: at + j, End: at + j + len(v), Label: "private_address", Score: score}
+					if v == addr && at == 0 && strings.HasPrefix(s, "sure ") || v == short && at == 0 {
+						f.Score = .9 // the model's first in each read
+					}
+					if v != short || f.Score == .9 {
+						out[i] = append(out[i], f)
+					}
+					at += j + len(v)
+				}
+			}
+		}
+		return out, nil
+	}
+	line := "Please ship it to " + addr + ", or to " + other + " by Friday. Room 1600.\n"
+	for _, text := range []string{"sure " + strings.Repeat(line, 3), "sure " + strings.Repeat(line, 400)} {
+		got, err := r.find(context.Background(), []string{text})
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := map[string]int{}
+		for _, f := range got[0] {
+			v := text[f.Start:f.End]
+			if v == addr && f.Score != .9 || v == other && f.Score != .5 {
+				t.Fatalf("%d bytes: %q at %d scored %.2f", len(text), v, f.Start, f.Score)
+			}
+			n[v]++
+		}
+		lines := strings.Count(text, "\n")
+		if n[addr] != lines || n[other] != lines || n[short] > len(cut(text, guardChunk)) {
+			t.Fatalf("%d bytes, %d lines: found %v", len(text), lines, n)
+		}
+	}
+}

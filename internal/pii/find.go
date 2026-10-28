@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -240,7 +241,7 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				if backlog[k] {
 					read += len(p.s)
 				}
-				got[k] = within(found[0], p.at, p.at+len(p.s))
+				got[k] = spread(p.s, within(found[0], p.at, p.at+len(p.s)))
 				b.cache.put(k, got[k])
 			}
 			b.cache.mu.Unlock()
@@ -449,7 +450,7 @@ func (b *backend) known(texts []string, got map[[32]byte][]redact.Found) (out []
 			miss = append(miss, i)
 			continue
 		}
-		out[i] = merge(all)
+		out[i] = spread(t, merge(all))
 		b.cache.put(sha256.Sum256([]byte(t)), out[i])
 	}
 	return out, miss
@@ -571,6 +572,57 @@ func landmark(t string, from, to int, c byte) int {
 // landmarkLen is how much of the text before a place landmark hashes:
 // enough that two lines alike but for a word or a number differ.
 const landmarkLen = 48
+
+// spread is fs with each value they found (minSpread bytes or more) found
+// wherever else it is in t, as sure as the surest of its finds there, and
+// of its label. The model is less sure of a value the more often it has
+// read it in a text: an address on 400 lines alike was found on every
+// line, at 0.90 on some and 0.50 on most, and masking (0.8) left 346 of
+// them as they were (wangwu25685333 on X, 10-29: "a few of 400",
+// thought to be where the text was cut; the 400 were left alike with the
+// pieces cut elsewhere). A value found but not sure anywhere stays as
+// unsure as it was.
+func spread(t string, fs []redact.Found) []redact.Found {
+	type find struct {
+		label string
+		score float64
+	}
+	best := map[string]find{}
+	for _, f := range fs {
+		v := t[f.Start:f.End]
+		if len(v) < minSpread {
+			continue
+		}
+		if b, ok := best[v]; !ok || f.Score > b.score {
+			best[v] = find{f.Label, f.Score}
+		}
+	}
+	if len(best) == 0 {
+		return fs
+	}
+	out := slices.Clone(fs)
+	more := false
+	for v, b := range best {
+		for at := 0; ; {
+			i := strings.Index(t[at:], v)
+			if i < 0 {
+				break
+			}
+			out = append(out, redact.Found{Start: at + i, End: at + i + len(v), Label: b.label, Score: b.score})
+			more = true
+			at += i + len(v)
+		}
+	}
+	if !more {
+		return fs
+	}
+	return merge(out)
+}
+
+// minSpread is the shortest value spread finds again: what redact matches
+// a value known before at (minKnown), so a short number or a name's
+// first word isn't found all over a text.
+const minSpread = 8
 
 // merge puts a long text's spans from its pieces together: spans that
 // overlap (one found in two pieces, or cut by a piece's end in one and
