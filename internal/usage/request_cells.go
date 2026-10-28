@@ -85,6 +85,8 @@ type chunkPart struct {
 	cells []pageCell
 	kept  int       // rows the filter keeps
 	first time.Time // the oldest charted row's time
+	// days are the heatmap's sums of the chunk, oldest first (heatOf)
+	days []Day
 }
 
 // partKey is what a chunk's cells are of besides the chunk: the page's

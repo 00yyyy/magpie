@@ -535,6 +535,9 @@ type requestIndex struct {
 	// names a call changes (meta), and read without the lock, since a
 	// part is never written once made
 	parts map[partKey]map[uint64]*chunkPart
+	// heatParts are the heatmap's sums of each chunk (heatOf), kept as
+	// parts are but apart, so that the heatmap's never push a page's out
+	heatParts map[partKey]map[uint64]*chunkPart
 	// pairs are the last pairing of each of a few periods (pairMemo),
 	// kept as parts are
 	pairs map[Period]*pairMemo
@@ -767,10 +770,12 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 		close(fl.done)
 	}()
 	// a rolling window's start moves with now, so its cells are never the
-	// same twice; the heatmap is added up on its own
+	// same twice; the heatmap's sums are kept apart (heatParts)
 	var cache *partCache
 	pk := partKey{p: p, f: f, since: p.Since(now), until: p.Until(now), loc: now.Location()}
-	if p.Last() == 0 && p != heatmapPeriod {
+	if p == heatmapPeriod {
+		cache = &partCache{old: idx.heatParts[pk], next: map[uint64]*chunkPart{}}
+	} else if p.Last() == 0 {
 		cache = &partCache{old: idx.parts[pk], next: map[uint64]*chunkPart{}, pairs: idx.pairs[p]}
 	}
 	shared := idx
@@ -794,7 +799,12 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 		return page
 	}
 	shared.noteBuilt(b)
-	if cache != nil {
+	if p == heatmapPeriod {
+		if shared.heatParts == nil || len(shared.heatParts) >= partSets && shared.heatParts[pk] == nil {
+			shared.heatParts = map[partKey]map[uint64]*chunkPart{}
+		}
+		shared.heatParts[pk] = cache.next
+	} else if cache != nil {
 		if shared.parts == nil || len(shared.parts) >= partSets && shared.parts[pk] == nil {
 			shared.parts = map[partKey]map[uint64]*chunkPart{}
 		}
@@ -1061,6 +1071,7 @@ func (idx *requestIndex) adopt(st requestState) {
 		idx.pages = nil
 		idx.heats = nil
 		idx.parts = nil
+		idx.heatParts = nil
 		idx.pairs = nil
 		idx.key = ""
 	}
@@ -1593,19 +1604,6 @@ func pairRows(p Period, now time.Time, gateways, chunks, others []*rowChunk, ide
 	return &pairedRows{all: all, skip: skip, matched: matched, pairs: pairs, compactions: compactions, since: since, until: until}
 }
 
-// visit calls fn with each row of the period that no other one stands for.
-func (ps *pairedRows) visit(fn func(timedRef, *Row)) {
-	var rows chunkRows
-	defer rows.release()
-	// one row for the visit, written over for each: fn is not known
-	// here, so a row of each would be an allocation of its own, and fn
-	// keeps none of them
-	var r Row
-	for _, c := range ps.all {
-		ps.visitChunk(&rows, c, &r, fn)
-	}
-}
-
 // visitActors is visit of the rows of the chunks a Codex thread is known
 // for some row of (codexActors), the only rows Codex's effort adds up: it
 // decoded every session file's chunk, ~90 MB of what eight Sessions polls
@@ -1651,7 +1649,7 @@ func buildRequestBlocksOf(p Period, f Filter, offset, limit int, now time.Time, 
 func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, gateways, chunks, others []*rowChunk, names map[string]string, identities map[string]sessions.CodexIdentity, cache *partCache) RequestPage {
 	since := p.Since(now)
 	var ps *pairedRows
-	if cache != nil {
+	if cache != nil && p != heatmapPeriod {
 		ps, cache.pairsNext = pairRowsMemo(p, now, gateways, chunks, others, identities, cache.pairs)
 	} else {
 		ps = pairRows(p, now, gateways, chunks, others, identities)
@@ -1662,13 +1660,7 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 	// The heatmap's page is only its days, all HeatmapOf reads: over its
 	// year the groups, shares and series below took seconds a call (#3493).
 	if p == heatmapPeriod {
-		out.Heat = heatmapOf(since, now, func(add func(Row)) {
-			ps.visit(func(_ timedRef, r *Row) {
-				if chartFilter.keepsRow(r) {
-					add(*r)
-				}
-			})
-		})
+		out.Heat = ps.heatOf(since, now, chartFilter, cache, identities)
 		return out
 	}
 	agents, providers := map[string]bool{}, map[string]bool{}
