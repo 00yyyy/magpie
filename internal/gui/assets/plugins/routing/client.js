@@ -5698,6 +5698,14 @@ function routingPage(part) {
     const list = el("div", "fbl");
     const addBtn = el("button", "rt-gadd");
     addBtn.append(svg(PLUS, 11, 1.8), el("span", "", t("Add a model")));
+    // By weight, the named members put heaviest first once (Norcleeh on
+    // Discord): the order is the fallback's, so it is written, not a mode.
+    // Shown only while it would move something; equal weights keep theirs
+    const sortBtn = el("button", "text rt-wsort", t("Sort by weight"));
+    sortBtn.type = "button";
+    sortBtn.title = t("Heaviest first. When a model fails, the next one in this order takes over");
+    const byWeight = () => d.members.slice(0, named()).map((id, i) => [id, i]).sort(([a, i], [b, j]) => Math.max(d.weights[b] || 0, 1) - Math.max(d.weights[a] || 0, 1) || i - j).map(([id]) => id);
+    sortBtn.onclick = () => { d.members.splice(0, named(), ...byWeight()); draw(); };
     // moveMember puts the member at `from` at `to` among those named — a
     // pattern's follow them, in the catalog's order — and keeps the
     // keyboard on its handle when it was there
@@ -5887,6 +5895,7 @@ function routingPage(part) {
         list.append(row);
       });
       addBtn.querySelector("span").textContent = t(d.members.length ? "Add another model" : "Add a model");
+      sortBtn.hidden = d.routing !== "weight" || byWeight().every((id, i) => d.members[i] === id);
     };
     // the picker stays open for as many models as are wanted, each ticked
     // once in, and says which other groups a model is in already (PAMI on
@@ -5921,7 +5930,9 @@ function routingPage(part) {
         draw(); drawRules();
       } }, addBtn, ev);
     };
-    box.append(list, addBtn);
+    const adds = el("div", "rt-madds");
+    adds.append(addBtn, sortBtn);
+    box.append(list, adds);
     draw();
     const mw = el("div");
     mw.append(box, el("div", "hint", t("The first answers for what the model can do. In order, they are tried top first.")));
