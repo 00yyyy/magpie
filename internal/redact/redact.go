@@ -157,12 +157,12 @@ var rules = append([]rule{
 	{kind: "PASSWORD", re: regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s:@/?#"'<>]*:([^\s@/?#"'<>]{3,})@`), markers: []string{"://"}, ok: notAVariable},
 	// password = …, API_KEY: "…", as .env files and configs have them
 	{kind: "SECRET", re: regexp.MustCompile(`(?i)[A-Za-z0-9_.-]*(?:` + secretNames.pattern() + `)[A-Za-z0-9_.-]*` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{8,})`),
-		markers: secretNames.markers(), ok: secretValue, at: notCode},
+		markers: secretNames.markers(), ok: secretValue, at: fieldAt},
 	// a field called key and nothing more, as providers.json has one: "key":
 	// "oc_sk_…" (#195). Only a long value of letters and digits both, since
 	// code calls anything a key: a map's "key": "value", sort_key, keyboard.
 	{kind: "SECRET", re: regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9_.-])` + quote + `key` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{16,})`),
-		markers: fieldNames{{"key", "key"}}.markers(), ok: secretValue, at: notCode},
+		markers: fieldNames{{"key", "key"}}.markers(), ok: secretValue, at: fieldAt},
 	// a password after its name in Chinese, Japanese or Korean, as people
 	// write one into a message: 密码：786kih, 密碼是 hunter2, パスワード: … .
 	// Unlike password = in a config, nothing in code is called 密码, so
@@ -292,6 +292,9 @@ func keyValue(v string) bool {
 // time.
 func keyAt(s string, a, b int) bool {
 	v := s[a:b]
+	if pathValue(v) {
+		return false // where a key is kept: 私钥 ~/.ssh/id_ed25519 (fieldvalue.go)
+	}
 	if keyValue(v) {
 		return true
 	}
