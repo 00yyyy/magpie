@@ -405,6 +405,9 @@ type Call struct {
 	// bodies above, which is all the Recent-calls page keeps
 	wholeIn, wholeOut       []byte
 	wholeInCut, wholeOutCut bool
+	// maskIn: the request went as written (unredactedRoute) with masking
+	// on, so an observer is handed its body masked here, not as it went
+	maskIn *laterMasked
 }
 
 // Server is the gateway.
@@ -1701,12 +1704,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// secrets go as placeholders and come back as they were; the log has
 	// what the vendor saw and said. plain is the body as the agent wrote
 	// it, for a request that goes only where the user said it may go
-	// unmasked (unredactedRoute)
 	// unmasked (unredactedRoute). The body is masked once the route is
-	// known (below): one that goes as written isn't masked at all, where
-	// masking it took up to minutes for nothing (#3973)
+	// known (below): one that goes as written isn't masked on its way,
+	// where masking it took up to minutes for nothing (#3973)
 	plain := body
-	var masked []byte // the masked body, when plain goes instead
 	var maskedHits maskHits
 	maskDone, sentWhole := false, false
 	unmask := func() {}
@@ -1941,10 +1942,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	g, ms, isGroup := provider.FindGroup(asked)
 	g = g.Live() // a manual group's rules wait
 	// a model on this machine or the local network that the user set to
-	// go unmasked gets the request as written (lc on Discord), and it is
-	// masked only for an observer or the archive, which may keep it
-	// elsewhere
-	if sentWhole = unredactedRoute(p, isGroup, ms) && !bodiesKeptAway(); !sentWhole {
+	// go unmasked gets the request as written (lc on Discord), and it
+	// isn't masked on its way, the request archive on or not: the archive
+	// keeps it as it went, its secrets taken out as every archived body's
+	// are, and an observer that wants the bodies is handed a copy masked
+	// when it is first handed one, after the try (maskIn, #3973)
+	if sentWhole = unredactedRoute(p, isGroup, ms); !sentWhole {
 		rw, b, done, hits, err := redactedHits(r.Context(), capture.ResponseWriter, body)
 		if err != nil { // fails closed: never sent unmasked
 			log.Printf("gateway: %v", err)
@@ -1953,16 +1956,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			return
 		}
 		capture.ResponseWriter, body, unmask, maskedHits = rw, b, done, hits
-		if unredactedRoute(p, isGroup, ms) {
-			masked, body = body, plain
-		}
+	} else if usage.ObservedBodies() != usage.NoBodies {
+		call.maskIn = &laterMasked{ctx: context.WithoutCancel(r.Context()), plain: body}
 	}
 	maskDone = true
-	if masked != nil {
-		logBody(masked)
-	} else {
-		logBody(body)
-	}
+	logBody(body)
 	// a gateway key held to some models (#882) is refused another, or a
 	// group it doesn't name with one it may not use in it
 	keyWho, keyHeld := keyHolds(r)
@@ -2037,9 +2035,6 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// text (#1613)
 			if b, ok := withoutSealedMessages(body); ok {
 				body = b
-				if masked != nil {
-					masked, _ = withoutSealedMessages(masked)
-				}
 				sealedTask = hasSealedAgentMessage(body)
 			}
 		}
@@ -2463,7 +2458,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// request went as written. The record names the provider and model
 	// the last try went to, not the group's first member, which a
 	// failover may never have reached
-	if masked == nil && !sentWhole {
+	if !sentWhole {
 		m, done := noteMaskedUntil(r, "chat", maskedHits, string(body), tr.ID, p.ID, call.Model)
 		if m != nil {
 			s.trace.update(tr, func(t *Route) { t.Masked = m })
@@ -2472,11 +2467,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	}
 	// the card's text is the masked body, even where the request went
 	// unmasked: masked by PromptText when it went whole (#3973)
-	textBody := body
-	if masked != nil {
-		textBody = masked
-	}
-	promptRead := s.inspectPrompt(tr, from, body, textBody, sentWhole)
+	promptRead := s.inspectPrompt(tr, from, body, body, sentWhole)
 	var lastTried provider.Provider // the last try's, for its model's context window and the usage's endpoint
 	var skipped []string
 	sent := ""       // the reasoning the last try's model was asked for
@@ -3210,7 +3201,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 				// what this account answered is its refusal, the reply
 				// captured so far being no one's yet
-				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody())}
+				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody()), maskIn: call.maskIn}
 				if call.wholeIn != nil {
 					refusal.wholeIn, refusal.wholeOut = call.wholeIn, hw.errBody()
 				}
@@ -3254,7 +3245,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 				// what this account answered is its refusal, the reply
 				// captured so far being no one's yet
-				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody())}
+				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody()), maskIn: call.maskIn}
 				if call.wholeIn != nil {
 					refusal.wholeIn, refusal.wholeOut = call.wholeIn, hw.errBody()
 				}
