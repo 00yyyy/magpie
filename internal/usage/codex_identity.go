@@ -193,7 +193,10 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 		gatewayOK, localOK bool
 		compaction         *bool
 	}
-	picks := map[string]*pick{}
+	// the picks are one slice the map points into: a pick each was ~300 MB
+	// of what two minutes of polls allocated while an agent worked (#2278)
+	picks := map[string]int32{}
+	var slab []pick
 	var rows chunkRows
 	defer rows.release()
 	for _, chunk := range gateways {
@@ -203,11 +206,13 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 				continue
 			}
 			row := open.row(i)
-			p := picks[row.ResponseID]
-			if p == nil {
-				p = &pick{}
-				picks[row.ResponseID] = p
+			k, ok := picks[row.ResponseID]
+			if !ok {
+				k = int32(len(slab))
+				picks[row.ResponseID] = k
+				slab = append(slab, pick{})
 			}
+			p := &slab[k]
 			p.gateways++
 			p.gateway = rowRef{chunk, i}
 			p.gatewayOK = isCodexRow(row) && !row.IsRejected() && row.Source != SourceReported
@@ -236,10 +241,11 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 			if duplicateLocal[ref] {
 				continue
 			}
-			p := picks[open.Strings[open.text(&open.Rows[i], rowResponseID)]]
-			if p == nil {
+			k, ok := picks[open.Strings[open.text(&open.Rows[i], rowResponseID)]]
+			if !ok {
 				continue
 			}
+			p := &slab[k]
 			row := open.row(i)
 			p.locals++
 			p.local = ref
@@ -248,8 +254,8 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 		}
 	}
 	pairs, compactions := map[rowRef]rowRef{}, map[rowRef]*bool{}
-	for _, p := range picks {
-		if p.gateways == 1 && p.locals == 1 && p.gatewayOK && p.localOK {
+	for i := range slab {
+		if p := &slab[i]; p.gateways == 1 && p.locals == 1 && p.gatewayOK && p.localOK {
 			pairs[p.gateway] = p.local
 			compactions[p.local] = p.compaction
 		}
