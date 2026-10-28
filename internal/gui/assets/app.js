@@ -9227,7 +9227,7 @@ function drawEditor(p, presetID) {
       if (p.move) ed.append(...renderMove(p));
     } else {
       const acct = el("div", "acct");
-      acct.append(icon(a.agentIcon), el("span", "n", a.user), hideAccounts.eye(a.user), el("span", "plan", accountPlan(a)));
+      acct.append(icon(a.agentIcon), el("span", "n", a.user), hideAccounts.eye(a.user, p.id), el("span", "plan", accountPlan(a)));
       ed.append(...field(t("Account"), acct, t("{agent}'s sign-in, read from its own files. Sign out there and this provider goes away.", { agent: a.agentName })));
     }
     ed.append(...field(t("Models"), renderModels(p), ""));
@@ -13595,7 +13595,7 @@ function accountNameButton(p, user) {
     s.title = t("The same seat as the key plan {name}, shown once, on this account's card", { name: seat });
     wrap.append(s);
   }
-  wrap.append(hideAccounts.eye(user));
+  wrap.append(hideAccounts.eye(user, p.id));
   return wrap;
 }
 // an account or key list's last row, adding one
@@ -17237,7 +17237,7 @@ function panelQuotaCard(q) {
   // and its eye while Hide accounts is on, as on the Usage page (yogurt36)
   const who = el("span", "pq-who");
   who.append(el("span", "pq-user", q.alias || q.user || q.name));
-  if ((q.user || q.alias) && window.hideAccounts) who.append(hideAccounts.eye(q.user || q.alias));
+  if ((q.user || q.alias) && window.hideAccounts) who.append(hideAccounts.eye(q.user || q.alias, q.provider));
   card.append(who);
   card.title = [q.name, q.alias, q.user, q.seat && q.seat !== q.alias && "≡ " + q.seat, q.plan, q.until ? planTerm(q) : "", q.balance && t("Balance") + " " + q.balance].filter(Boolean).join(" · ");
   if (q.error) {
@@ -24324,7 +24324,9 @@ window.noteAccounts = noteAccounts;
     const ns = names(), key = ns.join("\n");
     if (key !== findKey) {
       findKey = key;
-      find = ns.length ? new RegExp(EMAIL.source + "|" + ns.map(esc).join("|"), "g") : EMAIL;
+      // whole, not its address: Kiro's "a@b.c (GitHub)" (outloudvi)
+      const at = (n) => n.includes("@");
+      find = ns.length ? new RegExp([...ns.filter(at).map(esc), EMAIL.source, ...ns.filter((n) => !at(n)).map(esc)].join("|"), "g") : EMAIL;
     }
     return find;
   }
@@ -24336,12 +24338,19 @@ window.noteAccounts = noteAccounts;
   const joined = (s, i, step) => WORD.test(s[i] || "") || (JOIN.test(s[i] || "") && WORD.test(s[i + step] || ""));
   // accounts shown while the rest stay hidden (yogurt36), this page's
   // only: the window and the tray panel are pages of their own, so one
-  // shown in either never shows in the other
-  const shown = new Set(), low = (x) => String(x).trim().toLowerCase();
-  function* hits(s, re) {
+  // shown in either never shows in the other; kept by provider
+  // (outloudvi: one address on two services showed on both)
+  const shown = new Set(), low = (x) => String(x).trim().toLowerCase(), sk = (p, k) => p + "\n" + low(k);
+  // by an eye, its provider's only; elsewhere, shown under any
+  const isShown = (k, e) => {
+    if (!shown.size) return false;
+    for (; e && e !== document.body; e = e.parentElement) { const b = e.querySelector?.(":scope>.acct-eye,:scope>*>.acct-eye"); if (b?._p) return shown.has(sk(b._p, k)); }
+    return [...shown].some((s) => s.endsWith("\n" + low(k)));
+  };
+  function* hits(s, re, at) {
     re.lastIndex = 0; // matchAll starts where the pattern's last test ended
     for (const m of s.matchAll(re)) {
-      if (shown.has(low(m[0]))) continue;
+      if (isShown(m[0], at)) continue;
       const name = !m[0].includes("@"), end = m.index + m[0].length;
       if (name && ((WORD.test(m[0][0]) && joined(s, m.index - 1, -1)) || (WORD.test(m[0].at(-1)) && joined(s, end, 1)))) continue;
       yield m;
@@ -24385,7 +24394,7 @@ window.noteAccounts = noteAccounts;
       for (const n of found) {
         const bits = [];
         let last = 0;
-        for (const m of hits(n.data, reOf(n.parentElement))) {
+        for (const m of hits(n.data, reOf(n.parentElement), n.parentElement)) {
           if (m.index > last) bits.push(n.data.slice(last, m.index));
           const s = el("span", "pii", dots(m[0]));
           s.dataset.raw = m[0];
@@ -24403,7 +24412,7 @@ window.noteAccounts = noteAccounts;
         // one masked already reads as an account too, its stars and all
         if (!e.dataset || "piiTitle" in e.dataset || !e.title) continue;
         let out = "", last = 0;
-        for (const m of hits(e.title, reOf(e))) {
+        for (const m of hits(e.title, reOf(e), e)) {
           out += e.title.slice(last, m.index) + m[0].replace(m[0].includes("@") ? /[^@.]/g : /./gu, "•"); // a tooltip can't blur
           last = m.index + m[0].length;
         }
@@ -24464,14 +24473,14 @@ window.noteAccounts = noteAccounts;
     if (!keep) { chosen = on ? "1" : "0"; try { localStorage.setItem("magpie.maskEmails", chosen); } catch {} }
     for (const set of pages) set(on);
   }
-  const kin = (u) => {
+  const kin = (u, pid) => {
     const k = [u];
-    for (const p of providers?.providers || []) for (const [a, n] of Object.entries(p.accountNames || {})) if (a === low(u) || n === u) k.push(a, n);
-    for (const q of quotas || []) if (q.user === u || q.alias === u) k.push(q.user, q.alias);
-    return k.filter(Boolean).map(low);
+    for (const p of providers?.providers || []) if (p.id === pid) for (const [a, n] of Object.entries(p.accountNames || {})) if (a === low(u) || n === u) k.push(a, n);
+    for (const q of quotas || []) if (q.provider === pid && (q.user === u || q.alias === u)) k.push(q.user, q.alias);
+    return k.filter(Boolean).map((x) => sk(pid, x));
   };
   const paint = (b) => {
-    const on = shown.has(low(b._u));
+    const on = shown.has(sk(b._p, b._u));
     b.setAttribute("aria-pressed", on);
     b.title = t(on ? "Hide this account" : "Show this account");
     b.querySelector("path").setAttribute("d", on ? EYE : EYE_OFF);
@@ -24482,17 +24491,18 @@ window.noteAccounts = noteAccounts;
   };
   // Settings' Privacy has the same switch, and the settings follow
   window.hideAccounts = {
-    eye: (u) => {
+    eye: (u, p) => {
       const b = el("button", "acct-eye");
       b._u = u;
+      b._p = p;
       b.setAttribute("aria-label", t("Show this account"));
       b.append(svg("", 13, 2));
       b.firstChild.setAttribute("viewBox", "0 0 24 24");
       paint(b);
       b.onclick = (e) => {
         e.stopPropagation();
-        const on = !shown.has(low(u));
-        for (const k of kin(u)) on ? shown.add(k) : shown.delete(k);
+        const on = !shown.has(sk(p, u));
+        for (const k of kin(u, p)) on ? shown.add(k) : shown.delete(k);
         redraw();
       };
       return b;

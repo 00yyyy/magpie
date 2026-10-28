@@ -405,7 +405,7 @@ function quotaWho(q) {
     out.push(s);
   } else if (q.seat) out[0].title += "\n" + t("The same seat as the key plan {name}, shown once, on this account's card", { name: q.seat });
   if (q.sharedKeys) out.push(sharedKeysNote(q));
-  if (q.user || q.alias) out.push(hideAccounts.eye(q.user || q.alias));
+  if (q.user || q.alias) out.push(hideAccounts.eye(q.user || q.alias, q.provider));
   return out;
 }
 
