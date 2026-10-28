@@ -5986,7 +5986,7 @@ async function loadProvidersNow() {
   if (!providers.providers.length && editing === null && !providers.fileError) adding = true;
   if (providersPage(view)) {
     magpie.call(view, "render", was);
-    backToReader($("#view-" + view));
+    backAfterLoad($("#view-" + view));
   } else renderProviders();
   renderArchive();
   providersWhileFetching();
@@ -22871,6 +22871,25 @@ function puttingBack(v, from, h) {
   if (mine.length < 3 && !(run?.v === v && run.d === d && at - run.at < 1000)) return;
   run = { v, d, at }; putBack = putBack.filter((p) => !mine.includes(p)); flings();
   for (const p of mine) v.scrollTop += p.by;
+  if (!deaf) { deaf = true; try { localStorage.setItem("magpie.unheardWheels", "1"); } catch {} }
+}
+// Seen once (a run given back, kept for the next start), a scroll at rest
+// waits a moment before it is put back, and one more the same way within
+// 80ms (a frame or few: code's two scrolls come further apart), nothing laid
+// out anew between them, is the reader's: a gesture
+// starts without three put back first. What it puts back is kept, as at
+// once, for a wheel heard late to give back (issennknight, macOS 13: Routing and
+// Usage shook as they were opened and wheeled)
+let deaf = false;
+try { deaf = localStorage.getItem("magpie.unheardWheels") === "1"; } catch {}
+const waits = new WeakMap();
+function waitsBack(v) {
+  const d = Math.sign(Math.round(v.scrollTop - (readerAt.get(v) ?? 0))), w = waits.get(v);
+  if (!d) return false;
+  clearTimeout(w?.t); waits.delete(v);
+  if (w?.d === d && w.h === v.scrollHeight && performance.now() - w.at < 80) { readerWay.set(v, d); readerLeaves(v); flings(); return true; }
+  waits.set(v, { d, h: v.scrollHeight, at: performance.now(), t: setTimeout(() => { waits.delete(v); if (performance.now() >= purposeUntil && held?.v !== v) { const from = v.scrollTop; backToReader(v); puttingBack(v, from, false); } }, 120) });
+  return true;
 }
 // Given back is what was put back after the reader's input was made (its
 // timeStamp is when it was made, not when the page was told) and went the
@@ -23018,6 +23037,15 @@ function backToReader(v) {
     const r = f.getBoundingClientRect(), b = v.getBoundingClientRect();
     if (r.bottom > b.bottom || r.top < b.top) { readerScrolls(1000); guardUntil = purposeUntil; f.scrollIntoView({ block: "nearest" }); }
   }
+}
+// A load come in puts the view back where the reader left it, a redraw
+// having pulled it up; under a wheel the place last heard is late, and a
+// move the way the reader goes (readerWay) is theirs (gui-shell.md)
+const readerWay = new WeakMap();
+function backAfterLoad(v) {
+  const at = readerAt.get(v);
+  if (!v.hidden && (barDrag === v || performance.now() < purposeUntil && at != null && readerWay.get(v) === Math.sign(Math.round(v.scrollTop - at)))) readerLeaves(v);
+  else backToReader(v);
 }
 // Where an element is on the screen in its view. What's held is the element
 // clicked or, once it's gone or hidden (drawn again), the nearest still
@@ -23210,7 +23238,11 @@ for (const v of document.querySelectorAll(".view")) {
   v.addEventListener("scroll", () => {
     if (v.hidden) return;
     if (panning?.v === v) readerScrolls(250);
-    if (performance.now() < purposeUntil || barDrag === v) { fitRoom(v); readerLeaves(v); scrolledFrom.set(v, document.activeElement); return; }
+    if (performance.now() < purposeUntil || barDrag === v) {
+      const by = v.scrollTop - (readerAt.get(v) ?? v.scrollTop);
+      if (Math.abs(by) >= 1) readerWay.set(v, Math.sign(by));
+      fitRoom(v); readerLeaves(v); scrolledFrom.set(v, document.activeElement); return;
+    }
     const from = v.scrollTop;
     // a click's hold takes what a redraw moved; a scroll with the page laid
     // out as the hold left it is put back as at rest, so the reader's run
@@ -23218,6 +23250,7 @@ for (const v of document.querySelectorAll(".view")) {
     // wheeled through, held still for 4s)
     const h = held?.v === v && redrawn(held);
     if (held?.v === v) hold(held);
+    else if (deaf && waitsBack(v)) return;
     else backToReader(v);
     puttingBack(v, from, h);
   }, { passive: true });
@@ -23270,7 +23303,7 @@ async function show(v) {
   navSubs();
   for (const id of ["agents", "providers", "plugins", "settings", ...magpie.pages()]) $("#view-" + id).hidden = v !== id;
   // back to where the reader was in it, and again once it has what it loads
-  const back = () => backToReader($("#view-" + v));
+  const back = () => backAfterLoad($("#view-" + v));
   requestAnimationFrame(back);
   closePicker();
   closeAgentModels();
