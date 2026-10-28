@@ -1582,13 +1582,16 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .sess-card-foot .grow { flex: 1; }
 .sess-none { color: var(--faint); font-size: 12px; padding: 18px 0; text-align: center; margin: auto 0; }
 .sess-more { font-size: 11px; color: var(--faint); padding: 4px 2px 0; }
-/* a card of bars is one grid: its names take the width the longest needs
-   and the bars what is left, every row's bar starting at the same place;
-   a window too narrow for that shortens the names, never a bar past 5em */
-.sess-bars { display: grid; grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto 4.2em; column-gap: 10px; row-gap: 1px; }
-.sess-bars.tools { grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto auto 2.8em; }
-.sess-bars > * { grid-column: 1 / -1; }
-.sess-bar { display: grid; grid-template-columns: subgrid; align-items: center; gap: 10px; height: 26px; padding: 0 6px; margin: 0 -6px; border: 0; border-radius: 6px; background: none; color: var(--fg-2); font: inherit; font-size: 12px; text-align: left; cursor: default; }
+/* every row of a card of bars has the same columns: its names take the width
+   the longest needs and the bars what is left, every row's bar starting at
+   the same place; a window too narrow for that shortens the names, never a
+   bar past 5em. Each row is a grid of its own, its columns measured from the
+   widest (sessLineUp); the rows were a subgrid of the card once, the way
+   Safari 16 crashed sizing (#3731, #3955) */
+.sess-bars { display: flex; flex-direction: column; gap: 1px; }
+.sess-bar { display: grid; grid-template-columns: minmax(0, var(--sb0, max-content)) minmax(5em, 1fr) var(--sb2, auto) 4.2em; align-items: center; gap: 10px; height: 26px; padding: 0 6px; margin: 0 -6px; border: 0; border-radius: 6px; background: none; color: var(--fg-2); font: inherit; font-size: 12px; text-align: left; cursor: default; }
+.sess-bars.tools > .sess-bar { grid-template-columns: minmax(0, var(--sb0, max-content)) minmax(5em, 1fr) var(--sb2, auto) var(--sb3, auto) 2.8em; }
+.sess-bars.fit > .sess-bar, .sess-skills.fit .line { width: max-content; }
 .sess-bar:hover { background: var(--pill); }
 .sess-bar.on { background: var(--pill); color: var(--fg); font-weight: 550; }
 .sess-bar .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1634,20 +1637,10 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .sess-weeks .stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 3px; overflow: hidden; }
 .sess-weeks .stack i { min-height: 1px; }
 .sess-weeks-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--faint); }
-.sess-skills { display: grid; grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto; column-gap: 10px; row-gap: 2px; }
-.sess-skills > * { grid-column: 1 / -1; }
-.sess-skill { display: grid; grid-template-columns: subgrid; padding: 4px 6px; margin: 0 -6px; border-radius: 6px; min-width: 0; }
+.sess-skills { display: flex; flex-direction: column; gap: 2px; }
+.sess-skill { padding: 4px 6px; margin: 0 -6px; border-radius: 6px; min-width: 0; }
 .sess-skill:hover { background: var(--pill); }
-.sess-skill .line, .sess-skill .sub { grid-column: 1 / -1; }
-.sess-skill .line { display: grid; grid-template-columns: subgrid; align-items: center; gap: 10px; font-size: 12px; }
-/* before subgrid (Safari 16) each row is a grid of its own, its name as
-   wide as it needs and its bar at least 5em */
-@supports not (grid-template-columns: subgrid) {
-  .sess-bar { grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto 4.2em; }
-  .sess-bar.tool { grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto auto 2.8em; }
-  .sess-skill { display: block; }
-  .sess-skill .line { grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto; }
-}
+.sess-skill .line { display: grid; grid-template-columns: minmax(0, var(--sb0, max-content)) minmax(5em, 1fr) var(--sb2, auto); align-items: center; gap: 10px; font-size: 12px; }
 .sess-skill .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-weight: 550; }
 .sess-skill .track { height: 6px; border-radius: 3px; background: var(--pill); overflow: hidden; }
 .sess-skill:hover .track { background: var(--card); }
