@@ -483,6 +483,9 @@ type settingsJSON struct {
 	// LANURLs are a container's own addresses, not the host's: the page
 	// offers the one it was opened at instead, or says how to set it
 	LANContainer bool `json:"lanContainer,omitempty"`
+	// those of LANURLs at an internet address, which anyone online can
+	// reach, not only this network
+	LANPublic []string `json:"lanPublic,omitempty"`
 	// when the Codex warm-up last started an account's window
 	CodexWarmed *time.Time `json:"codexWarmed,omitempty"`
 	// and the Claude warm-up
@@ -667,6 +670,7 @@ func settingsState() settingsJSON {
 	s.Login, s.LoginAllow = login != autostart.Off, login == autostart.NeedsAllowing
 	if s.LAN {
 		s.LANURLs, s.LANContainer = gateway.LANURLs(), gateway.ContainerAddrs()
+		s.LANPublic = gateway.PublicURLs(s.LANURLs)
 	}
 	s.CodexWarmed, s.ClaudeWarmed = latest(provider.CodexWarmed()), latest(provider.ClaudeWarmed())
 	s.CodexUsers = codexUsers()
