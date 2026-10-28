@@ -599,6 +599,19 @@ before the merge, are in the code standards.)
   set.
 - Seen 1× (2026-10-17).
 
+**A release published after a newer one takes Latest, and with it the
+update feed and the tap, unless the publish step checks.**
+- 10-15: v0.1.1255 was published 25 minutes after v0.1.1256, and
+  GitHub marked the older one Latest (moved back by hand then).
+- 10-28: v0.1.1891 finished 16s after v0.1.1892. 1891 became Latest,
+  which usemagpie.ai's /api/latest serves, and the Homebrew tap went from
+  1892 back to 1891 (tap 1d47b64). v0.1.1890, still notarising, would
+  have done it again. magpie-releases ee73d7a now passes `make_latest`
+  only to the highest version and runs the tap update only then.
+- A fix made by hand once is a fix for that release only. When it comes
+  back, fix the step that does it.
+- Seen 2× (2026-10-15, 2026-10-28).
+
 **A publish run that stays red for one known package hides every new
 failure behind it.**
 - think-tags 0.1.1 can't publish (E404, publish.yml isn't its trusted
