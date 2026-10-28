@@ -178,9 +178,14 @@ function fixture(lang, theme, events, options = {}) {
     await route.fulfill({ body: await fs.readFile(file), contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)] });
   };
 }
+// keyAction picks Rotate key or Remove from a key's … menu
+async function keyAction(page, row, label) {
+  await row.locator(".gw-key-more").click();
+  await page.locator(".row-menu").getByRole("menuitem", { name: label, exact: true }).click();
+}
 async function confirmKeyAction(page, row, label) {
-  await row.getByRole("button", { name: label, exact: true }).click();
+  await keyAction(page, row, label);
   await page.locator("#modal").getByRole("button", { name: label, exact: true }).click();
   await page.locator("#modal").waitFor({ state: "hidden" });
 }
-module.exports = { fixture, confirmKeyAction };
+module.exports = { fixture, keyAction, confirmKeyAction };

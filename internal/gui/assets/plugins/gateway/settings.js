@@ -227,6 +227,19 @@ let lanSelectedURL = "", lanProtocol = "openai";
 // the address picked under Share on local network is kept like Connect's
 let lanWant = "";
 try { lanWant = localStorage.getItem("magpie.lanAddress") || ""; } catch {}
+// lanShown: the local network addresses the gateway is offered at, and a
+// line on them when magpie runs in a container, for Settings and Gateway
+// alike. In a container magpie finds only the container's own addresses;
+// the page opened over the network was reached at the host's, so the
+// gateway is offered there, on its port.
+function lanShown(urls, container) {
+  if (!container) return { urls, sub: "" };
+  const host = location.hostname, port = urls.length ? new URL(urls[0]).port : "";
+  if (web && host && port && !/^(localhost|127\.|\[::1\]$)/.test(host))
+    return { urls: ["http://" + host + ":" + port], // an IPv6 hostname comes bracketed
+      sub: t("Where this page was opened, on the gateway’s port; MAGPIE_PUBLIC_URL sets another") };
+  return { urls, sub: t("The container’s own addresses, which other devices can’t reach: set MAGPIE_PUBLIC_URL to the host’s") };
+}
 function renderLAN(s) {
   const box = $("#lanList");
   box.replaceChildren();
@@ -250,17 +263,7 @@ function renderLAN(s) {
   row(t("Share on local network"), t("Agents on other computers on this network, or through a tunnel to this one such as Cloudflare Tunnel, can use magpie’s models with a gateway key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
   if (!s.lan) return;
-  let urls = s.lanURLs || [], sub = "";
-  // in a container magpie finds only the container's own addresses; the
-  // page opened over the network was reached at the host's, so the
-  // gateway is offered there, on its port
-  if (s.lanContainer) {
-    const host = location.hostname, port = urls.length ? new URL(urls[0]).port : "";
-    if (web && host && port && !/^(localhost|127\.|\[::1\]$)/.test(host)) {
-      urls = ["http://" + host + ":" + port]; // an IPv6 hostname comes bracketed
-      sub = t("Where this page was opened, on the gateway’s port; MAGPIE_PUBLIC_URL sets another");
-    } else sub = t("The container’s own addresses, which other devices can’t reach: set MAGPIE_PUBLIC_URL to the host’s");
-  }
+  const { urls, sub } = lanShown(s.lanURLs || [], s.lanContainer);
   if (!urls.length) row(t("Address"), t("This computer has no local network address right now"), "");
   else {
     lanSelectedURL = urls.includes(lanWant) ? lanWant : urls[0];

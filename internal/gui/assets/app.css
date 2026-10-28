@@ -2277,20 +2277,45 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .gw-sk-call .result { width: 68px; }
 /* the status card: a dot where the logo would be, the URL as a pill */
 .gwcard { margin: 4px 0 2px; }
-.gw .dot { width: 8px; height: 8px; margin: 0 7px; border-radius: 50%; background: var(--amber); flex: none; box-shadow: 0 0 0 3px var(--amber-soft); }
-.gw .dot.on { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
-.gw .who { flex: 1 1 auto; }
+/* the gateway's mark, the sidebar's glyph in a tile, its two lights the
+   state: green running, amber not or served by an older magpie */
+.gw { min-height: 52px; padding: 8px 10px 8px 11px; gap: 8px 11px; flex-wrap: wrap; }
+.gw .gw-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; flex: none; color: var(--fg-2); background: var(--pill); box-shadow: inset 0 0 0 1px var(--line-2); }
+.gw .gw-mark svg { display: block; }
+.gw .gw-mark .led { fill: var(--amber); }
+.gw .gw-mark.on .led { fill: var(--green); }
+/* narrow, the fix button goes under the state rather than squeeze it */
+.gw .who { flex: 1 1 15em; min-width: 0; }
 .gw .name .state { margin-left: 8px; font-size: 11px; font-weight: 500; color: var(--green); }
-.gw .dot:not(.on) ~ .who .state { color: var(--amber); }
+.gw .gw-mark:not(.on) ~ .who .state { color: var(--amber); }
 .gw .sub.old { white-space: normal; overflow: visible; text-overflow: clip; }
 .gw .sub.err { color: var(--red); overflow-wrap: anywhere; }
 /* the take-over / restart button: bordered, so it reads as a button on the
    card in either theme (leslie_luo on Discord: in dark mode it didn't) */
-.gw .gw-fix { display: inline-flex; height: auto; min-height: 27px; margin: 6px 0 0; padding: 4px 10px; white-space: normal; text-align: left; }
-.gw .url { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 6px; background: var(--pill); box-shadow: inset 0 0 0 1px var(--line-2); flex: none; transition: background .12s, box-shadow .12s; }
-.gw .url:hover { background: var(--pill-hover); box-shadow: inset 0 0 0 1px var(--line); }
-.gw .url code { color: var(--fg-2); font-size: 11px; }
-.gw .url:hover code { color: var(--fg); }
+.gw .gw-fix { display: inline-flex; flex: none; height: auto; min-height: 27px; max-width: 100%; margin: 0 0 0 auto; padding: 4px 10px; white-space: normal; text-align: left; }
+/* Share on local network, on the card under the state, and the addresses
+   the gateway answers on: one quiet line each, the copy beside it */
+#gatewayLan { border-top: 1px solid var(--line-2); }
+/* narrow, the choice goes under its name rather than wrap it word by word */
+.gw-share { min-height: 40px; padding: 5px 10px 5px 11px; flex-wrap: wrap; row-gap: 4px; }
+.gw-share .name { flex: 1 1 9em; font-size: 12.5px; white-space: normal; overflow-wrap: anywhere; }
+.gw-share .segs { align-self: center; flex: none; max-width: 100%; margin-left: auto; }
+/* the addresses: their labels one column as wide as the longest, the
+   address and its copy the next */
+.gw-urls { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 14px; padding: 0 10px 7px 11px; }
+.gw-url { display: contents; }
+.gw-url-label { align-self: center; max-width: 12em; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-url-val { display: flex; align-items: center; gap: 6px; min-height: 28px; min-width: 0; }
+.gw-url code { flex: 0 1 auto; min-width: 0; font-size: 12px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+.gw-url .copy { flex: none; }
+.gw-url-none { grid-column: 2; padding: 4px 0 2px; font-size: 11.5px; color: var(--muted); }
+/* a gateway key: the copy right beside the masked key, the rest under
+   its … (the owner: a copy out in the row's middle looked lost) */
+.gw-keys .acc > .plan + .copy { margin-left: -5px; }
+/* narrow, the masked key gives up its room before the key's name does */
+.gw-keys .acc > .plan { flex-shrink: 6; }
+.gw-keys .gw-key-more { flex: none; color: var(--muted); }
+.gw-keys .gw-key-more:is(:hover, .open) { color: var(--fg); }
 #view-gateway .row-head, #view-usage .row-head { margin: 14px 0 6px; padding: 0 2px; }
 #view-usage .row-head.quota-head { margin: 6px 0 6px; }
 #view-gateway .row-head .note { font-size: 11px; color: var(--faint); }
@@ -3805,7 +3830,7 @@ body.panel .modal { padding: 16px 12px; }
   body.web .row.gw { flex-wrap: wrap; }
   body.web .row.gw > .who { flex: 1 1 0; min-width: 0; }
   body.web .row.gw .sub { white-space: normal; }
-  body.web .row.gw > .url { order: 2; margin-left: 17px; max-width: calc(100% - 17px); }
+  body.web .row.gw > .gw-fix { order: 2; margin-left: 39px; max-width: calc(100% - 39px); }
   body.web .call { flex-wrap: wrap; height: auto; min-height: 24px; padding: 3px 6px; }
   body.web .call > .m { order: 2; margin-left: 20px; min-width: 0; }
   body.web .call > .p { order: 3; }
