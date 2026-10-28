@@ -351,6 +351,84 @@ func TestHandedOffGatewayAnswersAConnectionItTook(t *testing.T) {
 	}
 }
 
+// A kept-alive connection the gateway answered before it handed off,
+// idle as its end begins, has the next request its agent sends answered
+// there, the reply closing it: Shutdown closed it unanswered, and the
+// agent's request just sent on it was cut ("connection reset", #3451).
+// So too for a `make dev` backend ending beside the one started after it.
+func TestHandedOffGatewayAnswersAKeptAliveConnection(t *testing.T) {
+	for _, dev := range []bool{false, true} {
+		name := "handed off"
+		if dev {
+			name = "make dev"
+		}
+		t.Run(name, func(t *testing.T) {
+			was := Handover
+			Handover = dev
+			defer func() { Handover = was }()
+			old, addr, stopOld, oldDone := handOffSandbox(t)
+
+			c, err := net.Dial("tcp", addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Close()
+			rd := bufio.NewReader(c)
+			ask := func() (*http.Response, string, error) {
+				chatOn(t, c, addr)
+				c.SetReadDeadline(time.Now().Add(10 * time.Second))
+				r, err := http.ReadResponse(rd, nil)
+				if err != nil {
+					return nil, "", err
+				}
+				defer r.Body.Close()
+				b, err := io.ReadAll(r.Body)
+				return r, string(b), err
+			}
+			// answered, and kept alive: idle once the end begins
+			if r, b, err := ask(); err != nil || r.StatusCode != 200 || r.Close {
+				t.Fatalf("the request before the handover: %v %q %v", r, b, err)
+			}
+
+			if !dev {
+				f, err := old.ListenerFile()
+				if err != nil {
+					t.Fatal(err)
+				}
+				ln, err := net.FileListener(f) // the new one's copy, keeping the socket open
+				f.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer ln.Close()
+				old.HandOff()
+			}
+			stopOld()
+			// its agent sends its next request once the end has begun:
+			// well inside the 5s the end waits for it (unreadWait)
+			time.Sleep(100 * time.Millisecond)
+			r, b, err := ask()
+			if err != nil || r.StatusCode != 200 || !strings.Contains(b, "quick") {
+				t.Fatalf("a request on a kept-alive connection, sent once the end began: %q %v", b, err)
+			}
+			if !r.Close {
+				t.Fatal("the reply kept the connection alive, for a request the old one's end would cut")
+			}
+			select {
+			case err := <-oldDone:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("the old one never ended once its connections were answered")
+			}
+			if n := len(old.Recent()); n != 2 {
+				t.Fatalf("the old one answered %d of its 2 requests", n)
+			}
+		})
+	}
+}
+
 // heldListener holds the next connection it takes, once told to, until
 // let go: as a busy machine can hold the goroutine that took one, before
 // net/http notes it.
