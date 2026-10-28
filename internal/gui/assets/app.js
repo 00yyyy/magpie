@@ -216,6 +216,9 @@ function notJSON(res, text) {
   return t("A proxy in front of magpie answered, not magpie ({what})", { what });
 }
 
+// blurOnEnter has Enter in a field commit it (by blur), its keys kept from the page
+const blurOnEnter = (i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); }; };
+
 // el makes a tag with a class and its content: text, or a node put inside
 // it as it is, never written out as "[object HTMLButtonElement]" (#2181).
 function el(tag, cls, text) {
@@ -11228,7 +11231,7 @@ function renderModels(p) {
         i.inputMode = "decimal";
         i.dataset.part = k;
         i.setAttribute("aria-label", label);
-        i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); };
+        blurOnEnter(i);
         i.onchange = () => takePrice();
         return i;
       };
@@ -20634,7 +20637,7 @@ function renderWarmAt(box, sub, ats, onReset, via, save) {
     const i = input(at, "06:00", "time");
     i.className = "at";
     i.setAttribute("aria-label", t("Time of day"));
-    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); };
+    blurOnEnter(i);
     i.onchange = () => { if (i.value && i.value !== at) save(ats.map((a, k) => (k === n ? i.value : a))); };
     one.append(i);
     if (ats.length > 1) {
@@ -20751,7 +20754,7 @@ function renderWarmAtOwn(s) {
       const i = input(at, "06:00", "time");
       i.className = "at";
       i.setAttribute("aria-label", t("{who}'s time of day", { who: user }));
-      i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); };
+      blurOnEnter(i);
       i.onchange = () => { if (i.value && i.value !== at) save(user, i.value); };
       box.append(i);
     }
@@ -20786,7 +20789,7 @@ function renderAlerts(s, keep) {
       i.className = "at num";
       i.inputMode = "decimal";
       i.setAttribute("aria-label", label);
-      i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); };
+      blurOnEnter(i);
       i.onchange = () => {
         const n = Number(i.value);
         if (!ok(n)) { i.value = String(value); return; }
