@@ -1350,6 +1350,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.UsageAgentsHidden = cur.UsageAgentsHidden
 		// and the names models' usage is counted under (magpie model alias)
 		in.UsageAliases = cur.UsageAliases
+		// and the clears of usage made on the Usage page
+		in.UsageCleared = cur.UsageCleared
 		// and the clients it counts as agents, set there too (#1958)
 		in.ClientAgents = cur.ClientAgents
 		// how agents' lists name models, set on its own for the agents to be told

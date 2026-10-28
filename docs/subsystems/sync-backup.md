@@ -47,6 +47,12 @@ session resumes in (`SessionTerminal`) and what the menu bar shows. Launch at
 login is the system's own setting (`internal/autostart`) and the listen
 address is `MAGPIE_ADDR`, so neither is in a bundle.
 
+The Usage page's clears (`usageCleared`, see
+[gateway sessions](gateway-sessions.md)) are a preference, not a computer's
+own, so they ride the settings part: a model cleared on one computer is
+cleared on the others, their shared usage days included. The usage files
+themselves are never rewritten by a clear.
+
 The providers part works the same way for which account an agent is kept
 signed in to (`KeepLogin`, `KeepLoginAs`, `SwitchOnly`): one person keeps a
 personal account at home and a work account at the office, and sync set

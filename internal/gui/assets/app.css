@@ -1197,6 +1197,8 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .us-hid .list[hidden] { display: none; }
 .row.stat.hid > :not(.us-unhide) { opacity: .55; }
 .usage-note { padding: 10px 4px 2px; font-size: 11px; color: var(--faint); user-select: text; -webkit-user-select: text; }
+.usage-clear { margin: 0; padding: 2px 0 6px; }
+.usage-clear button { font-size: 11px; }
 .usage-pane { display: flex; flex-direction: column; flex: none; }
 .usage-pane[hidden] { display: none; }
 

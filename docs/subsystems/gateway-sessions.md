@@ -74,6 +74,28 @@ Requests, the Requests ledger and model lists keep each call's own id.
 Verification: `TestUsageAliasCountsTwoIdsAsOne`,
 `TestSessionsCountAliasedModelsAsOne`, `TestAliasStatsLeavesItsInputAlone`.
 
+The Usage page can clear its figures (CrazyMouse_TT on X): a model's row's
+"…" has "Clear usage…", and "Clear all usage…" sits under the lists. Each
+asks first, then `POST /api/usage/clear` adds a mark to `usageCleared` in
+settings.json ([`settings.ClearUsage`](../../internal/settings/settings.go)):
+a provider and model as the Models list names them (the alias, the
+provider's shown id), or neither for everything, and the time in Unix
+milliseconds. usage.jsonl is never rewritten. The usage pages leave out
+each call at or before a mark that matches it
+([`cleared.go`](../../internal/usage/cleared.go)): the Overview
+(`summarizeFrom`), and the Requests page, its heatmap and the CSV through
+`Filter.keepsRow`; the request index keys its meta on the marks
+(`clearedKey`), so a cached page is read again. Gateway keys' spending
+limits, the allowances' window holds and Codex's reads go by `usage.Visit`
+and the raw log, so they still count every cleared call: a clear never
+lifts a limit, and the confirmation says so. The marks ride the settings
+part of a sync, so a clear holds on the computers it syncs with, over
+their shared days and the agents' session-file rows too, and a later clear
+of the same model or of everything takes an earlier one's place. Usage ›
+Sessions is not cleared. Verification: `TestClearedUsageLeavesThePages`,
+`TestClearUsageKeepsOneMarkAModel`, `TestUsageClearRoute`,
+`usage-clear.test.cjs`.
+
 Claude Desktop gateway rows can have a local name even without a CLI
 transcript (#1675). [`DesktopTitles`](../../internal/sessions/desktop_titles.go)
 reads `claude-code-sessions/*/*/local_*.json` and

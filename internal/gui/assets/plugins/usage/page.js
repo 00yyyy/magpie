@@ -321,6 +321,7 @@ function renderUsageLoading() {
   // still there while the period loads (#809, Hu9956: 用量界面红框这行会延迟几秒才会出现)
   for (const h of $$("#view-usage .row-head:not(#quotaHead, .plugin-panel > .row-head)")) h.hidden = true;
   $("#usageNote").textContent = "";
+  $("#usageClear").hidden = true;
 }
 
 // costHead is the Usage head's sum: the cost at effective prices, or, when
@@ -539,6 +540,7 @@ function renderUsage() {
     const none = noCallsIn(period);
     stats.append(el("div", "none", t(none) + " " + t("Point an agent at a catalog model and use it; every call through the gateway is counted here.")));
     $("#usageNote").textContent = "";
+    $("#usageClear").hidden = true;
     return;
   }
   stats.classList.remove("empty");
@@ -697,13 +699,62 @@ function renderUsage() {
     b.onclick = (e) => { e.stopPropagation(); hideUsageAgent(g.id, false); };
     r.append(b);
   });
-  list("usageModels", u.models);
+  // a model's usage cleared (CrazyMouse_TT on X: a local model deployed
+  // again, its requests, speed and cache wanted from nothing)
+  list("usageModels", u.models, (r, g) => {
+    if (!g.model) return;
+    r.classList.add("acts");
+    const b = el("button", "icon us-more");
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-label", t("Actions for {name}", { name: g.name || g.model }));
+    b.append(svg(DOTS, 14, 2.2));
+    const menu = () => {
+      const again = agentMenu?.anchor === b;
+      closeAgentMenu();
+      if (again) return;
+      openRowMenu(b, [{ name: "Clear usage…", icon: USAGE_CLEAR, run: () => clearUsage(g) }]);
+    };
+    b.onclick = (e) => { e.stopPropagation(); menu(); };
+    r.oncontextmenu = (e) => { e.preventDefault(); menu(); };
+    r.querySelector(".share").after(b);
+  });
   list("usageAccounts", u.accounts || []);
   list("usageKeys", u.callerKeys || []);
   $("#usageNote").textContent = t("Counted from the providers' own usage reports on every call through the gateway · {path}", { path: u.path });
+  const clear = $("#usageClear");
+  clear.hidden = false;
+  clear.onclick = () => clearUsage();
   // the account cards say how many of this period's requests were
   // magpie's own (ownLine), which they could only once the summary came
   if (quotas && (u.accounts?.some((g) => g.own?.calls) || $("#subscriptionUsage .quota-own"))) renderQuotas();
+}
+
+// clearUsage clears the Usage page's figures, after the reader confirms:
+// one model's (g, from the Models list) or everything's (no g). The calls
+// up to now stop being counted on the usage pages, here and on the
+// computers this one syncs with; the request log keeps them, so a key's
+// spending limit and the allowances still count them
+// (settings.UsageCleared).
+const USAGE_CLEAR = "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v3.5M9 7v3.5";
+async function clearUsage(g) {
+  const ok = await confirmAction(
+    g ? t("Clear the usage of {model}?", { model: g.name || g.model }) : t("Clear all usage?"),
+    (g
+      ? t("Every call to {model} at {provider} so far stops being counted on the Usage page: its requests, tokens, cost, speed and cache, in every period, on this computer and those it syncs with.", { model: g.name || g.model, provider: (g.sub || g.provider || "").split(" · ")[0] })
+      : t("Every call so far stops being counted on the Usage page: the requests, tokens, cost, speed and cache of every agent and model, in every period, on this computer and those it syncs with."))
+      + " " + t("Gateway keys' spending limits and the allowances still count these calls. This can't be undone."),
+    t("Clear"),
+  );
+  if (!ok) return;
+  try {
+    await api("usage/clear", g ? { provider: g.provider || "", model: g.model } : {});
+    status(g ? t("The usage of {model} is cleared", { model: g.name || g.model }) : t("All usage is cleared"), "ok");
+    ledger = null;
+    await loadUsage();
+  } catch (e) {
+    status(e.message, "err");
+  }
 }
 
 // countable is whether the Usage page's Agents list offers to count a
