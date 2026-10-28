@@ -29,6 +29,9 @@ func TestMain(m *testing.M) {
 	ending = func([]*Server) {}
 	// never the registry (mcp_npx.go)
 	npxInstall = nil
+	// Codex given its servers by their commands, as the tests expect;
+	// mcp_run_test.go turns it on
+	runOn = false
 	code := testenv.Run(m)
 	forgetProbes()
 	if left := leftDownloads(tmp); len(left) > 0 && code == 0 {

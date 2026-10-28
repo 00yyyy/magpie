@@ -809,6 +809,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /videos/{id}/content", s.videosContent)
 	mux.HandleFunc("POST "+claudeMCPPath+"{token}", s.subscription.mcpCall)
 	mux.HandleFunc("/mcp/{name}", s.mcpProxy)
+	mux.HandleFunc("/mcp/run/{name}", runMCP)
 	mux.HandleFunc(SearchMCPPath, s.searchMCP)
 	mux.HandleFunc(VisionMCPPath, s.visionMCP)
 	mux.HandleFunc(ImageMCPPath, s.imageMCP)
