@@ -6837,7 +6837,8 @@ addEventListener("pointerup", (e) => {
   addEventListener("click", seen, true);
   setTimeout(() => {
     removeEventListener("click", seen, true);
-    if (!clicked && b.isConnected) b.click();
+    // its newest self: b, or what a draw since put there (#3922)
+    if (!clicked) [...document.querySelectorAll(".segs")].find((x) => segsWho(x) === p.who)?.querySelectorAll(":scope > .opt")[p.i]?.click();
   });
 }, true);
 
