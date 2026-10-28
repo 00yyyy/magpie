@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -229,5 +231,149 @@ func TestClaudeDesktopProbeAsksNoClassifier(t *testing.T) {
 	}
 	if c.n() != 1 {
 		t.Fatalf("a user's turn asked the classifier %d times", c.n())
+	}
+}
+
+// ctyunRefusal is the body Desktop showed (cybercaius, v0.1.1862) as
+// magpie's message after "天翼云: ": a relay's error whose message is
+// its own upstream's refusal. The 天翼云 relay wraps that whole body as
+// its message in turn, so magpie's reading of it said it word for word.
+const ctyunRefusal = `{"error":{"message":"{\"code\":\"400\",\"message\":\"thinking.type must be \\\"enabled\\\" (type: invalid_request_error)\",\"type\":\"invalid_request_error\"} (request id: 20261028170149123456789)","type":"upstream_error","code":"Invalid_request"}}`
+
+// ctyunNeedsThinking answers as cybercaius's 天翼云 did a Messages request
+// whose thinking isn't enabled.
+func ctyunNeedsThinking(body []byte) (int, string) {
+	if gjson.GetBytes(body, "thinking.type").String() != "enabled" {
+		return ctyunRefused()
+	}
+	if b, m := gjson.GetBytes(body, "thinking.budget_tokens").Int(), gjson.GetBytes(body, "max_tokens").Int(); b < 1024 || m <= b {
+		return 400, `{"type":"error","error":{"type":"invalid_request_error","message":"max_tokens must be greater than thinking.budget_tokens"}}`
+	}
+	return 0, ""
+}
+
+func ctyunRefused() (int, string) {
+	out, _ := json.Marshal(map[string]any{"error": map[string]any{"message": ctyunRefusal, "type": "upstream_error", "code": "Invalid_request"}})
+	return 400, string(out)
+}
+
+// Desktop's check to a routing group whose member's upstream takes the
+// model only thinking (cybercaius, v0.1.1862: "thinking.type must be
+// \"enabled\""): magpie sent it thinking off (a vendor's model) or none
+// (a Claude's name), the refusal is read, and the check asked again
+// thinking at 1024 under a raised max_tokens, so Desktop gets 200. It is
+// remembered for the model: the next check, and a title, go thinking in
+// one call. Read off the reply: the provider's name has no part in it.
+func TestClaudeDesktopProbeThinkingNeeded(t *testing.T) {
+	const msg = `{"id":"m","type":"message","role":"assistant","model":"x","content":[{"type":"thinking","thinking":"hm","signature":"s"},{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":3}}`
+	for _, c := range []struct {
+		name, model string
+		proto       provider.Protocol
+	}{
+		{"vendor model on Messages", "glm-5", provider.Anthropic},
+		{"claude name on Messages", "claude-haiku-5-5", provider.Anthropic},
+		{"chat", "glm-5", provider.Chat},
+		{"chat, refused in its stream", "glm-5", provider.Chat},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ctyun := &fake{t: t, reply: msg, ctype: "application/json", refuse: ctyunNeedsThinking}
+			if c.proto == provider.Chat {
+				// a relay that turns reasoning_effort into thinking enabled
+				ctyun = &fake{t: t, reply: deepseekReply, refuse: func(body []byte) (int, string) {
+					if gjson.GetBytes(body, "reasoning_effort").String() == "" || gjson.GetBytes(body, "reasoning_effort").String() == "none" {
+						return ctyunRefused()
+					}
+					return 0, ""
+				}}
+			}
+			var h http.Handler = ctyun
+			if strings.HasSuffix(c.name, "in its stream") {
+				// the refusal as an event of a 200 stream
+				h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					b, _ := io.ReadAll(r.Body)
+					ctyun.got = b
+					ctyun.calls++
+					if e := gjson.GetBytes(b, "reasoning_effort").String(); e == "" || e == "none" {
+						_, refusal := ctyunRefused()
+						w.Header().Set("Content-Type", "text/event-stream")
+						io.WriteString(w, "data: "+refusal+"\n\n")
+						return
+					}
+					w.Header().Set("Content-Type", "text/event-stream")
+					io.WriteString(w, deepseekReply)
+				})
+			}
+			setup(t, provider.Anthropic, &fake{t: t})
+			cu := httptest.NewServer(h)
+			t.Cleanup(cu.Close)
+			p := provider.Provider{ID: "ctyun", Name: "天翼云", Key: "k", Models: []string{c.model}}
+			if c.proto == provider.Chat {
+				p.Chat = cu.URL + "/v1"
+			} else {
+				p.Anthropic = cu.URL
+			}
+			if err := provider.Save(p); err != nil {
+				t.Fatal(err)
+			}
+			if err := provider.SaveGroup(provider.Group{ID: "tianyi", Name: "天翼云", Members: []string{"ctyun/" + c.model}, Routing: provider.Ordered}); err != nil {
+				t.Fatal(err)
+			}
+			if err := provider.SetModelOrder("claude-desktop", []string{"group/tianyi"}); err != nil {
+				t.Fatal(err)
+			}
+			desktopPicked.Lock()
+			desktopPicked.model, desktopPicked.from = "", ""
+			desktopPicked.Unlock()
+			srv := New()
+			send := func(body string) (int, string) {
+				t.Helper()
+				req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body))
+				req.Header.Set("x-api-key", Token+"-claude-desktop")
+				req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh) Claude/2.7032.0 Chrome/140.0 Electron/38.0")
+				rec := httptest.NewRecorder()
+				srv.Handler().ServeHTTP(rec, req)
+				return rec.Code, rec.Body.String()
+			}
+			const probe = `{"model":"magpie-0958175816.anthropic.claude-haiku-5-5[1m]","max_tokens":1,"messages":[{"role":"user","content":"."}]}`
+			if code, body := send(probe); code != 200 {
+				t.Fatalf("check: %d %s (sent %s)", code, body, ctyun.got)
+			}
+			if ctyun.calls != 2 {
+				t.Fatalf("check: %d calls, want the refusal and one more", ctyun.calls)
+			}
+			if c.proto == provider.Anthropic {
+				if th := gjson.GetBytes(ctyun.got, "thinking"); th.Get("type").String() != "enabled" || th.Get("budget_tokens").Int() != 1024 || gjson.GetBytes(ctyun.got, "max_tokens").Int() <= 1024 {
+					t.Fatalf("check asked again with %s", ctyun.got)
+				}
+			}
+			// remembered: the next check and a title go thinking at once
+			for _, body := range []string{probe, `{"model":"ctyun/` + c.model + `","max_tokens":200,"system":"You write short session titles.","messages":[{"role":"user","content":"hi"}]}`} {
+				ctyun.calls = 0
+				if code, out := send(body); code != 200 || ctyun.calls != 1 {
+					t.Fatalf("after: %d in %d calls, %s (sent %s)", code, ctyun.calls, out, ctyun.got)
+				}
+			}
+		})
+	}
+}
+
+// withThinkingEnabled leaves a request that thinks as it is, and gives
+// one that doesn't the least budget under a limit raised past it.
+func TestWithThinkingEnabled(t *testing.T) {
+	for in, want := range map[string]string{
+		`{"max_tokens":16,"temperature":0}`:                    `{"max_tokens":1040,"thinking":{"budget_tokens":1024,"type":"enabled"}}`,
+		`{"max_tokens":8000,"thinking":{"type":"disabled"}}`:   `{"max_tokens":8000,"thinking":{"budget_tokens":1024,"type":"enabled"}}`,
+		`{"max_tokens":2,"thinking":{"type":"between_tools"}}`: `{"max_tokens":1026,"thinking":{"budget_tokens":1024,"type":"enabled"}}`,
+	} {
+		got, ok := withThinkingEnabled([]byte(in))
+		var a, b any
+		if !ok || json.Unmarshal(got, &a) != nil || json.Unmarshal([]byte(want), &b) != nil || !jsonEqual(a, b) {
+			t.Errorf("withThinkingEnabled(%s) = %s %v, want %s", in, got, ok, want)
+		}
+	}
+	for _, in := range []string{`{"thinking":{"type":"enabled","budget_tokens":2048}}`, `{"thinking":{"type":"adaptive"}}`, `not json`} {
+		if _, ok := withThinkingEnabled([]byte(in)); ok {
+			t.Errorf("withThinkingEnabled(%s) changed it", in)
+		}
 	}
 }
