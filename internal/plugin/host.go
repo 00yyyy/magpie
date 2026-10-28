@@ -747,6 +747,21 @@ func Running() bool {
 	return current != nil && current.alive()
 }
 
+// Warm starts the host if none is up and Bun is here. A plugin's page in
+// the window whose plugin has a part for the host too (a local service
+// its page goes to, as Magiczerowxy/magpie-chat's does) is served by the
+// host, which is otherwise started only by a call: at launch, while the
+// providers are first read, and after every Restart (a plugin installed,
+// updated or set, a Bun update) only once something asks a plugin again.
+// Opening such a page is that ask.
+func Warm(ctx context.Context) error {
+	if Running() || !HasBun() {
+		return nil
+	}
+	_, err := get(ctx)
+	return err
+}
+
 func (h *host) alive() bool {
 	select {
 	case <-h.dead:
