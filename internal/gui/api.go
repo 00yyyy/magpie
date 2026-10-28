@@ -855,8 +855,12 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if s.Colorblind {
 			boot["colorblind"] = true
 		}
+		// a browser tab keeps its own font choice (fonts.js) and is told
+		// whether there is a list to choose from
 		if !isWeb(w) {
 			boot["uiFont"], boot["codeFont"] = s.UIFont, s.CodeFont
+		} else if fonts.Available {
+			boot["fonts"] = true
 		}
 		// and whether it is a gateway's page alone (gatewaymode.go), so the
 		// pages left out never show
@@ -902,7 +906,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		writeJSON(rw, nil)
 	})
 	omarchyRoutes(mux, w)
-	fontRoutes(mux, isWeb(w) || !fonts.Available, fonts.List)
+	fontRoutes(mux, !fonts.Available, fonts.List)
 	mux.HandleFunc("GET /api/state", func(rw http.ResponseWriter, r *http.Request) {
 		// the panel and its model picker load from here: an account still
 		// without its vendor's list (one whose try at start-up failed) is

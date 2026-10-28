@@ -18862,7 +18862,9 @@ if (!web) addEventListener("keydown", (e) => {
 // keep the family/style controls usable while the shared save queue drains.
 let fontList = null, fontListError = false, fontFlight = null, fontRevision = 0;
 const fontDrafts = {};
+const fontsOn = !web || window.bootPrefs?.fonts;
 function fontChoices(s) {
+  if (web) return { ...s, ...window.desktopFonts.own() };
   return { ...s, ...Object.fromEntries(Object.entries(fontDrafts).map(([k, d]) => [k, d.value])) };
 }
 // The native host notifies both existing webviews after a successful save.
@@ -18876,13 +18878,12 @@ window.receiveFonts = (s) => {
   if (prefs && view === "settings") renderFonts(prefs);
 };
 async function loadFonts(refresh = false) {
-  if (web || fontFlight || (fontList !== null && !refresh)) return fontFlight;
+  if (!fontsOn || fontFlight || (fontList !== null && !refresh)) return fontFlight;
   fontListError = false;
   fontFlight = api("fonts" + (refresh ? "?refresh=1" : ""))
     .then((list) => {
       if (!Array.isArray(list)) throw new Error("invalid font collection");
-      fontList = list;
-      window.desktopFonts.catalogue(list);
+      window.desktopFonts.catalogue(fontList = web ? window.desktopFonts.here(list) : list);
       window.desktopFonts.apply(fontChoices(prefs || window.bootPrefs));
     })
     .catch(() => { fontListError = true; })
@@ -18891,6 +18892,7 @@ async function loadFonts(refresh = false) {
   return fontFlight;
 }
 function chooseFont(key, value) {
+  if (web) return window.desktopFonts.keep(key, value), renderFonts(prefs);
   const revision = ++fontRevision;
   fontDrafts[key] = { value, revision };
   window.desktopFonts.apply(fontChoices(prefs));
@@ -18914,8 +18916,7 @@ function renderFonts(s) {
   const current = fontChoices(s);
   for (const [key, id, label] of [["uiFont", "uiFontRow", "Interface font"], ["codeFont", "codeFontRow", "Code font"]]) {
     const row = $("#" + id);
-    row.hidden = web;
-    if (web) continue;
+    if (row.hidden = !fontsOn) continue;
     const chosen = current[key], family = fontList?.find((f) => f.name === chosen?.family);
     const missing = chosen && !window.desktopFonts.available(chosen);
     const note = row.querySelector(".font-note");
@@ -19058,7 +19059,7 @@ function renderLoginAllow(s) {
 
 async function loadSettings() {
   const since = prefsWrites;
-  if (!web && fontList === null && !fontListError) loadFonts();
+  if (fontsOn && fontList === null && !fontListError) loadFonts();
   if (window.bootPrefs?.omarchy && !barIcon) api("omarchy/widget").then((b) => { barIcon = b; renderBarIcon(); }).catch(() => {});
   const s = await api("settings");
   if (!prefsSettled(since) && prefs) return; // the save draws the page when it's in
