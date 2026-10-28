@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"crypto/sha256"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func TestPricedBlocksSharedWhileHeld(t *testing.T) {
 	}
 	pricer := func(meta string) *blockPricer {
 		b := newBlockPricer(provider.Renames{}, nil, func(Record) *catalog.Price { return nil })
-		b.share(meta)
+		b.share(sha256.Sum256([]byte(meta)))
 		return b
 	}
 	held := func() int {

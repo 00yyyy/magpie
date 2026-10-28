@@ -1,7 +1,6 @@
 package usage
 
 import (
-	"crypto/sha256"
 	"slices"
 	"sync"
 
@@ -70,9 +69,10 @@ var sharedPriced = struct {
 	blocks map[pricedKey]*pricedBlock
 }{blocks: map[pricedKey]*pricedBlock{}}
 
-// share has b's blocks shared with the other queries of meta.
-func (b *blockPricer) share(meta string) {
-	b.meta, b.shared = sha256.Sum256([]byte(meta)), true
+// share has b's blocks shared with the other queries of meta, a hash of
+// requestState's root and meta.
+func (b *blockPricer) share(meta [32]byte) {
+	b.meta, b.shared = meta, true
 }
 
 // release hands the rows of the blocks it priced back, once the query no

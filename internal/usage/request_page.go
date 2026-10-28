@@ -703,9 +703,19 @@ func hashCodexIdentities(h hash.Hash, ids map[string]sessions.CodexIdentity) {
 func requestRoot() string { return Path() + "|" + catalog.CachePath() }
 
 func QueryPage(p Period, f Filter, offset, limit int) RequestPage {
-	return queryPage(p, f, offset, limit, sessions.ReadCallSource)
+	return queryPageOf(p, f, offset, limit, sessions.ReadCallSource, true)
 }
-func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.CallSource) []sessions.Call) (page RequestPage) {
+
+// queryPage is QueryPage of the session files as readSource reads them,
+// its chunks its own.
+func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.CallSource) []sessions.Call) RequestPage {
+	return queryPageOf(p, f, offset, limit, readSource, false)
+}
+
+// queryPageOf is queryPage; share says readSource is the files' own
+// reader, so a chunk another query is making of a file is waited for
+// (sharedBuild).
+func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions.CallSource) []sessions.Call, share bool) (page RequestPage) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -766,7 +776,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	shared := idx
 	idx = shared.private()
 	shared.Unlock()
-	b := readRequestBlocks(idx, st, p, now, readSource)
+	b := readRequestBlocks(idx, st, p, now, readSource, share)
 	defer b.priced.release() // on a panic too: a shared block is held until let go
 	var names map[string]string
 	if someShared {
@@ -819,7 +829,7 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 	memo := shared.pairs[p]
 	idx := shared.private()
 	shared.Unlock()
-	b := readRequestBlocks(idx, st, p, now, sessions.ReadCallSource)
+	b := readRequestBlocks(idx, st, p, now, sessions.ReadCallSource, true)
 	defer b.priced.release()
 	sums := effortSums{}
 	ps, next := pairRowsMemo(p, now, b.gateways, b.chunks, b.others, st.codexIdentities, memo)
@@ -849,8 +859,10 @@ type requestBlocks struct {
 
 // readRequestBlocks reads the blocks of p at now into idx, a private copy
 // of the request index (private): a session file or another computer's
-// day is read again only when it changed since its chunk was made.
-func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Time, readSource func(sessions.CallSource) []sessions.Call) requestBlocks {
+// day is read again only when it changed since its chunk was made. share
+// says readSource is sessions.ReadCallSource: a file another query is
+// making a chunk of now is waited for, not read beside it (sharedBuild).
+func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Time, readSource func(sessions.CallSource) []sessions.Call, share bool) requestBlocks {
 	sources, cfg, snapshot, days := st.sources, st.cfg, st.snapshot, st.days
 	price := Pricer()
 	// Swapped's names are a few hundred pairs over thousands of files' calls,
@@ -895,7 +907,8 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 	var gateways []*rowChunk
 	renames := provider.UsageRenames()
 	priced := newBlockPricer(renames, cfg.ModelWires, price)
-	priced.share(st.root + "|" + st.meta)
+	meta := sha256.Sum256([]byte(st.root + "|" + st.meta))
+	priced.share(meta)
 	for _, packed := range snapshot.blocks {
 		if !gatewaySince.IsZero() && packed.Latest.Before(gatewaySince) {
 			continue
@@ -935,7 +948,7 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 	// another, they were most of a cold build's wait (#3493).
 	makeChunk := func() func(sessions.CallSource) *rowChunk {
 		priceRow := pricers()
-		return func(s sessions.CallSource) *rowChunk {
+		build := func(s sessions.CallSource) *rowChunk {
 			cs := readSource(s)
 			c := &rowChunk{Source: s, Rows: make([]packedRow, 0, len(cs))}
 			for _, call := range cs {
@@ -950,6 +963,12 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 			c.Bytes -= int64(32 * len(c.Strings))
 			c.dict, c.shapeIDs = nil, nil // local chunks are immutable until the source changes
 			return c.pack()
+		}
+		if !share {
+			return build
+		}
+		return func(s sessions.CallSource) *rowChunk {
+			return sharedBuild(chunkBuildKey{meta, s.Path, s.Size, s.Modified.UnixNano()}, func() *rowChunk { return build(s) })
 		}
 	}
 	read := prefetchEach(sources, stale, makeChunk)
