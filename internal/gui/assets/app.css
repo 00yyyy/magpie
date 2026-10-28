@@ -525,7 +525,17 @@ body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
 @keyframes side-out { to { transform: translateX(-100%); } }
 
 /* ---- lists ---------------------------------------------------------------- */
-.view { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px 4px; display: flex; flex-direction: column; animation: view-in .24s var(--ease); }
+/* every page keeps its bar's room, whether it runs past the window or
+   not: a row that opens (an agent's details, a fold, a card's list) made
+   the bar appear and the whole page 8px narrower in one frame, and shake
+   back when it closed (the owner, on Agents). The track is transparent,
+   so a page that fits shows nothing there. Usage and Routing needed it
+   first: their square-celled grids (the year heatmap, Sessions' calendar,
+   the context waffle) grow taller as they grow wider, so near the
+   window's height WebKit laid the page out at the full width under the
+   bar and, on each redraw, 8px narrower for a few frames (@LingYi_Stu on
+   X) */
+.view { flex: 1; min-height: 0; overflow-y: scroll; padding: 0 12px 4px; display: flex; flex-direction: column; animation: view-in .24s var(--ease); }
 /* a box that scrolls in a page, marked by app.js while it overflows: the
    wheel at its ends stays with it (contain keeps the Mac's bounce on it).
    Only then: Chromium holds the wheel even in a box that doesn't overflow.
@@ -564,15 +574,9 @@ body.mac :is(.view, .modal .dialog, .modal .editor.framed > .ebody, .heat-scroll
    and scrolled sideways; the bar's room is always kept, out of the right
    padding, so the fields end where they did */
 body.mac .modal .editor.framed > .ebody { overflow-y: scroll; padding-right: 10px; }
-/* Usage and Routing keep their bar's room too, whether the page runs past
-   the window or not. Their square-celled grids (the year heatmap, Sessions'
-   calendar, the context waffle) grow taller as they grow wider, so near the
-   window's height WebKit could lay the page out at the full width under the
-   bar and, on each redraw (Requests' 5s refresh), 8px narrower for a few
-   frames: the head's refresh, interval and cost shook sideways with Today
-   picked (@LingYi_Stu on X). The other pages have no such grid and keep the
-   8px while short */
-body.window :is(#view-usage, #view-routing) { overflow-y: scroll; }
+/* the same on Windows and Linux, whose bar is 10px: a field that opens
+   (an advanced section, a long error) no longer narrows the body under it */
+body:not(.mac):not(.web) .modal .editor.framed > .ebody { overflow-y: scroll; padding-right: 8px; }
 .list { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; flex: none; }
 body.panel .list { border: 0; border-radius: 10px; box-shadow: var(--card-edge); }
 .row { display: flex; align-items: center; gap: 9px; min-height: 40px; padding: 5px 9px 5px 11px; }
@@ -4237,6 +4241,9 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 /* the model it starts on, beside the switch: one width down the list, so
    the pickers and the switches line up */
 .row.agent.conn > .field.ag-start { flex: none; width: 196px; margin-left: 8px; align-self: center; justify-content: flex-start; }
+/* just above the narrow layout the page keeps its bar's 8px too, so the
+   picker gives that back and the name keeps its 150px */
+@media (max-width: 640px) { body.window .row.agent.conn > .field.ag-start { width: 184px; } }
 .row.agent.conn > .who + .field.ag-start { margin-left: auto; }
 .row.agent.conn > .field.ag-start .v { flex: 1; text-align: left; }
 .row.agent.conn > .field.ag-start .chev { margin-left: auto; }
