@@ -185,3 +185,49 @@ func TestOwnCacheKey(t *testing.T) {
 		}
 	}
 }
+
+// Claude Desktop's check through a routing group with intent rules is
+// answered by the group's order, not after its classifier: the check is
+// no user's turn, and Desktop gives it 10 seconds as it starts. Asked of
+// the classifier, the first check after a start waited up to the
+// Classifier timeout (8s) on a ".", and Desktop cancelled it as a 499;
+// the second passed on the verdict kept (CyberCaius on Discord,
+// v0.1.1847). A user's turn from Desktop still asks it.
+func TestClaudeDesktopProbeAsksNoClassifier(t *testing.T) {
+	resetClassified(t)
+	s, a, _, c := intented(t, provider.Rule{Use: "b/big", Intent: "writing or fixing tests"})
+	c.set("1", 0)
+	if err := provider.SetModelOrder("claude-desktop", []string{"group/r"}); err != nil {
+		t.Fatal(err)
+	}
+	desktopPicked.Lock()
+	desktopPicked.model, desktopPicked.from = "", ""
+	desktopPicked.Unlock()
+	send := func(body string) (int, string) {
+		t.Helper()
+		req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body))
+		req.Header.Set("x-api-key", Token+"-claude-desktop")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh) Claude/2.7032.0 Chrome/140.0 Electron/38.0")
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+	const probe = `{"model":"magpie-claude-haiku-5-5","max_tokens":1,"messages":[{"role":"user","content":"."}]}`
+	if code, body := send(probe); code != 200 {
+		t.Fatalf("probe: %d %s", code, body)
+	}
+	if n := c.n(); n != 0 {
+		t.Fatalf("the check asked the classifier %d times: %s", n, c.last())
+	}
+	r := lastRoute(s)
+	if a.last == "" || r.Rule == nil || r.Rule.Classified == nil || !strings.Contains(r.Rule.Classified.Error, "Claude Desktop's connection check") {
+		t.Fatalf("not answered by the group's first member, or the trace doesn't say why: %q %+v", a.last, r.Rule)
+	}
+	// a user's turn through the same group is still classified
+	if code, body := send(`{"model":"group/r","max_tokens":32000,"stream":true,"messages":[{"role":"user","content":"add a unit test for the parser"}]}`); code != 200 {
+		t.Fatalf("turn: %d %s", code, body)
+	}
+	if c.n() != 1 {
+		t.Fatalf("a user's turn asked the classifier %d times", c.n())
+	}
+}

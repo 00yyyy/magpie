@@ -1806,9 +1806,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// the group's, as "group/<id>" is, rather than one provider's that
 	// serves it: the Routing view shows the group it went to
 	asked = call.Model
+	desktopCheck := false // Claude Desktop's check that the gateway answers
 	if agent == "claude-desktop" {
 		sub, _ := subagentOf(r.Header)
 		probe := desktopProbe(body)
+		desktopCheck = probe
 		asked = desktopTurn(asked, body, fromClaudeCode(r.Header), sub != "")
 		if probe {
 			// its check, asked for room every model answers in
@@ -2058,8 +2060,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// a classifier's own call to a group (a group's classifier may be one)
 	// asks no classifier in turn: one that is, however far round, the group
 	// asking would ask itself for ever
+	//
+	// Nor does Claude Desktop's check (desktopProbe): it is no user's turn,
+	// and it has 10 seconds to be answered as Desktop starts (8 from Test
+	// connection). Asked of a group with intent rules or Effort auto, its
+	// "." waited on the classifier first, up to the Classifier timeout's 8
+	// seconds, so the first check after a start was cancelled as a 499
+	// and the second, its verdict kept or the classifier resting, passed
+	// (CyberCaius on Discord, v0.1.1847). It goes by the group's order,
+	// as a model's check does.
 	ask := s.askClassifier
-	if r.Header.Get("User-Agent") == RouterAgent {
+	if r.Header.Get("User-Agent") == RouterAgent || desktopCheck {
 		ask = nil
 	} else {
 		// a wait magpie knows of, before a route is begun (unrouted.go)
