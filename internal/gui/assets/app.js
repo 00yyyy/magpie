@@ -13829,9 +13829,10 @@ function accountCapPill(p, user, cap, direct) {
 }
 
 // An account's or key's limit on requests at once (#892): its own, else
-// the provider's Concurrency. The pill says it, and how many run and wait
-// (the lanes, read every 2s while one is in sight: refreshLanes), and opens
-// the app's menu: the provider's, none, a number, or the user's own.
+// the provider's Concurrency. The pill says it, and how many run and wait,
+// with no limit too (chentuoyan) (the lanes, read every 2s while one is in
+// sight: refreshLanes), and opens the app's menu: the provider's, none, a
+// number, or the user's own.
 const LANE_LIMITS = [1, 2, 3, 5, 10];
 let lanesNow = {}, lanesRead = false, lanesTick;
 function laneOwnOf(p, ref) {
@@ -13849,13 +13850,11 @@ function laneText(pill) {
   const own = laneOwnOf(p, pill.dataset.ref), limit = laneLimitOf(p, pill.dataset.ref);
   const lane = (lanesRead ? lanesNow : providers?.gateway?.lanes || {})[pill.dataset.who];
   const busy = lane?.busy || 0, waiting = lane?.waiting || 0;
-  let text;
-  if (limit && (busy || waiting)) text = waiting ? t("{n}/{max} running · {q} queued", { n: busy, max: limit, q: waiting }) : t("{n}/{max} running", { n: busy, max: limit });
-  else if (limit) text = t("{n} at once", { n: limit });
-  else text = t("No limit at once");
+  const v = { n: busy, max: limit, q: waiting };
+  const text = !limit ? t(busy ? "{n} running" : "No limit at once", v) : waiting ? t("{n}/{max} running · {q} queued", v) : t(busy ? "{n}/{max} running" : "{n} at once", busy ? v : { n: limit });
   if (pill.textContent !== text) pill.textContent = text;
   lanesTick ||= setInterval(refreshLanes, 2e3);
-  pill.classList.toggle("set", own != null || limit > 0);
+  pill.classList.toggle("set", own != null || limit + busy > 0);
   pill.classList.toggle("busy-lane", !!(limit && busy >= limit));
   pill.classList.toggle("queued", !!waiting);
   const whose = own != null ? t("its own") : t("the provider's");
