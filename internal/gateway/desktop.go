@@ -483,10 +483,6 @@ func desktopTurn(asked string, body []byte, byClaudeCode, bySubagent bool) strin
 	if m := desktopTierTurn(asked); m != "" {
 		return m
 	}
-	if desktopProbe(body) && !unserved(asked) {
-		// Desktop's check that the model works: asked of it alone
-		return asked
-	}
 	tools := hasTools(body)
 	desktopPicked.Lock()
 	defer desktopPicked.Unlock()
@@ -591,32 +587,6 @@ func desktopDefault(asked string) string {
 		return ""
 	}
 	return shown[0].ID
-}
-
-// desktopProbe: the request is Claude Desktop's check that a gateway model
-// answers, which it runs as it starts and from its gateway settings' Test:
-// {"model":<it>,"max_tokens":1,"messages":[{"role":"user","content":"."}]}
-// (lWt with JUt in its app.asar, 2.7032), on the shortest id with haiku
-// in it, else sonnet, else opus (YT). It is small and tool-less like a
-// title, but it asks whether that model answers: sent to the session's
-// model instead, a failure there was shown as the haiku model rejected
-// ("Gateway rejected model …haiku…", CyberCaius on Discord, whose session
-// was on a relay's GPT model that turned the request away).
-func desktopProbe(body []byte) bool {
-	var v struct {
-		MaxTokens int               `json:"max_tokens"`
-		System    json.RawMessage   `json:"system"`
-		Tools     json.RawMessage   `json:"tools"`
-		Messages  []json.RawMessage `json:"messages"`
-	}
-	if json.Unmarshal(body, &v) != nil || v.MaxTokens != 1 || len(v.System) > 0 || len(v.Tools) > 0 || len(v.Messages) != 1 {
-		return false
-	}
-	var m struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-	return json.Unmarshal(v.Messages[0], &m) == nil && m.Role == "user" && m.Content == "."
 }
 
 // desktopTitlePrompt is how the system prompt Claude Desktop asks a

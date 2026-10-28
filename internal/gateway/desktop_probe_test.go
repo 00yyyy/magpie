@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -22,16 +21,26 @@ func relayNeedsCacheKey(body []byte) (int, string) {
 
 // Claude Desktop checks a gateway model as it starts with
 // {"max_tokens":1,"messages":[{"role":"user","content":"."}]} on the first
-// haiku it is listed. With a session on a relay's GPT model, magpie took
-// that check for a title and sent it to the relay, which turned it away,
-// and Desktop said the haiku model was rejected (CyberCaius on Discord).
-// The check goes to the model it names; a title still goes to the
-// session's model, and reaches the relay with a cache key it needs.
-func TestClaudeDesktopProbeAsked(t *testing.T) {
+// haiku it is listed. It goes, as a title does, to the session's model:
+// the one the user picked, never another provider's Claude model, whose
+// quota it would spend (CyberCaius on Discord, after v0.1.1819 sent it to
+// leee's haiku). On a relay's GPT model it once failed for the cache key
+// the relay needs (shown as the haiku rejected); with the key, and the
+// relay's floor on max_tokens met by asking again, it is answered.
+func TestClaudeDesktopProbeToSessionModel(t *testing.T) {
 	claude := &fake{t: t, reply: sse(
 		`event: message_start`+"\n"+`data: {"type":"message_start","message":{"id":"m","type":"message","role":"assistant","model":"claude-haiku-5-5","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}`,
 		`event: message_stop`+"\n"+`data: {"type":"message_stop"}`)}
-	relay := &fake{t: t, reply: deepseekReply, refuse: relayNeedsCacheKey}
+	relay := &fake{t: t, reply: deepseekReply, refuse: func(body []byte) (int, string) {
+		if c, m := relayNeedsCacheKey(body); c != 0 {
+			return c, m
+		}
+		// as OpenAI's models answer a reply of fewer than 16 tokens
+		if n := max(gjson.GetBytes(body, "max_tokens").Int(), gjson.GetBytes(body, "max_completion_tokens").Int()); n > 0 && n < 16 {
+			return 400, `{"error":{"message":"Invalid 'max_tokens': integer below minimum value. Expected a value >= 16, but got 1 instead.","type":"invalid_request_error"}}`
+		}
+		return 0, ""
+	}}
 	up := setup(t, provider.Anthropic, claude)
 	_ = up
 	ru := httptest.NewServer(relay)
@@ -68,15 +77,18 @@ func TestClaudeDesktopProbeAsked(t *testing.T) {
 
 	// Desktop's check of its haiku, by the id it was listed
 	haiku := "magpie-" + aliasNumber("leee/claude-haiku-5-5") + ".anthropic.claude-haiku-5-5[1m]"
-	relay.calls, claude.got = 0, nil
+	relay.calls, relay.got, claude.got = 0, nil, nil
 	if code, body := send(`{"model":"` + haiku + `","max_tokens":1,"messages":[{"role":"user","content":"."}]}`); code != 200 {
 		t.Fatalf("probe: %d %s", code, body)
 	}
-	if relay.calls != 0 || !bytes.Contains(claude.got, []byte(`"claude-haiku-5-5"`)) {
-		t.Fatalf("probe went to the relay (%d calls); leee got %s", relay.calls, claude.got)
+	if claude.got != nil || modelOf(relay.got) != "gpt-6.1-sol" {
+		t.Fatalf("probe went to leee (%s), not the session's model (relay got %s)", claude.got, relay.got)
+	}
+	if relay.calls != 2 {
+		t.Fatalf("relay asked %d times, want 2 (the floor met once)", relay.calls)
 	}
 
-	// a title still goes to the session's model, and the relay takes it
+	// so does a title
 	relay.got = nil
 	if code, body := send(`{"model":"` + haiku + `","max_tokens":200,"stream":true,"system":"You write short session titles.","messages":[{"role":"user","content":"hi"}]}`); code != 200 {
 		t.Fatalf("title: %d %s", code, body)
@@ -90,21 +102,6 @@ func TestClaudeDesktopProbeAsked(t *testing.T) {
 	}
 	if k := gjson.GetBytes(relay.got, "prompt_cache_key").String(); k != first {
 		t.Fatalf("second turn's key %q, first %q", k, first)
-	}
-}
-
-// desktopProbe knows Desktop's check alone, not a title or a turn.
-func TestDesktopProbe(t *testing.T) {
-	for body, want := range map[string]bool{
-		`{"model":"x","max_tokens":1,"messages":[{"role":"user","content":"."}]}`:                                            true,
-		`{"model":"x","max_tokens":200,"messages":[{"role":"user","content":"."}]}`:                                          false,
-		`{"model":"x","max_tokens":1,"system":"You write short session titles.","messages":[{"role":"user","content":"."}]}`: false,
-		`{"model":"x","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`:                                           false,
-		`{"model":"x","max_tokens":1,"tools":[{"name":"a"}],"messages":[{"role":"user","content":"."}]}`:                     false,
-	} {
-		if desktopProbe([]byte(body)) != want {
-			t.Errorf("desktopProbe(%s) = %v", body, !want)
-		}
 	}
 }
 
