@@ -168,6 +168,33 @@ func LANURLs() []string {
 		return []string{Scheme() + "://" + net.JoinHostPort(h, Port())}
 	}
 	var out []string
+	for _, h := range LANHosts() {
+		out = append(out, Scheme()+"://"+net.JoinHostPort(h, Port()))
+	}
+	return out
+}
+
+// LANHosts are this computer's IPv4 addresses other machines can reach it
+// at, on every interface that is up: a private one, and a public one an
+// ISP assigns to the network card itself. The gateway's addresses and
+// `magpie web`'s links are both made from these, so the two list the
+// same computer the same way (a static public address was in one and not
+// the other).
+func LANHosts() []string {
+	var out []string
+	for _, ip := range hostIPs() {
+		if ip.To4() == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+			continue
+		}
+		out = append(out, ip.String())
+	}
+	return out
+}
+
+// hostIPs are the addresses on this computer's interfaces that are up,
+// loopback's left out; a variable for the tests.
+var hostIPs = func() []net.IP {
+	var out []net.IP
 	ifs, _ := net.Interfaces()
 	for _, i := range ifs {
 		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 {
@@ -175,11 +202,9 @@ func LANURLs() []string {
 		}
 		addrs, _ := i.Addrs()
 		for _, a := range addrs {
-			n, ok := a.(*net.IPNet)
-			if !ok || n.IP.To4() == nil || n.IP.IsLinkLocalUnicast() {
-				continue
+			if n, ok := a.(*net.IPNet); ok {
+				out = append(out, n.IP)
 			}
-			out = append(out, Scheme()+"://"+net.JoinHostPort(n.IP.String(), Port()))
 		}
 	}
 	return out
