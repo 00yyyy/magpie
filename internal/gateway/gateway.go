@@ -4587,6 +4587,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 	case provider.Chat:
 		body = developerAsSystem(body)
+		// a content of text parts, which a vendor's server that takes a
+		// string alone turns the whole request away for (Atria on Discord)
+		body = textPartsAsString(body)
 		// a turn the client cut off before it said anything, which
 		// DeepSeek and Kimi turn every later request away for (#2599)
 		body = silentAssistantsOut(body)
