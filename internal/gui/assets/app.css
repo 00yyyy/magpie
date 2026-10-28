@@ -526,6 +526,11 @@ body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
 
 /* ---- lists ---------------------------------------------------------------- */
 .view { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px 4px; display: flex; flex-direction: column; animation: view-in .24s var(--ease); }
+/* a box that scrolls in a page, marked by app.js while it overflows: the
+   wheel at its ends stays with it (contain keeps the Mac's bounce on it).
+   Only then: Chromium holds the wheel even in a box that doesn't overflow.
+   :where() weighs nothing, so .mchips in a short window still passes it on */
+:where(.holds) { overscroll-behavior-y: contain; }
 @keyframes view-in { from { opacity: 0; transform: translateY(5px); } }
 @media (prefers-reduced-motion: reduce) { .view { animation-name: fade-in; } }
 body.window .view { padding: 2px 16px 8px; }

@@ -2547,3 +2547,14 @@ reason, the "Not encrypted" row on the local network, no native select or
 left border, nothing wider or cut off at 360px, and no such section (nor a
 read of it) in a browser on the page. Every language, Chromium and WebKit,
 with the API faked.
+
+## Inner scroll boxes keep the wheel
+
+`inner-scroll-contain.test.cjs` wheels a box that scrolls inside a page past
+its foot and its top and checks the page's scrollTop didn't move: Routing's
+requests list grouped by session (the reporter's "No session ID" rows, en
+and zh, two sizes), and boxes of each kind added to the same page (calls'
+bodies, Sessions' talk, model lists, Library picks, diffs, and a new box
+naming no rule). A list too short to scroll and boxes that scroll only
+sideways still let the wheel move the page, and the model chips in a short
+window still pass it on (#833). Chromium and WebKit.

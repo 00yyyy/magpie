@@ -22880,8 +22880,11 @@ function givesBack(e, dir) {
   putBack = putBack.filter((p) => !mine(p));
   for (const p of back) p.v.scrollTop += p.by;
 }
+// marks a box that scrolls in a page while it overflows (.holds, app.css)
+const holds = (e) => { for (let b = e.target; b instanceof Element && !b.matches(".view,body"); b = b.parentNode) b.classList.toggle("holds", b.scrollHeight > b.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(b).overflowY)); };
+addEventListener("pointerover", holds, { capture: true, passive: true });
 let touchY = null;
-addEventListener("wheel", (e) => { flings(); givesBack(e, Math.sign(e.deltaY)); }, { capture: true, passive: true });
+addEventListener("wheel", (e) => { holds(e); flings(); givesBack(e, Math.sign(e.deltaY)); }, { capture: true, passive: true });
 addEventListener("touchstart", (e) => { touchY = e.touches[0]?.clientY ?? null; }, { capture: true, passive: true });
 addEventListener("touchmove", (e) => {
   readerScrolls(250);
