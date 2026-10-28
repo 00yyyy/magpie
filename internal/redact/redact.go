@@ -441,6 +441,9 @@ func realEmail(v string) bool {
 		return false
 	}
 	host := strings.ToLower(v[at+1:])
+	if !mailHost(v[:at], host) {
+		return false
+	}
 	if fileHost(host) || docFiles[host] || !mailTLD(host[strings.LastIndexByte(host, '.')+1:]) {
 		return false
 	}
@@ -451,6 +454,34 @@ func realEmail(v string) bool {
 	}
 	return !strings.HasPrefix(host, "noreply") && !strings.Contains(v, "noreply@")
 }
+
+// mailHost is whether host, after local and an @, can be a mail domain:
+// it has a dot, labels of letters, digits and hyphens (or a name's own
+// script's: 例子.中国), and is not a
+// linker's table; and local has no @ of its own. A disassembly's symbols
+// read as addresses: system@plt, puts@got.plt, a version after one @ or
+// two (memcpy@GLIBC_2.14, foo@@GLIBC_2.2.5, foo@Base). .got is a
+// top-level domain, and the local model took system@got for an email, so
+// a reverse engineer had to turn masking off (ch35tnut_ on X, 10-28).
+func mailHost(local, host string) bool {
+	if strings.HasSuffix(local, "@") || !strings.Contains(host, ".") || strings.Trim(host, ".") != host {
+		return false
+	}
+	linker := true
+	for _, l := range strings.Split(host, ".") {
+		if l == "" || strings.ContainsFunc(l, func(r rune) bool { return r < 0x80 && r != '-' && !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') }) {
+			return false
+		}
+		if !linkerWords[l] {
+			linker = false
+		}
+	}
+	return !linker
+}
+
+// linkerWords are the names of a binary's tables a symbol is reached
+// through (system@plt, puts@got.plt, foo@plt.sec), no domain's labels.
+var linkerWords = map[string]bool{"plt": true, "got": true, "sec": true, "iplt": true, "igot": true}
 
 // docFiles are the files agents read by name, on a domain's ending
 // (.md): "@AGENTS.md" after a word, as a prompt names one, is no address

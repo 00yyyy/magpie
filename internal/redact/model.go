@@ -130,7 +130,8 @@ func modelTakes(kind, v string) bool {
 		return !madeID(v)
 	case "EMAIL":
 		// as the rule's: a file's name (icon@2x.png) or an example's is no
-		// address, nor a host's name with no @ (eu.stg.acme.io)
+		// address, nor a host's name with no @ (eu.stg.acme.io), nor a
+		// symbol (system@got, foo@@GLIBC_2.2.5): realEmail's mailHost
 		return strings.Contains(v, "@") && realEmail(v)
 	}
 	return true
