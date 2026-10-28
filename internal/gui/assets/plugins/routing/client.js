@@ -796,6 +796,21 @@ function routingPage(part) {
     return null;
   }
 
+  // leftWhy is why a member was skipped before it was tried (r.left)
+  const leftWhy = (x) => x.held
+    ? t("{who} is left out: the gateway key asking may not use its account.", { who: who(x) })
+    : x.window
+    ? t("{who} is left out: this request is longer than its {n} context window, so it would only refuse it. It's asked only once every one with room is out of its allowance.", { who: who(x), n: ctxShort(x.window) })
+    : x.noCredits
+    ? t("{who} is left out: a usage window is used up, and the account is set not to spend its credits, so it counts as used up until that window renews.", { who: who(x) })
+    : x.capped
+    ? t("{who} is left out: a usage window is at {n}, past the {cap}% cap set on the account, so it counts as used up until that window renews.", { who: who(x), n: pct(x.used), cap: x.capped })
+    : x.barred
+    ? t("{who} is left out: it is set to serve other models, not {model}.", { who: who(x), model: x.model })
+    : x.kind === "key"
+    ? t("{who} is left out: {name} lists {model} to its other keys, not this one.", { who: who(x), name: x.name, model: x.model })
+    : t("{who} is left out: its plan doesn't list {model}.", { who: who(x), model: x.model });
+
   // asides: the others' places, where they say something
   function asides(r) {
     const out = [];
@@ -848,19 +863,7 @@ function routingPage(part) {
     }
     const pooled = r.order.find((x) => !x.aside && x.kind === "key");
     for (const x of r.order.filter((x) => x.aside)) out.push(t("{who} is made for {api}, not {other} as the keys routed over are, so it isn't one of them: it's tried after them.", { who: who(x), api: API[x.speaks] || x.speaks || t("any API"), other: API[pooled?.speaks] || pooled?.speaks || t("any API") }));
-    for (const x of r.left || []) out.push(x.held
-      ? t("{who} is left out: the gateway key asking may not use its account.", { who: who(x) })
-      : x.window
-      ? t("{who} is left out: this request is longer than its {n} context window, so it would only refuse it. It's asked only once every one with room is out of its allowance.", { who: who(x), n: ctxShort(x.window) })
-      : x.noCredits
-      ? t("{who} is left out: a usage window is used up, and the account is set not to spend its credits, so it counts as used up until that window renews.", { who: who(x) })
-      : x.capped
-      ? t("{who} is left out: a usage window is at {n}, past the {cap}% cap set on the account, so it counts as used up until that window renews.", { who: who(x), n: pct(x.used), cap: x.capped })
-      : x.barred
-      ? t("{who} is left out: it is set to serve other models, not {model}.", { who: who(x), model: x.model })
-      : x.kind === "key"
-      ? t("{who} is left out: {name} lists {model} to its other keys, not this one.", { who: who(x), name: x.name, model: x.model })
-      : t("{who} is left out: its plan doesn't list {model}.", { who: who(x), model: x.model }));
+    for (const x of r.left || []) out.push(leftWhy(x));
     return out;
   }
 
@@ -2702,10 +2705,15 @@ function routingPage(part) {
   // provider a line of the story names, so who it is about reads at a
   // glance (the owner: 这里在前面显示对应的 provider 图标会不会更直观一点)
   const logoOf = (w) => w.icon || w.preset || "generic";
-  function logoed(s, r) {
+  // A line names an order member, one skipped before it was tried (r.left,
+  // #3953: a skipped OpenCode Zen Free's line had no logo, or another
+  // member's), or both. Where two share the name at the same place (a key
+  // called "API key" on two providers), the member the line is about wins,
+  // then an order member over a skipped one.
+  function logoed(s, r, about) {
     const word = /[A-Za-z0-9_]/;
     let hit = null;
-    for (const w of r.order) {
+    for (const w of new Set([about, ...r.order, ...(r.left || [])].filter(Boolean))) {
       for (const n of new Set([who(w), w.name].filter(Boolean))) {
         for (let i = s.indexOf(n); i >= 0; i = s.indexOf(n, i + 1)) {
           if (word.test(s[i - 1] || "") || word.test(s[i + n.length] || "")) continue;
@@ -2736,9 +2744,11 @@ function routingPage(part) {
       : "This subagent task is encrypted. Only ChatGPT accounts can read it."), "aside"]);
     items.push([affWhy(r, true) || ruleWhy(r, true) || firstWhy(r), "why"]);
     for (const s of nestedWhy(r)) items.push([s, "why"]);
-    for (const a of asides(r)) items.push([a, "aside"]);
+    // the member a line is about, where it is one: a skipped one's line, a try's
+    const skipped = new Map((r.left || []).map((x) => [leftWhy(x), x]));
+    for (const a of asides(r)) items.push([a, "aside", undefined, skipped.get(a)]);
     r.tries.forEach((tr, i) => {
-      items.push([tryWhy(r, i), tr.done ? (tryOk(tr) ? "ok" : "bad") : "wait"]);
+      items.push([tryWhy(r, i), tr.done ? (tryOk(tr) ? "ok" : "bad") : "wait", undefined, tried(r, tr)]);
       // where its time went, once it is done: the first try's has the
       // request's masking before it
       const timed = i === 0 && r.masking > 0 ? { ...tr, masking: r.masking } : tr;
@@ -2768,7 +2778,9 @@ function routingPage(part) {
       if (tr.done && tryOk(tr) && tr.upstream) items.push([upstreamWhy(tr), "aside upstream-said", tr]);
     });
     if (r.done && !r.tries.length) items.push([t("Nothing was tried: {error}", { error: r.error || r.status }), "bad"]);
-    const key = JSON.stringify([tagKind(r), items.map(([s, c, tr]) => [s, c, tr?.model, tr?.served]), r.order.map(logoOf)]);
+    const aboutKey = (w) => w ? seat(w) : "";
+    const logos = [...r.order, ...(r.left || [])].map(logoOf);
+    const key = JSON.stringify([tagKind(r), items.map(([s, c, tr, w]) => [s, c, tr?.model, tr?.served, aboutKey(w)]), logos]);
     // a different request starts its steps at the top, even when they say
     // what the last one's said (the box is routing.css's, #3764); the same
     // request keeps its scroll while its steps grow
@@ -2780,21 +2792,20 @@ function routingPage(part) {
     // again and, in WebKit, blinks out for a frame, and the story is drawn
     // again on every request that comes in and at each of its steps, so
     // with an agent at work every logo in it blinked on and off
-    const logos = r.order.map(logoOf);
     const was = new Map([...steps.children].map((li) => [li.dataset.k, li]));
-    const lis = items.map(([s, c, tr]) => {
-      const k = JSON.stringify([tagKind(r), s, c, tr?.model, tr?.served, logos]);
+    const lis = items.map(([s, c, tr, w]) => {
+      const k = JSON.stringify([tagKind(r), s, c, tr?.model, tr?.served, aboutKey(w), logos]);
       const old = was.get(k);
       if (old) { was.delete(k); return { li: old }; }
-      return { k, s, c, tr };
+      return { k, s, c, tr, w };
     });
     keepIcons(...was.values());
     replaceKeeping(steps, lis.map((x) => {
       if (x.li) return x.li;
-      const { k, s, c, tr } = x;
+      const { k, s, c, tr, w } = x;
       const li = el("li", c);
       li.dataset.k = k;
-      li.append(...(/^(why|ok|bad|wait|aside)$/.test(c) ? logoed(s, r) : [s]));
+      li.append(...(/^(why|ok|bad|wait|aside)$/.test(c) ? logoed(s, r, w) : [s]));
       if (c === "aside kind") li.prepend(kindTag(r), " ");
       if (c === "swap") li.prepend(swapTag(tr), " ");
       if (c === "aside time") li.replaceChildren(timeElement(tr));
