@@ -12014,6 +12014,8 @@ function importSay(agent) {
   };
 }
 let signing = null; // the sign-in under way: { id, agent, url, state, installing, error }
+// stopSignIn tells the server the sign-in under way is given up
+const stopSignIn = () => { if (signing?.id) api("signin/" + signing.id + "/cancel", {}).catch(() => {}); };
 const signingOpen = () => signing?.state === "waiting" || signing?.state === "installing";
 let justAdded = ""; // the account that just came in, to greet it
 
@@ -12318,7 +12320,7 @@ function renderStepPlan(sp, id) {
 }
 
 function cancelSignIn() {
-  if (signing?.id) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
+  stopSignIn();
   if (signing?.behind) api("signin/" + signing.behind + "/cancel", {}).catch(() => {});
   signing = null;
   renderProviders();
@@ -12432,7 +12434,7 @@ function copilotHostSwitch(sub) {
   b.title = site ? t("Signing in on {host}", { host: site }) : t("An account of an enterprise on GitHub Enterprise Cloud with data residency signs in at its <name>.ghe.com");
   b.onclick = () => {
     if (site) return startSignIn("copilot", true); // which ends this one
-    if (signing?.id) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
+    stopSignIn();
     signing = { agent: "copilot", state: "ghe" };
     renderProviders();
   };
@@ -12696,7 +12698,7 @@ function renderSigning(sub) {
     const k = el("button", "link", t("Use an API key instead"));
     k.title = t("If the page can't reach magpie (it runs on a server or in Docker)");
     k.onclick = () => {
-      if (signing?.id) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
+      stopSignIn();
       startPluginSignIn(sub, keyWay);
     };
     acts.append(k);
@@ -12710,7 +12712,7 @@ function renderSigning(sub) {
     const acts = tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
     const other = el("button", "link other-ways", t("Other ways to sign in…"));
     other.onclick = () => {
-      if (signing?.id) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
+      stopSignIn();
       signing = { agent: sub.agent, state: "method" };
       renderProviders();
     };
