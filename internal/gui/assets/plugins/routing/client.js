@@ -6203,9 +6203,30 @@ function routingPage(part) {
       };
       return b;
     };
+    // fitConds: the widest rule's conditions, measured, as every rule's
+    // (--rt-condw), so each rule's → starts at one x. Measured each under
+    // its own fit-content(50%), with the width before taken off; told a
+    // frame after a rule's conditions or the list change size, or a
+    // condition is typed into (narrower, a rule held at the width before
+    // tells nothing)
+    let condsSoon = 0;
+    const fitConds = () => {
+      condsSoon = 0;
+      if (!rlist.offsetWidth) return;
+      rlist.style.removeProperty("--rt-condw");
+      const w = Math.max(0, ...[...rlist.querySelectorAll(":scope > .rt-rule > .rt-line.when")].map((x) => x.getBoundingClientRect().width));
+      // up to the layout's 1/64px, so the widest rule's conditions don't wrap
+      if (w) rlist.style.setProperty("--rt-condw", Math.ceil(w * 64) / 64 + "px");
+    };
+    const fitCondsSoon = () => { if (!condsSoon) condsSoon = requestAnimationFrame(fitConds); };
+    const condsSeen = new ResizeObserver(fitCondsSoon);
+    rlist.addEventListener("input", fitCondsSoon);
     const drawRules = () => {
       drawCtx(); // the members' windows changed with them
       rlist.replaceChildren();
+      // the rules drawn before are let go, not watched on while unseen
+      condsSeen.disconnect();
+      condsSeen.observe(rlist);
       rAdd.hidden = rTip.hidden = d.members.length < 2;
       // only what holds the rules back is said in a line: how they work is
       // under the ⓘ beside Add a rule
@@ -6562,7 +6583,9 @@ function routingPage(part) {
         };
         row.append(ruleHandle(i, row), line, then, more, need);
         rlist.append(row);
+        condsSeen.observe(line);
       });
+      fitConds();
       drawClassifier();
       focusCond = null;
       focus?.();

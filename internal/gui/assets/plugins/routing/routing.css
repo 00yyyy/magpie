@@ -653,14 +653,15 @@ button.rt-session { cursor: pointer; }
 /* a group's rules, each one line read as a sentence: the conditions it
    has, → and the model it sends that turn to first; its acts under ⋯ */
 .rt-rules .fbl:not(:empty) + .rt-gadds { margin-top: 2px; }
-/* the rules share their columns (each rule a subgrid of the list), so
-   every rule's → and model start at one x: the number, the conditions
-   (as wide as the widest rule's, to at most half the width before they wrap), what
-   it does, the ⋯. Where subgrid isn't, each rule keeps the same columns
-   on its own */
-.rt-rules .fbl { display: grid; grid-template-columns: 16px fit-content(50%) minmax(0, 1fr) auto; gap: 0; }
-.rt-rule { grid-column: 1 / -1; display: grid; grid-template-columns: 16px fit-content(50%) minmax(0, 1fr) auto; align-items: start; column-gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
-@supports (grid-template-columns: subgrid) { .rt-rule { grid-template-columns: subgrid; } }
+/* every rule's → and model start at one x: the number, the conditions
+   (as wide as the widest rule's, to at most half the width before they
+   wrap), what it does, the ⋯. Each rule is a grid of its own, its
+   conditions at least --rt-condw wide, the widest rule's conditions as
+   measured (fitConds). The rules were a subgrid of the list once, the way
+   Safari 16 crashed sizing the requests (#3731, #3955) */
+.rt-rules .fbl { display: flex; flex-direction: column; }
+.rt-rule { display: grid; grid-template-columns: 16px fit-content(50%) minmax(0, 1fr) auto; align-items: start; column-gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+.rt-rule > .rt-line.when { min-width: var(--rt-condw, 0); }
 .rt-rule:first-child { border-top: 0; padding-top: 2px; }
 .rt-rule > .i { line-height: 26px; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; }
 /* a rule's number is its handle, as a model's is: the grip beside it
@@ -678,8 +679,8 @@ button.rt-session { cursor: pointer; }
 .rt-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 /* on a narrow page what it does goes under the conditions */
 @media (max-width: 640px) {
-  .rt-rules .fbl { display: flex; flex-direction: column; }
   .rt-rule { grid-template-columns: 16px minmax(0, 1fr) auto; row-gap: 6px; }
+  .rt-rule > .rt-line.when { min-width: 0; }
   .rt-rule > .rt-then { grid-column: 2; grid-row: 2; }
   .rt-rule > .rt-rmore { grid-column: 3; grid-row: 1; }
 }
