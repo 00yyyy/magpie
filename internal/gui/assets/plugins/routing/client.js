@@ -2355,6 +2355,34 @@ function routingPage(part) {
     if (what.childElementCount !== 2 || what.firstChild.textContent !== name || what.lastChild.textContent !== tail) what.replaceChildren(el("b", "", name), el("span", "", tail));
     // keys that read their own windows are weighed as accounts are
     setText(mode, none ? noneWhy(r) : lone ? t(LONE) : g && routing === "order" ? t(GROUP_ORDER) : g && routing === "weight" ? t(GROUP_WEIGHT) : t(!routing && f?.kind === "key" && !r.order.some((x) => x.known) && !g ? KEYS_SMART : m[1]));
+    holdMode(r);
+  }
+  // holdMode keeps the line under the head, live, as tall as the last
+  // few requests told it, as holdStory does the story: it sits over the
+  // list, so a request picked whose line is shorter (one nothing took
+  // says so in a line, where one account on gave three) pulled the list
+  // up under the reader's click. A layout is read only when the line's
+  // words or the width change, not on each second's telling (#3164)
+  let modeHold = { key: "", told: new Map() };
+  function holdMode(r) {
+    const w = storyW;
+    if (rp || day || !w) {
+      if (mode.style.minHeight) mode.style.minHeight = "";
+      modeHold = { key: "", told: new Map() };
+      return;
+    }
+    const key = JSON.stringify([w, document.documentElement.lang]);
+    if (key !== modeHold.key) modeHold = { key, told: new Map() };
+    if (modeHold.told.get(r.id)?.[0] !== mode.textContent) {
+      mode.style.minHeight = "";
+      modeHold.told.set(r.id, [mode.textContent, mode.getBoundingClientRect().height]);
+      const ids = [...modeHold.told.keys()].sort((x, y) => y - x);
+      for (const id of ids.slice(3)) if (id !== r.id) modeHold.told.delete(id);
+    }
+    const own = modeHold.told.get(r.id)[1];
+    const held = Math.max(...[...modeHold.told.values()].map((h) => h[1]));
+    const min = held > own ? held + "px" : "";
+    if (mode.style.minHeight !== min) mode.style.minHeight = min;
   }
   // goTo makes what names a routing a way to where it is set: a provider's
   // own under Several accounts or keys, a group's its card
@@ -2699,7 +2727,9 @@ function routingPage(part) {
     });
   }
   // grown since it was measured (a font come in): measured again as it is
-  new ResizeObserver(() => { storyW = steps.clientWidth; storyDrawn = ""; holdStory(); }).observe(steps);
+  // and the head's line told again, so it is held from the first width
+  // on, not from the second's next telling (a pick before it isn't held)
+  new ResizeObserver(() => { storyW = steps.clientWidth; storyDrawn = ""; holdStory(); if (headOf) header(...headOf); }).observe(steps);
   // renderCtx draws the request's context window under its story, with
   // its session's prompts request by request; drawn again only when what
   // it shows changes. Live, the next request is patched into the card
