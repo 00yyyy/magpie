@@ -20968,83 +20968,50 @@ function modelOpt(x) {
   return { value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id };
 }
 
-// renderCodexDescriptions picks the model for descriptions independently
-// of titles; an empty setting preserves Codex's requested model, off
-// answers with no description.
 // a model id as "Name · Provider", else as is
 const namedIn = (models) => (id) => {
   const m = models.find((x) => x.id === id);
   return m ? `${m.name || m.id} · ${m.providerName}` : id;
 };
-function renderCodexDescriptions(s) {
+// codexSidePick is the picker for where one of Codex's side requests goes
+// (descriptions, predictions, titles): as Codex sends it, off, or a model of
+// magpie's
+function codexSidePick(s, key, aria, none, path) {
   const models = s.titleModels || [];
   const named = namedIn(models);
-  const v = s.codexDescriptions || "";
+  const v = s[key] || "";
   const b = el("button", "rt-cond on");
   b.type = "button";
-  b.setAttribute("aria-label", t("Codex thread descriptions"));
+  b.setAttribute("aria-label", t(aria));
   if (v === "off") b.append(el("span", "", t("Off")));
   else if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
   else b.append(icon("generic"), el("span", "", t(SAME_SESSION)));
-  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexDescriptions", label: "model", value: v, options: [
+  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key, label: "model", value: v, options: [
     { value: "", label: t(SAME_SESSION), note: t("as Codex sends them when the session is on Codex’s own model"), icon: "generic", reset: true },
-    { value: "off", label: t("Off"), note: t("no description, nothing sent"), reset: true },
+    { value: "off", label: t("Off"), note: t(none), reset: true },
     ...models.map(modelOpt)],
   onPick: (id) => {
     if (id === v) return;
-    prefWrite(api("settings/codex-descriptions", { model: id }));
+    prefWrite(api("settings/" + path, { model: id }));
   } }, b, ev);
-  $("#codexDescriptionsPick").replaceChildren(b);
+  $("#" + key + "Pick").replaceChildren(b);
 }
+
+// renderCodexDescriptions picks the model for descriptions independently
+// of titles; an empty setting preserves Codex's requested model, off
+// answers with no description.
+function renderCodexDescriptions(s) { codexSidePick(s, "codexDescriptions", "Codex thread descriptions", "no description, nothing sent", "codex-descriptions"); }
 
 // renderCodexPredictions: where the Codex app's guess at the user's next
 // message goes (#1970) — as Codex sends it, on the thread's own model; off,
 // answered by magpie with no prediction; or to a model of magpie's.
-function renderCodexPredictions(s) {
-  const models = s.titleModels || [];
-  const named = namedIn(models);
-  const v = s.codexPredictions || "";
-  const b = el("button", "rt-cond on");
-  b.type = "button";
-  b.setAttribute("aria-label", t("Codex composer predictions"));
-  if (v === "off") b.append(el("span", "", t("Off")));
-  else if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
-  else b.append(icon("generic"), el("span", "", t(SAME_SESSION)));
-  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexPredictions", label: "model", value: v, options: [
-    { value: "", label: t(SAME_SESSION), note: t("as Codex sends them when the session is on Codex’s own model"), icon: "generic", reset: true },
-    { value: "off", label: t("Off"), note: t("no prediction, nothing sent"), reset: true },
-    ...models.map(modelOpt)],
-  onPick: (id) => {
-    if (id === v) return;
-    prefWrite(api("settings/codex-predictions", { model: id }));
-  } }, b, ev);
-  $("#codexPredictionsPick").replaceChildren(b);
-}
+function renderCodexPredictions(s) { codexSidePick(s, "codexPredictions", "Codex composer predictions", "no prediction, nothing sent", "codex-predictions"); }
 
 // renderCodexTitles: where Codex's requests for a thread's title go (#705)
 // — as Codex sends them, to its own model through its ChatGPT sign-in; off,
 // answered by magpie with no title; or to a model of magpie's — set on its
 // own, as Codex's subagents are.
-function renderCodexTitles(s) {
-  const models = s.titleModels || [];
-  const named = namedIn(models);
-  const v = s.codexTitles || "";
-  const b = el("button", "rt-cond on");
-  b.type = "button";
-  b.setAttribute("aria-label", t("Codex thread titles"));
-  if (v === "off") b.append(el("span", "", t("Off")));
-  else if (v) b.append(icon(models.find((x) => x.id === v)?.icon || "generic"), el("span", "", named(v)));
-  else b.append(icon("generic"), el("span", "", t(SAME_SESSION)));
-  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "codexTitles", label: "model", value: v, options: [
-    { value: "", label: t(SAME_SESSION), note: t("as Codex sends them when the session is on Codex’s own model"), icon: "generic", reset: true },
-    { value: "off", label: t("Off"), note: t("no title, nothing sent"), reset: true },
-    ...models.map(modelOpt)],
-  onPick: (id) => {
-    if (id === v) return;
-    prefWrite(api("settings/codex-titles", { model: id }));
-  } }, b, ev);
-  $("#codexTitlesPick").replaceChildren(b);
-}
+function renderCodexTitles(s) { codexSidePick(s, "codexTitles", "Codex thread titles", "no title, nothing sent", "codex-titles"); }
 
 // renderCodexAutoReview: the model Codex's auto-review — the reviewer that
 // decides an approval in the user's place — runs on (#938): Codex's own pick
