@@ -205,7 +205,7 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 	var entries []any
 	for i, m := range ms {
 		if raw, ok := own[strings.TrimPrefix(m.ID, "codex/")]; ok && strings.HasPrefix(m.ID, "codex/") {
-			e := ownEntry(raw, m.ID, m.Name, after+i+1)
+			e := ownEntry(raw, m.ID, shownName(m), after+i+1)
 			// the window as magpie resolves it — the one the user set,
 			// else the account's list's — not the cache's, which is what
 			// magpie last handed Codex (#674)
@@ -222,7 +222,7 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 			continue
 		}
 		e := model{
-			Slug: m.ID, DisplayName: m.Name, Description: m.Name + " via magpie",
+			Slug: m.ID, DisplayName: shownName(m), Description: m.Name + " via magpie",
 			Instructions: Prompt, Efforts: []level{},
 			Shell: "unified_exec", Visibility: "list", InAPI: true, Priority: after + i + 1,
 			ApplyPatch: "freeform", Tools: []string{}, Modalities: []string{"text"},
@@ -832,6 +832,17 @@ func ownEntry(raw map[string]any, id, name string, priority int) map[string]any 
 	return e
 }
 
+// shownName is the name Codex's picker shows m by: its Name, with what
+// tells it from another entry of that name after it (catalog.Model.Apart).
+// The picker alone shows it: the description, and the names magpie adds
+// to spawn_agent, which go upstream, keep Name.
+func shownName(m catalog.Model) string {
+	if m.Apart == "" {
+		return m.Name
+	}
+	return m.Name + " · " + m.Apart
+}
+
 // listedEntry is the entry m's vendor lists it under in Codex's own shape
 // (catalog.Model.Codex, a sub2api's), under magpie's id: as the vendor
 // gave it — its instructions, tools, truncation, tiers and the rest, which
@@ -847,7 +858,7 @@ func listedEntry(m catalog.Model, priority int, work settings.Settings, autoRevi
 	if len(m.Codex) == 0 || json.Unmarshal(m.Codex, &raw) != nil || raw == nil {
 		return nil, false
 	}
-	e := ownEntry(raw, m.ID, m.Name, priority)
+	e := ownEntry(raw, m.ID, shownName(m), priority)
 	desc, _ := e["description"].(string)
 	e["description"] = cmp.Or(strings.TrimSpace(desc), m.Name) + " via magpie"
 	if c := m.Context; c > 0 {
