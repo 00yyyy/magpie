@@ -267,7 +267,8 @@ export const FakePlugin = async ({ client }) => ({
     // account's name/uid, so two of one name tell apart), and the
     // answer said by the key: ck-claim gives 50 on a 3-day streak, ck-done
     // is in already, ck-captcha is asked a captcha, ck-throw can't reach
-    // the vendor, ck-odd answers no outcome magpie knows
+    // the vendor, ck-odd answers no outcome magpie knows, and ck-until
+    // answers what the test wrote to <FAKE_CHECKIN>.until ({outcome, until})
     ...(process.env.FAKE_CHECKIN
       ? {
           checkin: async (getAuth) => {
@@ -285,6 +286,8 @@ export const FakePlugin = async ({ client }) => ({
                 throw new Error("FakeCo's check-in is down")
               case "ck-odd":
                 return { outcome: "yes", message: "the daily credits were refreshed" }
+              case "ck-until":
+                return JSON.parse(fs.readFileSync(process.env.FAKE_CHECKIN + ".until", "utf8"))
             }
             return { outcome: "inactive" }
           },

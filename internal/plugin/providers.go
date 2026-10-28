@@ -1102,12 +1102,15 @@ type UsageWindow struct {
 
 // Checkin is what came of an account's daily check-in, as the plugin's
 // auth.checkin said: Outcome is one of claimed, done, ineligible,
-// inactive, captcha and failed.
+// inactive, captcha and failed. Until (RFC 3339, "" when not told) is when
+// the vendor's own day turns and the answer stops holding: Qoder's daily
+// credits open at 10:00 UTC+8, not at Beijing midnight.
 type Checkin struct {
 	Outcome string  `json:"outcome"`
 	Credit  float64 `json:"credit"`
 	Streak  int     `json:"streak"`
 	Message string  `json:"message"`
+	Until   string  `json:"until"`
 }
 
 // AccountCheckin asks the plugin to check account of provider in for the

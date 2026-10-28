@@ -97,8 +97,9 @@ func (c checkiner) checkinNow(ctx context.Context, soon bool) []WorkBuddyCheckin
 			settled = false
 		}
 		// and the loop asks again an answer that may be the vendor's
-		// day before (#3326)
-		if settled && prev.provisional() {
+		// day before (#3326), unless the vendor said when its day turns
+		// (ValidUntil, held to in settled)
+		if settled && prev.provisional() && prev.ValidUntil.IsZero() {
 			settled = now.Sub(prev.At) < wbCheckinEvery
 		}
 		if c.recheck {

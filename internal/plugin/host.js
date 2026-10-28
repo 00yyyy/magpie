@@ -2461,10 +2461,13 @@ async function usageOf(provider, account) {
 //       "ineligible" (the account can't take part) | "inactive" (no
 //       check-in running) | "captcha" (the vendor asks for a captcha: the
 //       user checks in in its own app; never solved) | "failed",
-//     credit? (what it gave), streak? (days in a row), message?
+//     credit? (what it gave), streak? (days in a row), message?,
+//     until? (when the vendor's own day turns: an RFC 3339 time or epoch
+//       milliseconds; Qoder's daily credits open at 10:00 UTC+8)
 //   }
 // magpie asks once a Beijing day per account while the user has it on, and
-// again later that day after a failure; a hook that throws is a failure.
+// again later that day after a failure, or at until; a hook that throws is
+// a failure.
 // Run in the account's scope, a token it renews is saved to that account.
 async function checkin({ provider, account, proxy }) {
   return via.run(proxy ?? "", () => checkinOf(provider, account))
@@ -2482,11 +2485,14 @@ async function checkinOf(provider, account) {
   const r = (await inScope(provider, key, () => a.checkin(async () => authCopy(key), JSON.parse(JSON.stringify(p))))) ?? {}
   const num = (v) => (typeof v === "number" && isFinite(v) ? Math.max(0, v) : 0)
   const message = typeof r.message === "string" ? r.message : ""
+  // a time that doesn't read is not told
+  const t = typeof r.until === "number" ? r.until : typeof r.until === "string" ? Date.parse(r.until) : NaN
+  const until = Number.isFinite(t) && t > 0 ? new Date(t).toISOString() : ""
   if (!checkinOutcomes.includes(r.outcome)) {
     const said = r.outcome === undefined || r.outcome === null ? "no outcome" : JSON.stringify(r.outcome)
-    return { outcome: "failed", credit: 0, streak: 0, message: message ? `the plugin answered ${said}: ${message}` : `the plugin answered ${said}` }
+    return { outcome: "failed", credit: 0, streak: 0, message: message ? `the plugin answered ${said}: ${message}` : `the plugin answered ${said}`, until }
   }
-  return { outcome: r.outcome, credit: num(r.credit), streak: Math.round(num(r.streak)), message }
+  return { outcome: r.outcome, credit: num(r.credit), streak: Math.round(num(r.streak)), message, until }
 }
 
 // sdkHeaders are what the AI SDK package the model is on sends of the key.
