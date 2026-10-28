@@ -857,6 +857,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if s.Colorblind {
 			boot["colorblind"] = true
 		}
+		if s.ReduceMotion {
+			boot["reduceMotion"] = true
+		}
 		// a browser tab keeps its own font choice (fonts.js)
 		if !isWeb(w) {
 			boot["uiFont"], boot["codeFont"] = s.UIFont, s.CodeFont
@@ -1288,6 +1291,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// nor how long a routing group's classifier is given (#2934)
 		if _, sent := fields["classifyTimeout"]; !sent {
 			in.ClassifyTimeout = cur.ClassifyTimeout
+		}
+		// nor whether animations are stilled (#3813)
+		if _, sent := fields["reduceMotion"]; !sent {
+			in.ReduceMotion = cur.ReduceMotion
 		}
 		in.AgentOrder, in.AgentsHidden, in.AgentsShown = cur.AgentOrder, cur.AgentsHidden, cur.AgentsShown
 		in.Window, in.WindowMaximised = cur.Window, cur.WindowMaximised // the window's own, as it was last resized

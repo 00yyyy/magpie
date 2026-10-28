@@ -2566,7 +2566,7 @@ function sessIndexHero() {
   bar.append(fill);
   hero.append(words, field, bar);
 
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduced = calm();
   let frac = 0, shown = 0, known = false, tipAt = Date.now(), tipI = 0, rate = 0, last = null;
   let done = false;
   hero.update = (p) => {

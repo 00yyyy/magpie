@@ -44,7 +44,7 @@ function routingPage(part) {
   const box = $("#rt");
   if (!box) return;
   const NS = "http://www.w3.org/2000/svg";
-  const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const still = calm;
   const shown = () => !$("#view-routing").hidden && !document.hidden;
   // steady redraws a part of the page where the reader is: WebKit has no
   // scroll anchoring, and a part emptied and filled again, measured between,

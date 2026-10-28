@@ -45,9 +45,13 @@ type Settings struct {
 	// Colorblind switches chart series (--c1…--c7) to an Okabe–Ito palette
 	// and gives each quota curve window, and its legend key, a dash of its
 	// own (#2073).
-	Colorblind bool   `json:"colorblind,omitempty"`
-	Lang       string `json:"lang,omitempty"` // system | en | zh
-	Tray       string `json:"tray,omitempty"` // what clicking the tray icon opens: panel | window
+	Colorblind bool `json:"colorblind,omitempty"`
+	// ReduceMotion stills magpie's animations as the system's Reduce
+	// Motion does, for a computer or phone that the moving Routing page
+	// keeps busy (#3813).
+	ReduceMotion bool   `json:"reduceMotion,omitempty"`
+	Lang         string `json:"lang,omitempty"` // system | en | zh
+	Tray         string `json:"tray,omitempty"` // what clicking the tray icon opens: panel | window
 	// SessionTerminal is the Mac app that opens a resumed session, by bundle
 	// id. "" and "system" follow the .command file association. This
 	// computer's own (KeepOwn): another Mac may not have that app.
