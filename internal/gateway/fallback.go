@@ -2484,6 +2484,15 @@ func (h *holdWriter) settle() {
 		h.failure, h.failMsg, h.refused = refusedStatus, msg, true
 		return
 	}
+	if h.status < 400 {
+		// a 200 that is only an error fails as that error's own status
+		// would (errorReply): asked again, or of the next, not handed on
+		// as an answer
+		if status, msg, ok := errorReply(h.held.Bytes()); ok {
+			h.failure, h.failMsg = status, msg
+			return
+		}
+	}
 	if h.alive != nil && h.alive.sent && h.status < 400 && wholeEvents(h.alive.proto, h.held.Bytes()) == nil {
 		// a 200 that is no reply of the protocol's, once the agent has a
 		// stream's headers: it can't go as that stream, so it failed, as
@@ -3392,6 +3401,48 @@ func refusedReply(b []byte) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// errorReply says whether a reply that came whole under a success status
+// is only an error: OpenAI's or Gemini's {"error":{…}}, Anthropic's
+// {"type":"error","error":{…}}, a Responses object whose error is set —
+// with no reply beside it. msg is what it says (provider.APIError), and
+// status what it stands for (streamStatus), as the same error said in a
+// stream is read: a relay that answers OpenAI's TPM limit as a 200 fails
+// as its 429 would, asked again in a moment, not as a reply that went
+// through (monater on Discord).
+func errorReply(body []byte) (status int, msg string, ok bool) {
+	b := bytes.TrimSpace(body)
+	if len(b) == 0 || b[0] != '{' {
+		return 0, "", false
+	}
+	var v struct {
+		Error      json.RawMessage `json:"error"`
+		Choices    []any           `json:"choices"`
+		Content    []any           `json:"content"`
+		Candidates []any           `json:"candidates"`
+		Output     []any           `json:"output"`
+		Status     string          `json:"status"`
+	}
+	if json.Unmarshal(b, &v) != nil || !carries(v.Error) || len(v.Choices)+len(v.Content)+len(v.Candidates) > 0 ||
+		len(v.Output) > 0 && v.Status != "failed" {
+		return 0, "", false
+	}
+	var e struct {
+		Message any `json:"message"`
+		Type    any `json:"type"`
+		Code    any `json:"code"`
+		Status  any `json:"status"`
+	}
+	var said string
+	if json.Unmarshal(v.Error, &said) == nil {
+		if strings.TrimSpace(said) == "" {
+			return 0, "", false
+		}
+	} else if json.Unmarshal(v.Error, &e) != nil || e.Message == nil && e.Type == nil && e.Code == nil && e.Status == nil {
+		return 0, "", false
+	}
+	return streamStatus(string(wordsOf(b))), provider.APIError(b, "the upstream reported an error"), true
 }
 
 // streamStatus is the status an error in a stream stands for, as a vendor

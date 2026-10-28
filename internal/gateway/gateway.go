@@ -5184,6 +5184,8 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	if sse {
 		sniff.drain()
+	} else {
+		sniff.settleWhole()
 	}
 	if gather != nil {
 		cut := ""
@@ -6327,8 +6329,9 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		}
 		// a request the vendor refused in its stream is answered as
 		// refused, with its code (magpie-releases#18); anything else is
-		// the vendor failing
-		return writeVendorError(w, from, cmp.Or(col.errStatus, 502), p.Name+": "+said, col.errSaid), said
+		// the vendor failing, with the status its words would have come
+		// with: a minute limit in a 200 stream is a 429, not a 502
+		return writeVendorError(w, from, cmp.Or(col.errStatus, streamStatus(said)), p.Name+": "+said, col.errSaid), said
 	}
 	if col.err == "" && !ended && saysItsEnd(p, actual, model) && r.Context().Err() == nil {
 		// an Anthropic stream that just stopped — no stop_reason, no

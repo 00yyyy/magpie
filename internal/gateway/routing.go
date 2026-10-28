@@ -361,8 +361,29 @@ var proxyDown = regexp.MustCompile(`proxyconnect |socks connect `)
 // the strings of a JSON body that escapes what isn't ASCII decoded (#1669).
 func wordsOf(body []byte) []byte { return catalog.Words(body) }
 
+// carriedStatus is the status an error a reply carried under a success
+// status stands for: an `error` event, or a `{"error":{…}}` body, sent
+// with HTTP 200, is read as streamStatus reads an error in a stream, so
+// it fails as the same error would with its real status. Read as the
+// 200 it came with, OpenAI's "Rate limit reached for gpt-6.1-sol … on
+// tokens per min (TPM) … Please try again in 6ms." held usedUpWords'
+// "limit reached" and rested the account as out of quota (monater on
+// Discord), where its 429 is a minute's rate limit. Words streamStatus
+// doesn't know (its 502) keep the 200, and read as before; any other
+// status is the reply's own.
+func carriedStatus(status int, body []byte) int {
+	if status < 200 || status >= 400 {
+		return status
+	}
+	if said := streamStatus(string(wordsOf(body))); said != http.StatusBadGateway {
+		return said
+	}
+	return status
+}
+
 // failure says why a reply failed.
 func failure(status int, body []byte) string {
+	status = carriedStatus(status, body)
 	if status == http.StatusBadGateway && proxyDown.Match(body) {
 		return failProxy
 	}
@@ -456,6 +477,7 @@ func dashScopeRate(p provider.Provider, status int, body []byte) bool {
 // till it is signed in again; another vendor saying the same words fails
 // as failure says, and rests as before.
 func failureOf(c candidate, status int, body []byte) string {
+	status = carriedStatus(status, body)
 	if status >= 400 && c.p.Account != nil && c.p.Account.Agent == "claude" && provider.ClaudeSignInRequired(string(body)) {
 		return failAuth
 	}
@@ -1000,6 +1022,9 @@ func (s *Server) restAfter(c candidate, status int, header http.Header, body []b
 // restAfterMarked keeps an upstream routing fact through gateway error
 // translation without putting it in the response sent to the client.
 func (s *Server) restAfterMarked(c candidate, status int, header http.Header, body []byte, sharedPool bool) Rest {
+	// an error carried under a 200 rests as its own status would, and
+	// says that status where the rest is shown
+	status = carriedStatus(status, body)
 	now := time.Now()
 	d := fallbackCooldown
 	why := failureOf(c, status, body)
