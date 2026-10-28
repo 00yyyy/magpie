@@ -44,6 +44,30 @@ const (
 	WorkGitHeader = "X-Magpie-Work-Git"
 )
 
+// FallbackHeader, "1", tells a plugin's fetch that magpie needn't have the
+// answer waited for: a request its vendor queues (Qoder's free models)
+// comes back at once with the queue's 503 and Retry-After instead of being
+// waited out for minutes. Without it the plugin waits. A model's test
+// sends it, so a queued model's test says it is queued instead of running
+// out of time. The plugin host takes it off whatever the plugin sends on
+// (host.js), as it does the two above.
+const FallbackHeader = "X-Magpie-Fallback"
+
+// warmPlugin starts p's plugin host and runs its account's loader, which
+// may renew the sign-in, under ctx and through the account's proxy: what
+// a plugin's first fetch waits for besides its vendor. A failure is left
+// for the fetch to meet and say.
+func (p Provider) warmPlugin(ctx context.Context) {
+	if !p.IsPlugin() {
+		return
+	}
+	id := p.Account.plugin.ID
+	if cur, ok := PluginOf(p.ID); ok {
+		id = cur.ID
+	}
+	_, _ = plugin.LoaderOptions(p.Via(ctx), id, p.Account.pluginKey)
+}
+
 // PluginID is the id magpie gives the provider OpenCode calls id: the same,
 // unless a preset or a built-in subscription has it (google, openai,
 // anthropic), or a provider of the user's own made before the plugin was
