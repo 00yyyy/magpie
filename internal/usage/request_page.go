@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -1338,6 +1339,90 @@ type matchGroup struct {
 	off, n int32
 }
 
+// matchCandidate is a local call with one gateway call in its range, and
+// that call's place in ends
+type matchCandidate struct {
+	ref rowRef
+	at  int32
+}
+
+// matchScratch is what one matchedBlocks call works in, kept for the
+// next. Every poll while an agent works matches a year's history again,
+// and growing these afresh each time was ~1.9 of the ~2.2 GB the matcher
+// allocated in 80 s of polls (#2278). A sync.Pool kept nothing: a poll
+// collects several times a second, and each collection empties it. One is
+// kept until ReleaseScratch, which the window calls once its reads rest.
+type matchScratch struct {
+	reserved   map[rowRef]bool
+	byID       map[string]int32
+	calls      []idCalls
+	ids        map[uint32]struct{}
+	found      []idLocal
+	used       map[rowRef]bool
+	refs       []timedRef
+	groupOf    map[matchKey]int32
+	groups     []matchGroup
+	ks         []int32
+	ends       []matchEnd
+	counts     []int32
+	named      map[uint64]struct{}
+	unique     []bool
+	candidates []matchCandidate
+}
+
+var keptMatch atomic.Pointer[matchScratch]
+
+// matchScratchFor is the kept scratch, or a new one when another call has
+// it or none is kept
+func matchScratchFor() *matchScratch {
+	if s := keptMatch.Swap(nil); s != nil {
+		return s
+	}
+	return &matchScratch{}
+}
+
+// mapFor is m, or a new map made for n when there is none yet
+func mapFor[K comparable, V any](m map[K]V, n int) map[K]V {
+	if m == nil {
+		return make(map[K]V, n)
+	}
+	return m
+}
+
+// ReleaseScratch lets go of what the request matching keeps between calls.
+func ReleaseScratch() {
+	keptMatch.Store(nil)
+	keptPicks.Store(nil)
+}
+
+// sized is s[:n], zeroed, in s's array when it holds n
+func sized[T any](s []T, n int) []T {
+	if cap(s) < n {
+		return make([]T, n)
+	}
+	s = s[:n]
+	clear(s)
+	return s
+}
+
+// release empties s, so it holds no chunk of this call, and keeps it
+func (s *matchScratch) release() {
+	clear(s.reserved)
+	clear(s.byID)
+	clear(s.ids)
+	clear(s.used)
+	clear(s.groupOf)
+	clear(s.named)
+	clear(s.calls)
+	clear(s.found)
+	clear(s.refs)
+	clear(s.ends)
+	clear(s.candidates)
+	s.calls, s.found, s.refs, s.groups, s.ks = s.calls[:0], s.found[:0], s.refs[:0], s.groups[:0], s.ks[:0]
+	s.ends, s.counts, s.unique, s.candidates = s.ends[:0], s.counts[:0], s.unique[:0], s.candidates[:0]
+	keptMatch.Store(s)
+}
+
 // agyMatchSession stands for the session of an Antigravity CLI (agy) call
 // on both sides: agy sends the gateway no session header, so its gateway
 // records name none, and its transcript's steps are matched to them by
@@ -1354,11 +1439,12 @@ func matchedLocal(gateway *rowChunk, chunks []*rowChunk, skip map[rowRef]bool, s
 }
 
 func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]bool, responsePairs map[rowRef]rowRef, since time.Time, newestIDs bool) map[rowRef]bool {
-	reserved := make(map[rowRef]bool, len(responsePairs)*2)
-	matched := make(map[rowRef]bool, len(responsePairs))
+	scratch := matchScratchFor()
+	defer scratch.release()
+	scratch.reserved = mapFor(scratch.reserved, len(responsePairs)*2)
+	reserved := scratch.reserved
 	for gateway, local := range responsePairs {
 		reserved[gateway], reserved[local] = true, true
-		matched[local] = true
 	}
 	gatewaySince := since
 	if !since.IsZero() {
@@ -1380,8 +1466,10 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			}
 		}
 	}
-	byID := make(map[string]int32, withID)
-	calls := make([]idCalls, 0, withID)
+	scratch.byID = mapFor(scratch.byID, withID)
+	byID := scratch.byID
+	calls := slices.Grow(scratch.calls, withID)
+	defer func() { scratch.calls = calls }()
 	for _, gateway := range gateways {
 		for i := range gateway.Rows {
 			ref := rowRef{gateway, i}
@@ -1401,11 +1489,13 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 	}
 	// the local calls that name an id, chained from its calls[k].last in
 	// the order they were found
-	var found []idLocal
+	found := scratch.found
+	defer func() { scratch.found = found }()
 	rows := lentRows() // a key is looked up
 	defer rows.release()
 	hints := hintsOf(chunks, &rows)
-	ids := make(map[uint32]struct{}, len(byID))
+	scratch.ids = mapFor(scratch.ids, len(byID))
+	ids := scratch.ids
 	for id := range byID {
 		ids[uint32(matchHash(id))] = struct{}{}
 	}
@@ -1432,8 +1522,16 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			}
 		}
 	}
-	used := make(map[rowRef]bool, len(found))
-	var refs []timedRef
+	// made once the calls matched by id are known: grown from the response
+	// pairs alone, it was ~300 MB of what 80 s of polls allocated
+	matched := make(map[rowRef]bool, len(responsePairs)+len(found))
+	for _, local := range responsePairs {
+		matched[local] = true
+	}
+	scratch.used = mapFor(scratch.used, len(found))
+	used := scratch.used
+	refs := scratch.refs
+	defer func() { scratch.refs = refs }()
 	for k := range calls {
 		refs = refs[:0]
 		for j := calls[k].last; j != 0; j = found[j-1].before {
@@ -1488,9 +1586,11 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			}
 		}
 	}
-	groupOf := make(map[matchKey]int32, kept) // a key's place in groups
-	var groups []matchGroup
-	ks := make([]int32, 0, kept) // each kept call's group, in the order read
+	scratch.groupOf = mapFor(scratch.groupOf, kept)
+	groupOf := scratch.groupOf // a key's place in groups
+	groups := scratch.groups
+	defer func() { scratch.groups = groups }()
+	ks := slices.Grow(scratch.ks, kept) // each kept call's group, in the order read
 	for _, gateway := range gateways {
 		for i := range gateway.Rows {
 			key, ok := keyOf(gateway, i)
@@ -1512,7 +1612,8 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 		groups[k].off, off = off, off+groups[k].n
 		groups[k].n = 0
 	}
-	ends := make([]matchEnd, len(ks))
+	ends := sized(scratch.ends, len(ks))
+	scratch.ends, scratch.ks = ends, ks
 	next := 0
 	for _, gateway := range gateways {
 		for i := range gateway.Rows {
@@ -1526,23 +1627,19 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			g.n++
 		}
 	}
-	ks = nil
 	for k := range groups {
 		g := groups[k]
 		slices.SortFunc(ends[g.off:g.off+g.n], func(a, b matchEnd) int { return a.at.Compare(b.at) })
 	}
-	counts := make([]int32, len(ends)+len(groups))
-	named := make(map[uint64]struct{}, len(groups))
+	counts := sized(scratch.counts, len(ends)+len(groups))
+	scratch.counts = counts
+	scratch.named = mapFor(scratch.named, len(groups))
+	named := scratch.named
 	for key := range groupOf {
 		named[matchHash(key.session)] = struct{}{}
 	}
-	// a local call with one gateway call in its range, and that call's
-	// place in ends
-	type candidate struct {
-		ref rowRef
-		at  int32
-	}
-	var candidates []candidate
+	candidates := scratch.candidates
+	defer func() { scratch.candidates = candidates }()
 	for n, chunk := range chunks {
 		if hints[n].latest.Before(since) || !namesAny(hints[n].sessions, named) {
 			continue
@@ -1592,11 +1689,12 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 				}
 			}
 			if count == 1 {
-				candidates = append(candidates, candidate{ref, at})
+				candidates = append(candidates, matchCandidate{ref, at})
 			}
 		}
 	}
-	unique := make([]bool, len(ends))
+	unique := sized(scratch.unique, len(ends))
+	scratch.unique = unique
 	for k := range groups {
 		g := groups[k]
 		count := int32(0)

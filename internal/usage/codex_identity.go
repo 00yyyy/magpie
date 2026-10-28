@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/sessions"
@@ -182,20 +183,43 @@ func cloneCodexChunks(chunks []*rowChunk) []*rowChunk {
 // rowResponseID is rowText's slot of Record.ResponseID.
 const rowResponseID = 25
 
+// responsePick is what codexChunkResponsePairs knows of one response id
+type responsePick struct {
+	gateways, locals   int
+	gateway, local     rowRef
+	gatewayOK, localOK bool
+	compaction         *bool
+}
+
+// pickScratch is what one codexChunkResponsePairs call works in, kept for
+// the next as matchScratch is: made afresh on every poll, its maps and
+// slab were ~775 MB of what 80 s of polls allocated while calls came in
+// (#2278).
+type pickScratch struct {
+	picks  map[string]int32
+	slab   []responsePick
+	picked map[uint64]bool
+}
+
+var keptPicks atomic.Pointer[pickScratch]
+
+// release empties s, so it holds no chunk of this call, and keeps it
+func (s *pickScratch) release() {
+	clear(s.picks)
+	clear(s.picked)
+	clear(s.slab)
+	s.slab = s.slab[:0]
+	keptPicks.Store(s)
+}
+
 // codexChunkResponsePairs are the Codex calls the gateway and a session file
 // both name by one response id, gateway to local, and each local call's
 // compaction. Only the ids the gateway names are kept of the locals': a map
 // of every Codex call's id held each decoded chunk's strings.
 func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[rowRef]bool) (map[rowRef]rowRef, map[rowRef]*bool) {
-	type pick struct {
-		gateways, locals   int
-		gateway, local     rowRef
-		gatewayOK, localOK bool
-		compaction         *bool
-	}
 	// the picks are one slice the map points into: a pick each was ~300 MB
 	// of what two minutes of polls allocated while an agent worked (#2278).
-	// Both are made the size of the gateway's ids, and a gateway call is
+	// The slab holds the gateway's ids, and a gateway call is
 	// judged by the few strings that decide it, not made a Row: grown
 	// from nothing, and a Row each, they were ~2.4 GB of what 80 s of
 	// polls allocated while calls came in, on a year's history.
@@ -210,8 +234,15 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 			}
 		}
 	}
-	picks := make(map[string]int32, withID)
-	slab := make([]pick, 0, withID)
+	scratch := keptPicks.Swap(nil)
+	if scratch == nil {
+		scratch = &pickScratch{}
+	}
+	defer scratch.release()
+	scratch.picks = mapFor(scratch.picks, withID)
+	picks := scratch.picks
+	slab := slices.Grow(scratch.slab, withID)
+	defer func() { scratch.slab = slab }()
 	for _, chunk := range gateways {
 		open := rows.of(chunk)
 		for i := range open.Rows {
@@ -224,7 +255,7 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 			if !ok {
 				k = int32(len(slab))
 				picks[id] = k
-				slab = append(slab, pick{})
+				slab = append(slab, responsePick{})
 			}
 			pk := &slab[k]
 			pk.gateways++
@@ -237,7 +268,8 @@ func codexChunkResponsePairs(gateways, locals []*rowChunk, duplicateLocal map[ro
 	// a local chunk is read only when one of its ids may be a pick's: on a
 	// page's poll every session file of the period was decoded again for
 	// the few the gateway named
-	picked := make(map[uint64]bool, len(picks))
+	scratch.picked = mapFor(scratch.picked, len(picks))
+	picked := scratch.picked
 	for id := range picks {
 		picked[foldHash(id)] = true
 	}
