@@ -894,8 +894,13 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			// and MAGPIE_PUBLIC_URL while other machines are let in, which
 			// a page they open (magpie web) shows instead (noahhrreion on
 			// Discord: in Docker the line said the container's loopback)
-			if u := gateway.PublicURL(); u != "" && (s.LAN || gateway.OnNetwork()) {
-				side["publicURL"] = u
+			// and, shared, the addresses other machines use, which the
+			// window's line names from the first paint (coeo91 on Discord)
+			if s.LAN || gateway.OnNetwork() {
+				side["lan"], side["lanURLs"] = true, gateway.LANURLs()
+				if u := gateway.PublicURL(); u != "" {
+					side["publicURL"] = u
+				}
 			}
 			boot["sideGateway"] = side
 		}

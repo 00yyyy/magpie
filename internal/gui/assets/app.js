@@ -24065,7 +24065,7 @@ function renderSideGw(g) {
   if (b.hidden) return;
   // a page other machines open (magpie web) says where they reach it,
   // MAGPIE_PUBLIC_URL, as the Gateway page does (#1551; noahhrreion)
-  const url = web && g.publicURL || g.url;
+  const url = self.sideLAN?.(g) || web && g.publicURL || g.url;
   let host = url;
   try { host = new URL(url).host; } catch {}
   b.classList.toggle("off", !g.running);
@@ -24075,7 +24075,7 @@ function renderSideGw(g) {
   // gateway leaves it no room ("Zugangspunkt") says the address alone, the
   // word kept in its tooltip
   if (g.running && s.scrollWidth > s.clientWidth) s.textContent = host;
-  b.title = g.running ? t("Gateway") + " " + url : url;
+  b.title = (g.running ? t("Gateway") + " " + url : url) + (web || url == g.url ? "" : " · " + g.url);
 }
 if (mode === "window") {
   $("#sideGw").onclick = () => { show("gateway"); $("#sideGw").blur(); };
