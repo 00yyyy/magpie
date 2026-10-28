@@ -500,8 +500,8 @@ cause:
     #3568 (TestHandedOverGatewayFinishesItsStream, a real handover drop)
     on 10-25, with a reproduction and red-on-old tests. Nobody ported it
     for three days, and it went red on ubuntu CI again at 0a7633136. It
-    was ported unchanged as 11c427eaa. Before filing or skipping a red,
-    read its issue to the end: a posted patch is ported first.
+    was ported unchanged as 11c427eaa. Now in the code standards (a
+    red's issue is read to its last comment, 77898391d).
 - 10-27: the #1794 pattern on a third day. internal/provider has died
   on main since 10-25 in TestUnreadLoginsWriteErrorsKeepCredentials
   (#3632, a synctest fatal, 2 of 2 on mote at 4b0a32e0f). The issue has
@@ -629,6 +629,9 @@ standards since 10-18, widened to a worktree and its logs. See
 
 ## Moved to the code standards
 
+- **A red's issue is read to its last comment, and a patch on it is
+  taken first** (10-12, 10-17, 10-27, 10-28). On 10-28 JoeyWu-tech's
+  #3568 patch sat three days until CI went red on it again (11c427eaa).
 - **A mover's min is npm's version when the change lands** (10-16,
   10-18, 10-24). On 10-16 19e9fc47f raised Cursor's min a version behind
   npm, and 53009f81a left Factory one behind (#2557). On 10-18 zed 0.1.9
