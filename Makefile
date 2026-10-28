@@ -63,6 +63,7 @@ app: build
 	@cp magpie magpie.app/Contents/MacOS/magpie
 	@cp build/darwin/magpie.icns magpie.app/Contents/Resources/magpie.icns
 	@cp build/darwin/Assets.car magpie.app/Contents/Resources/Assets.car
+	@cp THIRD_PARTY_NOTICES magpie.app/Contents/Resources/THIRD_PARTY_NOTICES
 	@sed 's/@VERSION@/$(VERSION)/' build/darwin/Info.plist > magpie.app/Contents/Info.plist
 	@echo "  magpie.app"
 

@@ -17848,6 +17848,23 @@ function askReset(q) {
 }
 // closes a confirmation, nothing more (its Cancel, or an OK that only dismisses)
 function cancelAsk(e) { e.stopPropagation(); closeConfirmAsk(); }
+// THIRD_PARTY_NOTICES, which every build carries
+async function showNotices() {
+  let text;
+  try { text = (await api("notices")).text; } catch (e) { status(e.message, "err"); return; }
+  const ed = el("div", "editor wide notices");
+  const head = el("div", "ehead");
+  head.append(el("b", "", t("Open-source licenses")));
+  const bar = el("div", "bar");
+  const ok = el("button", "text primary", t("Done"));
+  ok.onclick = cancelAsk;
+  bar.append(el("span", "grow"), ok);
+  ed.append(head, el("pre", "notices-text", text), bar);
+  confirmAsk = ed;
+  openModal(ed);
+  $("#modal").classList.add("lib");
+  ok.focus({ preventScroll: true });
+}
 function closeConfirmAsk() {
   if (!confirmAsk) return;
   // Escape and the backdrop must not expose row actions while a bulk write
@@ -19592,6 +19609,9 @@ function renderSettings() {
   const site = el("button", "text", t("Open"));
   site.onclick = () => api("open", { url: "https://usemagpie.ai" }).catch(() => {});
   row(t("Website"), t("downloads, docs and what's new"), "usemagpie.ai", site);
+  const lic = el("button", "text", t("View"));
+  lic.onclick = showNotices;
+  row(t("Open-source licenses"), t("the notices of the code and data magpie is built with"), "", lic);
   const join = el("button", "discord");
   join.innerHTML = DISCORD_SVG;
   join.append(el("span", "", t("Join Discord")));

@@ -43,6 +43,7 @@ import (
 	"github.com/yetone/magpie/internal/mcpauth"
 	"github.com/yetone/magpie/internal/middleware"
 	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/notices"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
@@ -115,6 +116,11 @@ func cliBehindRoutes(mux *http.ServeMux) {
 	// profile gets ~/.local/bin
 	mux.HandleFunc("GET /api/cli", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, update.ReadCLI())
+	})
+	// Settings › About's Open-source licenses: the notices this binary
+	// carries (notices.Text, THIRD_PARTY_NOTICES)
+	mux.HandleFunc("GET /api/notices", func(rw http.ResponseWriter, r *http.Request) {
+		writeJSON(rw, map[string]string{"text": notices.Text})
 	})
 	mux.HandleFunc("POST /api/cli", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
