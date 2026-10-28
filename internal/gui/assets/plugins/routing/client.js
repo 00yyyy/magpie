@@ -2865,6 +2865,7 @@ function routingPage(part) {
   // go up to the stage, which read as the page jumping to its top)
   function pick(r) {
     pinned = !day && r.id === newest()?.id ? null : r;
+    awayAt = 0;
     if (rp) { rp = null; rbar.hidden = true; }
     stopPlays();
     cur = r;
@@ -4383,6 +4384,7 @@ function routingPage(part) {
     ticking = 0;
     seen = false;
     endReplay(true);
+    leftPick();
     for (const tr of trips) tr.res();
     trips = [];
     wake();
@@ -4391,16 +4393,41 @@ function routingPage(part) {
   // Visibility events can arrive after the browser has suspended frames, so
   // finish hidden work here too. The first visible frame alone owns resume.
   function start() {
+    const waking = !!sightWait; // the poll waited: it reads what came meanwhile
     inSightAgain();
     countdown();
     if (!shown()) { pause(); return; }
+    backToPick(!waking);
     kick();
+  }
+  // A pick holds the stage while the reader is with it (and #1389 lets it
+  // go once it has left the list). Gone from the page — another app,
+  // another page, the window hidden — and back to requests that came
+  // meanwhile, the reader comes back to live, not to a pick they may well
+  // have forgotten: a 16:36 request the agent had canceled held the stage
+  // at 17:09 while the list under it filled with newer ones (未寒 on
+  // Discord, 10-28). Back to none, the pick stays.
+  let awayAt = 0, blurred = false; // the newest request when the reader left a pick; 0 while with it
+  function leftPick() {
+    if (pinned && !day && !rp && !awayAt) awayAt = newest()?.id || 1;
+  }
+  // backToPick: the reader is back; done, it was the last word on this
+  // time away (the poll may still be reading what came meanwhile)
+  function backToPick(done) {
+    if (!awayAt || blurred || !shown() || !loaded) return;
+    const was = awayAt;
+    if (done) awayAt = 0;
+    if (!pinned || day || rp || !((newest()?.id || 0) > was)) return;
+    awayAt = 0;
+    pinned = null;
+    followListed();
   }
   // in sight again: the view picked, the window shown, another tab left,
   // the window covered and drawing frames once more
   new MutationObserver(start).observe($("#view-routing"), { attributes: true, attributeFilter: ["hidden"] });
   document.addEventListener("visibilitychange", start);
-  window.addEventListener("focus", start);
+  window.addEventListener("blur", () => { blurred = true; leftPick(); });
+  window.addEventListener("focus", () => { blurred = false; start(); });
   // countdowns tick once a second, only while the page is in sight: a
   // tick with nothing to draw wakes the web content process all the same
   // (#3185), so out of sight there is none until start() sees it again
@@ -4550,6 +4577,8 @@ function routingPage(part) {
             cur = newest();
             if (cur) { sync(true); say(affWhy(cur, true) || ruleWhy(cur, true) || firstWhy(cur)); }
           }
+          // back in sight to requests that came while away: live again
+          if (back) backToPick(true);
           if (!pinned && !rp) {
             cur = newest();
             if (cur) sync();
