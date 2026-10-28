@@ -329,13 +329,15 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 			}
 			sh := shares[f.key]
 			if sh == nil {
-				sh = &share{models: map[string]Tokens{}, dates: map[string]bool{}, tools: map[string]int{},
-					skills: map[string]int{}, skillLast: map[string]string{}, perDate: map[string]*dayShare{}}
+				// tools and skills are made once a day has some: most
+				// sessions' days have none, and each poll made them for
+				// every session of every range (#2278)
+				sh = &share{models: map[string]Tokens{}, dates: map[string]bool{}, perDate: map[string]*dayShare{}}
 				shares[f.key] = sh
 			}
 			pd := sh.perDate[date]
 			if pd == nil {
-				pd = &dayShare{tools: map[string]int{}}
+				pd = &dayShare{}
 				sh.perDate[date] = pd
 			}
 			for model, t := range d.Models.all() {
@@ -355,10 +357,19 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 			}
 			pd.messages += d.Prompts + d.Replies
 			for name, n := range d.Tools.all() {
+				if sh.tools == nil {
+					sh.tools = map[string]int{}
+				}
+				if pd.tools == nil {
+					pd.tools = map[string]int{}
+				}
 				sh.tools[name] += n
 				pd.tools[ToolCategory(name)] += n
 			}
 			for name, n := range d.Skills.all() {
+				if sh.skills == nil {
+					sh.skills, sh.skillLast = map[string]int{}, map[string]string{}
+				}
 				sh.skills[name] += n
 				if date > sh.skillLast[name] {
 					sh.skillLast[name] = date
