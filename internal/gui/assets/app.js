@@ -13525,6 +13525,26 @@ const CAP_SHARES = [50, 60, 70, 80, 90];
 // account was found to stand in for, the name it goes by till it has one.
 function accountNameOf(p, user) { return p?.accountNames?.[String(user).toLowerCase()] || ""; }
 function accountSeatOf(p, user) { return p?.accountSeats?.[String(user).toLowerCase()] || ""; }
+// renameIn edits a name in place of at: Enter saves it changed, Escape
+// keeps it. Once: Enter or Escape draws the editor again, and the blur
+// that follows (Chromium's, as the redraw takes the input out) does nothing,
+// rather than draw it again inside that draw or save on Escape (#3944)
+function renameIn(at, own, hint, save) {
+  const i = input(own, hint);
+  let over = false;
+  const done = (ok) => {
+    if (over) return;
+    over = true;
+    if (ok && i.value.trim() !== own) save(i.value);
+    else renderProviders();
+  };
+  i.className = "rename-in";
+  i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") done(true); else if (e.key === "Escape") done(false); };
+  i.onblur = () => done(true);
+  at.replaceWith(i);
+  i.focus();
+  return i;
+}
 // accountNameButton is the account's name on its editor row: the name of
 // its own, the account beside it, and a click renames it.
 function accountNameButton(p, user) {
@@ -13540,21 +13560,7 @@ function accountNameButton(p, user) {
   name.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); name.onclick(); } };
   name.onclick = () => {
     if (String(getSelection?.() || "").length) return;
-    const i = input(own, seat || t("Name, e.g. Personal or Team"));
-    i.className = "rename-in";
-    i.maxLength = 64;
-    // once: Enter re-renders the row, and the input's blur then follows
-    let over = false;
-    const done = (save) => {
-      if (over) return;
-      over = true;
-      if (save && i.value.trim() !== own) accountAction("provider/accountname", { id: p.id, account: user, alias: i.value });
-      else renderProviders();
-    };
-    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") done(true); else if (e.key === "Escape") done(false); };
-    i.onblur = () => done(true);
-    wrap.replaceWith(i);
-    i.focus();
+    renameIn(wrap, own, seat || t("Name, e.g. Personal or Team"), (alias) => accountAction("provider/accountname", { id: p.id, account: user, alias })).maxLength = 64;
   };
   wrap.append(name);
   if (own) wrap.append(el("span", "acct-user", user));
@@ -14225,18 +14231,7 @@ function renderKeyAccounts(p) {
     dot.onclick = () => accountAction("keys/" + (k.on ? "off" : "on"), { id: p.id, ref: k.id });
     const name = el("button", "n rename" + (k.name ? "" : " mono"), k.name || k.masked);
     name.title = t("Rename");
-    name.onclick = () => {
-      const i = input(k.name, t("Name, e.g. Personal or Team"));
-      i.className = "rename-in";
-      const done = (save) => {
-        if (save && i.value.trim() !== (k.name || "")) accountAction("keys/rename", { id: p.id, ref: k.id, name: i.value });
-        else renderProviders();
-      };
-      i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") done(true); else if (e.key === "Escape") done(false); };
-      i.onblur = () => done(true);
-      name.replaceWith(i);
-      i.focus();
-    };
+    name.onclick = () => renameIn(name, k.name || "", t("Name, e.g. Personal or Team"), (n) => accountAction("keys/rename", { id: p.id, ref: k.id, name: n }));
     row.append(dot, name);
     if (k.name) row.append(el("span", "plan mono", k.masked));
     // a key rotated at the vendor (#1869): its new value pasted in place,
