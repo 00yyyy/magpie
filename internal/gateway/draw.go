@@ -1157,7 +1157,7 @@ func (s *Server) sendWith(ctx context.Context, p provider.Provider, method, url,
 	} else {
 		// Google's API keys go in their own header
 		req.Header.Set("x-goog-api-key", p.Key)
-		for k, v := range p.Headers {
+		for k, v := range p.SentHeaders(ctx) {
 			catalog.PutUserHeader(req.Header, k, v)
 		}
 	}

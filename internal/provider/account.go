@@ -232,7 +232,9 @@ func (p Provider) Sign(ctx context.Context, req *http.Request, proto Protocol, b
 	// other case (PutUserHeader), so it is sent once, theirs.
 	// A list the request has its own of (anthropic-beta) is added to, not
 	// replaced: the user's betas go after those the agent asked.
-	for k, v := range p.Headers {
+	// ${sessionId} and ${threadId} in a value are the conversation's
+	// (conversation.go).
+	for k, v := range p.SentHeaders(ctx) {
 		if ListHeader(k) {
 			MergeList(req.Header, k, v)
 			continue

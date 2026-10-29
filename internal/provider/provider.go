@@ -213,8 +213,9 @@ type Provider struct {
 	// price as listed; at most three decimals (PriceRateOK).
 	PriceRate float64 `json:"priceRate,omitempty"`
 
-	// Headers are extra HTTP request headers sent to the vendor, exactly as
-	// the user typed them. They ride on every request magpie makes to a plain
+	// Headers are extra HTTP request headers sent to the vendor, as the user
+	// typed them but for ${sessionId} and ${threadId} in a value, the
+	// request's conversation ids (SentHeaders, conversation.go). They ride on every request magpie makes to a plain
 	// key+URL provider — forwarded calls, connectivity tests, and model-list
 	// fetches — applied after the auth headers, so the user can override those
 	// when a gateway insists on a private scheme. Signed-in agent accounts
@@ -223,8 +224,8 @@ type Provider struct {
 
 	// ExtraBody are JSON fields added to the body of every request to the
 	// vendor (#1604), filling in what the body lacks, or replacing it for a
-	// name written "!name"; ${sessionId} in a value is the conversation's
-	// id (extrabody.go). Signed-in agent accounts ignore it, as Headers.
+	// name written "!name"; ${sessionId} and ${threadId} in a value are the
+	// conversation's ids (extrabody.go, conversation.go). Signed-in agent accounts ignore it, as Headers.
 	ExtraBody ExtraBody `json:"extraBody,omitempty"`
 
 	// ReplyHeaders are headers of the vendor's reply passed on to the
