@@ -1054,6 +1054,24 @@ func codexToken(ctx context.Context, dir string) (tok, accountID string, err err
 	return codexTokenRenewing(ctx, dir, "")
 }
 
+// codexTokenAsKept is the access token Codex keeps in dir, as it is: an
+// expired one is an error, not refreshed, for a sign-in magpie leaves to
+// Codex (leftAlone), which renews it itself.
+func codexTokenAsKept(dir string) (tok, accountID string, err error) {
+	b, _, err := readCodexLogin(dir, false)
+	if err != nil {
+		return "", "", err
+	}
+	var a codexAuth
+	if json.Unmarshal(b, &a) != nil || a.Tokens.AccessToken == "" {
+		return "", "", errors.New("Codex is signed out; run codex login")
+	}
+	if exp, _ := jwtClaims(a.Tokens.AccessToken)["exp"].(float64); exp != 0 && !time.Now().Before(time.Unix(int64(exp), 0)) {
+		return "", "", errors.New("Codex's sign-in has expired; Codex renews it as it runs")
+	}
+	return a.Tokens.AccessToken, codexAccountID(a), nil
+}
+
 // codexTokenRenewing is codexToken, and with stale, the access token the
 // backend just answered 401 "token expired" for while its exp was still
 // ahead (willz on Discord, #2973: a Team account's), refreshes the

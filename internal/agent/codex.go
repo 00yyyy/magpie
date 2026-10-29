@@ -1525,8 +1525,12 @@ func codexIn(at place) *Agent {
 		// mark stays for Sync to put it back beside the sign-in: the
 		// Agents row said "its own models stay in /model" while the Codex
 		// app was meant to be in its API state (#2267)
-		Joined:      func() bool { return joined() && !asProvider() },
-		AppOut:      func() bool { return asProvider() && !api() && chatGPT() && stashLoad()[at.key("codex.out")] == "1" },
+		Joined: func() bool { return joined() && !asProvider() },
+		AppOut: func() bool { return asProvider() && !api() && chatGPT() && stashLoad()[at.key("codex.out")] == "1" },
+		HoldMatters: func() bool {
+			return stashLoad()[at.key("codex.login")] == "" && chatGPT() &&
+				(viaBase() || asProvider() && stashLoad()[at.key("codex.out")] == "1")
+		},
 		Beside:      beside,
 		Routed:      routed,
 		FailingOver: failingOver,
