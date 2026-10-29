@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -87,7 +85,6 @@ type pluginPage struct {
 	dir     string
 	file    string // its HTML, relative to dir, with forward slashes
 	hosted  bool   // its plugin has a part for the host too (pageHost)
-	service int    // the port of its local service (servePageService), or 0
 }
 
 // pluginAction is an item a plugin's page adds to one of magpie's menus.
@@ -152,8 +149,7 @@ func windowParts() (pages []pluginPage, panels []pluginPanel) {
 			tok := pageToken(e.Spec)
 			rel, _ := filepath.Rel(spec.Dir, spec.File)
 			p := pluginPage{Spec: e.Spec, Name: name, Key: key, Title: spec.Title, Titles: spec.Titles, Reads: reads, token: tok, dir: spec.Dir,
-				URL: pluginPagePrefix + tok + "/" + filepath.ToSlash(rel), file: filepath.ToSlash(rel), hosted: !only,
-				service: spec.Service.ServicePort(e.Options)}
+				URL: pluginPagePrefix + tok + "/" + filepath.ToSlash(rel), file: filepath.ToSlash(rel), hosted: !only}
 			if p.Title == "" {
 				p.Title = plugin.ShortName(name)
 			}
@@ -286,6 +282,10 @@ func pageHost(ctx context.Context) {
 
 // servePluginPage serves a file of a plugin's page, by its token.
 func servePluginPage(rw http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	rest := strings.TrimPrefix(r.URL.Path, pluginPagePrefix)
 	tok, rel, ok := strings.Cut(rest, "/")
 	if !ok || len(tok) != 32 {
@@ -293,24 +293,12 @@ func servePluginPage(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// the page's or the panel's folder, by its token
-	dir, entry, hosted, service := "", "", false, 0
+	dir, entry, hosted := "", "", false
 	pages, panels := windowParts()
 	for _, p := range pages {
 		if hmac.Equal([]byte(p.token), []byte(tok)) {
-			dir, entry, hosted, service = p.dir, p.file, p.hosted, p.service
+			dir, entry, hosted = p.dir, p.file, p.hosted
 		}
-	}
-	if service > 0 && (rel == pageServiceDir || strings.HasPrefix(rel, pageServiceDir+"/")) {
-		// its first page: the host part that runs the service is up first
-		if rel == pageServiceDir+"/" && r.Method == http.MethodGet {
-			pageHost(r.Context())
-		}
-		servePageService(rw, r, tok, service, strings.TrimPrefix(rel, pageServiceDir))
-		return
-	}
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
 	for _, p := range panels {
 		if hmac.Equal([]byte(p.token), []byte(tok)) {
@@ -336,13 +324,7 @@ func servePluginPage(rw http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-cache")
 	if rel == pluginBridgePath {
 		h.Set("Content-Type", "text/javascript; charset=utf-8")
-		js := string(pageBridgeJS)
-		if service > 0 {
-			// where the page's service is reached from a browser on
-			// another machine (servePageService)
-			js += "\nwindow.magpie.service = " + strconv.Quote(pluginPagePrefix+tok+"/"+pageServiceDir+"/") + ";\n"
-		}
-		http.ServeContent(rw, r, "bridge.js", time.Time{}, strings.NewReader(js))
+		http.ServeContent(rw, r, "bridge.js", time.Time{}, strings.NewReader(string(pageBridgeJS)))
 		return
 	}
 	file, ok := plugin.FileIn(dir, rel)
@@ -364,64 +346,6 @@ func servePluginPage(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeContent(rw, r, filepath.Base(file), st.ModTime(), f)
-}
-
-// pageServiceDir is where, under a page's own address, magpie forwards to
-// the local service its plugin's host part runs (magpie.page.service).
-const pageServiceDir = "_service"
-
-// servePageService forwards a request to a page's local service on
-// 127.0.0.1. A page such as Magiczerowxy/magpie-chat's sends its frame to
-// the service it starts on 127.0.0.1, which works only in a browser on the
-// machine magpie runs on: opened from another computer through magpie
-// web, 127.0.0.1 was that computer and refused (Discord DM: AIGCFREE,
-// magpie web behind nginx). Here it is at the page's own address, with
-// the page's token as the key, as for its files (webGuard); the service
-// sees itself asked for (Host, and Origin when it is magpie's own), and
-// none of magpie's cookies or credentials. What it answers stays shut in
-// as the page is: a sandbox of its own origin, no referrer, no cookies.
-func servePageService(rw http.ResponseWriter, r *http.Request, tok string, port int, rel string) {
-	own := "127.0.0.1:" + strconv.Itoa(port)
-	base := pluginPagePrefix + tok + "/" + pageServiceDir
-	if rel == "" {
-		http.Redirect(rw, r, base+"/", http.StatusFound)
-		return
-	}
-	proxy := &httputil.ReverseProxy{
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			out := pr.Out
-			out.URL.Scheme, out.URL.Host = "http", own
-			out.URL.Path, out.URL.RawPath = rel, ""
-			out.Host = own
-			out.Header.Del("Cookie")
-			out.Header.Del("Authorization")
-			if o := out.Header.Get("Origin"); o != "" && o != "null" {
-				if u, err := url.Parse(o); err == nil && u.Host == r.Host {
-					out.Header.Set("Origin", "http://"+own)
-				}
-			}
-		},
-		FlushInterval: -1, // a chat streams
-		ModifyResponse: func(res *http.Response) error {
-			h := res.Header
-			h.Del("Set-Cookie")
-			h.Add("Content-Security-Policy", "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads")
-			h.Set("Referrer-Policy", "no-referrer")
-			h.Set("X-Content-Type-Options", "nosniff")
-			// a redirect within the service stays under the page's address
-			if loc := h.Get("Location"); strings.HasPrefix(loc, "/") && !strings.HasPrefix(loc, "//") {
-				h.Set("Location", base+loc)
-			} else if u, err := url.Parse(loc); err == nil && loc != "" && u.Host == own {
-				h.Set("Location", base+u.RequestURI())
-			}
-			return nil
-		},
-		ErrorHandler: func(rw http.ResponseWriter, r *http.Request, err error) {
-			log.Printf("plugin page: its service on %s: %v", own, err)
-			http.Error(rw, "this page's service on "+own+" is not answering: is its plugin on and its host up?", http.StatusBadGateway)
-		},
-	}
-	proxy.ServeHTTP(rw, r)
 }
 
 // apiFramed is whether r is a request for /api that no page of the window's

@@ -3,13 +3,10 @@ package gui
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -374,119 +371,5 @@ func TestPluginPageActions(t *testing.T) {
 	}
 	if a[1].ID != "logs" || a[1].Menu != "agent" || a[1].Title != "Usage glance" || a[1].Titles["zh"] != "用量速览" {
 		t.Errorf("an action with no title: %+v, want the page's", a[1])
-	}
-}
-
-// A page's local service (magpie.page.service) is forwarded under the
-// page's own address, so a browser on another machine reaches it through
-// magpie web: opened from another computer, the chat page's 127.0.0.1 was
-// that computer's and refused (Discord DM: AIGCFREE). The service sees
-// itself asked for and none of magpie's cookies; its answer stays
-// sandboxed, with no referrer and no cookie of its own; a redirect stays
-// under the page; the port is the user's option; a page with no service,
-// or a token that isn't a page's, forwards nothing.
-func TestPluginPageForwardsItsService(t *testing.T) {
-	on, _ := pagePlugins(t)
-	type seen struct{ host, cookie, auth, origin, path, query, body string }
-	got := make(chan seen, 8)
-	svc := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		got <- seen{r.Host, r.Header.Get("Cookie"), r.Header.Get("Authorization"), r.Header.Get("Origin"), r.URL.Path, r.URL.RawQuery, string(b)}
-		switch r.URL.Path {
-		case "/old":
-			http.Redirect(rw, r, "/new", http.StatusFound)
-			return
-		case "/away":
-			http.Redirect(rw, r, "http://"+r.Host+"/there?a=1", http.StatusFound)
-			return
-		}
-		rw.Header().Set("Set-Cookie", "s=1")
-		rw.Write([]byte("service " + r.Method))
-	}))
-	defer svc.Close()
-	port := svc.Listener.Addr().(*net.TCPAddr).Port
-
-	hosted := filepath.Join(filepath.Dir(on), "chat")
-	if err := os.CopyFS(hosted, os.DirFS("testdata/page-plugin")); err != nil {
-		t.Fatal(err)
-	}
-	pkg := `{"name": "page-chat", "main": "./index.mjs", "magpie": {"options": {"port": 1}, "page": {"title": "Chat", "file": "page/index.html", "service": {"portOption": "port"}}}}`
-	if err := os.WriteFile(filepath.Join(hosted, "package.json"), []byte(pkg), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(hosted, "index.mjs"), []byte("export default {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	b, _ := json.Marshal(map[string]any{"plugins": []map[string]any{{"spec": on}, {"spec": hosted, "options": map[string]any{"port": port}}}})
-	if err := os.WriteFile(filepath.Join(settings.Dir(), "plugins.json"), b, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	warmHost = func(context.Context) error { return nil }
-	t.Cleanup(func() { warmHost = plugin.Warm })
-
-	pages := pluginPages()
-	if len(pages) != 2 {
-		t.Fatalf("pages: %+v", pages)
-	}
-	glance, chat := pages[0], pages[1]
-	tokOf := func(p pluginPage) string { return strings.Split(strings.TrimPrefix(p.URL, pluginPagePrefix), "/")[0] }
-	base := pluginPagePrefix + tokOf(chat) + "/" + pageServiceDir + "/"
-	h := pageMux()
-
-	// the bridge tells the page where its service is; a page with none hears nothing
-	if w := do(h, httptest.NewRequest("GET", pluginPagePrefix+tokOf(chat)+"/"+pluginBridgePath, nil)); !strings.Contains(w.Body.String(), `window.magpie.service = "`+base+`"`) {
-		t.Fatalf("the bridge doesn't name the service: %s", w.Body.String()[max(0, w.Body.Len()-200):])
-	}
-	if w := do(h, httptest.NewRequest("GET", pluginPagePrefix+tokOf(glance)+"/"+pluginBridgePath, nil)); strings.Contains(w.Body.String(), "magpie.service") {
-		t.Fatal("a page without a service is told of one")
-	}
-
-	r := httptest.NewRequest("POST", "http://magpie.example:3430"+base+"api/chat?x=1", strings.NewReader(`{"q":1}`))
-	r.Header.Set("Cookie", "magpie_web=secret")
-	r.Header.Set("Authorization", "Bearer secret")
-	r.Header.Set("Origin", "http://magpie.example:3430")
-	w := do(h, r)
-	s := <-got
-	if w.Code != 200 || w.Body.String() != "service POST" {
-		t.Fatalf("forwarded: %d %s", w.Code, w.Body)
-	}
-	own := "127.0.0.1:" + strconv.Itoa(port)
-	if s.host != own || s.cookie != "" || s.auth != "" || s.origin != "http://"+own || s.path != "/api/chat" || s.query != "x=1" || s.body != `{"q":1}` {
-		t.Fatalf("the service saw %+v", s)
-	}
-	if w.Header().Get("Set-Cookie") != "" || w.Header().Get("Referrer-Policy") != "no-referrer" || !strings.Contains(strings.Join(w.Header().Values("Content-Security-Policy"), ";"), "sandbox allow-scripts") {
-		t.Fatalf("the answer isn't shut in: %v", w.Header())
-	}
-	// a sandboxed frame's Origin: null goes as it is
-	r = httptest.NewRequest("GET", base, nil)
-	r.Header.Set("Origin", "null")
-	do(h, r)
-	if s := <-got; s.origin != "null" || s.path != "/" {
-		t.Fatalf("the frame's request: %+v", s)
-	}
-	// redirects stay under the page's address
-	if w := do(h, httptest.NewRequest("GET", base+"old", nil)); w.Header().Get("Location") != base+"new" {
-		t.Fatalf("redirect: %q", w.Header().Get("Location"))
-	}
-	<-got
-	if w := do(h, httptest.NewRequest("GET", base+"away", nil)); w.Header().Get("Location") != base+"there?a=1" {
-		t.Fatalf("absolute redirect: %q", w.Header().Get("Location"))
-	}
-	<-got
-	// none for a page without a service, nor for a made-up token
-	for _, u := range []string{pluginPagePrefix + tokOf(glance) + "/" + pageServiceDir + "/", pluginPagePrefix + strings.Repeat("0", 32) + "/" + pageServiceDir + "/"} {
-		if w := do(h, httptest.NewRequest("POST", u, nil)); w.Code == 200 {
-			t.Errorf("%s forwarded: %d", u, w.Code)
-		}
-	}
-	select {
-	case s := <-got:
-		t.Fatalf("the service was asked %+v", s)
-	default:
-	}
-	// the service down: a 502 that says so
-	svc.Close()
-	if w := do(h, httptest.NewRequest("GET", base, nil)); w.Code != http.StatusBadGateway {
-		t.Fatalf("service down: %d", w.Code)
 	}
 }
