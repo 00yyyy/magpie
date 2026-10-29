@@ -466,6 +466,10 @@ type Server struct {
 	sightMu    sync.Mutex
 	sights     map[string]*sight
 	sightOrder []string
+	// blind are the models that turned an image away while this server
+	// ran, by "<provider>/<model>" (refuseSight): kept for the run alone,
+	// so a vendor that adds sight is asked again after a restart
+	blind sync.Map
 	// the requests out at each key or account with a MaxConcurrency, and
 	// those waiting their turn (concurrency.go)
 	lanes lanes
@@ -2168,11 +2172,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// a model its list says nothing of is text-only to a describer, as
 	// agents are told: while one describes images they are told every
 	// model takes them, and send the images on to be described
+	//
+	// One that turned an image away since magpie started is text-only
+	// whatever its list or models.dev says, with a model to describe the
+	// image: the model picked is given the description, not left to fail
+	// over to the same model at another provider that sees (xyenon)
 	unknownSight := false
-	if imageInput == nil && !isGroup && hasImage(from, body) && blindTo(p.ID, model, nil) {
+	if !isGroup && (imageInput == nil || *imageInput) && hasImage(from, body) && s.blindTo(p.ID, model, imageInput) {
 		if _, ok := seeing(); ok {
 			no := false
-			imageInput, unknownSight = &no, true
+			imageInput, unknownSight = &no, imageInput == nil && !s.sightRefused(p.ID, model)
 		}
 	}
 	if imageInput != nil && !*imageInput {
@@ -2464,7 +2473,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			for i, c := range cands {
 				in := membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}})
 				switch {
-				case !blindTo(c.p.ID, c.model, in):
+				case !s.blindTo(c.p.ID, c.model, in):
 					sees, seesAt = append(sees, c), append(seesAt, pl.order[i])
 				case in == nil:
 					unknown, unknownAt = append(unknown, c), append(unknownAt, pl.order[i])
@@ -2731,7 +2740,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		if isGroup {
 			in := membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}})
-			if seenGroup != nil && blindTo(c.p.ID, c.model, in) {
+			if seenGroup != nil && s.blindTo(c.p.ID, c.model, in) {
 				groupUnknown = in == nil
 				b, err := seenGroup()
 				if err != nil {
@@ -3233,6 +3242,33 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		if plainFor == c.who()+"|"+c.model && call.Status > 0 && call.Status < 400 {
 			effortUpdatesRefused(c.who(), c.model)
+		}
+		if !hw.passing && !s.sightRefused(c.p.ID, c.model) && imageRefused(hw.code(), hw.errBody()) && hasImage(from, attemptBody) {
+			// the model turned the image away, its list or models.dev
+			// having said it sees: it is text-only from now on (blindTo),
+			// and with a model to describe images it is asked again with
+			// them described, before any other candidate — the user picked
+			// this one, and the Image recognition model is what they set
+			// for it. A pick of DeepSeek-V4.1-Flash at a relay serving it
+			// text-only went on to the same model at another provider
+			// (xyenon). With nothing to describe them it goes on as
+			// before, to a candidate that may see.
+			s.refuseSight(c.p.ID, c.model)
+			if isGroup && seenGroup != nil {
+				try.Fail = failSight
+				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+				i--
+				continue
+			}
+			if see, ok := seeing(); ok && !isGroup {
+				if seen, err := s.seenBody(withDescribeFor(r.Context(), call.Agent, call.Model, sessionOf(r.Header), false), from, body, see); err == nil {
+					body = seen
+					try.Fail = failSight
+					s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+					i--
+					continue
+				}
+			}
 		}
 		if !floored && !hw.passing && hw.code() == 400 {
 			// asked for fewer tokens than this provider answers with (#64)

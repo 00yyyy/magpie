@@ -906,6 +906,39 @@ Covered by `TestSearchMCPServesWebSearch`, `TestSearchMCPWithNoSearcher`,
 `TestSearchMCPGuarded`, `TestSearchMCPHeldToKeyLimit`,
 `TestSearchMCPRoutedAsTheAgentsCall`, `TestSearchQueryMasked` and `search-mcp.test.cjs`.
 
+## A model that turns an image away
+
+Whether a model sees is its provider's list's word (`ImageInput`), else
+the served entry's (`blindTo`), and a list that says nothing takes
+models.dev's modalities for the model (`catalog.SeesImages`). A relay's
+copy of a model can take text only where models.dev says it sees: xyenon
+(Discord) picked provider-1/DeepSeek-V4.1-Flash in pi with Image
+recognition set, magpie sent it the raw image, DeepSeek answered 400
+"unknown variant `image_url`", and since that reads as a shape refusal
+(`shapeWords`) the request went on to the fallback, the same model at
+provider-2, which sees. The image was never described.
+
+A 400, 415 or 422 whose words say images aren't taken (`imageRefused`:
+unknown variant image_url/input_image/image, OpenAI's "only supported by
+certain models", OpenRouter's "no endpoints found that support image",
+vLLM's "not a multimodal model", 不支持图片 and the like) now marks the
+model blind for the server's run (`refuseSight`, `Server.blind`;
+`blindTo` checks it first). With a describer (`seer`), the same candidate
+is asked again at once with the images described (`seenBody`, or the
+group's `seenGroup`; the try's failure is `failSight`), before any
+fallback or other member, and later requests are described up front, for
+a direct pick and a group alike. The pick and the describer the user set
+win over another provider's copy of the model.
+
+With no describer (Image recognition off, or nothing that sees), going on
+to a candidate whose copy sees is the only way to answer, so that is kept
+on purpose (`TestRefusedImageWithNoDescriberGoesToOneThatSees`).
+
+Covered by `TestPickedModelThatRefusesAnImageIsGivenItDescribed` (direct,
+user group and auto group, over Chat, Responses and Messages) and
+`TestImageRefused`
+([`vision_refused_test.go`](../../internal/gateway/vision_refused_test.go)).
+
 ## Image recognition as an MCP server
 
 `VisionMCPPath`, `/mcp/magpie/vision`, serves the model that describes
