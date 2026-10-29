@@ -1114,9 +1114,14 @@ function connectable(a) {
   return !a.import && (!!connectField(a) || !!a.models?.listed);
 }
 
-// kindOf is the agent an id names, its WSL twin (claude@wsl:Ubuntu) too:
-// a twin has the same rows and words as the agent itself (cybercaius)
+// kindOf: the agent an id names, a WSL twin's too (cybercaius)
 const kindOf = (a) => a.id.split("@wsl:")[0];
+// arranged: the agents' order and who is hidden, as the server answered
+const arranged = (s) => { state.settings = { ...state.settings, agentOrder: s.agentOrder || [], agentsHidden: s.agentsHidden || [], agentsShown: s.agentsShown || [] }; };
+// noneLeft: every model taken out of a's list, said as its list opens
+const noneLeft = (a) => status(t("None of magpie's models is left in {agent}'s model list: pick one, then connect {agent}", { agent: a.name }), "err");
+// reopenNote: running copies take it once reopened
+const reopenNote = (a) => STARTS_WITH.has(kindOf(a)) ? el("span", "ag-bar-note", t("Running {agent} copies take it once reopened", { agent: a.name })) : el("span");
 
 // PICKS_IN is where an agent picks a model itself, for the words under it.
 const PICKS_IN = { codex: "/model", claude: "/model", opencode: "/models", pi: "/model", droid: "/model", kimi: "/model", grok: "/model", "minimax-code": "/model", dsh: "/model", crush: "ctrl+p", omp: "/model", qwen: "/model", mimocode: "/model", deveco: "/models" };
@@ -1178,7 +1183,7 @@ function connectSwitch(a) {
       // Discord: Grok Build, all hidden, then switched off, couldn't be
       // connected again)
       if (err.code === "all_hidden") {
-        status(t("None of magpie's models is left in {agent}'s model list: pick one, then connect {agent}", { agent: a.name }), "err");
+        noneLeft(a);
         openAgentModels(a, s, e);
         return;
       }
@@ -1772,7 +1777,7 @@ async function guideConnect(a, ev) {
     // at the row's switch (connectSwitch)
     const chip = err.code === "all_hidden" && document.querySelector(`.guide-agent[data-id="${CSS.escape(a.id)}"]`);
     if (chip) {
-      status(t("None of magpie's models is left in {agent}'s model list: pick one, then connect {agent}", { agent: a.name }), "err");
+      noneLeft(a);
       openAgentModels(a, chip, ev);
       return;
     }
@@ -2289,7 +2294,7 @@ function askDisconnect(a) {
   };
   const cancel = el("button", "text", t("Cancel"));
   cancel.onclick = cancelAsk;
-  bar.append(STARTS_WITH.has(kindOf(a)) ? el("span", "ag-bar-note", t("Running {agent} copies take it once reopened", { agent: a.name })) : el("span"), el("span", "grow"), cancel, go);
+  bar.append(reopenNote(a), el("span", "grow"), cancel, go);
   ed.append(bar);
   confirmAsk = ed;
   openModal(ed);
@@ -2377,14 +2382,11 @@ function cliTag(a) {
     v.title = t("The {agent} app {v}. It reads the same settings as the CLI: connecting {agent} here connects both", { agent: a.name, v: c.app });
     box.append(v);
   }
-  // no Claude Code of its own here, only the one Claude Desktop includes
-  // for its Code tab, which reads this same ~/.claude (cybercaius,
-  // young02036: a card left after Claude Code's uninstall, with nothing
-  // saying which of the Claude cards Desktop reads)
+  // only the Claude Code Desktop's Code tab runs (cybercaius, young02036)
   if (c.inDesktop) {
     const v = el("span", "ag-ver ag-app", t("In Claude Desktop"));
     v.title = (c.desktopVersion ? t("Claude Code {v}, included in Claude Desktop", { v: c.desktopVersion }) + "\n" : "")
-      + t("No Claude Code of its own is installed here: this is the one Claude Desktop runs in its Code tab, and it reads this same {path}. A Code session Desktop opens in WSL runs that distro's Claude Code instead, its card in WSL.", { path: a.path || "~/.claude/settings.json" });
+      + t("No Claude Code of its own is installed here: Claude Desktop's Code tab runs this one, reading this {path}. Its Code sessions in WSL use the WSL card.", { path: a.path || "~/.claude/settings.json" });
     box.append(v);
   }
   return box;
@@ -2781,7 +2783,7 @@ async function saveArrangement(order, hidden, shown) {
   renderAgents();
   try {
     const s = await api("agents/arrange", { order, hidden, shown });
-    state.settings = { ...state.settings, agentOrder: s.agentOrder || [], agentsHidden: s.agentsHidden || [], agentsShown: s.agentsShown || [] };
+    arranged(s);
   } catch (e) {
     state.settings = prev;
     renderAgents();
@@ -2901,7 +2903,7 @@ function openAgentsManager() {
       });
       if (hidden) ids.forEach((id) => unhid.delete(id));
       agentsVisibilityRevision++;
-      state.settings = { ...state.settings, agentOrder: s.agentOrder || [], agentsHidden: s.agentsHidden || [], agentsShown: s.agentsShown || [] };
+      arranged(s);
       selected.clear();
       result.textContent = hidden
         ? t(ids.length === 1 ? "{n} agent hidden" : "{n} agents hidden", { n: ids.length })
@@ -3634,7 +3636,7 @@ async function openAgentModels(a, anchor, ev) {
     // agent is handed them in it, and one that sorts its own menu may sort
     // them again
     footNote.textContent = !order ? ""
-      : a.id.split("@wsl:")[0] === "codex" ? t("Drag to put them in the order {agent} lists them; new models go last", { agent: a.name })
+      : kindOf(a) === "codex" ? t("Drag to put them in the order {agent} lists them; new models go last", { agent: a.name })
       : t("Drag to put them in the order magpie hands them to {agent}; new models go last", { agent: a.name });
     if (order) foot.replaceChildren(footNote, el("span", "sp"), unorder);
     else foot.replaceChildren(onlyBox, el("span", "sp"), hideAll, el("span", "am-dot", "·"), reset);
@@ -3801,9 +3803,7 @@ function openRowMenu(anchor, acts) {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAgentMenu(); anchor.focus({ preventScroll: true }); }
     else if (e.key === "Tab") closeAgentMenu();
     else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && items.length) {
-      e.preventDefault(); e.stopPropagation();
-      const n = items.length, at = k < 0 ? (e.key === "ArrowDown" ? n - 1 : 0) : k;
-      items[(at + (e.key === "ArrowDown" ? 1 : n - 1)) % n].focus();
+      stepFocus(e, items, k);
     }
   };
   document.addEventListener("mousedown", outside, true);
@@ -3837,7 +3837,7 @@ const OMP_UNSET = {
 const OMP_OWN_PICK = Object.keys(OMP_UNSET);
 const OMP_ROLES = ["subagents", "smol", "slow", ...OMP_OWN_PICK];
 // omp, a named profile of it (omp#<name>) or either in a WSL distro
-const ompAgent = (a) => a.id.split("@wsl:")[0].split("#")[0] === "omp";
+const ompAgent = (a) => kindOf(a).split("#")[0] === "omp";
 // the roles an agent's square lists, and whether a field is one of them or
 // one of their levels
 const menuRoles = (a) => ompAgent(a) ? OMP_ROLES : TIERS;
@@ -3872,7 +3872,7 @@ const SUB_MODEL = "subagent model";
 // pick, not the model's
 const AUTO_MODE = "auto mode";
 const AUTO_MODE_UNSET = "Claude Code's own pick";
-const leadPicks = (a, f) => f.label === "subagents" && ["codex", "claude"].includes(a.id.split("@wsl:")[0]);
+const leadPicks = (a, f) => f.label === "subagents" && ["codex", "claude"].includes(kindOf(a));
 const LEAD_PICKS = "The model a subagent starts on when Codex's lead names none; the lead may still name another. To hold every subagent to one model, set the subagent model";
 // Claude Code's subagents unset: magpie writes no CLAUDE_CODE_SUBAGENT_MODEL
 // and Claude Code picks, taking the Agent call's model, then the subagent's
@@ -3884,7 +3884,7 @@ const claudePicks = (a, f) => leadPicks(a, f) && kindOf(a) === "claude";
 // card shows the subagent model alone, saying what each does. A pick there takes away [agents] default_subagent_model too (the
 // backend), and one left in the config is said on it until then. With no
 // model of magpie's to pick there, Codex's own square stays.
-const codexSub = (a) => a.id.split("@wsl:")[0] === "codex" && a.fields.some((f) => f.label === SUB_MODEL && (f.options.length || f.value));
+const codexSub = (a) => kindOf(a) === "codex" && a.fields.some((f) => f.label === SUB_MODEL && (f.options.length || f.value));
 const codexOwnSub = (a, f) => f.label === "subagents" && codexSub(a);
 // named rows in Codex's settings: no square too (the owner, 10-25)
 const hermesBot = (f) => f.key.startsWith("profile:");
@@ -3954,7 +3954,7 @@ function menuTitle(f) {
 // tab, at the effort its request asks for
 function subEffortTitle(a, f, opt) {
   return t("{label}: {value}", { label: t(f.label), value: effortName(opt || { value: f.value }) }) +
-    (f.value ? "" : "\n" + t(kindOf(a) === "claude" || kindOf(a) === "claude-desktop" ? "the effort Claude Code asks for" : "the session's effort, or the subagent model's own default"));
+    (f.value ? "" : "\n" + t(/^claude(-desktop)?$/.test(kindOf(a)) ? "the effort Claude Code asks for" : "the session's effort, or the subagent model's own default"));
 }
 
 // agentPrefsButton: the panel's line that opens the agent's own settings
@@ -5700,7 +5700,7 @@ function askLeave(a, field, value, opt) {
   go.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); setPick(a, field, value, opt); };
   const cancel = el("button", "text", t("Cancel"));
   cancel.onclick = cancelAsk;
-  bar.append(STARTS_WITH.has(kindOf(a)) ? el("span", "ag-bar-note", t("Running {agent} copies take it once reopened", { agent: a.name })) : el("span"), el("span", "grow"), cancel);
+  bar.append(reopenNote(a), el("span", "grow"), cancel);
   if (value === "") {
     const restore = el("button", "text", t("Disconnect and restore"));
     restore.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); askDisconnect(a); };
@@ -9304,13 +9304,13 @@ function drawEditor(p, presetID) {
     const saveBtn = el("button", "text primary", t("Save"));
     saveBtn.onclick = () => {
       const cx = parseContexts(draft.contexts || "");
-      if (cx.error) { shown(ed.querySelector("input.contexts"))?.focus({ preventScroll: true }); return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn"); }
+      if (cx.error) return contextError(ed, cx.error);
       const ox = parseContexts(draft.outputs || "");
       if (ox.error) return outputError(ed, ox.error);
       const cpx = parseContexts(draft.compacts || "");
       if (cpx.error) return compactError(ed, cpx.error);
       const proxy = proxyOfDraft();
-      if (proxy === null) { shown(ed.querySelector(".proxy-url"))?.focus({ preventScroll: true }); return editorError(t("Proxy: type its address, like http://127.0.0.1:7890"), "warn"); }
+      if (proxy === null) return proxyError(ed);
       const own = accountProxiesOfDraft();
       if (own.missing) {
         const line = [...ed.querySelectorAll(".acct-proxy")].find((x) => x.dataset.user.toLowerCase() === own.missing);
@@ -9325,7 +9325,7 @@ function drawEditor(p, presetID) {
       if (priceRate === undefined) return priceRateError(ed);
       if (priceTypedError(ed)) return;
       const picked = accountModelsDraft(p);
-      if (picked === false) return editorError(t("Pick at least one model for the account, or choose All models"), "warn");
+      if (picked === false) return pickError();
       const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), unlisted: draft.unlisted, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
       saving(saveBtn, t("Saving…"));
       saveAccountModelsDraft(picked).then(() => savePluginOptions(subOf(a.agent))).then(() => providerAction("save", body, t("{name} saved", { name: p.name })), (e) => { doneSaving(saveBtn); editorError(e.message || String(e)); }); };
@@ -9941,7 +9941,7 @@ function drawEditor(p, presetID) {
     if (!decideOnly(p || pr)) body.nativeCompaction = !!draft.nativeCompaction && carriesCompaction();
     body.passUserAgent = !!draft.passUserAgent && uaPassable();
     const cx = parseContexts(draft.contexts || "");
-    if (cx.error) { shown(ed.querySelector("input.contexts"))?.focus({ preventScroll: true }); return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn"); }
+    if (cx.error) return contextError(ed, cx.error);
     body.contexts = cx.map;
     if (!decideOnly(p || pr)) {
       const ox = parseContexts(draft.outputs || "");
@@ -9952,7 +9952,7 @@ function drawEditor(p, presetID) {
       body.compacts = cpx.map;
     }
     body.proxy = proxyOfDraft();
-    if (body.proxy === null) { shown(ed.querySelector(".proxy-url"))?.focus({ preventScroll: true }); return editorError(t("Proxy: type its address, like http://127.0.0.1:7890"), "warn"); }
+    if (body.proxy === null) return proxyError(ed);
     if (perKey) {
       const own = accountProxiesOfDraft();
       if (own.missing) {
@@ -9998,7 +9998,7 @@ function drawEditor(p, presetID) {
     }
     editorError("");
     const picked = accountModelsDraft(p);
-    if (picked === false) return editorError(t("Pick at least one model for the account, or choose All models"), "warn");
+    if (picked === false) return pickError();
     saving(saveBtn, t(isNew ? "Adding…" : "Saving…"));
     const okMsg = t(isNew ? "{name} added" : "{name} saved", { name: draft.name || draft.id });
     saveAccountModelsDraft(picked).then(() => providerAction("save", body, okMsg), (e) => { doneSaving(saveBtn); editorError(e.message || String(e)); });
@@ -10140,6 +10140,18 @@ function compactField() {
 function compactError(ed, v) {
   shown(ed.querySelector("input.compacts"))?.focus({ preventScroll: true });
   return editorError(t("Compact at: {v} is not a number of tokens like 272k", { v }), "warn");
+}
+
+function contextError(ed, v) {
+  shown(ed.querySelector("input.contexts"))?.focus({ preventScroll: true });
+  return editorError(t("Context window: {v} is not a length like 128k or 1m", { v }), "warn");
+}
+
+const pickError = () => editorError(t("Pick at least one model for the account, or choose All models"), "warn");
+
+function proxyError(ed) {
+  shown(ed.querySelector(".proxy-url"))?.focus({ preventScroll: true });
+  return editorError(t("Proxy: type its address, like http://127.0.0.1:7890"), "warn");
 }
 
 function outputError(ed, v) {
@@ -14645,6 +14657,23 @@ function hoverFocus(b) {
   b.onmouseenter = (e) => { if (e.screenX + "," + e.screenY !== pointerAt) b.focus({ preventScroll: true }); };
 }
 let protoMenu = null;
+// stepFocus: ArrowDown or ArrowUp moves focus round list from i (-1: none)
+function stepFocus(e, list, i) {
+  e.preventDefault(); e.stopPropagation();
+  const n = list.length, down = e.key === "ArrowDown";
+  if (n) list[((i < 0 ? (down ? n - 1 : 0) : i) + (down ? 1 : n - 1)) % n].focus();
+}
+// holdMenu makes box the app menu: Escape, a click outside it, a resize
+// or the scroll it is given closes it, and done runs once it is closed
+function holdMenu(box, anchor, own, scroll, done) {
+  const keys = (e) => { if (e.key !== "Escape") return own(e); e.preventDefault(); e.stopPropagation(); closeProtoMenu(); anchor.focus(); };
+  const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeProtoMenu(); };
+  document.addEventListener("mousedown", outside, true);
+  document.addEventListener("keydown", keys, true);
+  document.addEventListener("scroll", scroll, true);
+  addEventListener("resize", closeProtoMenu);
+  protoMenu = { box, anchor, outside, keys, scroll, done };
+}
 function closeProtoMenu() {
   if (!protoMenu) return;
   protoMenu.anchor.classList.remove("open");
@@ -14757,7 +14786,6 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   placeMenu(box, anchor, align);
   anchor.classList.add("open");
   if (anchor.hasAttribute("aria-expanded")) anchor.setAttribute("aria-expanded", "true");
-  const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeProtoMenu(); };
   // A live pick can shrink the list or wrap its heading and clamp the scroll.
   // Only the reader's scroll dismisses it; the click guard holds its anchor.
   const scroll = (e) => {
@@ -14767,11 +14795,8 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   const keys = (e) => {
     const shown = filter ? items.filter((b) => !b.hidden) : items;
     const i = shown.indexOf(document.activeElement);
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeProtoMenu(); anchor.focus(); }
-    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault(); e.stopPropagation();
-      const n = shown.length, from = i < 0 ? (e.key === "ArrowDown" ? n - 1 : 0) : i;
-      if (n) shown[(from + (e.key === "ArrowDown" ? 1 : n - 1)) % n].focus();
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      stepFocus(e, shown, i);
     } else if (filter && e.key === "Enter" && document.activeElement === filter) {
       const first = shown.find((b) => !opts[items.indexOf(b)].always);
       if (first) { e.preventDefault(); first.click(); }
@@ -14780,15 +14805,10 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
       shown[e.key === "Home" ? 0 : shown.length - 1]?.focus();
     }
   };
-  document.addEventListener("mousedown", outside, true);
-  document.addEventListener("keydown", keys, true);
-  document.addEventListener("scroll", scroll, true);
-  addEventListener("resize", closeProtoMenu);
-  const done = multi && !live ? () => {
+  holdMenu(box, anchor, keys, scroll, multi && !live ? () => {
     if (picked.length === value.length && picked.every((v) => value.includes(v))) return;
     choose(opts.map((o) => o.v).filter((v) => picked.includes(v)));
-  } : null;
-  protoMenu = { box, anchor, outside, keys, scroll, done };
+  } : null);
   (filter || items.find((b) => b.classList.contains("on")) || items[0]).focus({ preventScroll: true });
 }
 
@@ -18802,15 +18822,11 @@ function openSessCombo(anchor, all, opts, value, choose, head) {
   document.body.append(box);
   placeMenu(box, anchor);
   anchor.classList.add("open");
-  const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeProtoMenu(); };
   const scroll = (e) => { if (scrollCloses(box, e)) closeProtoMenu(); };
   const keys = (e) => {
     const i = items.indexOf(document.activeElement);
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeProtoMenu(); anchor.focus(); }
-    else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && items.length) {
-      e.preventDefault(); e.stopPropagation();
-      const n = items.length, from = i < 0 ? (e.key === "ArrowDown" ? n - 1 : 0) : i;
-      items[(from + (e.key === "ArrowDown" ? 1 : n - 1)) % n].focus();
+    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && items.length) {
+      stepFocus(e, items, i);
     } else if (e.key === "Enter" && document.activeElement === q) {
       e.preventDefault();
       const o = items[0];
@@ -18820,11 +18836,7 @@ function openSessCombo(anchor, all, opts, value, choose, head) {
       q.focus({ preventScroll: true });
     }
   };
-  document.addEventListener("mousedown", outside, true);
-  document.addEventListener("keydown", keys, true);
-  document.addEventListener("scroll", scroll, true);
-  addEventListener("resize", closeProtoMenu);
-  protoMenu = { box, anchor, outside, keys, scroll };
+  holdMenu(box, anchor, keys, scroll);
   q.focus({ preventScroll: true });
 }
 
@@ -20857,7 +20869,7 @@ const AGENT_PREFS = {
   claude: ["fullContextRow"],
   grok: ["fullContextRow"],
 };
-const agentPrefsOf = (a) => gatewayMode ? null : AGENT_PREFS[a.id.split("@wsl:")[0]];
+const agentPrefsOf = (a) => gatewayMode ? null : AGENT_PREFS[kindOf(a)];
 const PREFS_GLYPH = "M2.75 4.75h10.5M2.75 11.25h10.5M5.75 3.25v3M10.25 9.75v3";
 let agentPrefRowEls = null;
 // homeAgentPrefRows puts back the rows a sheet took with it when another
