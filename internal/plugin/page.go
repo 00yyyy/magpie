@@ -38,6 +38,54 @@ type PageSpec struct {
 	// Replaces is the built-in page (one of Replaceable) whose place in
 	// the sidebar the page takes while its plugin is on, or "".
 	Replaces string
+	// Service is the local HTTP service the plugin's host part runs for
+	// the page (magpie.page.service), which magpie web forwards under
+	// the page's own address; nil when it names none.
+	Service *ServiceSpec
+}
+
+// ServiceSpec is where a page's service listens: 127.0.0.1 on Port, or on
+// the plugin's option PortOption when the user has set it to a port.
+type ServiceSpec struct {
+	Port       int
+	PortOption string
+}
+
+// ServicePort is the port s listens on, by the plugin's options.
+func (s *ServiceSpec) ServicePort(options map[string]any) int {
+	if s == nil {
+		return 0
+	}
+	if s.PortOption != "" {
+		if p, ok := portOf(options[s.PortOption]); ok {
+			return p
+		}
+	}
+	return s.Port
+}
+
+func portOf(v any) (int, bool) {
+	var f float64
+	switch n := v.(type) {
+	case float64:
+		f = n
+	case int:
+		f = float64(n)
+	case int64:
+		f = float64(n)
+	case json.Number:
+		x, err := n.Float64()
+		if err != nil {
+			return 0, false
+		}
+		f = x
+	default:
+		return 0, false
+	}
+	if f != float64(int(f)) || f < 1 || f > 65535 {
+		return 0, false
+	}
+	return int(f), true
 }
 
 // PanelSpec is a panel a plugin adds to one of magpie's own pages: a
@@ -139,15 +187,20 @@ func Window(target string) (w *WindowSpec, only bool) {
 		Replaces string          `json:"replaces"`
 		ID       string          `json:"id"`
 		Menu     string          `json:"menu"`
+		Service  *struct {
+			Port       any    `json:"port"`
+			PortOption string `json:"portOption"`
+		} `json:"service"`
 	}
 	var pkg struct {
 		Main    string          `json:"main"`
 		Exports json.RawMessage `json:"exports"`
 		Magpie  struct {
-			Page        *part    `json:"page"`
-			Panels      []part   `json:"panels"`
-			Actions     []part   `json:"actions"`
-			Permissions []string `json:"permissions"`
+			Page        *part          `json:"page"`
+			Panels      []part         `json:"panels"`
+			Actions     []part         `json:"actions"`
+			Permissions []string       `json:"permissions"`
+			Options     map[string]any `json:"options"`
 		} `json:"magpie"`
 	}
 	if json.Unmarshal(b, &pkg) != nil {
@@ -165,6 +218,17 @@ func Window(target string) (w *WindowSpec, only bool) {
 			}
 			if r := strings.TrimSpace(pg.Replaces); slices.Contains(Replaceable, r) {
 				p.Replaces = r
+			}
+			if sv := pg.Service; sv != nil {
+				port, _ := portOf(sv.Port)
+				opt := strings.TrimSpace(sv.PortOption)
+				if port == 0 && opt != "" {
+					// the option's default, in the package's magpie.options
+					port, _ = portOf(pkg.Magpie.Options[opt])
+				}
+				if port > 0 || opt != "" {
+					p.Service = &ServiceSpec{Port: port, PortOption: opt}
+				}
 			}
 			w.Page = p
 		}
