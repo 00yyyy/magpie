@@ -654,7 +654,7 @@ func All() []Provider {
 	// round every 30s), most of an idle magpie's CPU (xsw on Discord)
 	off := sync.OnceValue(func() bool { return settings.AccountDiscoveryOffIn(heldSettings()) })
 	for _, p := range held {
-		if p.Account != nil && off() {
+		if p.Account != nil && off() && !p.publicAccount() {
 			continue
 		}
 		out = append(out, p.clone()) // callers change theirs, Keys[i] and Headers included

@@ -24123,6 +24123,9 @@ window.noteAccounts = noteAccounts;
       // the names the user gave accounts (#1515), as the accounts are
       for (const n of Object.values(p.accountNames || {})) all.add(String(n).trim());
     }
+    // a plugin's provider, signed in or not, is a provider too: its name
+    // on the Plugins page and the add sheet is no account (lileo0668)
+    for (const p of providers?.plugins || []) for (const n of [p.id, p.pid, p.name]) if (n) not.add(String(n).toLowerCase());
     for (const q of quotas || []) {
       for (const n of [q.provider, q.name, q.plan]) if (n) not.add(String(n).toLowerCase());
       all.add((q.user || "").trim());

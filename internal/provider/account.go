@@ -201,7 +201,7 @@ func (p Provider) ListedAPIs(model string) []Protocol {
 // Sign authenticates a request to the provider, refreshing what needs it.
 // Plain providers get their key; accounts get the agent's tokens.
 func (p Provider) Sign(ctx context.Context, req *http.Request, proto Protocol, body []byte) error {
-	if p.Account != nil && settings.AccountDiscoveryOff() {
+	if p.Account != nil && settings.AccountDiscoveryOff() && !p.publicAccount() {
 		return errAccountDiscoveryOff
 	}
 	ctx = p.Via(ctx) // a sign-in refreshed on the way goes through its proxy
@@ -866,7 +866,7 @@ func refreshFailed(status int, agent, msg string) error {
 // Accounts lists the signed-in agents as providers.
 func Accounts() []Provider {
 	if settings.AccountDiscoveryOff() {
-		return nil
+		return pluginAccounts() // the public plugins' alone (publicPlugin)
 	}
 	rememberLogins(false)
 	home, _ := os.UserHomeDir()
