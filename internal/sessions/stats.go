@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"cmp"
+	"maps"
 	"math"
 	"slices"
 	"sort"
@@ -158,9 +159,8 @@ func StatsAndNative(days int) (Stats, map[string]bool) {
 // are the same whatever the range, and the page keeps 7, 30 and every
 // day, each read again behind it (statsFor in internal/gui, #2278).
 func StatsAndNativeAll(days []int) ([]Stats, map[string]bool) {
-	native := map[string]bool{}
 	alias := provider.UsageAlias()
-	out := statsReadAll(days, time.Now(), native)
+	out, native := statsKept(days, time.Now(), true)
 	if alias != nil {
 		for i := range out {
 			out[i] = aliasStats(out[i], alias)
@@ -189,6 +189,17 @@ func statsRead(days int, now time.Time, native map[string]bool) Stats {
 // statsReadAll is statsRead for each of days, sharing what doesn't
 // depend on the range.
 func statsReadAll(ranges []int, now time.Time, native map[string]bool) []Stats {
+	out, listed := statsKept(ranges, now, native != nil)
+	if native != nil {
+		maps.Copy(native, listed)
+	}
+	return out
+}
+
+// statsKept is statsReadAll, and the agent|id of every session listed when
+// native is asked for. The ranges' Stats and the map are kept for the
+// next read (keptStats), so neither is written.
+func statsKept(ranges []int, now time.Time, wantNative bool) ([]Stats, map[string]bool) {
 	now = now.In(time.Local)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 
@@ -202,15 +213,30 @@ func statsReadAll(ranges []int, now time.Time, native map[string]bool) []Stats {
 	// every changed file, whatever the range, so a wider range picked later
 	// finds them read rather than starting another run
 	refresh(files, files)
+	price, titles := pricer(), codexTitleOf()
+	keptFor(files, today, price, titles)
+	out := make([]Stats, len(ranges))
+	var todo []int
+	for i, days := range ranges {
+		st, ok := keptStats.ranges[days]
+		if !ok {
+			todo = append(todo, i)
+		}
+		out[i] = st
+	}
+	if len(todo) == 0 && (!wantNative || keptStats.native != nil) {
+		return out, keptStats.native
+	}
+	price, titles = keptPrice(price), keptTitle(titles)
 	identities := codexIdentitySnapshot(files)
 	taskTitles := codexSubagentTaskTitles(files)
-	price, titles := pricer(), codexTitleOf()
 	// each session as listed, by key: what native is made of, and what a
 	// range's sessions are summed up from
 	var listed map[string]Session
-	if native != nil {
+	if wantNative {
 		groups := byKey(files, nil)
 		listed = make(map[string]Session, len(groups))
+		native := make(map[string]bool, len(groups))
 		for key, fs := range groups {
 			// as List: a session nothing was said in is not listed
 			if s, ok := assembleListed(fs, price, titles); ok {
@@ -218,6 +244,7 @@ func statsReadAll(ranges []int, now time.Time, native map[string]bool) []Stats {
 				listed[key] = s
 			}
 		}
+		keptStats.native = native
 	}
 	// a copy of a conversation is counted in the session it is kept in
 	// (ccCopies): its subagents' files, and what its own file holds that
@@ -231,11 +258,13 @@ func statsReadAll(ranges []int, now time.Time, native map[string]bool) []Stats {
 			folder[f.key] = st.Cwd
 		}
 	}
-	out := make([]Stats, len(ranges))
-	for i, days := range ranges {
-		out[i] = statsOfRange(days, today, files, copies, copied, folder, listed, identities, taskTitles, price, titles)
+	for _, i := range todo {
+		st := statsOfRange(ranges[i], today, files, copies, copied, folder, listed, identities, taskTitles, price, titles)
+		keepDesktop(st)
+		keepRange(ranges[i], st, ranges)
+		out[i] = st
 	}
-	return out
+	return out, keptStats.native
 }
 
 // statsOfRange is one range's Stats from what statsReadAll read, with the
