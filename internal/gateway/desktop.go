@@ -295,8 +295,8 @@ const desktop1MSaid = "1M context window"
 // claude-sonnet-… and that, unserved, went to the chat's model: every
 // subagent ran on it, whatever its tier (WilianWeng on Discord). The user
 // picks a model per tier in magpie; a tier with none picked runs on the
-// chat's provider's model of that tier, else on the chat's model
-// (servedBeside).
+// chat's model, or, when the chat is on a Claude model, on its provider's
+// model of that tier (servedBeside).
 var DesktopTierNames = []string{"opus", "sonnet", "haiku", "fable"}
 
 func desktopTiersPath() string { return filepath.Join(settings.Dir(), "claude-desktop.tiers.json") }
@@ -534,8 +534,16 @@ func desktopTurn(asked string, body []byte, byClaudeCode, bySubagent bool) strin
 	// model for is tagged in /v1/models, so Claude Code asks for that
 	// model by its own id, which is a catalog id and stays as asked.
 	elsewhere := !gone && !title && picked != "" && (!tools || bySubagent) && claudeOwnID(asked)
+	if elsewhere {
+		// a tier the user picked takes Claude Code's own id of it, though
+		// a provider lists a model by that name (desktopTierTurn takes
+		// one no provider serves)
+		if m := DesktopTiers()[claudeTier(asked)]; m != "" {
+			return m
+		}
+	}
 	if (gone || elsewhere) && !title {
-		if m := servedBeside(asked, picked); m != "" {
+		if m := servedBeside(asked, picked, byClaudeCode); m != "" {
 			return m
 		}
 	}
@@ -592,7 +600,17 @@ func claudeOwnID(asked string) bool {
 // claude-haiku-4-5-20251001), so its small calls stay small and on the
 // chat's provider. "" when the session's provider serves no model of the
 // tier.
-func servedBeside(asked, picked string) string {
+//
+// A call Claude Code makes on its own (byClaudeCode: a classifier, a
+// small task, a subagent on a tier) is given one of the provider's Claude
+// models only when the session is on one of them too. Only then has the
+// user picked that provider's Claude models: a chat on Leee's DeepSeek
+// had Claude Code's sonnet calls sent to Leee's claude-sonnet-5-5, which
+// Leee's key may not use (403, CyberCaius on Discord). Such a session's
+// calls go to its own model ("" here). Desktop's own client sends no such
+// call: a tool-less request of its own that isn't a title is the user's
+// chat turn.
+func servedBeside(asked, picked string, byClaudeCode bool) string {
 	bare := strings.TrimSuffix(asked, "[1m]")
 	tier := claudeTier(bare)
 	if picked == "" || strings.Contains(bare, "/") || tier == "" {
@@ -600,10 +618,11 @@ func servedBeside(asked, picked string) string {
 	}
 	cat := provider.Catalog()
 	var pid, dir string
+	chatClaude := false
 	picked = strings.TrimSuffix(picked, "[1m]")
 	for _, e := range cat {
 		if e.ID == picked && e.Group == "" {
-			pid = e.Provider.ID
+			pid, chatClaude = e.Provider.ID, claudeModel(e) != ""
 			if i := strings.LastIndex(e.Model, "/"); i >= 0 {
 				dir = e.Model[:i+1]
 			}
@@ -617,14 +636,14 @@ func servedBeside(asked, picked string) string {
 			break
 		}
 		if e.Model == picked && e.Group == "" {
-			pid = e.Provider.ID
+			pid, chatClaude = e.Provider.ID, claudeModel(e) != ""
 			if i := strings.LastIndex(e.Model, "/"); i >= 0 {
 				dir = e.Model[:i+1]
 			}
 			break
 		}
 	}
-	if pid == "" {
+	if pid == "" || byClaudeCode && !chatClaude {
 		return ""
 	}
 	found := ""

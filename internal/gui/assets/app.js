@@ -4033,11 +4033,12 @@ function tierMenu(a) {
   const tiers = a.fields.filter((f) => menuRoles(a).includes(f.label));
   if (!tiers.length || !tiers.some((f) => f.options.length)) return null;
   // Claude Desktop has no model of its own here: a tier unset runs on the
-  // chat's provider's model of that tier, else on the chat's model
+  // chat's model, or, for a chat on a Claude model, its provider's model of
+  // that tier
   const main = a.fields.find((f) => f.key === "model");
   const mainName = main && (optionFor(main, main.value)?.label || main.value);
   const unset = (f) => omp && OMP_OWN_PICK.includes(f.label) ? t(OMP_UNSET[f.label])
-    : main ? t("same as model ({model})", { model: mainName }) : t("the chat's provider's model of the tier, else the chat's model");
+    : main ? t("same as model ({model})", { model: mainName }) : t("the chat's model; for a Claude chat, its provider's model of the tier");
   // a tier's effort, offered while there are levels to pick (Claude Code
   // through magpie); unset, the tier runs at the effort Claude Code asks.
   // An omp role's thinking level, while the role is on one model; unset,
@@ -4925,7 +4926,7 @@ function openPicker(agent, field, anchor, ev, only) {
     options.unshift(main && claudePicks(agent, field) ? { value: "", label: t(AUTO_MODE_UNSET), note: t("{model} unless the lead or the subagent names another", { model: mainName }), icon: agent.icon, reset: true }
       : main && leadPicks(agent, field) ? { value: "", label: t("Lead's pick"), note: t("{model} unless the lead names another", { model: mainName }), icon: optionFor(main, main.value)?.icon, reset: true }
       : main ? { value: "", label: t("Same as model"), note: mainName, icon: optionFor(main, main.value)?.icon, reset: true }
-      : { value: "", label: t("Not set"), note: t("the chat's provider's model of the tier, else the chat's model"), icon: agent.icon, reset: true });
+      : { value: "", label: t("Not set"), note: t("the chat's model; for a Claude chat, its provider's model of the tier"), icon: agent.icon, reset: true });
   } else if (field.label === SUB_MODEL && codexSub(agent) && !options.some((o) => o.value === "")) {
     const said = codexSubSaid(agent, { ...field, value: "" });
     const main = agent.fields.find((f) => f.key === "model");
