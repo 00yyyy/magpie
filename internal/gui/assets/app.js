@@ -9058,7 +9058,7 @@ function drawEditor(p, presetID) {
   const another = isNew && !!pr?.added;
   // an editor opened afresh has Names & levels folded: it stayed open in
   // every editor after, until magpie was restarted (Hu9956, #868)
-  if (!draft) naming = unpickedShown = null;
+  if (!draft) naming = unpickedShown = picksLeft = null;
   draft = draft || (p
     ? draftOf(p)
     : pr
@@ -10950,6 +10950,10 @@ let modelsOpen = false;
 // other n; a click on a model shows them all, so nothing vanishes while
 // picking, and Picked only clicked folds them away again
 let unpickedShown = null;
+// picksLeft: the picks Vendor's list or Usage only set aside, given back
+// when Picked only is clicked again in the same editor (yyddbds: to the
+// list and back, every model came back picked, the 24 the list serves)
+let picksLeft = null;
 const MCHIPS_MAX = 240;
 // emptyModelsHint is what an empty model list says. Azure OpenAI's is its
 // deployments, asked for with the key after it is added (#1995): while that
@@ -11585,9 +11589,11 @@ function renderModels(p) {
     b.dataset.serves = v;
     b.title = t(tip, { n: 24 });
     b.onclick = () => {
+      if (v !== "picked" && draft.chosen.length) picksLeft = { id: p.id, picks: [...draft.chosen] };
       if (v === "list") { draft.chosen = []; draft.typed = ""; draft.none = false; }
       else if (v === "none") { draft.chosen = []; draft.typed = ""; draft.none = true; }
       else {
+        if (!draft.chosen.length && picksLeft?.id === p.id) { draft.chosen = picksLeft.picks; draft.none = true; }
         if (!draft.chosen.length) { draft.chosen = p.models.filter((m) => !noAPI(m)).slice(0, 24).map((m) => m.id); draft.none = true; }
         unpickedShown = null;
       }
