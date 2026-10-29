@@ -234,6 +234,7 @@ function renderGatewayKeys() {
 
 const ROTATE_GLYPH = "M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3.25h-3.25";
 const REMOVE_GLYPH = "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4";
+const POWER_GLYPH = "M8 2.5v5M4.8 4.6a4.75 4.75 0 1 0 6.4 0";
 function gatewayKeyMore(k) {
   const more = el("button", "copy gw-key-more");
   more.type = "button";
@@ -244,7 +245,11 @@ function gatewayKeyMore(k) {
   more.onclick = (e) => {
     e.stopPropagation();
     if (more.classList.contains("open")) return closeAgentMenu();
+    // off and on again here too, by name, beside Remove (wei_VC on X:
+    // the tick alone wasn't seen as a switch, so a key was removed and
+    // added again)
     openRowMenu(more, [
+      { name: k.off ? "Enable key" : "Disable key", icon: POWER_GLYPH, run: () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id }) },
       { name: "Rotate key", icon: ROTATE_GLYPH, run: () => askGatewayKey(k, true) },
       { name: "Remove", icon: REMOVE_GLYPH, sep: true, run: () => askGatewayKey(k, false) },
     ]);

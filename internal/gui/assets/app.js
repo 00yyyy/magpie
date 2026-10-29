@@ -14544,6 +14544,17 @@ function renderKeyAccounts(p) {
     // how many requests it has out at once, and waiting (#892)
     row.append(laneLimitPill(p, k.id, p.id + "#" + k.id, k.name || k.masked));
     row.append(el("span", "grow"));
+    // off and on again by name, beside Remove (wei_VC on X: the dot alone
+    // wasn't seen as a switch, so keeping a key meant adding it again).
+    // The last key on stays on: the provider's own switch is for that.
+    // Switch off shows on hover, as Remove does; an off key's Switch on
+    // always shows, the one thing to do with it.
+    if (!k.on || several) {
+      const sw = el("button", "text key-switch" + (k.on ? " quiet" : ""), k.on ? t("Switch off") : t("Switch on"));
+      sw.title = k.on ? t("Stop using this key") : t("Use this key too");
+      sw.onclick = () => { sw.classList.add("busy"); accountAction("keys/" + (k.on ? "off" : "on"), { id: p.id, ref: k.id }); };
+      row.append(sw);
+    }
     if (!k.active || several) {
       const rm = el("button", "text quiet", t("Remove"));
       rm.onclick = () => accountAction("keys/remove", { id: p.id, ref: k.id }, t("Key removed"));
