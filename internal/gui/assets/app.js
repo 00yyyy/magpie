@@ -2342,7 +2342,7 @@ function cliTag(a) {
     return box;
   }
   const c = cliInfo[a.id];
-  if (!c?.version && !c?.app) return box;
+  if (!c?.version && !c?.app && !c?.inDesktop) return box;
   if (c.version) {
     // beside its desktop app's version, the CLI's says it is the CLI's
     const v = el("span", "ag-ver", c.app ? t("CLI {v}", { v: c.version }) : c.version);
@@ -2375,6 +2375,16 @@ function cliTag(a) {
   if (c.app) {
     const v = el("span", "ag-ver ag-app", t("App {v}", { v: c.app }));
     v.title = t("The {agent} app {v}. It reads the same settings as the CLI: connecting {agent} here connects both", { agent: a.name, v: c.app });
+    box.append(v);
+  }
+  // no Claude Code of its own here, only the one Claude Desktop includes
+  // for its Code tab, which reads this same ~/.claude (cybercaius,
+  // young02036: a card left after Claude Code's uninstall, with nothing
+  // saying which of the Claude cards Desktop reads)
+  if (c.inDesktop) {
+    const v = el("span", "ag-ver ag-app", t("In Claude Desktop"));
+    v.title = (c.desktopVersion ? t("Claude Code {v}, included in Claude Desktop", { v: c.desktopVersion }) + "\n" : "")
+      + t("No Claude Code of its own is installed here: this is the one Claude Desktop runs in its Code tab, and it reads this same {path}. A Code session Desktop opens in WSL runs that distro's Claude Code instead, its card in WSL.", { path: a.path || "~/.claude/settings.json" });
     box.append(v);
   }
   return box;
