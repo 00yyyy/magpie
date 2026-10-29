@@ -43,7 +43,20 @@ user's own llm-deepseek row pointed at magpie relies on (#3298,
 `TestDshMarksOnEveryRoute`).
 
 When the same identity is present in a native session, the native session wins
-and the gateway projection is omitted. On `/api/sessions/manage`, in its
+and the gateway projection is omitted. A native session can stand for more
+than its own key (`sessions.GatewayKeys`): Raft's (slock's raft-computer)
+agents run Pi in their folders under `$SLOCK_HOME` (else `~/.slock`,
+`%USERPROFILE%\.slock` on Windows), `agents/<id>/.pi-sessions/` and
+`.builtin-sessions/`, Pi's SDK files read as agent `raft`
+([`raft.go`](../../internal/sessions/raft.go)). Raft's Pi reads the user's
+own Pi folder, so through magpie it says it is Pi, and a Raft session is
+the gateway's `pi|<id>` too: in `MergeExternal`, the stats' native keys,
+the GUI's list and Via, and `NativeIDs` for `pi`. Raft's sessions are
+listed, read and deleted as Pi's (one file to the trash, nothing beside
+it; Raft starts afresh without it), with no resume command, no carry and
+no trace export (the gateway's Pi identity has those calls). Verification:
+`TestRaftSessions`, `TestRaftIsPiToTheGateway`, `TestRaftDeleteRestore`,
+`TestRaftSlockHome`. On `/api/sessions/manage`, in its
 counts as in its list, and on `/api/sessions/delete`, a native session is any
 session file the agent keeps, one nothing was said in too, with no limit
 (`sessions.NativeIDs`); one pass over the agents' files (`sessions.Manage`)
@@ -436,8 +449,8 @@ Code's (#1779; its sessions are on the Sessions page too, from the same
 `projects/<cwd>/<id>.jsonl` files read as WorkBuddy's, resumed with
 `codebuddy --resume <id>` and deletable, #2657: `TestCodeBuddy`,
 `TestCodeBuddySessionsListedUnderTheirName`), MiniMax Code's (#1605), Kimi Code's (#1607,
-[`calls_kimi.go`](../../internal/sessions/calls_kimi.go)) and Pi's and
-omp's, here and in WSL (#1951,
+[`calls_kimi.go`](../../internal/sessions/calls_kimi.go)) and Pi's,
+Raft's Pi agents' and omp's, here and in WSL (#1951,
 [`calls_pi.go`](../../internal/sessions/calls_pi.go)). Each skips the
 calls the agent made through magpie's own entry, which the gateway logged
 with the account that answered: Kimi Code's are the ones whose

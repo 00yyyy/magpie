@@ -105,6 +105,10 @@ var others = []*Agent{
 	// ("pi-desktop/0.1.0"), it is told apart from Pi by that name, which
 	// Pi's "pi-" would take otherwise (#1966, dgmico)
 	{ID: "pi-desktop", Name: "PI-Desktop", Icon: "pi", UA: []string{"pi-desktop"}},
+	// Raft (slock's raft-computer) runs Pi in each of its agents' folders;
+	// Sessions lists those as Raft's (internal/sessions/raft.go), while
+	// their requests say "pi (…)" and are Pi's
+	{ID: "raft", Name: "Raft", Icon: "generic"},
 }
 
 // Clients is everyone whose requests the gateway knows by name: every

@@ -240,7 +240,9 @@ func statsKept(ranges []int, now time.Time, wantNative bool) ([]Stats, map[strin
 		for key, fs := range groups {
 			// as List: a session nothing was said in is not listed
 			if s, ok := assembleListed(fs, price, titles); ok {
-				native[s.Agent+"|"+s.ID] = true
+				for _, k := range GatewayKeys(s) {
+					native[k] = true
+				}
 				listed[key] = s
 			}
 		}
