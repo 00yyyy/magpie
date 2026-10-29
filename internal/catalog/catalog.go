@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/filememo"
@@ -1302,13 +1303,25 @@ func SeesImages(id string) bool {
 // vendor's own list gives is read before this, by the caller, and stays.
 func ContextOf(id string) int { return contextAs(id, true) }
 
-// contextAs is ContextOf, with another spelling (normalFor) only when
-// spellings is true.
+// contextAs is ContextOf, with another spelling (normalFor), the model
+// the user said it is the same as (UserSame) and a tag in brackets taken
+// off (untagged) only when spellings is true.
 func contextAs(id string, spellings bool) int {
 	load()
-	b := bareID(id)
+	return contextIn(bareID(id), spellings, spellings)
+}
+
+// contextIn is contextAs for a bare id, the user's word (UserSame) heard
+// only with user: the model it names is looked up as any other, but not
+// sent to the user's word again.
+func contextIn(b string, spellings, user bool) int {
 	if w, ok := found(b, windows); ok {
 		return w
+	}
+	if s, ok := userSame(b, user); ok {
+		if w := contextIn(s, true, false); w > 0 {
+			return w
+		}
 	}
 	if r, w, ok := renamed(b); ok {
 		if w > 0 {
@@ -1321,6 +1334,9 @@ func contextAs(id string, spellings bool) int {
 	if n, ok := normalFor(b); spellings && ok {
 		w, _ := found(n, windows)
 		return w
+	}
+	if t, ok := untagged(b); spellings && ok {
+		return contextIn(t, true, user)
 	}
 	return 0
 }
@@ -1354,12 +1370,23 @@ func lookup[T any](id string, table map[string]T) (T, bool) {
 	return lookupAs(id, table, true)
 }
 
-// lookupAs is lookup, with another spelling (normalFor) only when
-// spellings is true.
+// lookupAs is lookup, with another spelling (normalFor), the model the
+// user said it is the same as (UserSame) and a tag in brackets taken off
+// (untagged) only when spellings is true.
 func lookupAs[T any](id string, table map[string]T, spellings bool) (T, bool) {
-	b := bareID(id)
+	return lookupIn(bareID(id), table, spellings, spellings)
+}
+
+// lookupIn is lookupAs for a bare id, the user's word heard only with
+// user, as contextIn.
+func lookupIn[T any](b string, table map[string]T, spellings, user bool) (T, bool) {
 	if v, ok := found(b, table); ok {
 		return v, true
+	}
+	if s, ok := userSame(b, user); ok {
+		if v, ok := lookupIn(s, table, true, false); ok {
+			return v, true
+		}
 	}
 	if r, _, ok := renamed(b); ok {
 		if v, ok := found(r, table); ok {
@@ -1369,8 +1396,73 @@ func lookupAs[T any](id string, table map[string]T, spellings bool) (T, bool) {
 	if n, ok := normalFor(b); spellings && ok {
 		return found(n, table)
 	}
+	if t, ok := untagged(b); spellings && ok {
+		return lookupIn(t, table, true, user)
+	}
 	var zero T
 	return zero, false
+}
+
+// UserSame, when set, is the model the user said a model of this bare id
+// (lowercase, without a vendor's prefix) is the same as, by the id any
+// vendor spells it with (settings' ModelSameAs; the settings package sets
+// it). A model models.dev lists by its very id is that model; one it
+// doesn't is looked up as the model the user named, before any guess of
+// magpie's (renamed, normalFor): a relay's rename no rule can read,
+// "ds.4.1(WB)" for deepseek-v4.1-flash (pinmmis on X), has that model's
+// window, reply limit, levels and images.
+var UserSame func(bare string) (string, bool)
+
+// userSame is UserSame's answer for b, as a bare id, when user is true
+// and it names a model other than b.
+func userSame(b string, user bool) (string, bool) {
+	if !user || UserSame == nil {
+		return "", false
+	}
+	s, ok := UserSame(b)
+	if s = bareID(strings.TrimSpace(s)); !ok || s == "" || s == b {
+		return "", false
+	}
+	return s, true
+}
+
+// tagPairs are the brackets a relay or a user puts a channel's tag in,
+// before or after a model's id: "deepseek-v4.1-flash (WB)", "[WB]
+// deepseek-v4.1-flash", and their full-width forms.
+var tagPairs = [][2]string{{"(", ")"}, {"[", "]"}, {"（", "）"}, {"【", "】"}, {"「", "」"}}
+
+// untagged is b without a tag in brackets at its start or its end, and
+// whether it had one: "deepseek-v4.1-flash (wb)" is deepseek-v4.1-flash.
+// A "[...]" written onto the end of the id with no space before it is not
+// a tag ("deepseek-v4.1-flash[fast]" may be a variant). A window mark ("[1m]", renamed's) is not a tag, nor is what is left
+// with no letter in it.
+func untagged(b string) (string, bool) {
+	t := strings.TrimSpace(b)
+	if r, _ := unmarked(t); r != t {
+		return "", false
+	}
+	for _, p := range tagPairs {
+		if strings.HasSuffix(t, p[1]) {
+			// "[fast]" written onto the id may be a variant's
+			// (TestRenameNeverTakesAModelForAnother): only one set
+			// apart by a space is a tag
+			if i := strings.LastIndex(t, p[0]); i > 0 && (p[0] != "[" || t[i-1] == ' ') {
+				t = strings.TrimSpace(t[:i])
+				break
+			}
+		}
+		if strings.HasPrefix(t, p[0]) {
+			if i := strings.Index(t, p[1]); i > 0 && i+len(p[1]) < len(t) {
+				t = strings.TrimSpace(t[i+len(p[1]):])
+				break
+			}
+		}
+	}
+	t = strings.Trim(t, " -_·.")
+	if t == b || t == "" || !strings.ContainsFunc(t, unicode.IsLetter) {
+		return "", false
+	}
+	return t, true
 }
 
 // normalFor is the bare id models.dev knows a model by when it knows it

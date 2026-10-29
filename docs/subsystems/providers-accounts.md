@@ -178,6 +178,22 @@ The id stays the upstream's, and its name isn't borrowed. A price never is:
 usage report sends a model id only when models.dev knows it as written
 (`KnowsAsWritten`).
 
+A model no rule can read (a relay's rename, `ds.4.1(WB)` for
+`deepseek-v4.1-flash`, pinmmis on X) takes its specs from the model the
+user said it is the same as: the editor's Same as, settings'
+`ModelSameAs`. The settings package hands it to the catalog
+(`catalog.UserSame`, `sameAsBare`, by the bare model id at any provider),
+and the same lookups ask it after the id as given and before magpie's own
+guesses (`renamed`, `normalFor`); a model models.dev lists by its own id
+stays its own, and the user's own window, reply limit, levels or images
+still win. Its price stays the provider's `SamePriceIn`. Before giving up,
+those lookups also take a channel's tag in brackets off the start or end
+of an id (`untagged`: `deepseek-v4.1-flash (WB)`, `[WB] …`, full-width
+`（）【】`); a `[...]` written onto the id with no space is not a tag, since
+it may be a variant's (`deepseek-v4.1-flash[fast]`), and a tagged id is
+never priced. `TestUserSameGivesTheSpecs`, `TestTaggedIDHasTheModelsSpecs`,
+`TestSameAsGivesAnUnlistedModelItsSpecs`.
+
 ## Constraints and failure behavior
 
 An allowance deliberately not requested (a saved Claude account outside
