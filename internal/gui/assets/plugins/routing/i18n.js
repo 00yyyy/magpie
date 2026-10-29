@@ -580,6 +580,10 @@ magpie.strings({
     "To ask for the maker's own API, tick “{tick}” in the provider's settings.": "要指定模型厂商的官方 API，请在该服务商设置里勾选“{tick}”。",
     "No provider was asked for, and its reply didn't say which one answered.": "请求时没有指定上游，回复也没有说是哪家作答。",
     "{h} h {m} min": "{h} 小时 {m} 分钟",
+    "magpie saved a report of where it held this request. If it keeps happening, send the report with yours.": "magpie 保存了一份报告，记下这个请求卡在了哪里。如果反复出现，请把这份报告附在你的反馈里。",
+    "Report copied": "报告已复制",
+    "Couldn't read the report: {error}": "读不到这份报告：{error}",
+    "Open Folder": "打开文件夹",
   },
   "zh-TW": {
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie 正在為這個請求脫敏（設定 › 隱私），脫敏完才路由，所以還沒選出由誰處理。",
@@ -1160,6 +1164,10 @@ magpie.strings({
     "To ask for the maker's own API, tick “{tick}” in the provider's settings.": "要指定模型廠商的官方 API，請在該服務商設定裡勾選「{tick}」。",
     "No provider was asked for, and its reply didn't say which one answered.": "請求時沒有指定上游，回覆也沒有說是哪家作答。",
     "{h} h {m} min": "{h} 小時 {m} 分鐘",
+    "magpie saved a report of where it held this request. If it keeps happening, send the report with yours.": "magpie 儲存了一份報告，記下這個請求卡在了哪裡。如果反覆出現，請把這份報告附在你的回報裡。",
+    "Report copied": "報告已複製",
+    "Couldn't read the report: {error}": "讀不到這份報告：{error}",
+    "Open Folder": "打開資料夾",
   },
   ja: {
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie はルーティングの前にこのリクエストをマスクしています（設定 › プライバシー）。誰が処理するかはまだ決まっていません。",
@@ -1740,6 +1748,10 @@ magpie.strings({
     "{h} h {m} min": "{h} 時間 {m} 分",
     "This routing group will no longer be available to agents.": "このルーティンググループはエージェントから利用できなくなります。",
     "These routing groups will no longer be available to agents.": "これらのルーティンググループはエージェントから利用できなくなります。",
+    "magpie saved a report of where it held this request. If it keeps happening, send the report with yours.": "magpie はこのリクエストがどこで止まっていたかをレポートに保存しました。繰り返し起きる場合は、報告にこのレポートを添えてください。",
+    "Report copied": "レポートをコピーしました",
+    "Couldn't read the report: {error}": "レポートを読み込めませんでした：{error}",
+    "Open Folder": "フォルダを開く",
   },
   de: {
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie maskiert diese Anfrage vor der Weiterleitung (Einstellungen › Datenschutz), daher steht noch nicht fest, wer sie übernimmt.",
@@ -2320,5 +2332,9 @@ magpie.strings({
     "{h} h {m} min": "{h} h {m} min",
     "This routing group will no longer be available to agents.": "Diese Weiterleitungsgruppe steht Agenten nicht mehr zur Verfügung.",
     "These routing groups will no longer be available to agents.": "Diese Weiterleitungsgruppen stehen Agenten nicht mehr zur Verfügung.",
+    "magpie saved a report of where it held this request. If it keeps happening, send the report with yours.": "magpie hat in einem Bericht festgehalten, wo diese Anfrage hängen blieb. Passiert es wieder, senden Sie den Bericht mit Ihrer Meldung mit.",
+    "Report copied": "Bericht kopiert",
+    "Couldn't read the report: {error}": "Der Bericht konnte nicht gelesen werden: {error}",
+    "Open Folder": "Ordner öffnen",
   },
 });

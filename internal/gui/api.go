@@ -2407,6 +2407,20 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	})
+	// the folder of the reports saved of requests held too long before
+	// routing (gateway.HeldDir), from such a request's row on Routing
+	mux.HandleFunc("POST /api/gateway/held/reveal", func(rw http.ResponseWriter, r *http.Request) {
+		dir := gateway.HeldDir()
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := w.OpenFolder(dir); err != nil {
+			fail(rw, err)
+			return
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("POST /api/window/{action}", func(rw http.ResponseWriter, r *http.Request) {
 		switch r.PathValue("action") {
 		case "hide":

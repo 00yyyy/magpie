@@ -432,7 +432,7 @@ func (s *Server) askVisionWith(ctx context.Context, model, src, system, text str
 func (s *Server) seenBody(ctx context.Context, proto provider.Protocol, body []byte, model string) ([]byte, error) {
 	// the images described before a route is begun: a wait magpie knows
 	// of (unrouted.go)
-	defer noteWait(ctx)()
+	defer noteWait(ctx, "image description")()
 	var srcs []string
 	have := map[string]bool{}
 	walkImages(proto, body, func(im imageAt) (json.RawMessage, error) {

@@ -2855,6 +2855,11 @@ function routingPage(part) {
       if (tr.done && tryOk(tr) && tr.upstream) items.push([upstreamWhy(tr), "aside upstream-said", tr]);
     });
     if (r.done && !r.tries.length) items.push([t("Nothing was tried: {error}", { error: r.error || r.status }), "bad"]);
+    // one magpie held too long before routing it was stopped, and what
+    // held it saved to a report (the app's log goes only to stderr, which
+    // its user can't reach): its line copies it. Its name rides as the
+    // line's model, so another held request's line is drawn anew.
+    if (r.done && r.held) items.push([t("magpie saved a report of where it held this request. If it keeps happening, send the report with yours."), "aside held", { model: r.held }]);
     const aboutKey = (w) => w ? seat(w) : "";
     const logos = [...r.order, ...(r.left || [])].map(logoOf);
     const key = JSON.stringify([tagKind(r), items.map(([s, c, tr, w]) => [s, c, tr?.model, tr?.served, aboutKey(w)]), logos]);
@@ -2886,9 +2891,28 @@ function routingPage(part) {
       if (c === "aside kind") li.prepend(kindTag(r), " ");
       if (c === "swap") li.prepend(swapTag(tr), " ");
       if (c === "aside time") li.replaceChildren(timeElement(tr));
+      if (c === "aside held") li.append(" ", ...heldActions(tr.model));
       return li;
     }));
     keptIcons = null;
+  }
+
+  // heldActions are a held request's report's buttons: Copy Report, and
+  // the folder it is kept in, on this computer only
+  function heldActions(name) {
+    const cp = el("button", "link", t("Copy Report"));
+    cp.onclick = async () => {
+      try {
+        const got = await api("gateway/held/" + encodeURIComponent(name));
+        await copy(got.text, "", cp, t("Report copied"));
+      } catch (e) {
+        status(t("Couldn't read the report: {error}", { error: t(e.message) }), "err");
+      }
+    };
+    if (window.bootPrefs?.web) return [cp];
+    const open = el("button", "link", t("Open Folder"));
+    open.onclick = () => api("gateway/held/reveal", {}).catch((e) => status(e.message, "err"));
+    return [cp, " ", open];
   }
 
   // pick sets the stage to a past request, or back to live with the newest.

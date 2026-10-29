@@ -348,7 +348,10 @@ recorded as a prediction failure (`noPrediction`).
   One's or the decision model's classifier (`askWaited`), an image's
   description (`seenBody`), Codex's auto reset (`autoReset`), plugins'
   gateway hooks (`GatewayBegin`) and JS gateway middleware, and every
-  `notePhase` (slot, rpm, upstream, redact). What is left is magpie's own work
+  `notePhase` (slot, rpm, upstream, redact), and the body room's queue
+  (`bodyRoom.take`, at most `bodyRoomWait`, 100s). Each is named (its
+  `kind`), and the time spent in each kind is kept (`waitKind`) for the
+  report below. What is left is magpie's own work
   (the catalog, parsing, planning, reading the usage log), ~8.5s at its
   slowest (a cold catalog sync), so 30s gives it room on a loaded machine.
   With no route and nothing written, it is answered 504 in its client's
@@ -357,6 +360,23 @@ recorded as a prediction failure (`noPrediction`).
   `errUnrouted`, its route ends with the error, and the log has every
   goroutine's stack (at most once in 10 minutes). The handler's writes go
   through `heldWriter`, and nowhere once magpie has answered for it.
+  The desktop app's log goes only to stderr, which its user can't reach
+  (Jason on Discord, a Codex request held 2m0s, told to send "magpie's
+  log"), so what held it is also saved as a report
+  ([`held_report.go`](../../internal/gateway/held_report.go)): taken while
+  the request is still held, before its context ends, in `HeldDir`
+  (`<cache>/held`, mode 0700), written through a temp file and renamed,
+  the newest `heldKept` (5) kept. It has the time, version and system,
+  method and path, the model and agent, how long it was held, each kind
+  of known wait and its time ("(under way)" for the one it was in), the
+  body room's state, the requests in flight and every goroutine's stack
+  (function names and lines, no values; 128 KB at most, one dump for a
+  burst within 10s). Never the body or headers. Its file name is
+  `Route.Held`; the Routing page's story of that request has Copy Report
+  (`GET /api/gateway/held/{name}`, only a report's own name is read) and,
+  in the app, Open Folder (`POST /api/gateway/held/reveal`). The 504 and
+  the log line say where it is. `TestUnroutedHeldReportSaved`,
+  `TestHeldReportsKeptAndNamed`, `routing-held-report.test.cjs`.
   `TestUnroutedRequestShownThenAnswered`, `TestUnroutedShownGivesWayToItsRoute`,
   `TestUnroutedUnknownHoldAnsweredSooner`, `TestUnroutedSlowBodyNotCutOff`,
   `TestUnroutedMaskingNotCutOff`, `TestUnroutedSlotWaitNotCutOff`,

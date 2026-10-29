@@ -4082,6 +4082,8 @@ const I18N = {
     "1 place": "1 处",
     "as written": "原样",
     "Where": "位置",
+    "Copy Report": "复制报告",
+    "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
     "MCP hub": "MCP 聚合",
@@ -8147,6 +8149,8 @@ const I18N = {
     "1 place": "1 處",
     "as written": "原樣",
     "Where": "位置",
+    "Copy Report": "複製報告",
+    "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
     "MCP hub": "MCP ハブ",
@@ -12214,6 +12218,8 @@ const I18N = {
     "1 place": "1 か所",
     "as written": "そのまま",
     "Where": "場所",
+    "Copy Report": "レポートをコピー",
+    "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
     "MCP hub": "MCP-Hub",
@@ -16281,6 +16287,8 @@ const I18N = {
     "1 place": "1 Stelle",
     "as written": "unverändert",
     "Where": "Wo",
+    "Copy Report": "Bericht kopieren",
+    "This report is no longer kept: magpie keeps the last 5.": "Dieser Bericht ist nicht mehr da: magpie behält nur die letzten 5.",
   },
 };
 
