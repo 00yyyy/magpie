@@ -2,6 +2,7 @@ package redact
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -359,12 +360,58 @@ func modelFits(s string, a, b int, kind string) bool {
 		if pinnedAfter(s, b) {
 			return false
 		}
+		if wordsOnly(v) && !assignedSecret(s, a) {
+			return false
+		}
 		return !hexRe.MatchString(v) || secretCued(s, a)
 	case "EMAIL":
 		// a URL's user:password@host is no address, as for the rule's (#3538)
 		return wordByte(v[0]) && !modCacheRe.MatchString(v) && !inUserinfo(s, a)
 	}
 	return true
+}
+
+// wordsOnlyRe is words in lower case and nothing else, joined by - . or
+// _: drizzle-orm, reflect-metadata, lodash.merge, secretstorage.
+var wordsOnlyRe = regexp.MustCompile(`^[a-z]+(?:[-._][a-z]+)*$`)
+
+// wordsOnly says v, which the model took for a secret, is made of words
+// in lower case alone, as a package's, a tool's or a setting's name is.
+// A key is random: it has a digit, a capital or a symbol in it, and the
+// SECRET rules ask a digit of a value after password= too (secretValue).
+// AstrLink Guard took drizzle-orm for a secret in a tsup config's
+// external list in a Markdown fence (dniray on Discord, v0.1.1976; 0.515
+// on that line alone), after v0.1.1932 and v0.1.1976 had each let it go
+// in more places (an import, package.json, a tsc error): the places a
+// package's name is written can't all be listed, so the shape decides. Such a value is a
+// secret only where it is assigned to a secret's name (assignedSecret):
+// PASSWORD=opensesame, "password": "letmeinplease", the wifi password is
+// purplemonkey.
+func wordsOnly(v string) bool { return wordsOnlyRe.MatchString(v) }
+
+// assignedSecret says the value at s[a] is given to a secret's name: the
+// name, then =, :, is or 是 (and the quotes around them), right before it.
+// A list's comma before it is no assignment, whatever is further back:
+// 'jsonwebtoken', 'drizzle-orm' (secretCued takes the token in that).
+func assignedSecret(s string, a int) bool {
+	before := strings.ToLower(strings.TrimRight(s[max(0, a-64):a], " \t\"'`“「"))
+	for _, sep := range []string{"=", ":", "：", " is", " was", "是", "为", "為"} {
+		if !strings.HasSuffix(before, sep) {
+			continue
+		}
+		name := strings.TrimRight(before[:len(before)-len(sep)], " \t\"'`:")
+		i := len(name)
+		for i > 0 && (wordByte(name[i-1]) || name[i-1] == '.' || name[i-1] == '-') {
+			i--
+		}
+		if i == len(name) {
+			// a Chinese name: 密码是, 令牌为
+			return slices.ContainsFunc(secretCues, func(c string) bool { return c[0] >= 0x80 && strings.HasSuffix(name, c) })
+		}
+		return slices.ContainsFunc(secretCues, func(c string) bool { return c[0] < 0x80 && strings.Contains(name[i:], c) }) ||
+			strings.Contains(name[i:], "pass") || strings.Contains(name[i:], "pwd") || strings.Contains(name[i:], "credential")
+	}
+	return false
 }
 
 // pinnedAfter says the value that ends at s[b] is a package's name, as

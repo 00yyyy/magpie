@@ -199,8 +199,15 @@ func knownSpans(s string, o Options) []span {
 			if !o.coversKind(k.kind) {
 				continue
 			}
-			if sc, ok := scores[k.v]; ok && sc < o.MinScore {
+			sc, scored := scores[k.v]
+			if scored && sc < o.MinScore {
 				continue // the model's alone, under the slider
+			}
+			if scored && sc < ruleFound && k.kind == "SECRET" && wordsOnly(k.v) && !assignedSecret(s, i) {
+				// words the model alone took for a secret, as modelFits
+				// lets go now: what a magpie before it had remembered
+				// (drizzle-orm, dniray on Discord, v0.1.1976)
+				continue
 			}
 			if best != nil && len(k.v) <= len(best.v) || !strings.HasPrefix(s[i:], k.v) || !standsAlone(k.kind, s, i, i+len(k.v)) {
 				continue
