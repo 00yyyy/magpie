@@ -691,7 +691,8 @@ magpie.plugin("sessions", (ctx) => {
   }
 
   // nest finds the sessions shown that are under another one shown: a
-  // Codex thread whose parent_session is, by a chain with no loop in it
+  // Codex thread, or a Claude branch, whose parent_session is, by a chain
+  // with no loop in it
   function nest(list) {
     const byId = new Map(list.map((s) => [s.id, s]));
     kidsOf = new Map();
@@ -938,18 +939,23 @@ magpie.plugin("sessions", (ctx) => {
 
   // subagentsBox is the fold under a session with its subagents: those
   // its agent started inside it, each opened to its conversation, and the
-  // Codex threads it started, drawn as sessions
+  // Codex threads it started, drawn as sessions; and the Claude sessions
+  // forked from it that went on (role "branch"), named apart
   function subagentsBox(s, kids, depth) {
     const box = el("div", "sm-subs");
     const k = s.agent + "/" + s.id;
     const subs = subTree(s.subagents || []);
-    const n = kids.length + subs.length;
+    const branches = kids.filter((c) => c.role === "branch").length;
+    const n = kids.length + subs.length - branches;
+    const words = [];
+    if (branches) words.push(t(branches === 1 ? "{n} branch" : "{n} branches", { n: branches }));
+    if (n || !branches) words.push(t(n === 1 ? "{n} subagent" : "{n} subagents", { n }));
     const draw = () => {
       const open = subsOpen.has(k) || (!!query.trim() && kids.length > 0);
       const fold = el("button", "fold sm-subs-fold");
       fold.type = "button";
       fold.setAttribute("aria-expanded", String(open));
-      fold.append(svg(CHEV_R, 10, 1.6), el("span", "", t(n === 1 ? "{n} subagent" : "{n} subagents", { n })));
+      fold.append(svg(CHEV_R, 10, 1.6), el("span", "", words.join(" · ")));
       fold.onclick = (e) => {
         e.stopPropagation();
         if (subsOpen.has(k)) subsOpen.delete(k); else subsOpen.add(k);

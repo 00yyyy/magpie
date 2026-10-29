@@ -248,9 +248,12 @@ func statsKept(ranges []int, now time.Time, wantNative bool) ([]Stats, map[strin
 	}
 	// a copy of a conversation is counted in the session it is kept in
 	// (ccCopies): its subagents' files, and what its own file holds that
-	// the keeper's doesn't (ccCopyStates), not the messages both hold
-	copies := ccCopies(files)
-	copied := ccCopyStates(files, copies)
+	// the keeper's doesn't (ccCopyStates), not the messages both hold. A
+	// branch (ccFamily) is its own session, and counts only what the
+	// session it was forked from doesn't hold, so the shared part is
+	// counted once.
+	copies, branches := ccFamily(files)
+	copied := ccCopyStates(files, ccJoin(copies, branches))
 	// a subagent's file counts in the folder of its session's own file
 	folder := map[string]string{}
 	for _, f := range files {
@@ -319,6 +322,9 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 		st := cache[f.path]
 		if keeper := copies[f.key]; keeper != "" {
 			st, f.key = copied[f.path], keeper
+		} else if own := copied[f.path]; own != nil {
+			// a branch's file: what it said on its own
+			st = own
 		}
 		if st == nil {
 			continue

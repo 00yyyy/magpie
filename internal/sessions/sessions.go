@@ -154,6 +154,10 @@ type Session struct {
 	// Copies are the ids of the sessions that are copies of its
 	// conversation, not listed apart from it (ccCopies)
 	Copies []string `json:"-"`
+	// BranchOf is the main file of the session a Claude-format session
+	// is a branch of (ccFamily): it is listed under that one, and read
+	// from that one's start up to where it went its own way
+	BranchOf string `json:"-"`
 }
 
 // PriceOf is the effective price of a model as a session names it, at the
@@ -1445,7 +1449,7 @@ func listSessions(limit int) []Session {
 	identities := codexIdentitySnapshot(files)
 	taskTitles := codexSubagentTaskTitles(files)
 
-	copies := ccCopies(files)
+	copies, branches := ccFamily(files)
 	copyIDs := copiesByKeeper(copies, groups)
 
 	price, titles := pricer(), codexTitleOf()
@@ -1456,6 +1460,7 @@ func listSessions(limit int) []Session {
 		}
 		if s, ok := assemble(groups[k], price, titles); ok {
 			s.Copies = copyIDs[k]
+			setBranch(&s, branches[k], groups)
 			setSessionCodexIdentity(&s, identities)
 			setSessionCodexTaskTitle(&s, taskTitles)
 			out = append(out, s)
@@ -2461,5 +2466,35 @@ func get(key string) (s Session, ok, found bool) {
 	s, ok = assemble(fs, pricer(), codexTitleOf())
 	setSessionCodexIdentity(&s, identities)
 	setSessionCodexTaskTitle(&s, taskTitles)
+	if parserFor(fs[0].agent).claude {
+		// judged with the files of its agent cache has read, as the
+		// listing judges them
+		var mine []file
+		groups := map[string][]file{}
+		for _, f := range files {
+			if f.agent == fs[0].agent {
+				mine = append(mine, f)
+				groups[f.key] = append(groups[f.key], f)
+			}
+		}
+		_, branches := ccFamily(mine)
+		setBranch(&s, branches[key], groups)
+	}
 	return s, ok, true
+}
+
+// setBranch marks s a branch of the session by the key head (ccFamily):
+// nested under it, and read from its start (TranscriptOf). "" leaves s.
+func setBranch(s *Session, head string, groups map[string][]file) {
+	g := groups[head]
+	if head == "" || len(g) == 0 {
+		return
+	}
+	s.Role, s.ParentSession = "branch", sessionID(g)
+	for _, f := range g {
+		if f.main {
+			s.BranchOf = f.path
+			break
+		}
+	}
 }

@@ -664,7 +664,35 @@ establishes them, `parent_session` and `root_session`. A child whose root is not
 known keeps an empty `root_session`; Codex entries without explicit identity
 metadata, gateway-only entries and conflicting identities set `role` to
 `unknown` and do not acquire a guessed parent or root. These fields are omitted
-for other agents. This is Codex-specific (#1591).
+for other agents, except a Claude-format branch (below). This is Codex-specific
+(#1591).
+
+Claude Code copies a conversation into a new session file when it forks one
+(`--resume <id> --fork-session`, the Agent SDK's `forkSession`, `/branch`):
+every message again, under the same uuids, with the new session id; after a
+compaction the copy starts at the compaction's summary
+([`cc_copies.go`](../../internal/sessions/cc_copies.go), `ccFamily`). Files
+are grouped by their first message and their compactions' summaries. A file
+whose last message and first message another file of the group holds is a
+copy: not listed, its id in `Copies`, counted in the stats only for what the
+keeper doesn't hold (`ccRest`). A file that holds what came before the
+other's start (the compaction the fork started after) is never that one's
+copy. What is left of the group went on apart and is one conversation: the
+head is the file that holds the others' first message as they don't hold
+its, else the one a `/branch` names in `forkedFrom`, else the earliest, then
+the lowest key. Each other one is a branch: listed with `role` `branch` and
+`parent_session` the head's id, its transcript (`TranscriptOf`, Markdown
+export) is the head's from its start up to the last message the two share,
+then the branch's own lines (`branchTranscript`), and the stats count only
+its own lines. A search reads the branch's own file. Neo (#feedback, after
+v0.1.1809): a client that ran each task in a fork of a compacted session
+showed a row per task, each opening on the summary and that one task, while
+the session itself was hidden as a fork's copy. See
+`TestClaudeForksAfterCompactAreBranches`,
+`TestClaudeSlashBranchAfterCompactIsABranch`,
+`TestClaudeBranchNamesItsSession` and
+`TestClaudeCopyBeforeACompactionIsCounted`; the fixtures in
+`testdata/claude-forks` are Claude Code 2.1.312's own files.
 
 A session whose agent keeps its subagents' conversations beside its own
 lists them in `subagents` on the sessions API (`/api/sessions`, `one`, `manage`; #2261,
@@ -721,7 +749,9 @@ kind, set in under the subagent that started it, and a click shows its
 conversation (`sub=`). A Codex thread whose `parent_session` chain reaches a
 listed session is drawn, as a session with its own details, Resume and
 Delete, under its parent in the same fold; a loop of parents, a chain deeper
-than eight or a parent not listed leaves it on top. The folder's count and
+than eight or a parent not listed leaves it on top. A Claude branch is drawn
+under its session the same way, and the fold names them apart ("2
+branches · 1 subagent"). The folder's count and
 checkbox cover the sessions under others. See `sessions-subagents.test.cjs`.
 
 Codex keeps the existing session-title precedence. Only when that leaves the

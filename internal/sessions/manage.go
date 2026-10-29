@@ -246,7 +246,7 @@ func listAgentWith(agent string, all []file, quick bool) []Managed {
 		identities = codexIdentitySnapshot(mine)
 		taskTitles = codexSubagentTaskTitles(mine)
 	}
-	copies := ccCopies(mine)
+	copies, branches := ccFamily(mine)
 	copyIDs := copiesByKeeper(copies, groups)
 	price, titles := pricer(), codexTitleOf()
 	out := []Managed{}
@@ -256,6 +256,7 @@ func listAgentWith(agent string, all []file, quick bool) []Managed {
 		}
 		s, _ := assemble(fs, price, titles)
 		s.Copies = copyIDs[k]
+		setBranch(&s, branches[k], groups)
 		setSessionCodexIdentity(&s, identities)
 		setSessionCodexTaskTitle(&s, taskTitles)
 		listed(&s)
