@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/budget"
+	"github.com/yetone/magpie/internal/netguard"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
@@ -182,19 +184,36 @@ func LANURLs() []string {
 // the other). Private ones come first: in the interfaces' order the public
 // one came first, and Settings offered it as the address under "Share on
 // local network" (the same user, asking why sharing was on the internet).
+// Of the private ones, RFC 1918's (a home or office network) come before
+// carrier-grade NAT's (Tailscale). A proxy's TUN address is left out:
+// 198.18.0.0/15 (netguard.FakeIP), which Clash, Mihomo, sing-box, Surge
+// and Stash take for their TUN interfaces and fake-ip answers, and which
+// no network hands out: no other device reaches this computer there, and
+// Settings offered http://198.18.0.1 instead of 192.168.110.x (coeo91 on
+// Discord). It goes by the address, not the interface's name: Tailscale's
+// is a utun too, and its address is reached.
 func LANHosts() []string {
-	var near, far []string
+	var home, near, far []string
 	for _, ip := range hostIPs() {
-		if ip.To4() == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+		if ip.To4() == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || fakeIP(ip) {
 			continue
 		}
-		if PublicIP(ip) {
+		switch {
+		case ip.IsPrivate():
+			home = append(home, ip.String())
+		case PublicIP(ip):
 			far = append(far, ip.String())
-		} else {
+		default:
 			near = append(near, ip.String())
 		}
 	}
-	return append(near, far...)
+	return slices.Concat(home, near, far)
+}
+
+// fakeIP: ip is a proxy's TUN or fake-ip address (netguard.FakeIP).
+func fakeIP(ip net.IP) bool {
+	a, ok := netip.AddrFromSlice(ip)
+	return ok && netguard.FakeIP(a)
 }
 
 // sharedRanges are IPv4 ranges outside RFC 1918 that still aren't the
