@@ -76,10 +76,16 @@ type Settings struct {
 	// Dock keeps magpie in the Mac's Dock as well as the menu bar, for a
 	// menu bar too full to show its icon.
 	Dock bool `json:"dock,omitempty"`
-	// DockWindow shows it in the Dock only while its window is open, so
-	// Cmd-Tab reaches the window without an icon kept there the rest of
-	// the time. Dock wins over it.
+	// DockWindow is the With window choice: magpie is in the Dock, and so
+	// in Command-Tab, only while its window is open. It is what magpie
+	// does with neither Dock nor DockNever set (ShouguangCao on X: the
+	// window was out of Command-Tab, so going back to it to paste a key
+	// copied elsewhere took the menu bar), so it is still written for an
+	// older magpie reading the file, which took none for Hide.
 	DockWindow bool `json:"dockWindow,omitempty"`
+	// DockNever keeps magpie out of the Dock and Command-Tab even while
+	// its window is open, the Hide choice. Dock wins over it.
+	DockNever bool `json:"dockNever,omitempty"`
 	// Proxy for magpie's own requests to vendors: "" follows the
 	// environment and then the system, "direct" uses none, anything else
 	// is the proxy (http://, https:// or socks5://; host:port means http).
@@ -1152,6 +1158,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.GatewayConversations = cur.GatewayConversations
 	s.UIFont, s.CodeFont = cur.UIFont, cur.CodeFont
 	s.Window, s.Proxy, s.Port, s.Dock, s.DockWindow, s.Lightweight = cur.Window, cur.Proxy, cur.Port, cur.Dock, cur.DockWindow, cur.Lightweight
+	s.DockNever = cur.DockNever
 	s.ProxyCustom = cur.ProxyCustom
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost

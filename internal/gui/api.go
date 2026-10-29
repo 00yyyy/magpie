@@ -1467,7 +1467,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if strings.TrimSpace(in.Vision) != strings.TrimSpace(cur.Vision) {
 			catalog.Touched()
 		}
-		if (in.Dock != cur.Dock || in.DockWindow != cur.DockWindow) && onDock != nil {
+		if (in.Dock != cur.Dock || in.DockWindow != cur.DockWindow || in.DockNever != cur.DockNever) && onDock != nil {
 			onDock(in)
 		}
 		// the cards the menu bar shows, any of them (TrayUsage is only the first),
