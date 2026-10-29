@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/yetone/magpie/internal/source"
 	"gopkg.in/yaml.v3"
@@ -139,18 +140,50 @@ func parseMeta(b []byte) meta {
 
 var unsafe = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
 
-// nameFor is the name a skill found at dir goes by: what its SKILL.md
-// says, else its folder's, made fit for a file name.
-func nameFor(dir string, m meta) string {
-	n := m.Name
-	if n == "" {
-		n = filepath.Base(dir)
+// nameFor is the name a skill in the folder named folder goes by: what its
+// SKILL.md says, made fit for a file name. A name in another script doesn't
+// survive that: asdfgh1445/ctf-super-hub's "CTF•密码学" and ten more were
+// all "CTF", "Strix•RCE 测试" and ten more "Strix", and "头脑风暴" nothing,
+// so 35 skills were listed as 16 (tnt1223 on Discord). Such a name, or
+// none, goes by its folder's name instead, which a repository keeps apart;
+// only a folder whose name is no name either leaves the name as it came
+// out.
+func nameFor(folder string, m meta) string {
+	if n := fitName(m.Name); n != "" && !dropsLetters(m.Name) {
+		return n
 	}
+	if n := fitName(folder); n != "" {
+		return n
+	}
+	return fitName(m.Name)
+}
+
+// srcFolder is the name of the folder a source's top is: a repository's
+// own name, not the temporary folder it was downloaded to.
+func srcFolder(src Source) string {
+	if src.Kind == "folder" {
+		return filepath.Base(src.Dir)
+	}
+	r := strings.TrimSuffix(strings.TrimRight(src.Repo, "/"), ".git")
+	return r[strings.LastIndexAny(r, "/:")+1:]
+}
+
+// fitName is a name made fit for a file name: anything but ASCII letters,
+// digits, _ and - is a -, and it is at most 64 bytes.
+func fitName(n string) string {
 	n = strings.Trim(unsafe.ReplaceAllString(n, "-"), "-_")
 	if len(n) > 64 {
 		n = n[:64]
 	}
 	return n
+}
+
+// dropsLetters is whether making n fit for a file name loses a letter or
+// digit of it, not only a space or a mark between words.
+func dropsLetters(n string) bool {
+	return strings.ContainsFunc(n, func(r rune) bool {
+		return r > unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r))
+	})
 }
 
 // ---- linking into agents --------------------------------------------------
@@ -931,17 +964,18 @@ func untar(r io.Reader, dst string) error {
 // skills folder: some repositories keep their skill only in
 // .claude/skills (#1964, UFO404). A skill the repository holds twice, in a
 // hidden folder or a plugin's, is listed once (unhiddenFirst).
-func candidates(root, sub string) []Candidate {
+func candidates(root, sub, top string) []Candidate {
 	base := filepath.Join(root, filepath.FromSlash(sub))
 	var out []Candidate
 	var walk func(dir string, depth int)
 	walk = func(dir string, depth int) {
 		if m, ok := readMeta(dir); ok {
 			rel, _ := filepath.Rel(root, dir)
+			folder := filepath.Base(dir)
 			if rel == "." {
-				rel = ""
+				rel, folder = "", top
 			}
-			out = append(out, Candidate{Path: filepath.ToSlash(rel), Name: nameFor(dir, m), Description: m.Description})
+			out = append(out, Candidate{Path: filepath.ToSlash(rel), Name: nameFor(folder, m), Description: m.Description})
 			return
 		}
 		if depth == 0 {
@@ -1072,7 +1106,7 @@ func probeSkills(input, name string) (*Probe, error) {
 			return nil, fmt.Errorf("%s isn't a folder", input)
 		}
 		p.Kind, p.root, p.src = "folder", dir, Source{Kind: "folder", Dir: dir}
-		p.Candidates = candidates(dir, "")
+		p.Candidates = candidates(dir, "", filepath.Base(dir))
 	} else if src, ok := githubSource(input); ok || isGit(input) {
 		if !ok {
 			src, _, _ = gitSource(input)
@@ -1086,7 +1120,7 @@ func probeSkills(input, name string) (*Probe, error) {
 			os.RemoveAll(tmp)
 			return nil, fmt.Errorf("%s has no folder %s", src.Repo, src.Path)
 		}
-		p.Candidates = candidates(tmp, src.Path)
+		p.Candidates = candidates(tmp, src.Path, srcFolder(src))
 		p.Left = tookLeftOut(tmp, src.Path)
 		key := input
 		if part && name != "" {
