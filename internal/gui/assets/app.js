@@ -4954,6 +4954,7 @@ function openPicker(agent, field, anchor, ev, only) {
   }
   const modelPicker = (["model", "small", "large", MEMORIES, SUB_MODEL, AUTO_MODE, "executor", "planner", ...ROLE_MODELS].includes(field.label) || hermesBot(field)) && !only;
   pick = { agent, field, options, groups, anchor, cursor: 0, free: !only && !field.menu, modelPicker, effortPicker, groupFilter: "all" };
+  if (modelPicker) readSpeeds();
   anchor.classList.add("open");
   const pop = $("#pop");
   pop.classList.toggle("model-picker", modelPicker);
@@ -5203,7 +5204,9 @@ function filter(keep) {
   else if (pick.modelPicker && pick.groupFilter !== "all") source = source.filter((o) => (o.group || o.home) === pick.groupFilter || o.reset);
   const scored = source.map((o) => ({ o, i: pick.options.indexOf(o), s: score(q, o) })).filter((x) => x.s > 0);
   // with a query, best matches first; without, catalog order keeps the groups together
-  if (q) scored.sort((a, b) => b.s - a.s || a.i - b.i);
+  // (and a model several providers serve, found by its name, fastest
+  // first: modelSpeeds, axuhere on X)
+  if (q) scored.sort((a, b) => b.s - a.s || (pick.modelPicker ? speedRank(a.o) - speedRank(b.o) : 0) || a.i - b.i);
   pick.items = scored.map((x) => x.o);
   const typed = $("#q").value.trim();
   if (typed && pick.free && ["model", "small", "large", "executor", "planner", ...ROLE_MODELS].includes(pick.field.label) && !pick.items.some((o) => o.value === typed)) {
@@ -5444,6 +5447,39 @@ function pathTag(o) {
   return tag;
 }
 
+// modelSpeeds: each catalog ref's speed this week from the usage ledger
+// ({ttft ms, tps, n}, /api/model-speeds), read when a model picker opens,
+// at most once a minute; a model several providers serve shows which of
+// them answers it fastest (axuhere on X)
+let modelSpeeds = {}, speedsRead = 0;
+function readSpeeds() {
+  if (Date.now() - speedsRead < 60000) return;
+  speedsRead = Date.now();
+  api("model-speeds").then((s) => {
+    modelSpeeds = s || {};
+    if (pick?.modelPicker) { const o = pick.items?.[pick.cursor]; filter(o && ((x) => x === o)); }
+  }).catch(() => { speedsRead = 0; });
+}
+
+// speedRank: about how long a 200-token reply takes on o's provider, in
+// seconds; Infinity when no reply was timed
+function speedRank(o) {
+  const s = o.ref && modelSpeeds[o.ref];
+  if (!s || !(s.ttft || s.tps)) return Infinity;
+  return (s.ttft || 0) / 1000 + (s.tps ? 200 / s.tps : 0);
+}
+
+// speedTag: the quiet speed by a picker's model, tokens a second, or the
+// first token's wait when only that was timed
+function speedTag(o) {
+  const s = o.ref && modelSpeeds[o.ref];
+  if (!s || !(s.ttft || s.tps)) return null;
+  const secs = ((s.ttft || 0) / 1000).toFixed(1);
+  const tag = el("span", "badge ctx speed", s.tps ? t("{n} tok/s", { n: Math.round(s.tps) }) : secs + "s");
+  tag.title = s.tps && s.ttft ? t("first token in {s}s, {n} tokens a second", { s: secs, n: Math.round(s.tps) }) : s.ttft ? t("first token in {s}s", { s: secs }) : t("{n} tok/s", { n: Math.round(s.tps) });
+  return tag;
+}
+
 function renderList() {
   const list = $("#list");
   list.replaceChildren();
@@ -5469,6 +5505,8 @@ function renderList() {
     if (rate) words.append(rate);
     const ctx = contextTag(o.context, o.label);
     if (ctx) words.append(ctx);
+    const speed = pick.modelPicker && speedTag(o);
+    if (speed) words.append(speed);
     // an Aside account's note is its e-mail, or Aside's "Local Account",
     // then whether Aside has it active: the words are magpie's, the e-mail not
     let note = o.note && o.note !== (o.label || o.value) ? (own ? t(o.note) : asideAccount(pick.agent, pick.field) ? o.note.split(" · ").map((w) => t(w)).join(" · ") : o.note) : "";

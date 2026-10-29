@@ -2480,6 +2480,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		rw.WriteHeader(http.StatusNoContent)
 	})
 	agentModelsAPI(mux)
+	speedsAPI(mux)
 	devListen(mux)
 	return noFramedAPI(held(mux))
 }
