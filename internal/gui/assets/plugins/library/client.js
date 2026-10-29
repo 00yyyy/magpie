@@ -982,6 +982,8 @@ magpie.plugin("library", (ctx) => {
       card.append(acts);
     }
     body.append(card);
+    // an agent in WSL runs its distro's own RTK (rtk_wsl.go): one card each
+    for (const d of rtk.wsl || []) body.append(rtkDistroCard(d));
     const rh = el("div", "row-head");
     rh.append(el("span", "label", t("Agents")), el("span", "grow"), el("span", "note", t("restart an agent after switching it")));
     body.append(rh);
@@ -992,22 +994,31 @@ magpie.plugin("library", (ctx) => {
       const who = el("div", "who");
       who.append(el("div", "name", a.name));
       row.append(icon(a.icon), who, el("span", "grow"));
+      // an agent in WSL: its distro's RTK, not this computer's
+      const kind = a.id.split("@")[0];
+      const d = a.wsl ? (rtk.wsl || []).find((x) => x.name === a.wsl) : null;
+      const path = a.wsl ? d?.path : rtk.path, offPath = a.wsl ? d?.offPath : rtk.offPath;
+      if (a.asleep) row.append(tag(t("Not running"), "", t("WSL {distro} isn't running: magpie doesn't start it to read or change {agent}. Start the distro, then Check again.", { distro: a.wsl, agent: a.name })));
       // its hook calls an rtk that isn't there: switching it off still works
-      if (a.on && !rtk.path) row.append(tag(t("RTK missing"), "warn", t("{agent}'s hook calls rtk, which isn't installed, so its shell commands fail. Install RTK, or switch this off.", { agent: a.name })));
+      else if (a.on && !path) row.append(tag(t("RTK missing"), "warn", a.wsl
+        ? t("{agent}'s hook calls rtk, which isn't installed in WSL {distro}, so its shell commands fail. Install RTK there, or switch this off.", { agent: a.name, distro: a.wsl })
+        : t("{agent}'s hook calls rtk, which isn't installed, so its shell commands fail. Install RTK, or switch this off.", { agent: a.name })));
       // …or one that is, off the PATH the agent gets
-      else if (a.on && rtk.offPath) row.append(tag(t("Not on PATH"), "warn", t("{agent}'s hook runs rtk by name and can't find it, so RTK does nothing for it. Put RTK on PATH above.", { agent: a.name })));
+      else if (a.on && offPath) row.append(tag(t("Not on PATH"), "warn", a.wsl
+        ? t("{agent}'s hook runs rtk by name and can't find it in WSL {distro}, so RTK does nothing for it. Add RTK's folder to PATH there.", { agent: a.name, distro: a.wsl })
+        : t("{agent}'s hook runs rtk by name and can't find it, so RTK does nothing for it. Put RTK on PATH above.", { agent: a.name })));
       // an agent RTK has no hook for (rtkNoHook in rtk.go): listed, with its own why
       if (a.noHook) row.append(tag(t("No RTK hook"), "warn", rtkNoHookWhy(a)));
       // RTK before 0.51 installs Antigravity's hook only per project
-      else if (a.blocked && a.id === "agy") row.append(tag(t("Update RTK"), "warn", t("{agent}'s hook needs RTK 0.51 or newer: older ones install it only per project. Update RTK (brew upgrade rtk, or its installer again), then switch it on.", { agent: a.name })));
-      else if (a.blocked && a.id !== "opencode") row.append(tag(t("Update RTK"), "warn", t("{agent}'s hook needs RTK 0.50 or newer: older ones only add @RTK.md to AGENTS.md, which rewrites no command. Update RTK (brew upgrade rtk, or its installer again), then switch it on.", { agent: a.name })));
+      else if (a.blocked && kind === "agy") row.append(tag(t("Update RTK"), "warn", t("{agent}'s hook needs RTK 0.51 or newer: older ones install it only per project. Update RTK (brew upgrade rtk, or its installer again), then switch it on.", { agent: a.name })));
+      else if (a.blocked && kind !== "opencode") row.append(tag(t("Update RTK"), "warn", t("{agent}'s hook needs RTK 0.50 or newer: older ones only add @RTK.md to AGENTS.md, which rewrites no command. Update RTK (brew upgrade rtk, or its installer again), then switch it on.", { agent: a.name })));
       // OpenCode 2 loads only the plugin RTK 0.52 on writes (rtk-ai/rtk#4187);
       // an older one's, already there, can be switched off
       else if (a.blocked) row.append(tag(t("Update RTK"), "warn", a.on
         ? t("OpenCode 2 refuses to load this plugin: RTK before 0.52 writes it for OpenCode 1. Update RTK (brew upgrade rtk, or its installer again) and switch it on again, or switch this off.")
         : t("OpenCode 2 needs RTK 0.52 or newer: older ones write a plugin for OpenCode 1, which OpenCode 2 refuses to load. Update RTK (brew upgrade rtk, or its installer again), then switch it on.")));
       const sw = toggle(a.on, t("{agent} runs its commands through RTK", { agent: a.name }), (on) => setRTK(a, on));
-      if ((!rtk.path && !a.on) || (a.blocked && !a.on) || rtkBusy.has(a.id) || rtkInstalling || rtkUpgrading) sw.disabled = true;
+      if ((!path && !a.on) || a.asleep || (a.blocked && !a.on) || rtkBusy.has(a.id) || rtkInstalling || rtkInstallingIn || rtkUpgrading) sw.disabled = true;
       row.append(sw);
       list.append(row);
     }
@@ -1021,7 +1032,7 @@ magpie.plugin("library", (ctx) => {
   // two together. An agent with no entry gets no reason and no link.
   function rtkNoHookWhy(a) {
     const agent = a.name;
-    switch (a.id) {
+    switch (a.id.split("@")[0]) {
       case "dsh": return t("RTK can't be given to {agent} yet: RTK works by rewriting the shell command an agent is about to run, and {agent}'s hooks can only allow or deny a command, not change it. RTK's installer has no option for it either (github.com/rtk-ai/rtk/issues/3847).", { agent });
       case "grok": return t("RTK can't be given to {agent} yet: RTK's installer has no option for Grok Build (github.com/rtk-ai/rtk/issues/2136).", { agent });
       case "grok-app": return t("RTK can't be given to {agent} yet: {agent} runs Grok Build, and RTK's installer has no option for Grok Build (github.com/rtk-ai/rtk/issues/2136).", { agent });
@@ -1142,6 +1153,61 @@ magpie.plugin("library", (ctx) => {
       status(e.message, "err", 10000);
     }
     rtkPathing = false;
+    render();
+  }
+  // RTK in a WSL distro: its agents' hooks run there, so they run its own
+  // rtk, installed by RTK's own Linux script run in the distro. A distro
+  // that isn't running is never started for it.
+  let rtkInstallingIn = "";
+  const rtkInstallErrIn = {};
+  function rtkDistroCard(d) {
+    const card = el("div", "list lib-card lib-rtk-wsl");
+    const ttl = el("div", "lib-cardhead");
+    ttl.append(el("b", "", t("RTK in WSL {distro}", { distro: d.name })), el("span", "grow"));
+    if (d.path) ttl.append(el("span", "note mono", d.version ? "v" + d.version : d.path));
+    card.append(ttl);
+    const acts = el("div", "lib-acts");
+    const again = (cls) => button(t("Check again"), cls, () => { rtk = null; render(); });
+    if (d.asleep) {
+      card.append(el("p", "lib-rtk-gain", t("WSL {distro} isn't running: magpie doesn't start it to look for RTK or change its agents. Start the distro, then Check again.", { distro: d.name })));
+      acts.append(again("action"));
+    } else if (!d.path) {
+      const installing = rtkInstallingIn === d.name;
+      card.append(el("p", "lib-rtk-gain", installing
+        ? t("Installing RTK in WSL {distro}… this can take a minute.", { distro: d.name })
+        : d.install
+          ? t("RTK isn't installed in WSL {distro}. Agents there run their hooks in the distro, so they need RTK there: magpie can run RTK's own installer in it.", { distro: d.name })
+          : t("magpie couldn't look for RTK in WSL {distro}.", { distro: d.name })));
+      if (d.install) card.append(el("p", "lib-rtk-cmd", d.install));
+      if (rtkInstallErrIn[d.name] && !installing) card.append(el("p", "lib-rtk-note lib-rtk-err lib-rtk-install-err", t("The install failed: {why}", { why: rtkInstallErrIn[d.name] })));
+      if (d.install) {
+        const ib = button(installing ? t("Installing…") : t("Install RTK in WSL {distro}", { distro: d.name }), "action", () => installRTKIn(d.name));
+        ib.disabled = !!rtkInstallingIn || rtkInstalling;
+        acts.append(ib);
+      }
+      acts.append(again(d.install ? "" : "action"));
+    } else if (d.offPath) {
+      const dir = d.path.replace(/\/[^/]*$/, "");
+      card.append(el("p", "lib-rtk-note lib-rtk-offpath", t("RTK is in {dir} in WSL {distro}, which isn't on its shells' PATH. Agents there run rtk by name, so they can't find it. Add {dir} to PATH in your shell profile there, then Check again.", { dir, distro: d.name })));
+      acts.append(again("action"));
+    } else {
+      card.append(el("p", "lib-rtk-gain", t("Agents in WSL {distro} run its own RTK, at {path}. What it saves there is in its own count (rtk gain in the distro), not the one above.", { distro: d.name, path: d.path })));
+    }
+    if (acts.childNodes.length) card.append(acts);
+    return card;
+  }
+  async function installRTKIn(distro) {
+    rtkInstallingIn = distro;
+    delete rtkInstallErrIn[distro];
+    render();
+    try {
+      rtk = await api("library/rtk/install", { distro });
+      status(t("RTK is installed in WSL {distro} — switch it on for its agents below", { distro }), "ok", 6000);
+    } catch (e) {
+      rtkInstallErrIn[distro] = e.message;
+      status(e.message, "err", 10000);
+    }
+    rtkInstallingIn = "";
     render();
   }
   let rtkInstalling = false, rtkInstallErr = "";

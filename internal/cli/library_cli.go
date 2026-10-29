@@ -41,6 +41,7 @@ const libraryUsage = `magpie library                     what the library gives 
   magpie library rtk                 which agents run their shell commands through RTK (rtk-ai.app), to save tokens
   magpie library rtk on|off <agent>  switch it (on with RTK's own installer; off works with RTK gone)
   magpie library rtk install         install RTK (Homebrew, winget, or RTK's own script)
+  magpie library rtk install <distro>  install RTK in a WSL distro, for the agents there (RTK's own script, run there)
   magpie library rtk upgrade         bring RTK up to its latest release, the way it was installed
   magpie library rtk path            put RTK on the PATH the agents get, when it isn't (their hooks run it by name)
 `
@@ -501,6 +502,12 @@ func rtkCmd(args []string) error {
 		if v, err = library.InstallRTK(); err != nil {
 			return err
 		}
+	case len(args) == 2 && args[0] == "install":
+		fmt.Println(muted.Render("installing rtk in WSL " + args[1] + "…"))
+		var err error
+		if v, err = library.InstallRTKIn(args[1]); err != nil {
+			return err
+		}
 	case len(args) == 1 && args[0] == "path":
 		var err error
 		if v, err = library.PathRTK(); err != nil {
@@ -572,17 +579,42 @@ func rtkCmd(args []string) error {
 			fmt.Println(muted.Render("  Codex runs its commands in its Windows sandbox, which can't write RTK's history, so what RTK saves there isn't counted"))
 		}
 	}
+	// an agent in WSL runs its distro's rtk
+	wslRTK := map[string]library.RTKDistro{}
+	for _, d := range v.WSL {
+		wslRTK[d.Name] = d
+		switch {
+		case d.Asleep:
+			fmt.Println(muted.Render("  WSL " + d.Name + " isn't running: its agents are left as they are, and magpie doesn't start it"))
+		case d.Path == "" && d.Install != "":
+			fmt.Println(amber.Render("  rtk isn't installed in WSL "+d.Name), muted.Render("— magpie library rtk install "+d.Name+" runs there: "+d.Install))
+		case d.Path == "":
+			fmt.Println(amber.Render("  magpie couldn't look for rtk in WSL " + d.Name))
+		case d.OffPath:
+			fmt.Println(bold.Render("  WSL "+d.Name), muted.Render(d.Version+" · "+d.Path))
+			fmt.Println(amber.Render("  rtk isn't on the PATH of WSL "+d.Name+"'s shells"), muted.Render("— add "+d.Path[:strings.LastIndex(d.Path, "/")]+" to PATH in your shell profile there"))
+		default:
+			fmt.Println(bold.Render("  WSL "+d.Name), muted.Render(d.Version+" · "+d.Path))
+		}
+	}
 	for _, a := range v.Agents {
 		mark := muted.Render("off")
 		note := ""
 		if a.NoHook {
 			mark, note = muted.Render(" – "), muted.Render(" — "+a.Blocked)
 		}
+		path, offPath := v.Path, v.OffPath
+		if a.WSL != "" {
+			path, offPath = wslRTK[a.WSL].Path, wslRTK[a.WSL].OffPath
+		}
+		if a.Asleep {
+			mark, note = muted.Render(" ? "), muted.Render(" — WSL "+a.WSL+" isn't running")
+		}
 		if a.On {
 			mark = green.Render("on ")
-			if v.Path == "" {
+			if path == "" {
 				mark, note = amber.Render("on "), muted.Render(" — its hook calls rtk, which isn't installed: install it, or switch this off")
-			} else if v.OffPath {
+			} else if offPath {
 				mark, note = amber.Render("on "), muted.Render(" — its hook can't find rtk on PATH, so it does nothing")
 			}
 		}
