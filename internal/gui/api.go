@@ -864,6 +864,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if s.ReduceMotion {
 			boot["reduceMotion"] = true
 		}
+		if s.NoBird {
+			boot["noBird"] = true
+		}
 		// a browser tab keeps its own font choice (fonts.js)
 		if !isWeb(w) {
 			boot["uiFont"], boot["codeFont"] = s.UIFont, s.CodeFont
@@ -1304,6 +1307,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// nor whether animations are stilled (#3813)
 		if _, sent := fields["reduceMotion"]; !sent {
 			in.ReduceMotion = cur.ReduceMotion
+		}
+		// nor whether the loading bird is kept off
+		if _, sent := fields["noBird"]; !sent {
+			in.NoBird = cur.NoBird
 		}
 		// nor whether a value masked for the first time is told (Must2333)
 		if _, sent := fields["maskAlert"]; !sent {

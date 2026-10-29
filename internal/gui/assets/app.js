@@ -8366,6 +8366,8 @@ const IOS_EASE = "cubic-bezier(.32, .72, 0, 1)";
 // a declaration, so code above it can ask too
 // the system's Reduce Motion, or Settings' (#3813)
 function calm() { return document.documentElement.dataset.motion === "reduce" || matchMedia("(prefers-reduced-motion: reduce)").matches; }
+// Settings' Loading bird turned off: no bird on a skeleton or a README
+function birdOff() { return document.documentElement.dataset.bird === "off"; }
 // magpie's bird in parts, its wing and tail free to move (the header's logo
 // holds the shapes)
 const BIRD = `<svg viewBox="0 0 44 44"><use href="#bird" clip-path="url(#bird-body)"/><g class="tail"><use href="#bird" clip-path="url(#bird-tail)"/></g><g class="wing"><use href="#bird" clip-path="url(#bird-wing)"/></g></svg>`;
@@ -8389,12 +8391,31 @@ function skelSeen() {
   }
   return out;
 }
-let skelSince = 0, skelFlying = false;
-setInterval(() => {
-  if (skelFlying || document.hidden || calm() || !document.querySelector(SKEL)) return (skelSince = 0);
-  if (!skelSince) return (skelSince = Date.now());
-  if (Date.now() - skelSince >= 450 && skelSeen().length) skelBird();
-}, 250);
+// It looks every 250ms only while a skeleton is in the page: an observer
+// starts the look when one is added, the look stops itself once none is
+// left, and with the bird turned off neither runs (a 1-core server:
+// Yayoi_no_yume on X).
+let skelSince = 0, skelFlying = false, skelTick = 0;
+const skelAdded = new MutationObserver((recs) => {
+  for (const r of recs) for (const n of r.addedNodes) if (n.nodeType === 1 && (n.matches(SKEL) || n.querySelector(SKEL))) return skelWatch();
+});
+function skelWatch() {
+  if (birdOff()) {
+    clearInterval(skelTick);
+    skelTick = skelSince = 0;
+    return skelAdded.disconnect();
+  }
+  if (skelTick) return;
+  if (!document.querySelector(SKEL)) return skelAdded.observe(document.body, { childList: true, subtree: true });
+  skelAdded.disconnect();
+  skelTick = setInterval(() => {
+    if (!skelFlying && !document.querySelector(SKEL)) return (skelSince = 0, clearInterval(skelTick), skelTick = 0, skelWatch());
+    if (skelFlying || document.hidden || calm()) return (skelSince = 0);
+    if (!skelSince) return (skelSince = Date.now());
+    if (Date.now() - skelSince >= 450 && skelSeen().length) skelBird();
+  }, 250);
+}
+skelWatch();
 async function skelBird() {
   skelFlying = true;
   const b = el("div", "sk-bird roam");
@@ -8428,7 +8449,7 @@ async function skelBird() {
       s.animate([{ transform: "none" }, { transform: "translateY(3px)", offset: .3 }, { transform: "translateY(-1.2px)", offset: .6 }, { transform: "translateY(.4px)", offset: .8 }, { transform: "none" }], { duration: 560, easing: "ease-out" });
       await tween(130, (e) => put({ y: at.y + 3 * e, sx: 1 + .14 * e, sy: 1 - .18 * e }), easeOut);
       await tween(90, (e) => put({ y: at.y + 3 * (1 - e), sx: 1.14 - .14 * e, sy: .82 + .18 * e }), easeIn);
-      const to = next(s);
+      const to = birdOff() ? null : next(s);
       if (!to) break;
       const from = { x, y }, go = spot(to), h = 16 + Math.min(40, Math.hypot(go.x - from.x, go.y - from.y) * .15);
       put({ f: go.x >= from.x ? 1 : -1 });
@@ -19026,6 +19047,10 @@ function applyPrefs(s, rate) {
     }
   }
   if (!!s.reduceMotion !== (root.dataset.motion === "reduce")) window.holdStill(!!s.reduceMotion);
+  if (!!s.noBird !== birdOff()) {
+    if (s.noBird) root.dataset.bird = "off"; else delete root.dataset.bird;
+    skelWatch();
+  }
   if (!!s.colorblind !== !!root.dataset.colorblind) {
     if (s.colorblind) root.dataset.colorblind = "1";
     else delete root.dataset.colorblind;
@@ -19471,6 +19496,8 @@ function renderSettings() {
   $("#colorblindSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.colorblind ? "on" : "off", (v) => savePrefs({ ...keep, colorblind: v === "on" })));
   $("#reduceMotionSegs").title = t("Animations stand still, as with the system's Reduce Motion, so magpie keeps the computer less busy");
   $("#reduceMotionSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.reduceMotion ? "on" : "off", (v) => savePrefs({ ...keep, reduceMotion: v === "on" })));
+  $("#birdSegs").title = t("magpie's bird hops on what is still loading; Off keeps it away, and magpie stops looking for it");
+  $("#birdSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.noBird ? "off" : "on", (v) => savePrefs({ ...keep, noBird: v === "off" })));
   renderLangPick(s, keep);
   renderGatewayMode(s);
   // a browser tab has its own zoom, and magpie leaves it to it
@@ -22408,7 +22435,7 @@ function wbCheckinLine(r) {
 
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
-  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, proxy: s.proxy || "",
+  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, proxy: s.proxy || "",
     sessionTerminal: s.sessionTerminal || "",
     uiFont: s.uiFont || null, codeFont: s.codeFont || null,
     otel: s.otel || {},
