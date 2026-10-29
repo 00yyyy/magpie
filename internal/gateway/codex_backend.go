@@ -2312,6 +2312,31 @@ func localCompactionTurn(meta string) (string, bool) {
 	return strings.Replace(meta, old, `"implementation":"responses"`, 1), true
 }
 
+// previousModelCompaction is whether a compaction is the one Codex runs
+// before a turn on another model, on the model the thread was on: a
+// switch to a model with a smaller window (compaction.reason
+// "model_downshift") or of another compaction hash ("comp_hash_changed"),
+// the only places Codex names either (codex-rs core/src/session/turn.rs,
+// maybe_run_previous_model_inline_compact). When it fails Codex asks the
+// turn's own model instead, but only under its provider named "OpenAI"
+// (compact_model_fallback.rs); under magpie's, the provider Codex has
+// while its sign-in is used up (codex.out), the failure is the turn's,
+// and every turn of the thread asks the old model again.
+func previousModelCompaction(r *http.Request, body []byte) bool {
+	meta := r.Header.Get(turnMetadataHeader)
+	if meta == "" {
+		meta = gjson.GetBytes(body, "client_metadata.x-codex-turn-metadata").Str
+	}
+	if !strings.Contains(meta, `"compaction"`) {
+		return false
+	}
+	switch gjson.Get(meta, "compaction.reason").Str {
+	case "model_downshift", "comp_hash_changed":
+		return true
+	}
+	return false
+}
+
 // localCompactionMeta is a request's client_metadata with its
 // x-codex-turn-metadata made localCompactionTurn's.
 func localCompactionMeta(raw json.RawMessage) (json.RawMessage, bool) {
@@ -2959,7 +2984,14 @@ func userMessage(text string) map[string]any { return codexsummary.UserMessage(t
 // keeps failing stops being asked for a while (compactFails, #2274).
 func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byte) {
 	key, model := compactKey(body), modelOf(body)
-	if msg, held := s.compactFails.held(key, model); held {
+	// Codex's compaction on the model a thread is leaving, under magpie's
+	// provider: one that fails is compacted locally, as Codex would have
+	// the turn's own model do it (previousModelCompaction), never the
+	// turn's failure. On CodexPath Codex's provider is its own "OpenAI",
+	// which asks the turn's model itself, a summary where magpie's local
+	// one is only what was asked and the last reply
+	prev := !strings.HasPrefix(r.URL.Path, CodexPath+"/") && previousModelCompaction(r, body)
+	if msg, held := s.compactFails.held(key, model); held && !prev {
 		log.Printf("codex compaction: %s", msg)
 		writeError(w, provider.Responses, http.StatusBadRequest, msg)
 		return
@@ -3005,6 +3037,19 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 			rec, res, err = &recorder{header: http.Header{}, status: 200}, compactResult{}, nil
 		}
 	}
+	if prev && local == "" && (rec.status >= 400 || err != nil) {
+		// the thread's old model can't summarise it — Codex's sign-in used
+		// up, the model gone — and the turn is on another: compacted
+		// locally, the thread goes on on the model it was switched to,
+		// where the refusal failed every turn of it (hiwise_aigc on X)
+		who, msg := compactFailure(body, rec)
+		if err != nil {
+			msg = "broken off: " + err.Error()
+		}
+		log.Printf("codex compaction: %s answered %d (%s) on the model the thread is leaving; compacting locally", who, rec.status, msg)
+		local = localSummary(body, fmt.Sprintf("%s answered %d to the summary request: %s", who, rec.status, msg))
+		rec, res, err = &recorder{header: http.Header{}, status: 200}, compactResult{}, nil
+	}
 	if rec.status >= 400 {
 		// said as the compaction's failure, with who answered it: a bare
 		// "Fake: 502 Bad Gateway" read as Codex's own, and a body with
@@ -3030,6 +3075,11 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 			why = d.Reason
 		}
 		err = fmt.Errorf("%s (%s)", incompleteReply, why)
+	}
+	if err != nil && prev {
+		who, _ := compactFailure(body, rec)
+		log.Printf("codex compaction: %s: %v on the model the thread is leaving; compacting locally", who, err)
+		local, err = localSummary(body, who+": "+err.Error()), nil
 	}
 	if err != nil {
 		who, _ := compactFailure(body, rec)
@@ -3074,6 +3124,9 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		sum.WriteString(local)
 	} else {
 		sum.WriteString(res.summary())
+	}
+	if strings.TrimSpace(sum.String()) == "" && prev {
+		sum.WriteString(localSummary(body, "the model wrote no summary"+answeredWith(res.Output)))
 	}
 	if strings.TrimSpace(sum.String()) == "" {
 		why := "the model wrote no summary" + answeredWith(res.Output)
