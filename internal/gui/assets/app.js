@@ -7540,7 +7540,7 @@ function partnerTile(pr) {
 
 let fieldIDs = 0;
 function field(label, control, hint) {
-  const l = el("label", "", label);
+  const l = el("label", control.classList?.contains("accts") ? "by-list" : "", label); // on a list's first row
   const wrap = el("div");
   wrap.append(control);
   const inputSelector = "input, select, textarea";
@@ -12266,6 +12266,7 @@ let signing = null; // the sign-in under way: { id, agent, url, state, installin
 const stopSignIn = () => { if (signing?.id) api("signin/" + signing.id + "/cancel", {}).catch(() => {}); };
 const signingOpen = () => signing?.state === "waiting" || signing?.state === "installing";
 let justAdded = ""; // the account that just came in, to greet it
+const accountToolsOpen = new Set(); // rows whose ⋯ is open
 
 // o: { user } signing that account in again, { proxy } the one picked to
 // sign in through (#1663): none picked, the one the account's requests go
@@ -13179,10 +13180,16 @@ function renderAccounts(a, p) {
       dot.title = on ? t("Stop using this account") : t("Use this account too");
       dot.onclick = () => accountAction("login/" + (on ? "off" : "on"), { agent: a.agent, user: l.user });
     }
-    row.append(dot, accountNameButton(p, l.user), el("span", "plan", accountPlan({ agent: a.agent, builtin: a.builtin, plan: l.plan })));
+    // one line, First or Make first at its right end (the owner, 10-29)
+    const line = el("div", "acc-line");
+    row.append(line);
+    line.append(dot, accountNameButton(p, l.user), el("span", "plan", accountPlan({ agent: a.agent, builtin: a.builtin, plan: l.plan })));
     // its own models (#474), when there is another account to send the rest to
     const [amPill, amBox] = ls.length > 1 || accountModelsOf(p, l.user).length ? accountModels(p, l.user, false, l.user) : [];
-    if (amPill) row.append(amPill);
+    // what is set shows on it; the rest waits under ⋯ on a line below
+    const tools = el("div", "acc-tools");
+    const pill = (x) => (x.classList.contains("set") ? line : tools).append(x);
+    if (amPill) pill(amPill);
     // its usage cap: the share of each window it is used to at most
     const cap = accountCapOf(p, l.user);
     // Claude Code or Codex signed in to it asks its vendor itself, not
@@ -13190,76 +13197,90 @@ function renderAccounts(a, p) {
     // holds back only what goes through magpie (𝕏 on Discord: a 90% cap
     // and the five hours run to 100%)
     const direct = l.active && !several && (a.agent === "claude" || a.agent === "codex") ? a.agentName : "";
-    if (p) row.append(accountCapPill(p, l.user, cap, direct));
+    if (p) pill(accountCapPill(p, l.user, cap, direct));
     // and each window's own, set on its meter (willz on Discord)
     const capFor = (w) => windowCapOf(p, l.user, w);
     // how many requests it has out at once, and waiting (#892)
-    if (p) row.append(laneLimitPill(p, l.user, p.id + "@" + String(l.user).toLowerCase(), l.user));
+    if (p) pill(laneLimitPill(p, l.user, p.id + "@" + String(l.user).toLowerCase(), l.user));
     const held = capHeldOf(quota?.[l.user], capFor);
-    if (held) row.append(capHeldNote(held, held.cap, several, direct));
-    row.append(el("span", "grow"));
+    if (held) line.append(capHeldNote(held, held.cap, several, direct));
+    line.append(el("span", "grow"));
     if (unusable(l)) {
       row.classList.add("signed-out");
-      row.append(el("span", "using", t("Sign-in required")));
+      line.append(el("span", "using", t("Sign-in required")));
       const again = el("button", "text", t("Sign in again"));
       again.onclick = () => startSignIn(a.agent, false, undefined, { user: l.user });
-      row.append(again);
+      line.append(again);
       // the one Claude Code is signed in to can't be forgotten (ForgetLogin)
       if (!l.active) {
-        row.append(forgetOf());
+        line.append(forgetOf());
       }
     } else if (signedOut(l)) {
       row.classList.add("signed-out");
-      row.append(el("span", "using", t("Sign-in required")));
+      line.append(el("span", "using", t("Sign-in required")));
       const again = el("button", "text", t("Sign in again"));
       again.onclick = () => startSignIn(a.agent, false, againSite(l), { user: l.user });
-      row.append(again, forgetOf(true));
+      line.append(again, forgetOf(true));
     } else if (l.active && kept && l.user !== firstUser) {
       // signed in to, kept so, and tried at its place in the order
       const signed = el("span", "using", l.paused ? t("Paused") : t("Signed in"));
       signed.title = t("{agent} is kept signed in to this account; requests through magpie go to the accounts in their order", { agent: a.agentName });
-      row.append(signed);
-      if (on) row.append(makeFirst(l));
+      line.append(signed);
+      if (on) line.append(makeFirst(l));
     } else if (l.active) {
       const using = el("span", "using", l.paused ? t("Paused") : back ? t("First for now") : several ? t("First") : t("In use"));
       if (back && !l.paused) using.title = t("{user} was nearly used up, so magpie signed {agent} in to this one; it goes back to {user} once that has room again", { user: back.user, agent: a.agentName });
-      row.append(using);
+      line.append(using);
       if (a.agent === "qoder" || a.agent === "qoder-cn" || l.own) {
-        row.append(forgetOf(l.own));
+        line.append(forgetOf(l.own));
       } else if (a.agent === "codex" && ls.length === 1) {
         // Codex's only account: no other to sign it in to first, so it is
         // signed out, as codex logout does (ForgetLogin)
         const out = el("button", "text quiet", t("Sign out"));
         out.title = t("Signs Codex out of this account, as codex logout does");
         out.onclick = () => askSignOutLogin(a, l);
-        row.append(out);
+        line.append(out);
       } else if (a.agent === "codex") {
         // Codex is signed in to another of its accounts first, then this
         // one goes (ForgetLogin), rather than Codex signed out
-        row.append(forgetOf(t("Codex is signed in to another of its accounts, and magpie forgets this one; the account itself is untouched")));
+        line.append(forgetOf(t("Codex is signed in to another of its accounts, and magpie forgets this one; the account itself is untouched")));
       }
     } else {
       const forget = forgetOf(true);
       if (l === back) {
         const again = el("span", "using", t("First again once it has room"));
         again.title = t("magpie signs {agent} back in to this account once it has room again", { agent: a.agentName });
-        row.append(again);
+        line.append(again);
       }
       if (kept) {
         // the sign-in stays where it is kept: Make first is the order's,
         // and an account not in use is ticked on by its dot
-        row.append(forget);
-        if (l.user === firstUser) row.append(el("span", "using", t("First")));
-        else if (on) row.append(makeFirst(l));
+        line.append(forget);
+        if (l.user === firstUser) line.append(el("span", "using", t("First")));
+        else if (on) line.append(makeFirst(l));
       } else {
         const use = el("button", "text", on ? t("Make first") : t("Use"));
         use.title = sub?.own ? t("The gateway uses this account first") : t("Sign {agent} in to this account", { agent: a.agentName });
         use.onclick = () => { use.classList.add("busy"); accountAction("login/switch", { agent: a.agent, user: l.user }, sub?.own ? t("The gateway now uses {user} first", { user: l.user }) : t("{agent} is now signed in as {user}", { agent: a.agentName, user: l.user })); };
-        row.append(forget, use);
+        line.append(forget, use);
       }
     }
     row.append(accountQuota(l.lapsed ? { [l.user]: { error: t(l.lapsed) } } : quota, l.user, capFor, p ? (m, w) => windowCapMeter(m, p, l.user, w) : null));
     row.classList.add("with-aq"); // not :has(.aq), which Safari 15.0 lacks (#220)
+    // Remove goes under ⋯ too, but beside Sign in again while signed out
+    if (!row.classList.contains("signed-out")) tools.append(...line.querySelectorAll(":scope > .text.quiet"));
+    if (tools.childElementCount) {
+      const key = (p?.id || a.agent) + "@" + String(l.user).toLowerCase(), more = el("button", "acc-more");
+      more.type = "button";
+      more.append(svg(DOTS, 14, 2.4));
+      more.title = t("Settings for {user}", { user: l.user });
+      more.setAttribute("aria-label", more.title);
+      const shown = (v) => { row.classList.toggle("tools-open", v); more.setAttribute("aria-expanded", v); v ? accountToolsOpen.add(key) : accountToolsOpen.delete(key); };
+      shown(accountToolsOpen.has(key) || !!amBox);
+      more.onclick = () => shown(!row.classList.contains("tools-open"));
+      line.querySelector(".grow").after(more);
+      row.append(tools);
+    }
     if (amBox) row.append(amBox);
     list.append(row);
   }
@@ -14056,6 +14077,9 @@ function laneText(pill) {
   if (pill.textContent !== text) pill.textContent = text;
   lanesTick ||= setInterval(refreshLanes, 2e3);
   pill.classList.toggle("set", own != null || limit + busy > 0);
+  // set or running on its account's line, else under ⋯, not while open
+  const row = pill.closest(".acc"), tools = row?.querySelector(".acc-tools"), line = row?.querySelector(".acc-line"), on = pill.classList.contains("set");
+  if (tools && line && !pill.classList.contains("open") && pill !== document.activeElement && pill.parentElement === (on ? tools : line)) on ? line.querySelector(".grow").before(pill) : tools.insertBefore(pill, tools.querySelector(".text.quiet"));
   pill.classList.toggle("busy-lane", !!(limit && busy >= limit));
   pill.classList.toggle("queued", !!waiting);
   const whose = own != null ? t("its own") : t("the provider's");

@@ -2561,6 +2561,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .accts { display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid var(--line); border-radius: 10px; background: var(--card); overflow: hidden; }
 .acc { display: flex; align-items: center; gap: 9px; min-height: 38px; padding: 5px 8px 5px 11px; font-size: 12.5px; text-align: left; }
 .acc + .acc, .accts .signing { border-top: 1px solid var(--line-2); }
+/* every row of the box ruled off from the one above it, a setting's too
+   (the owner, 10-29: Add another sat unruled under Only switch) */
+.accts > :is(.keep-login, .switch-only, .pool-ends) + .acc { border-top: 1px solid var(--line-2); }
 .editor .accts .keep-login, .editor .accts .switch-only, .editor .accts .pool-ends { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 34px; padding: 6px 11px; font-size: 12px; border-top: 1px solid var(--line-2); }
 .editor .accts .keep-login .keep-as { max-width: 240px; }
 .editor .accts .pool-ends .note { flex-basis: 100%; color: var(--fg-2); }
@@ -2681,6 +2684,39 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .acct-user, .acc .acct-seat { color: var(--muted); font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acc .acct-who .n { flex: 0 1 auto; }
 .acc .plan { flex: none; }
+/* an account's first line (the owner, 10-29): its name gives way, never
+   its place on the right, so First and Make first end every row at the
+   same edge. What is set shows on it; the rest waits under ⋯ on a line
+   of its own, so nothing on it takes room it doesn't show */
+.acc-line { flex: 1 0 100%; display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 22px; }
+.acc-line > .plan { flex: 0 3 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; }
+.acc-line > :not(.acct-who, .n, .plan, .grow, .amodels, .acap, .alane, .text, .using) { flex-shrink: 0; }
+.acc-line > .using, .acc-line > .text { white-space: nowrap; }
+/* and only where even that is too narrow (a long German Make first beside
+   a 240px row) the button's own words end in an ellipsis, last of all */
+.acc-line > :is(.using, .text:not(.quiet)) { flex-shrink: .001; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.acc-line > .acct-who, .acc-line > .n { min-width: 4.5em; }
+/* a signed-out account keeps both ways out on its line: where they don't
+   fit beside the name they wrap under it, Remove still at the right end */
+.acc.signed-out .acc-line { flex-wrap: wrap; row-gap: 4px; }
+.acc.signed-out .acc-line > .text.quiet:last-child { margin-left: auto; }
+.acc-line > :is(.amodels, .acap, .alane) { flex-shrink: .01; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the pills sit closer to one another than to the name */
+.acc-line > :is(.amodels, .acap, .alane) + :is(.amodels, .acap, .alane) { margin-left: -4px; }
+/* a pill set when the row was drawn that is no longer (requests running
+   that ended) takes no room till the row is drawn again */
+.acc-line > :is(.amodels:not(.set), .acap:not(.set), .alane:not(.set)):not(.open):not(:focus-visible) { max-width: 0; padding-left: 0; padding-right: 0; margin-left: -9px; box-shadow: none; opacity: 0; }
+/* ⋯: a hover brings it out, beside what ends the row */
+.acc .acc-more { flex: none; display: inline-grid; place-items: center; width: 22px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: default; opacity: 0; transition: opacity .15s, background .12s, color .12s; }
+.acc:hover .acc-more, .acc .acc-more:focus-visible, .acc.tools-open .acc-more { opacity: 1; }
+.acc .acc-more:hover { color: var(--fg); background: var(--pill-hover); }
+.acc.tools-open .acc-more { color: var(--fg); background: var(--pill); }
+/* and its line, under the quota, lined up with it */
+.acc .acc-tools { flex-basis: 100%; display: none; align-items: center; flex-wrap: wrap; gap: 6px; padding-left: 25px; min-width: 0; }
+.acc.tools-open .acc-tools { display: flex; }
+.acc .acc-tools > :is(.amodels, .acap, .alane, .text.quiet) { opacity: 1; }
+/* Remove ends the line, and where the line wraps it ends the next */
+.acc .acc-tools > .text.quiet { margin-left: auto; }
 /* a key's row (#841): what shows only on hover takes no room till then,
    so a key's weight never squeezes its name away; the room it takes on
    hover is the row's free room, else the masked key's, and the models
@@ -2971,7 +3007,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .sheet .custom-foot .custom:hover, .sheet .custom-foot .custom.on { background: var(--accent-soft); }
 .sheet .custom-foot .hint { font-size: 12px; color: var(--muted); }
 /* the provider editor, in a dialog */
-.editor { padding: 16px 18px 14px; display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px 14px; align-items: start; }
+/* the label column is as wide as its longest label, so that label starts
+   at the padding and the fields end the same way on the right (the
+   owner, 10-29: a 72px column left the left edge twice the right) */
+.editor { padding: 16px 18px 14px; display: grid; grid-template-columns: fit-content(132px) minmax(0, 1fr); gap: 10px 14px; align-items: start; }
 .editor .ehead { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding-bottom: 8px; margin-bottom: 2px; border-bottom: 1px solid var(--line-2); }
 .editor .ehead .ic { width: 20px; height: 20px; }
 .editor .icon-pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -2986,6 +3025,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .ehead b { font-weight: 600; }
 .editor .ehead .note { font-size: 12px; color: var(--muted); }
 .editor label { font-size: 12px; color: var(--fg-2); text-align: right; padding-top: 5px; }
+.editor label.by-list { padding-top: 11px; }
 .editor .hint { font-size: 11px; color: var(--fg-2); margin-top: 4px; }
 /* a provider's own proxy (#237): the address beside the options, its room
    kept while it is hidden so a pick never changes the dialog's height */
@@ -3068,6 +3108,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .extra-body .why { font-size: 12px; line-height: 1.45; color: var(--red); overflow-wrap: anywhere; }
 .editor .extra-body .why:empty { display: none; }
 .segs { position: relative; display: inline-flex; padding: 2px; border-radius: 7px; background: var(--pill); align-self: flex-start; }
+/* an editor's choices wrap where its sheet is narrow, never pushing the
+   sheet into a sideways scroll (German Routing at the 560px window) */
+.editor .segs { max-width: 100%; flex-wrap: wrap; }
 .opt { position: relative; z-index: 1; white-space: nowrap; height: 22px; padding: 0 10px; border-radius: 5px; font-size: 12px; color: var(--muted); transition: color .18s var(--ease), transform .14s var(--ease); }
 .opt.on { color: var(--fg); }
 /* how often magpie checks for updates, while it doesn't by itself */
@@ -3875,6 +3918,7 @@ body.panel .modal { padding: 16px 12px; }
   /* nothing hovers on a phone: what a row shows on hover is shown, and a
      key's row gives it back the room it folds away till a hover (#841) */
   body.web .acc :is(.text.quiet, .proto, .amodels, .alane) { opacity: 1; }
+  body.web .acc .acc-more { opacity: 1; }
   body.web .accts.keys .acc > :is(.amodels, .proto, .alane, .text.quiet) { max-width: none !important; padding: 0 7px !important; flex-shrink: 0 !important; }
   body.web .accts.keys .acc > .alane:not(.set) { margin-left: 0 !important; }
   body.web #gatewayKeys .acc > .key-quotas { max-width: none !important; padding: 0 7px !important; margin-left: 0 !important; flex-shrink: 0; }
