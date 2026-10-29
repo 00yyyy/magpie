@@ -31,7 +31,9 @@ const entry = (tok, name, title, reads, file = "index.html") => ({
 const TITLES = { zh: "用量速览", "zh-TW": "用量速覽", ja: "使用量の概要" };
 const pages = [
   { ...entry(GLANCE, "glance", "Usage glance", ["usage:summary"]), titles: TITLES },
-  entry(PROBE, "probe", "Probe", []),
+  // a page with a local service (magpie.page.service), as /api/plugin-pages
+  // lists it to a browser: relative to the page's address
+  { ...entry(PROBE, "probe", "Probe", []), service: "_magpie/service/" },
   entry(OPEN, "open", "Probe without a policy", []),
   entry(BROKEN, "broken", "Broken", []),
 ];
@@ -54,6 +56,7 @@ const PROBE_HTML = `<!doctype html><meta charset="utf-8"><script src="_magpie/br
 const PROBE_JS = `(async () => {
   const out = {};
   await magpie.ready;
+  out.service = magpie.service;
   try { const r = await fetch("/api/state?probe=1"); out.fetch = "status " + r.status; } catch (e) { out.fetch = "refused"; }
   try { out.storage = typeof localStorage.length; } catch (e) { out.storage = "refused"; }
   try { out.cookie = document.cookie; } catch (e) { out.cookie = "refused"; }
@@ -201,6 +204,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(probe.read2, "Probe doesn't ask to read providers:list", where);
           assert.equal(seen.api.length, 0, `${where}: nothing reached /api`);
           assert.equal(seen.reads.length, 1, `${where}: an undeclared read never reached the server`);
+          // its service, where the window's server serves it: an absolute
+          // address under the page's own
+          assert.match(probe.service, new RegExp(`^https?://[^/]+/_magpie/plugin/${PROBE}/_magpie/service/$`), `${where}: magpie.service`);
           // a page with no stylesheet of its own reads as part of the window
           const win = await page.evaluate(() => {
             const d = document.createElement("div");
@@ -226,6 +232,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(open.fetch.startsWith("status") || open.fetch === "refused", true, where);
           assert.equal(seen.api.length, 1, `${where}: the fetch went out`);
           assert.equal(seen.api[0].origin, "null", `${where}: as Origin: null`);
+          assert.equal(open.service, "", `${where}: a page with no service has no magpie.service`);
           assert.ok(!seen.api[0].cookie, `${where}: without a cookie`);
 
           // a message from another frame naming a page is nothing
