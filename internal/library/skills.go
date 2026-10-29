@@ -499,18 +499,33 @@ func linked(p string) bool {
 func sharedSkillsDir() string { return filepath.Join(home(), ".agents", "skills") }
 
 // sharedHas is whether the library's skill by that name is kept in
-// ~/.agents/skills: the user's own entry there (not a link magpie made)
-// is the very folder the library's is or links to, so every agent that
-// reads the shared folder has it, whatever the library gives.
-func sharedHas(name string) bool {
-	p, lib := filepath.Join(sharedSkillsDir(), name), skillDir(name)
-	if _, err := os.Lstat(p); err != nil || ours(p, name) {
-		return false
-	}
+// ~/.agents/skills, so every agent that reads the shared folder has it,
+// whatever the library gives (sharedEntry).
+func sharedHas(name string) bool { return sharedEntry(name) != "" }
+
+// sharedEntry is the user's own entry in ~/.agents/skills (not a link
+// magpie made) by which the agents reading that folder find the library's
+// skill by that name: the very folder the library's is or links to. That
+// is the entry by its name, or, for a library skill linked to a folder
+// right in the shared one under another name, that entry. "" when none.
+// HandOverSkills moves such a skill out of it (skill_handover.go).
+func sharedEntry(name string) string {
+	lib := skillDir(name)
 	if _, err := os.Stat(lib); err != nil {
-		return false
+		return ""
 	}
-	return realDir(p) == realDir(lib)
+	r := realDir(lib)
+	p := filepath.Join(sharedSkillsDir(), name)
+	if _, err := os.Lstat(p); err == nil && !ours(p, name) && realDir(p) == r {
+		return p
+	}
+	sh := realDir(sharedSkillsDir())
+	if rel, err := filepath.Rel(sh, r); err == nil && within(r, sh) && rel != "." && !strings.ContainsRune(rel, filepath.Separator) {
+		if q := filepath.Join(sharedSkillsDir(), rel); !ours(q, rel) && realDir(q) == r {
+			return q
+		}
+	}
+	return ""
 }
 
 // within is whether p is dir or inside it.
@@ -544,6 +559,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	// a skill magpie put there for another (Kimi Code) already: a link in
 	// its own too would be the skill twice
 	shared := realDir(sharedSkillsDir())
+	isShared := realDir(t.Skills) == shared
 	inShared := func(s *Skill) bool {
 		if s == nil || !slices.Contains(readsShared, id) || realDir(t.Skills) == shared {
 			return false
@@ -595,6 +611,14 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 				mine = append(mine, s.Name)
 			}
 			continue
+		}
+		// kept in ~/.agents/skills under another name (sharedEntry): the
+		// agent whose folder that is has it there already, and a link by
+		// this name too would be the skill twice for every reader of it
+		if isShared && !ours(p, s.Name) {
+			if e := sharedEntry(s.Name); e != "" && e != p {
+				continue
+			}
 		}
 		if inShared(s) {
 			// a copy of its own of the very same files would be the skill
