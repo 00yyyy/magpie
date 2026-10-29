@@ -12284,13 +12284,34 @@ async function startSignIn(agent, risky, site, o = {}) {
     if (o.user) body.user = o.user;
     if (o.proxy != null) body.proxy = o.proxy;
     signing = { ...(await api("signin", body)), ...keep };
-    if (web && signing.url) api("open", { url: signing.url });
+    if (web && signing.url) {
+      const id = signing.id;
+      openSignInPage(signing.url).catch((e) => {
+        if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
+      });
+    }
     renderProviders();
     followSignIn(signing.id);
   } catch (e) {
     signing = { agent, ...keep, proxy: o.proxy ?? signInProxyOf(agent, o.user), state: "failed", error: e.message };
     renderProviders();
   }
+}
+
+// openSignInPage opens a sign-in's page for the window. In a browser tab
+// (magpie web: a server, Docker) that's a new tab the viewer's browser may
+// block, as it was asked for after the sign-in started, not on the click:
+// then it says so, and the page opens from Open again, a click
+// (treeMan on Discord). A tab opened without noopener is the one way to
+// learn it was blocked, so the page it opens is cut from this one at once.
+const openBlocked = "\u0000blocked";
+function openSignInPage(url) {
+  if (!web) return api("open", { url });
+  let w = null;
+  try { w = window.open(url, "_blank"); } catch {}
+  if (!w) return Promise.reject(new Error(openBlocked));
+  try { w.opener = null; } catch {}
+  return Promise.resolve(null);
 }
 
 async function followSignIn(id) {
@@ -12302,7 +12323,7 @@ async function followSignIn(id) {
     if (st.state === "waiting" || st.state === "installing") {
       // the CLI it needed is in: now the vendor's page can open
       if (signing.state === "installing" && st.state === "waiting" && st.url && !st.opened) {
-        api("open", { url: st.url }).catch((e) => {
+        openSignInPage(st.url).catch((e) => {
           if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
         });
       }
@@ -12388,7 +12409,12 @@ async function startPluginSignIn(sub, method, inputs = {}, o = {}) {
     if (o.proxy != null) body.proxy = o.proxy;
     signing = { ...(await api("plugin-signin", body)), ...keep };
     // opened: the plugin's own CLI opened the page already (Grok Build's)
-    if (web && signing.url && !signing.opened) api("open", { url: signing.url });
+    if (web && signing.url && !signing.opened) {
+      const id = signing.id;
+      openSignInPage(signing.url).catch((e) => {
+        if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
+      });
+    }
     renderProviders();
     followSignIn(signing.id);
   } catch (e) {
@@ -12823,6 +12849,7 @@ function renderSigning(sub) {
   }
   tt.append(el("span", "n", t("Finish signing in to {name} in your browser", { name: sub.name })),
     el("span", "s", signing.state === "starting" ? t("Starting the sign-in…")
+      : signing.openError === openBlocked ? t("Your browser blocked the sign-in page from opening. Open it with Open again below, or copy the link into a browser.")
       : signing.openError ? t("magpie couldn't open your browser: {error}. Open the sign-in link below in a browser yourself.", { error: signing.openError })
       : sub.plugin ? (signing.instructions || (signing.pasteCode ? t("magpie opened the sign-in page. Paste the code it shows below.") : t("magpie opened the sign-in page. The account shows up here as soon as you're done.")))
       : signing.pasteCode ? t("magpie opened the sign-in page. Paste the code it shows below.")
