@@ -9058,7 +9058,7 @@ function drawEditor(p, presetID) {
   const another = isNew && !!pr?.added;
   // an editor opened afresh has Names & levels folded: it stayed open in
   // every editor after, until magpie was restarted (Hu9956, #868)
-  if (!draft) naming = null;
+  if (!draft) naming = unpickedShown = null;
   draft = draft || (p
     ? draftOf(p)
     : pr
@@ -10944,6 +10944,12 @@ const servedIds = (p) => draft.chosen.length ? draft.chosen : draft.none ? [] : 
 // (#833), kept for the next editor opened. MCHIPS_MAX: the most the box is
 // tall held, as app.css's .mchips max-height: min(240px, 40vh) says
 let modelsOpen = false;
+// unpickedShown: the provider whose editor shows its unpicked models while
+// it serves Picked only (yyddbds on Discord: 选择了仅所选分类，下边的模型项
+//并没有变化). Picked only shows the picks, the others behind Show the
+// other n; a click on a model shows them all, so nothing vanishes while
+// picking, and Picked only clicked folds them away again
+let unpickedShown = null;
 const MCHIPS_MAX = 240;
 // emptyModelsHint is what an empty model list says. Azure OpenAI's is its
 // deployments, asked for with the key after it is added (#1995): while that
@@ -11108,7 +11114,9 @@ function renderModels(p) {
     if (agentMenu && chips.contains(agentMenu.anchor)) closeAgentMenu();
     chips.replaceChildren();
     const f = (q?.value || "").trim().toLowerCase();
-    let shown = 0, hidden = 0;
+    let shown = 0, hidden = 0, unpicked = 0;
+    // Picked only, unfiltered: the picks alone (unpickedShown)
+    const picksOnly = draft.chosen.length && !f && unpickedShown !== p.id && !decideOnly(p);
     // with none picked agents are served the vendor's list, up to 24 of
     // it: those are drawn as served, not as left out (#614: the one model
     // unticked and saved was still "1 model" on the card). Kept for routing
@@ -11125,6 +11133,7 @@ function renderModels(p) {
       // past the first 80 only the picked are drawn, till the rest are
       // asked for: a picked model is never out of sight (#685: 10 picked,
       // 7 shown, and "4 more, filter to find them" with no names to filter by)
+      if (picksOnly && !on) { unpicked++; continue; }
       if (shown >= 80 && !f && !showAll && !on) { hidden++; continue; }
       const c = el("button", "mchip pick" + (on ? " on" : served.has(m.id) ? " auto" : "") + (noAPI(m) ? " noapi" : ""));
       c.append(el("span", "", m.name && m.name !== m.id ? m.name : m.id));
@@ -11163,12 +11172,12 @@ function renderModels(p) {
       c.onclick = () => {
         draft.chosen = on ? draft.chosen.filter((x) => x !== m.id) : [...draft.chosen, m.id];
         draft.none = true;
+        unpickedShown = p.id;
         draw();
       };
       chips.append(c);
       shown++;
     }
-    if (hidden) chips.append(showRest(hidden, () => { showAll = true; draw(); }));
     for (const id of draft.chosen) {
       if (p.models.some((m) => m.id === id) || (f && !id.toLowerCase().includes(f))) continue;
       const c = el("button", "mchip on own");
@@ -11179,6 +11188,7 @@ function renderModels(p) {
       c.onclick = () => { draft.chosen = draft.chosen.filter((x) => x !== id); draft.none = true; draw(); };
       chips.append(c);
     }
+    if (hidden || unpicked) chips.append(showRest(hidden || unpicked, () => { if (unpicked) unpickedShown = p.id; else showAll = true; draw(); }));
     if (!p.models.length && !draft.chosen.length) chips.append(el("span", "hint", t(emptyModelsHint(p))));
     // the list is of models agents chat with: image, embedding and speech
     // models are left out of it, and an image model is set in Settings
@@ -11577,7 +11587,10 @@ function renderModels(p) {
     b.onclick = () => {
       if (v === "list") { draft.chosen = []; draft.typed = ""; draft.none = false; }
       else if (v === "none") { draft.chosen = []; draft.typed = ""; draft.none = true; }
-      else if (!draft.chosen.length) { draft.chosen = p.models.filter((m) => !noAPI(m)).slice(0, 24).map((m) => m.id); draft.none = true; }
+      else {
+        if (!draft.chosen.length) { draft.chosen = p.models.filter((m) => !noAPI(m)).slice(0, 24).map((m) => m.id); draft.none = true; }
+        unpickedShown = null;
+      }
       draw();
     };
     serves.append(b);
