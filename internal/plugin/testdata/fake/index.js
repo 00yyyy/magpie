@@ -97,6 +97,9 @@ export const FakePlugin = async ({ client }) => ({
     // Google AI Studio plugin gives them all (@ai-sdk/google), so it has
     // no OpenAI-compatible model
     if (process.env.FAKE_GOOGLE) cfg.provider[ID].npm = "@ai-sdk/google"
+    // $FAKE_VIDEO: a video model, as a Gemini plugin lists Veo: it says it
+    // gives video, nothing else
+    if (process.env.FAKE_VIDEO) cfg.provider[ID].models["veo-3.1-generate-preview"] = { name: "Veo 3.1", modalities: { input: ["text", "image"], output: ["video"] }, limit: { context: 1000, output: 100 } }
     // $FAKE_GEMINI_DRAWS: image models on Gemini's API, as XYenon's Google
     // AI Studio plugin lists them: one named for images, one that only
     // says it gives them, and an Imagen, which draws on :predict instead

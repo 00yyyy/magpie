@@ -500,7 +500,9 @@ same OpenAI way (#1446, `customVideomakers`), but only with the models its
 own fetched list marks `"kind": "video"` (`catalog.LiveVideomakers`) or the
 user marks a video model (settings' `ModelKinds`, `provider.SetModelKind`,
 a model chip's right-click *Makes…* in the editor, #1399); a name alone
-never makes a model a video maker. A model marked an image model is drawn
+never makes a model a video maker. A plugin's provider makes videos with the
+models it says give video, through its fetch on the account that started
+each (`keyMark`, `markedKey`; see [provider plugins](provider-plugins.md)). A model marked an image model is drawn
 with (`Drawers`) and leaves the video makers, and one marked a video model
 leaves the drawers; only a provider set up with a base URL can be marked
 (`MarksKinds`). Start, poll and content go to
