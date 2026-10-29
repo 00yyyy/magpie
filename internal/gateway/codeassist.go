@@ -562,8 +562,9 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 			gen["responseJsonSchema"] = sc
 		}
 	}
-	if catalog.DrawsID(sent) {
-		// an image model draws only when asked for images too
+	if catalog.DrawsID(sent) || r.draws {
+		// an image model draws only when asked for images too: one named
+		// for them, or any asked to draw (a plugin's that says it does)
 		gen["responseModalities"] = []string{"TEXT", "IMAGE"}
 	}
 	if len(gen) > 0 {

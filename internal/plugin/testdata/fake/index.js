@@ -93,6 +93,15 @@ export const FakePlugin = async ({ client }) => ({
       cfg.provider[ID].models["sensenova-u1.5-lite"] = { name: "sensenova-u1.5-lite", limit: { context: 131072, output: 32768 } }
       cfg.provider[ID].models["flux-2"] = { name: "Flux 2", provider: { npm: "@ai-sdk/anthropic" }, limit: { context: 1000, output: 100 } }
     }
+    // $FAKE_GEMINI_DRAWS: image models on Gemini's API, as XYenon's Google
+    // AI Studio plugin lists them: one named for images, one that only
+    // says it gives them, and an Imagen, which draws on :predict instead
+    if (process.env.FAKE_GEMINI_DRAWS) {
+      const g = { provider: { npm: "@ai-sdk/google" }, limit: { context: 3000, output: 300 } }
+      cfg.provider[ID].models["gemini-3-pro-image-preview"] = { ...g, name: "Nano Banana Pro", modalities: { input: ["text", "image"], output: ["text", "image"] } }
+      cfg.provider[ID].models["gemini-3-flash-canvas"] = { ...g, name: "Gemini 3 Flash Canvas", modalities: { input: ["text", "image"], output: ["text", "image"] } }
+      cfg.provider[ID].models["imagen-4.0-generate-001"] = { ...g, name: "Imagen 4", modalities: { input: ["text"], output: ["image"] } }
+    }
     // $FAKE_DEEPSEEK: a DeepSeek model, as Cline's cline-pass/deepseek-v4-pro
     if (process.env.FAKE_DEEPSEEK) cfg.provider[ID].models["deepseek-v4-pro"] = { name: "DeepSeek V4 Pro", limit: { context: 1000, output: 100 } }
     // $FAKE_GLM: a GLM model, as Cline's cline-pass/glm-5.3

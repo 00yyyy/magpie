@@ -182,6 +182,9 @@ type Request struct {
 	// client asked prompt_cache_retention "in_memory", or the upstream
 	// turned the ttl away (hourMarksRefused).
 	hourMarks bool
+	// draws asks the model for images beside text: a drawing asked on
+	// Gemini's API of a model not named for images (drawCodeAssist).
+	draws bool
 
 	Model      string
 	System     string

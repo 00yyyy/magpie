@@ -297,9 +297,17 @@ func Drawers(p provider.Provider) []catalog.Model {
 		// its list names that draw on the images API, sent through its
 		// fetch under the base its chat goes to (01huadalang on Discord:
 		// the SenseNova plugin's sensenova-u1.5-lite)
+		// A model the plugin speaks Gemini's API to (@ai-sdk/google) draws
+		// as a Google sign-in's do, on generateContent asking for images,
+		// when it says it gives images or is named for them (XYenon's
+		// Google AI Studio plugin).
 		var out []catalog.Model
 		for _, m := range p.Available() {
-			if catalog.DrawsID(m.ID) && catalog.ImagesAPI(m.ID) && p.PluginOpenAICompatible(m.ID) && p.ModelKind(m.ID) != provider.KindVideo {
+			if p.ModelKind(m.ID) == provider.KindVideo {
+				continue
+			}
+			if catalog.DrawsID(m.ID) && catalog.ImagesAPI(m.ID) && p.PluginOpenAICompatible(m.ID) ||
+				pluginDrawsGemini(p, m.ID) && (catalog.DrawsID(m.ID) || slices.Contains(m.OutputModalities, "image")) {
 				m.Provider = p.ID
 				out = append(out, m)
 			}
@@ -1069,7 +1077,7 @@ func (s *Server) draw(ctx context.Context, p provider.Provider, model string, d 
 	if drawsCodex(p) || drawsGrok(p) {
 		return s.drawImages(ctx, p, model, d)
 	}
-	if googleAccount(p) {
+	if googleAccount(p) || pluginDrawsGemini(p, model) {
 		return s.drawCodeAssist(ctx, p, model, d)
 	}
 	if p.Base(provider.Chat) == "" && p.Base(provider.Responses) == "" {
@@ -1789,6 +1797,14 @@ func (s *Server) drawGemini(ctx context.Context, p provider.Provider, model stri
 	})
 }
 
+// pluginDrawsGemini is whether model is one p, a plugin, speaks Gemini's
+// generateContent to (its npm @ai-sdk/google) and isn't an Imagen, which
+// draws on :predict: such a model draws through the plugin's fetch as a
+// Google sign-in's draws, on drawCodeAssist.
+func pluginDrawsGemini(p provider.Provider, model string) bool {
+	return p.IsPlugin() && !catalog.ImagesAPI(model) && slices.Equal(p.APIs(model), []provider.Protocol{provider.CodeAssist})
+}
+
 // drawCodeAssist asks an image model on a Google sign-in to draw, as it is
 // asked to chat: on Code Assist, in the account's envelope, which asks for
 // images beside text for an image model (buildCodeAssistSent); what it
@@ -1805,7 +1821,7 @@ func (s *Server) drawCodeAssist(ctx context.Context, p provider.Provider, model 
 		}
 		parts = append(parts, Part{Kind: Image, MediaType: pic.Mime, Data: base64.StdEncoding.EncodeToString(pic.Data)})
 	}
-	req := &Request{Messages: []Message{{Role: "user", Parts: parts}}}
+	req := &Request{Messages: []Message{{Role: "user", Parts: parts}}, draws: true}
 	return s.eachDrawing(d.N, func() (drawn, int, error) {
 		// one each: the drawings are asked for at once
 		ask := s.askTranslated(p, provider.CodeAssist, model, http.Header{}, http.Header{})
