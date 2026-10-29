@@ -237,6 +237,9 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), retrieveTimeout)
+		// the headers of the vendor's reply passed on (#4145)
+		var heard heardHeaders
+		ctx = withReplySink(ctx, c.p.ID, heard.put)
 		b, got, code, err := s.retrieveAs(ctx, c.p, base+path, ctype, out)
 		cancel()
 		tried(code, err)
@@ -263,10 +266,12 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 			if len(skipped) > 0 {
 				msg += " (tried first: " + call.Fallback + ")"
 			}
+			heard.into(w.Header())
 			writeError(w, provider.Chat, code, msg)
 			return
 		}
 		s.record(call)
+		heard.into(w.Header())
 		w.Header().Set("Content-Type", req.answerType(got))
 		w.WriteHeader(code)
 		w.Write(b)
@@ -326,6 +331,7 @@ func (s *Server) retrieveAs(ctx context.Context, p provider.Provider, url, ctype
 		return nil, "", 502, err
 	}
 	res, err := p.Do(s.client, req)
+	heardReply(ctx, p, res)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, "", 504, fmt.Errorf("%s didn't answer in %s", p.Name, retrieveTimeout)
