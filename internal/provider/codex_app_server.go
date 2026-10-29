@@ -146,6 +146,9 @@ var codexApp struct {
 	stale map[int]int
 	// stuck: one of them outlived codexAppTries ends, or may not be ended
 	stuck bool
+	// switched: Codex's ChatGPT account changed since the app-servers were
+	// last listed (codexAppAccountSwitched)
+	switched bool
 }
 
 // CodexAppStuck is whether a Codex app is left on the provider it started
@@ -157,7 +160,7 @@ func CodexAppStuck() bool {
 	return c.stuck
 }
 
-// codexAppAccountLeft has the Codex app's app-server pid, left on the
+// codexAppAccountSwitched has the Codex app's own app-servers, left on the
 // ChatGPT account Codex was switched away from (noteCodexSwitch), ended
 // as a route change's are, once no Codex turn runs: the app starts
 // another, which reads auth.json and the new account afresh, so the app
@@ -165,16 +168,20 @@ func CodexAppStuck() bool {
 // (zhibukaixinyao on Discord: Windows has no Restart button). One
 // switched away and back before then is restarted all the same, which
 // costs the app nothing it shows.
-func codexAppAccountLeft(pid int) {
+//
+// They are listed at codexAppStep's next look, as a route change's are:
+// every one on Codex's home, by the test a route change uses, and listed
+// again at the look after when the listing fails. The pid the switch
+// itself saw was the first app-server-looking process in a five-second
+// listing, which was another program's (Miyi Helper's `--listen stdio://`
+// one, listed ahead of the app's on the owner's Mac) or none when ps was
+// slow, and then nothing was ended and the app stayed grey on the used-up
+// account till the user restarted it (danzi002 on Discord).
+func codexAppAccountSwitched() {
 	c := &codexApp
 	c.Lock()
 	defer c.Unlock()
-	if c.stale == nil {
-		c.stale = map[int]int{}
-	}
-	if _, ok := c.stale[pid]; !ok {
-		c.stale[pid] = 0
-	}
+	c.switched = true
 }
 
 // KeepCodexAppOnItsProvider runs codexAppStep every codexAppEvery till
@@ -212,7 +219,7 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 	c.Lock()
 	// at the first look only a used-up account's app-servers are ended:
 	// what the others read before magpie started isn't known
-	changed := !c.seen && out || c.seen && c.route != route
+	changed := !c.seen && out || c.seen && c.route != route || c.switched
 	if !changed {
 		c.seen, c.route = true, route
 	}
@@ -227,7 +234,7 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 			return nil
 		}
 		c.Lock()
-		c.seen, c.route = true, route
+		c.seen, c.route, c.switched = true, route, false
 		c.stale, c.stuck = map[int]int{}, false
 		for _, p := range pids {
 			c.stale[p] = 0

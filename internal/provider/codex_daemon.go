@@ -167,6 +167,9 @@ const codexDaemonRecheck = 5 * time.Second
 func noteCodexSwitch(from, to string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	// the Codex app's app-servers are found and restarted on
+	// KeepCodexAppOnItsProvider's own look, whatever this listing finds
+	codexAppAccountSwitched()
 	ps, err := listProcesses(ctx)
 	known := err == nil
 	codexDaemonMu.Lock()
@@ -177,9 +180,6 @@ func noteCodexSwitch(from, to string) {
 	}
 	noteLeft(&codexDaemonLeft, findCodexDaemon(ps, codexHome()), from, to)
 	noteLeft(&codexAppLeft, findCodexApp(ps), from, to)
-	if codexAppLeft.pid != 0 {
-		codexAppAccountLeft(codexAppLeft.pid)
-	}
 }
 
 // noteLeft updates what is known of the app-server pid, running as Codex's
@@ -269,7 +269,8 @@ func DismissCodexApp() {
 // codex.
 func findCodexApp(ps []proc.Process) int {
 	for _, p := range ps {
-		if isCodexAppServer(p.Args) {
+		// not another program's, run from the app's codex with --listen
+		if isCodexAppOwnServer(p.Args) {
 			return p.PID
 		}
 	}
