@@ -2,11 +2,13 @@ package agent
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,6 +26,7 @@ import (
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexcat"
+	"github.com/yetone/magpie/internal/codexrelay"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/lastgood"
@@ -2304,22 +2307,51 @@ func codexFailover() bool {
 // The app-server codex sessions share read the old base URL as it started
 // and keeps it, and KeepCodexDaemonCurrent ends with magpie, so it is
 // restarted here, when no session is on it (thisisvainxx on X: back on
-// its own config, Codex took "several restarts").
-func EndCodexFailover() error {
+// its own config, Codex took "several restarts"). ended says it took
+// failover out: a thread open in the Codex app still sends to the
+// gateway's address, which the caller leaves a relay at (codexrelay).
+func EndCodexFailover() (ended bool, err error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return err
+		return false, err
 	}
 	a := codex(home)
 	if !a.FailingOver() {
-		return nil
+		return false, nil
 	}
 	if err := a.EndFailover(); err != nil {
-		return err
+		return false, err
 	}
 	codexDaemonCheck(a.Path)
-	return nil
+	return true, nil
 }
+
+// RelayOpenCodex leaves a relay at the gateway's address for the Codex
+// processes running as magpie quits (codexrelay.Start), when the address
+// is this computer's own and Codex is running at all.
+func RelayOpenCodex() error {
+	u, err := url.Parse(gateway.URL())
+	if err != nil {
+		return err
+	}
+	if ip := net.ParseIP(u.Hostname()); !strings.EqualFold(u.Hostname(), "localhost") && (ip == nil || !ip.IsLoopback()) {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	pids := codexPIDs(ctx)
+	if len(pids) == 0 {
+		return nil
+	}
+	return startRelay(u.Host, pids)
+}
+
+// startRelay and codexPIDs are vars so tests start no relay and list
+// Codex processes of their own.
+var (
+	startRelay = codexrelay.Start
+	codexPIDs  = provider.CodexPIDs
+)
 
 // CodexDesktopList is the list a Codex beside its ChatGPT sign-in is
 // handed, as the file the Codex app reads it from (deskList); ok false

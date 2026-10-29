@@ -17,6 +17,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/claudebridge"
+	"github.com/yetone/magpie/internal/codexrelay"
 	"github.com/yetone/magpie/internal/davsync"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/imagemcp"
@@ -323,6 +324,8 @@ func run(args []string) error {
 			return toolsCmd(args[1:])
 		case "tool":
 			return toolCmd(args[1:])
+		case codexrelay.Command: // internal: what a quitting magpie leaves for Codex's open threads
+			return codexrelay.Main(args[1:], gateway.CodexRelay())
 		}
 	}
 	startUp()

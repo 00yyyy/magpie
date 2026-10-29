@@ -32,6 +32,7 @@ import (
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/awake"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/codexrelay"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/gwbudget"
 	"github.com/yetone/magpie/internal/gwmw"
@@ -585,6 +586,11 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	s.lnMu.Lock()
 	s.tls = cfg
 	s.lnMu.Unlock()
+	// the Codex relay a magpie quitting left at the port (codexrelay)
+	// lets go of it, finishing the turns it streams
+	if !Handover && !Inherited() {
+		codexrelay.Leave()
+	}
 	ln, err := s.listen(listenAddr())
 	if err != nil {
 		return err
