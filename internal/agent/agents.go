@@ -599,8 +599,8 @@ func objectPairs(raw []byte) orderedJSON {
 }
 
 // piModelJSON is one of magpie's models as an entry of Pi's models.json.
-// native asks it on the API its provider speaks natively (a model's own
-// api and baseUrl); without it the model is left on the provider's
+// native selects the model's preferred gateway API (its own api and
+// baseUrl); without it the model is left on the provider's
 // openai-completions (Pencil, pencil.go).
 func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
 	// reasoning lets Pi offer its thinking levels for the model: as
@@ -627,11 +627,24 @@ func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
 		if gateway.AdaptiveThinking(m.ID) {
 			e["compat"] = map[string]any{"forceAdaptiveThinking": true}
 		}
+	case slices.Contains(m.APIs, string(provider.Gemini)):
+		e["api"], e["baseUrl"] = "google-generative-ai", gw+"/v1beta"
 	}
 	if m.Images {
 		e["input"] = []string{"text", "image"}
 	}
 	if levels := piThinkingLevels(m.Efforts, e["api"] == "anthropic-messages" && gateway.ThinksOnlyWhenAsked(m.ID)); levels != nil {
+		// on google-generative-ai Pi resolves a level through the map to
+		// one of Gemini's four (pi-ai's resolveGoogleThinkingLevel) and
+		// throws before sending on any other name, so a level the model
+		// calls something else (xhigh, max) is hidden there (#3282)
+		if e["api"] == "google-generative-ai" {
+			for l, v := range levels {
+				if s, ok := v.(string); ok && l != "off" && !slices.Contains([]string{"minimal", "low", "medium", "high"}, strings.ToLower(s)) {
+					levels[l] = nil
+				}
+			}
+		}
 		e["thinkingLevelMap"] = levels
 	}
 	// without it Pi takes every model for a 128K one, and compacts
