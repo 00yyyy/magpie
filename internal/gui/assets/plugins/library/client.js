@@ -65,11 +65,31 @@ magpie.plugin("library", (ctx) => {
   // One gone from this computer (gone: uninstalled, or its CLI) is listed
   // only on the rows of what it still has (withGone), for that to be taken
   // out: an agent that isn't installed was on every row (@jiahao_jayden).
-  const shownAgents = () => lib.agents.filter((a) => !a.gone && !isHidden(a));
-  const withGone = (all, on) => [...all, ...lib.agents.filter((a) => a.gone && (on || []).includes(a.id) && !all.some((x) => x.id === a.id))];
+  // An agent in a stopped WSL distro (asleep) is listed by what magpie last
+  // knew of it, its ticks kept for when the distro next runs; one whose
+  // places magpie never saw (unseen) only on the rows that name it, like
+  // a gone one, its chip greyed out: opening its files would start WSL
+  // (#3896, cybercaius on Discord).
+  const shownAgents = () => lib.agents.filter((a) => !a.gone && !a.unseen && !isHidden(a));
+  const withGone = (all, on) => [...all, ...lib.agents.filter((a) => (a.gone || a.unseen && !isHidden(a)) && (on || []).includes(a.id) && !all.some((x) => x.id === a.id))];
   const mcpAgents = () => shownAgents().filter((a) => a.mcp)
     .map((a) => a.mcpVia ? { ...a, aside: t("{agent} reads MCP servers through the {ext} extension", { agent: a.name, ext: a.mcpVia }) } : a);
   const skillAgents = () => shownAgents().filter((a) => a.skills);
+  // the MCP hub's agents: not a stopped distro's, whose files say what it
+  // has of the hub, and can't be read without starting it
+  const hubAgents = () => mcpAgents().filter((a) => !a.asleep);
+  // one line for each stopped WSL distro the page lists agents of: they
+  // show what magpie last saw, and a change waits for the distro to run
+  function asleepAsides() {
+    const seen = lib.agents.filter((a) => a.asleep && !isHidden(a));
+    return [...new Set(seen.map((a) => a.asleep))].map((d) => {
+      const unseen = seen.filter((a) => a.asleep === d && a.unseen).map((a) => a.name);
+      const p = el("p", "lib-aside lib-asleep", t("WSL {distro} isn't running: its agents show what magpie last saw there, and what you change is written there the next time it runs.", { distro: d }));
+      if (unseen.length) p.append(" " + t("{agents} can be changed once it runs.", { agents: unseen.join(", ") }));
+      p.dataset.distro = d;
+      return p;
+    });
+  }
 
   function glyph(d, cls = "lib-glyph") {
     const g = el("span", cls);
@@ -266,6 +286,12 @@ magpie.plugin("library", (ctx) => {
       // grey chip for a remote server and nothing said why
       if (blocked) { c.classList.add("blocked"); c.setAttribute("aria-disabled", "true"); tip = blocked; }
       if (a.gone) { c.classList.add("gone"); tip = t("{agent} isn't installed here — click to take it away", { agent: a.name }); }
+      if (a.unseen) { c.classList.add("asleep", "unseen", "blocked"); c.setAttribute("aria-disabled", "true"); tip = t("WSL {distro} isn't running, and magpie hasn't seen {agent}'s files there yet: start the distro to change this", { distro: a.asleep, agent: a.name }); }
+      else if (a.asleep) {
+        c.classList.add("asleep");
+        const v = { distro: a.asleep, agent: a.name };
+        if (!problem && !blocked) tip = has ? t("WSL {distro} isn't running: {agent} has it — click to take it away, and magpie writes the change there the next time it runs", v) : t("WSL {distro} isn't running: a click gives it to {agent} the next time the distro runs", v);
+      }
       c.title = a.aside && !problem && !blocked ? tip + "\n" + a.aside : tip;
       c.setAttribute("aria-pressed", has ? "true" : "false");
       // What's lit is read off the chips clicked, not the list they were
@@ -293,12 +319,13 @@ magpie.plugin("library", (ctx) => {
   // The agents a row's chips have lit by a click: not one lit because it
   // has the item whatever is ticked.
   function litOf(box) {
-    return [...box.children].filter((x) => x.dataset.agent && !x.classList.contains("always") && x.getAttribute("aria-pressed") === "true").map((x) => x.dataset.agent);
+    return [...box.children].filter((x) => x.dataset.agent && !x.classList.contains("always") && !x.classList.contains("unseen") && x.getAttribute("aria-pressed") === "true").map((x) => x.dataset.agent);
   }
-  // What a click leaves as it was: an agent not shown, and one that has the
-  // item whatever is ticked, whose chip can't be clicked.
+  // What a click leaves as it was: an agent not shown, one that has the
+  // item whatever is ticked, whose chip can't be clicked, and one in a
+  // stopped distro magpie can't show the ticks of (unseen).
   function keptOf(box, all, on) {
-    const fixed = [...box.children].filter((x) => x.classList.contains("always")).map((x) => x.dataset.agent);
+    const fixed = [...box.children].filter((x) => x.classList.contains("always") || x.classList.contains("unseen")).map((x) => x.dataset.agent);
     return on.filter((id) => !all.some((x) => x.id === id) || fixed.includes(id));
   }
 
@@ -1230,7 +1257,7 @@ magpie.plugin("library", (ctx) => {
     for (const a of rows) list.append(...instructionsRow(a));
     if (!rows.length) list.append(el("div", "lib-none", t("None of your agents reads a user-wide instructions file magpie knows.")));
     body.append(list);
-    const skip = shownAgents().filter((a) => !a.instructions);
+    const skip = shownAgents().filter((a) => !a.instructions && !a.asleep);
     if (skip.length) body.append(el("p", "lib-aside", t(skip.length > 1 ? "{agents} keep no user-wide instructions file." : "{agents} keeps no user-wide instructions file.", { agents: skip.map((a) => a.name).join(", ") })));
     body.append(bar);
   }
@@ -1529,6 +1556,7 @@ magpie.plugin("library", (ctx) => {
     if (lib.servers.length || lib.projects.length) renderProjects(body, "mcp");
     const skip = shownAgents().filter((a) => !a.mcp);
     if (skip.length) body.append(el("p", "lib-aside", t("{agents} has no MCP servers magpie can write.", { agents: skip.map((a) => a.name).join(", ") })));
+    body.append(...asleepAsides());
     // WorkBuddy connects a server only once it is trusted there, again
     // after its command or address changes (#1266)
     for (const wb of shownAgents().filter((a) => (a.id === "workbuddy" || a.id === "workbuddy-ai") && a.mcp)) {
@@ -1571,7 +1599,7 @@ magpie.plugin("library", (ctx) => {
     connect.classList.add("lib-hubconnect");
     at.append(glyph(GLYPH.web), aw, copyBtn(hubURL(), t("Address")), connect);
     list.append(at);
-    const names = (why) => mcpAgents().filter((a) => a.hub === why).map((a) => a.name).join(", ");
+    const names = (why) => hubAgents().filter((a) => a.hub === why).map((a) => a.name).join(", ");
     const why = [
       ["no-remote", "{agents} reaches no MCP server over HTTP, so it keeps each server's own entry."],
       ["taken", "A server in the library is called magpie, so {agents} keeps each server's own entry: give that server another name for the hub to be used."],
@@ -1598,7 +1626,7 @@ magpie.plugin("library", (ctx) => {
       const n = known.reduce((sum, s) => sum + Math.max(0, (health.get(s.name).h.tools || 0) - (s.disabledTools?.length || 0)), 0);
       parts.push(n === 1 ? t("1 tool") : t("{n} tools", { n }));
     }
-    const given = mcpAgents().filter((a) => a.hub === "on").map((a) => a.name);
+    const given = hubAgents().filter((a) => a.hub === "on").map((a) => a.name);
     if (given.length) parts.push(t("in {agents}", { agents: given.length > 3 ? t("{first} and {n} more", { first: given.slice(0, 2).join(", "), n: given.length - 2 }) : given.join(", ") }));
     return parts.join(" · ");
   }
@@ -1726,7 +1754,7 @@ magpie.plugin("library", (ctx) => {
     };
 
     const drawAgents = () => {
-      const all = mcpAgents();
+      const all = hubAgents();
       const st = (a) => a.hub || (a.noRemote ? "no-remote" : "");
       const can = all.filter((a) => st(a) === "on" || !st(a));
       const on = can.filter((a) => st(a) === "on");
@@ -1835,7 +1863,7 @@ magpie.plugin("library", (ctx) => {
       pane.scrollTop = top;
       if (focus) { const i = pane.querySelector("#lib-hubq"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
       // the one primary action: Connect all while there are agents to connect
-      const rest = hubTab === "agents" && served().length ? mcpAgents().filter((a) => !a.hub && !a.noRemote) : [];
+      const rest = hubTab === "agents" && served().length ? hubAgents().filter((a) => !a.hub && !a.noRemote) : [];
       bar.replaceChildren(el("span", "grow lib-hubnote", changed ? t("Restart an agent for it to read the change") : ""), done);
       done.className = "text" + (rest.length ? "" : " primary");
       done.disabled = false;
@@ -3148,6 +3176,7 @@ magpie.plugin("library", (ctx) => {
     if (lib.skills.length || lib.projects.length) renderProjects(body, "skills");
     const skip = shownAgents().filter((a) => !a.skills);
     if (skip.length) body.append(el("p", "lib-aside", t("{agents} has no skills folder.", { agents: skip.map((a) => a.name).join(", ") })));
+    body.append(...asleepAsides());
     // Desktop reads its skills list again only when its window is reloaded (#638)
     if (shownAgents().some((a) => a.id === "claude-desktop" && a.skills)) {
       body.append(el("p", "lib-aside", t("Claude Desktop shows skill changes once its window is reloaded ({keys}). It gets a copy of each skill, and one you change in Desktop is left as it is.", { keys: /^Mac/.test(navigator.platform) ? "⌘R" : "Ctrl+R" })));

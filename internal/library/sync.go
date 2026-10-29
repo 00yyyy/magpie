@@ -403,6 +403,13 @@ type AgentView struct {
 	// Gone: not installed here any more, and listed only for what magpie
 	// gave it to be taken out (held); it is given nothing new
 	Gone bool `json:"gone,omitempty"`
+	// Asleep is the WSL distro, not running now, the agent is in: it is
+	// listed by what magpie last knew of it (wsl_asleep.go), and a change
+	// for it is written there when the distro next runs. Unseen: magpie
+	// never saw where it keeps its MCP servers or skills, so its ticks
+	// can't be shown or changed until the distro runs
+	Asleep string `json:"asleep,omitempty"`
+	Unseen bool   `json:"unseen,omitempty"`
 }
 
 // ServerView is a library server, and what each agent it's on made of it.
@@ -519,7 +526,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	}
 	// the agents are found once for the whole read: finding them looks
 	// through every agent's folders, in WSL too (#1624)
-	targets := Targets()
+	targets, asleep := targetsAsleep(false)
 	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, MCPHub: l.MCPHub, HubPath: gateway.HubMCPPath, Partial: glance}
 	for _, t := range targets {
 		av := AgentView{ID: t.Agent.ID, Name: t.Agent.Name, Icon: t.Agent.Icon, Instructions: t.Instructions, Skills: t.Skills,
@@ -563,6 +570,13 @@ func readView(problems []Problem, glance bool) (*View, error) {
 			av.MCP = t.MCP.Path
 		}
 		v.Agents = append(v.Agents, av)
+	}
+	// a stopped WSL distro's agents, by what magpie last knew of them:
+	// nothing of theirs is opened, which would start the distro (#3896)
+	for _, a := range asleep {
+		if av, ok := l.asleepView(a); ok {
+			v.Agents = append(v.Agents, av)
+		}
 	}
 	of := func(what string) map[string]string {
 		m := map[string]string{}
@@ -751,10 +765,18 @@ func serversAgents(names, agents []string, on bool) (*Result, error) {
 			}
 		}
 		mcp := map[string]*mcpFile{}
+		// a stopped distro's agents, by what magpie last knew of them
+		shapes := map[string]*shape{}
 		if on {
-			for _, t := range Targets() {
+			ts, asleep := targetsAsleep(false)
+			for _, t := range ts {
 				if t.MCP != nil {
 					mcp[t.Agent.ID] = t.MCP
+				}
+			}
+			for _, a := range asleep {
+				if sh := shapeOf(a); sh != nil {
+					shapes[a.ID] = sh
 				}
 			}
 		}
@@ -764,7 +786,7 @@ func serversAgents(names, agents []string, on bool) (*Result, error) {
 			}
 			kept := slices.DeleteFunc(slices.Clone(s.Agents), func(a string) bool { return slices.Contains(agents, a) })
 			for _, a := range agents {
-				if on && mcp[a] != nil && mcp[a].supports(s) == nil {
+				if on && mcp[a] != nil && mcp[a].supports(s) == nil || on && shapes[a] != nil && shapes[a].reaches(s) {
 					kept = append(kept, a)
 				} else if on && slices.Contains(s.Agents, a) {
 					kept = append(kept, a) // one it has already stays, whatever it says of it

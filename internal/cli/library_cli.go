@@ -344,6 +344,11 @@ func libraryAgents(s, kind string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		// one in a stopped WSL distro is recorded, and written there once
+		// the distro runs: asking would start it (#3896)
+		if d := library.AsleepIn(id); d != "" {
+			fmt.Fprintln(os.Stderr, amber.Render("!"), muted.Render("WSL "+d+" isn't running: "+id+" is recorded, and magpie writes it there once it sees the distro running"))
+		}
 		out = append(out, id)
 	}
 	return out, nil
