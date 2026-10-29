@@ -223,3 +223,27 @@ func TestArkPlanImagesAreThePlans(t *testing.T) {
 		}
 	}
 }
+
+// XYenon: Ark's plan docs say glm-5.3-flash, deepseek-v4.1-flash,
+// -economy and kimi-k3 take images, so each is sent the image itself, not
+// marked text-only from the plans' /models (#1216: not the plans' list).
+func TestArkPlanModelsSeeAsTheDocsSay(t *testing.T) {
+	p, err := FromPreset("volcengine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms := map[string]catalog.Model{}
+	for _, m := range p.planModels(nil) {
+		ms[m.ID] = m
+	}
+	for _, id := range []string{"glm-5.3-flash", "deepseek-v4.1-flash", "deepseek-v4.1-flash-economy", "kimi-k3", "kimi-k2.8-preview", "minimax-m3"} {
+		m, ok := ms[id]
+		if !ok {
+			t.Errorf("%s isn't a plan model", id)
+			continue
+		}
+		if m.ImageInput == nil || !*m.ImageInput || !m.Images {
+			t.Errorf("%s: the docs say it takes images, marked %v (%v)", id, m.Images, m.ImageInput)
+		}
+	}
+}

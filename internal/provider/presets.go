@@ -133,17 +133,24 @@ var arkPlanModels = []string{"ark-code-latest", "doubao-seed-evolving", "doubao-
 	"doubao-seed-2.0-mini", "minimax-m3", "glm-5.3", "glm-5.3-flash", "deepseek-v4.1-flash", "deepseek-v4.1-flash-economy", "deepseek-v4-flash", "deepseek-v4-pro",
 	"kimi-k2.8-preview", "kimi-k3", "kimi-k3.1-pro"}
 
-// arkPlanImages are which of arkPlanModels take images, as Ark's own
-// /api/coding/v3/models says of the dated model each one is (its
-// input_modalities, 10-29): models.dev's resellers disagree on
-// doubao-seed-2.1-pro and say nothing of 2.1-lite, so magpie took them for
-// text-only and had every image of theirs described by another model
-// first, a minute or more before the first token (tongzhenbao on X). The
-// ones Ark's list doesn't name (ark-code-latest, glm-5.3, kimi-k3,
-// kimi-k2.8-preview, minimax-m3) are left to models.dev.
+// arkPlanImages are which of arkPlanModels take images, as Ark's plan
+// docs say (Coding Plan 套餐概览 docs/82379/1925114, Agent Plan 2366394,
+// read 10-29), never the plans' /models: its input_modalities aren't the
+// plans' models (#1216), and 10c85e1fe took them from it and marked
+// glm-5.3-flash and deepseek-v4.1-flash(-economy) text-only, so their
+// images went to another model to be described (XYenon). The docs say
+// glm-5.3-flash "为原生多模态模型，支持图片输入", deepseek-v4.1-flash "原生
+// 具备多模态视觉理解能力", -economy "支持多模态输入", kimi-k3 "原生支持视觉
+// 理解", kimi-k2.8-preview "支持文本和图片输入" and minimax-m3 "支持多模态
+// 视觉理解". The Doubao Seed models and kimi-k3.1-pro aren't described
+// either way there and keep what tongzhenbao's fix gave them (they see);
+// deepseek-v4-flash and -pro are DeepSeek's text-only V4, which V4.1 Flash
+// added vision to. ark-code-latest and glm-5.3 are left to models.dev.
 var arkPlanImages = map[string]bool{
+	"glm-5.3-flash": true, "deepseek-v4.1-flash": true, "deepseek-v4.1-flash-economy": true,
+	"kimi-k3": true, "kimi-k2.8-preview": true, "minimax-m3": true,
 	"doubao-seed-evolving": true, "doubao-seed-2.1-pro": true, "doubao-seed-2.1-lite": true, "doubao-seed-2.0-mini": true, "kimi-k3.1-pro": true,
-	"glm-5.3-flash": false, "deepseek-v4.1-flash": false, "deepseek-v4.1-flash-economy": false, "deepseek-v4-flash": false, "deepseek-v4-pro": false,
+	"deepseek-v4-flash": false, "deepseek-v4-pro": false,
 }
 
 // alibabaPlanModels are the text models of Alibaba's Token Plan, the same
