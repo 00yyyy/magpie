@@ -239,7 +239,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(".ctx-none").waitFor(); // the history has answered: the pane is its full length
         // the reader scrolls to the picker, as a wheel does
         await page.mouse.move(width / 2, 300);
-        for (let i = 0; i < 20 && (await row.locator(".ctx-tune-pick").boundingBox()).y > height * 0.6; i++) {
+        // the row can re-render under the wheel, and a picker being replaced has no box
+        // for a moment: wait for one instead of reading null (#4221)
+        const pickY = async () => {
+          for (let i = 0; i < 50; i++) {
+            const b = await row.locator(".ctx-tune-pick").boundingBox();
+            if (b) return b.y;
+            await page.waitForTimeout(20);
+          }
+          throw new Error("the picker never had a box");
+        };
+        for (let i = 0; i < 20 && (await pickY()) > height * 0.6; i++) {
           await page.mouse.wheel(0, 120);
           await page.waitForTimeout(60);
         }
