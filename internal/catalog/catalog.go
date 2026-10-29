@@ -966,6 +966,113 @@ func canonicallyPriced(all map[string]mdProvider, at int, providers []string, b 
 	return Price{}, false
 }
 
+// madeBy is who a model is, by models.dev's canonical_model_id: the labs
+// that make it, and the providers that list it as their own (ownAPI).
+type madeBy struct{ makers, owners []string }
+
+// makerOwners are, by bare id and by that id with its dots as dashes, the
+// makers of the models models.dev's providers list and those of the
+// providers that are a maker's own API, for the Reset count gen: an entry
+// whose canonical_model_id names the provider listing it, or one it is an
+// API of, as its maker (deepseek's deepseek-flash, deepseek/deepseek-v4.1-flash-1017;
+// meta's muse-spark-1.2; stepfun-ai's step-5-preview), under the entry's
+// id and its canonical's. An entry at $0 counts for neither: a maker's
+// free tier (nvidia's) is not what the model costs.
+var makerOwners struct {
+	sync.Mutex
+	gen int
+	by  map[string]*madeBy
+}
+
+// ownAPI is whether the models.dev provider pid is maker's own API: its
+// id, or its id and a region or edition (stepfun-ai is StepFun's global
+// API, alibaba-cn Alibaba's in China). A plan's catalog ("-plan") is not:
+// it lists what a membership charges, not the model's price.
+func ownAPI(pid, maker string) bool {
+	pid, maker = strings.ToLower(pid), strings.ToLower(maker)
+	return (pid == maker || strings.HasPrefix(pid, maker+"-")) && !strings.Contains(pid, "-plan")
+}
+
+// madeByOf is who the bare id b is made and listed as their own by, nil
+// when no provider lists it as its own.
+func madeByOf(all map[string]mdProvider, at int, b string) *madeBy {
+	makerOwners.Lock()
+	defer makerOwners.Unlock()
+	if makerOwners.by == nil || makerOwners.gen != at {
+		by := map[string]*madeBy{}
+		add := func(k, maker, pid string) {
+			for _, k := range []string{k, dashed(k)} {
+				x := by[k]
+				if x == nil {
+					x = &madeBy{}
+					by[k] = x
+				}
+				if !slices.Contains(x.makers, maker) {
+					x.makers = append(x.makers, maker)
+				}
+				if !slices.Contains(x.owners, pid) {
+					x.owners = append(x.owners, pid)
+				}
+			}
+		}
+		for pid, p := range all {
+			for key, m := range p.Models {
+				maker, _, ok := strings.Cut(m.Canonical, "/")
+				if !ok || !ownAPI(pid, maker) || m.Cost == nil || m.Cost.Same(Price{}) {
+					continue
+				}
+				maker = strings.ToLower(maker)
+				add(bareID(key), maker, pid)
+				add(bareID(m.Canonical), maker, pid)
+			}
+		}
+		for _, x := range by {
+			slices.Sort(x.makers)
+			slices.Sort(x.owners)
+		}
+		makerOwners.gen, makerOwners.by = at, by
+	}
+	if x := makerOwners.by[b]; x != nil {
+		return x
+	}
+	return makerOwners.by[dashed(b)]
+}
+
+// MakerPriced is the list price the model's own maker gives it: priced by
+// PricedBy at one provider alone, the first of prefer that is an API of
+// the model's maker (ownAPI), else the first by id of the providers that
+// list it as their own (madeByOf). A model a lab sells itself is costed at
+// the lab's price rather than a reseller's that a maker catalog asked
+// before it lists: Mistral sells DeepSeek's deepseek-v4.1-flash-1017 at
+// $0.30/$1.20, DeepSeek's own price is $0.15/$0.60 (bestony on Discord: a
+// Command Code call costed at the model's official price), and Meta's
+// muse-spark-1.2 and Sakana's fugu-ultra, which no maker preset lists, are
+// priced too. False when no provider lists it as its own, or none of
+// those prices it.
+func MakerPriced(prefer []string, id string) (Price, bool) {
+	all, at := loadGen()
+	b := bareID(id)
+	if r, ok := unprofiled(b); ok {
+		b = r
+	}
+	x := madeByOf(all, at, b)
+	if x == nil {
+		return Price{}, false
+	}
+	var asked []string
+	for _, pid := range prefer {
+		if slices.ContainsFunc(x.makers, func(mk string) bool { return ownAPI(pid, mk) }) {
+			asked = append(asked, pid)
+		}
+	}
+	for _, pid := range append(asked, x.owners...) {
+		if pr, ok := PricedBy([]string{pid}, id); ok {
+			return pr, true
+		}
+	}
+	return Price{}, false
+}
+
 // dashed is an id with its dots as dashes: the spelling two ids are compared
 // in when one vendor writes a model's version 4.6 and another 4-6.
 func dashed(id string) string { return strings.ReplaceAll(id, ".", "-") }
