@@ -6241,7 +6241,7 @@ function renderProviders() {
     let key;
     if (p.account && lapsed) {
       key = el("span", "key acct none", t("Signed out"));
-      key.title = t("Signed out — add this account again to use it");
+      key.title = t("Signed out — choose Sign in again on this account under Providers");
     } else if (p.account) {
       // the row names the vendor: a plan too long for the pill goes without it
       const plan = accountPlan(p.account), bare = plan.startsWith(p.name + " ") ? plan.slice(p.name.length + 1) : "";
@@ -13499,7 +13499,9 @@ function loginUsageOf(agent) {
 const SIGN_IN_GONE = /sign-in has (expired|lapsed)|sign in again/i;
 
 function quotaError(err, q) {
-  if (/sign-in has expired/.test(err)) return t("Signed out — add this account again to use it");
+  // signed in again in place, settings kept, from the row's Sign in again
+  // (blue12345655 on Discord looked for a way to add it again, found none)
+  if (/sign-in has expired/.test(err)) return t("Signed out — choose Sign in again on this account under Providers");
   // a Copilot account GitHub refused the token of (copilot_lapsed.go), as
   // its row says it, in English or already in the user's language
   const copilotLapsed = "GitHub refused this Copilot sign-in; sign in again";
