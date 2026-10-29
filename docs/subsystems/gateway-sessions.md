@@ -154,6 +154,24 @@ list the session), and `HasGatewayConversations` counts it.
 Implementation: [`internal/sessions/gateway_delete.go`](../../internal/sessions/gateway_delete.go),
 `Restore` in [`internal/sessions/manage.go`](../../internal/sessions/manage.go), and
 [`internal/gui/sessions_manage.go`](../../internal/gui/sessions_manage.go).
+A deleted Codex session also leaves the Codex app's list (zhuddan on Discord).
+The app (ChatGPT.app's Codex, 26.x) lists threads from its own catalog,
+`<CODEX_HOME>/sqlite/codex.db` (`codex-dev.db` for a non-prod build), table
+`local_thread_catalog`, and drops a row only on the app-server's
+`thread/deleted` or `thread/archived`; after its first full sweep it takes in
+only threads newer than its watermark. Delete removes the local host's rows of
+threads whose rollout is gone from that Codex folder's `sessions` and
+`archived_sessions` (named by Codex's state database, neither the file nor its
+packed twin there; a file that can't be looked at counts as there) and raises
+`catalog_revision`, in one `BEGIN IMMEDIATE` transaction that waits for the
+app's own. The removed rows go into the trash note (`codex_catalog`), and
+Restore puts them back. `/api/sessions/manage` does the same once a run
+(`TidyCodexCatalog`) for threads deleted before this. Implementation:
+[`internal/sessions/codex_catalog.go`](../../internal/sessions/codex_catalog.go);
+verification: `TestDeleteForgetsCodexAppCatalog`,
+`TestTidyCodexCatalogForgetsEarlierDeletes`,
+`TestTidyCodexCatalogKeepsWhatItCantJudge`, with schemas from Codex 26.1023 in
+`internal/sessions/testdata/codex-app/`.
 All-time statistics include gateway history older than native files. Calendar
 activity and output totals use each session's actual request dates, including
 intermediate dates; extending the range rebases existing native calendar indices.

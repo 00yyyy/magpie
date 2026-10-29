@@ -314,6 +314,9 @@ type Trashed struct {
 	// Gateway: a session seen only through magpie's gateway, whose items
 	// are the conversation text magpie recorded of it (gateway_delete.go)
 	Gateway bool `json:"gateway,omitempty"`
+	// CodexCatalog: a Codex thread's rows in the Codex app's catalog,
+	// taken out with it and put back on Restore (codex_catalog.go)
+	CodexCatalog []codexCatalogRow `json:"codex_catalog,omitempty"`
 }
 
 // moved is one file or folder of a session moved to the trash: where it
@@ -427,6 +430,18 @@ func Delete(agent, id string) (Trashed, error) {
 	}
 	saveCache()
 	wslForget(fs)
+	if agent == "codex" {
+		// the Codex app's list of it, which it keeps apart from the files
+		var homes []string
+		for _, p := range paths {
+			homes = append(homes, codexHomeOf(p))
+		}
+		tidyCodexCatalog(homes)
+		if b, err := os.ReadFile(filepath.Join(dir, manifest)); err == nil {
+			json.Unmarshal(b, &t)
+		}
+		t.Key = agent + "/" + name
+	}
 	return t, nil
 }
 
@@ -735,6 +750,11 @@ func Restore(key string) (Trashed, error) {
 			}
 			return Trashed{}, err
 		}
+	}
+	// the Codex app lists it again: it wouldn't take in a thread that old
+	// by itself
+	if t.Agent == "codex" && len(t.CodexCatalog) > 0 {
+		restoreCodexCatalog(t.CodexCatalog)
 	}
 	os.RemoveAll(dir)
 	wslRelistNow(t.Items)
