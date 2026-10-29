@@ -19599,6 +19599,8 @@ function renderSettings() {
     (v) => savePrefs({ ...keep, claudeWarmAts: v, claudeWarmAt: v[0] || "" }));
   renderWarmAtOwn(s);
   renderAutoResetOwn(s);
+  renderWarmNow("codex", s.codexUsers, "#warmNowRow");
+  renderWarmNow("claude", s.claudeUsers, "#claudeWarmNowRow");
   // each built-in vendor's daily check-in, its tab shown while one of its
   // accounts is signed in (#694, #811): its switch, how each account went,
   // and under it each account's own (#1902)
@@ -20857,8 +20859,47 @@ function renderWarmAtOwn(s) {
     box.append(segs([["same", t("Same")], ["own", t("Own")], ["off", t("Off")]], mode, (v) =>
       save(user, v === "same" ? "" : v === "off" ? "off" : s.codexWarmAt || "06:00")));
     r.append(who, box);
-    list.append(r);
+    $("#warmNowRow").before(r); // Warm up now stays last
   }
+}
+
+// renderWarmNow is Warm up now (a Windows user on Discord): one account's
+// warm-up request, the one the scheduled warm-up sends, sent at once. One
+// account is sent at a press; with more the press asks which. What it came
+// to stays on the row's line (warmNowSaid) across renders.
+const warmNowSaid = {};
+function renderWarmNow(agent, users, rowId) {
+  const row = $(rowId), sub = row.querySelector(".sub"), box = row.lastElementChild;
+  users = users || [];
+  row.hidden = !users.length;
+  const said = warmNowSaid[agent];
+  sub.textContent = said ? said.text : t("Sends the warm-up's one tiny request to an account now");
+  sub.classList.toggle("err", !!said?.bad);
+  const b = el("button", "text warm-now-go", t(users.length > 1 ? "Warm up…" : "Warm up"));
+  b.type = "button";
+  b.disabled = !!said?.busy;
+  b.classList.toggle("busy", !!said?.busy);
+  if (users.length > 1) b.setAttribute("aria-haspopup", "menu");
+  const send = async (user) => {
+    const say = (o) => { warmNowSaid[agent] = o; if ($(rowId).isConnected) renderWarmNow(agent, users, rowId); };
+    say({ busy: true, text: t("Warming up {who}…", { who: user }) });
+    try {
+      await api("warm-now", { agent, user });
+      say({ text: t("Warmed up {who} {when}", { who: user, when: syncWhen(new Date().toISOString()) }) });
+      status(t("Warmed up {who}", { who: user }), "ok");
+      loadQuotas(); // the window it started
+    } catch (e) {
+      say({ bad: true, text: t("Couldn't warm up {who}: {why}", { who: user, why: e.message }) });
+      status(t("Couldn't warm up {who}: {why}", { who: user, why: e.message }), "err");
+    }
+  };
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (users.length === 1) return send(users[0]);
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, users.map((u) => ({ v: u, name: u, note: "", literalName: true })), null, send, "Warm up which account", "sess-menu", "right");
+  };
+  box.replaceChildren(b);
 }
 
 // renderAlerts draws the usage alerts (#368): a notification when a window
