@@ -1080,6 +1080,13 @@ func codexTokenAsKept(dir string) (tok, accountID string, err error) {
 	return a.Tokens.AccessToken, codexAccountID(a), nil
 }
 
+// CodexSignInAsKept is the access token and account id of the ChatGPT
+// sign-in Codex keeps, as it is (codexTokenAsKept): an expired one is an
+// error, left to Codex to renew.
+func CodexSignInAsKept() (tok, accountID string, err error) {
+	return codexTokenAsKept(codexHome())
+}
+
 // codexTokenRenewing is codexToken, and with stale, the access token the
 // backend just answered 401 "token expired" for while its exp was still
 // ahead (willz on Discord, #2973: a Team account's), refreshes the
