@@ -1388,6 +1388,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.PanelUsageHidden = cur.PanelUsageHidden
 		// and the clients the Usage page's Agents list leaves out, set there
 		in.UsageAgentsHidden = cur.UsageAgentsHidden
+		// and the allowance cards the Usage page's Overview leaves out, set there
+		in.UsageCardsHidden = cur.UsageCardsHidden
 		// and the names models' usage is counted under (magpie model alias)
 		in.UsageAliases = cur.UsageAliases
 		// and the clears of usage made on the Usage page
@@ -2089,7 +2091,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	})
 	// the Usage page's order of its cards, which the tray panel's Allowances
 	// tab follows, what that tab leaves out, the clients the page's Agents
-	// list leaves out, and a client it counts as one of the agents (Count,
+	// list leaves out, the allowance cards its Overview leaves out
+	// (CardsHidden), and a client it counts as one of the agents (Count,
 	// #1958; As "" counts it on its own again), in magpie's settings; one
 	// not sent stays as it is
 	mux.HandleFunc("POST /api/usage/arrange", func(rw http.ResponseWriter, r *http.Request) {
@@ -2097,6 +2100,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			Order        *[]string
 			PanelHidden  *[]string
 			AgentsHidden *[]string
+			CardsHidden  *[]string
 			Count        *struct{ Client, As string }
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -2120,6 +2124,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		if in.AgentsHidden != nil {
 			s.UsageAgentsHidden = *in.AgentsHidden
+		}
+		if in.CardsHidden != nil {
+			s.UsageCardsHidden = *in.CardsHidden
 		}
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)

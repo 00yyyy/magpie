@@ -1216,6 +1216,9 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .us-hid .us-hidline[aria-expanded="true"] svg { transform: rotate(180deg); }
 .us-hid .list { margin-top: 4px; }
 .us-hid .list[hidden] { display: none; }
+.us-hid .us-showall { align-self: flex-start; margin: 4px 0 0 2px; font-size: 11.5px; }
+.us-hid .us-showall[hidden] { display: none; }
+#quotaHid .row.stat .who { flex: 1 1 auto; min-width: 0; }
 .row.stat.hid > :not(.us-unhide) { opacity: .55; }
 .usage-note { padding: 10px 4px 2px; font-size: 11px; color: var(--faint); user-select: text; -webkit-user-select: text; }
 .usage-clear { margin: 0; padding: 2px 0 6px; }

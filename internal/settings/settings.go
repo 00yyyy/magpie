@@ -645,6 +645,13 @@ type Settings struct {
 	// Agents list leaves out (ikunbots on X). It is that list's only: the
 	// ledger keeps their calls, and the totals and the chart count them.
 	UsageAgentsHidden []string `json:"usageAgentsHidden,omitempty"`
+	// UsageCardsHidden are the allowance cards the Usage page's Overview
+	// leaves out (whqtian_07012 on Discord), each as its tray card id (the
+	// provider id, then "|" and the account when there is one) and "|plan"
+	// or "|balance", so StepFun's balance card goes while its plan card
+	// stays. Only what that page shows: routing, caps, counting, the tray
+	// panel (PanelUsageHidden is its own) and the menu bar's cells keep them.
+	UsageCardsHidden []string `json:"usageCardsHidden,omitempty"`
 	// ClientAgents counts a client magpie doesn't know as one of the agents
 	// it does, on the Usage and Sessions pages (#1958, NorethSea): a bridge
 	// that starts Codex's app-server under a name of its own
@@ -1702,6 +1709,7 @@ func save(s Settings, recording bool) error {
 	s.UsageOrder = ids(s.UsageOrder)
 	s.PanelUsageHidden = ids(s.PanelUsageHidden)
 	s.UsageAgentsHidden = ids(s.UsageAgentsHidden)
+	s.UsageCardsHidden = ids(s.UsageCardsHidden)
 	s.ClientAgents = clientAgents(s.ClientAgents)
 	s.UsageCleared = usageCleared(s.UsageCleared)
 	s.TrayUsages = ids(s.TrayUsages)

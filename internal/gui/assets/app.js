@@ -15716,6 +15716,7 @@ function renderQuotas(lazy) {
     slide(pick, "quotaMode");
   }
   renderQuotaTrend();
+  renderQuotaHid();
   if (!quotas) {
     subscriptions.hidden = false;
     for (let i = 0; i < 2; i++) {
@@ -15728,10 +15729,12 @@ function renderQuotas(lazy) {
     return;
   }
   if (usageArranging) { usageRenderPending = true; restoreRefresh(); return; }
-  subscriptions.hidden = !quotas.length;
+  // less the ones hidden from it (overviewCards, the Usage page's)
+  const shown = overviewCards(quotas);
+  subscriptions.hidden = !shown.length;
   // an agent with several accounts is one card, a section per account
   const groups = [];
-  for (const sub of byUsageOrder(keyCards(quotas))) {
+  for (const sub of byUsageOrder(keyCards(shown))) {
     const g = sub.user && groups.find((x) => x[0].user && x[0].provider === sub.provider);
     if (g) g.push(sub); else groups.push([sub]);
   }
@@ -15752,6 +15755,7 @@ function renderQuotas(lazy) {
     if (!first.user && first.alias) head.append(...quotaWho(first));
     if (!first.user && (first.plan || first.until)) head.append(planSpan(first));
     card.append(head);
+    quotaCardMenus(card, subs); // the card's hide menu (page.js)
     // a provider's keys, each its balance: past a few, the rest folded
     // behind a button at the card's foot, and the sum in its head (361 on
     // Discord: an OpenRouter card listed every key's balance, very long)
