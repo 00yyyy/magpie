@@ -437,6 +437,17 @@ type Provider struct {
 	// it serves only through the routing groups it is in, and by its
 	// "provider/model" ids.
 	Unlisted bool `json:"unlisted,omitempty"`
+	// HiddenDrawers are the provider's image models the user unticked in
+	// its editor (321sssrt on X: an OpenAI key lists a dozen): left out of
+	// every list one is picked from (Settings › Images, another magpie's
+	// list, Aside's) and of Automatic's choice, as an unticked chat model
+	// is left out of the agents' lists. A deny list beside Models, not in
+	// it: Models is what agents chat with, empty meaning the vendor's list,
+	// so an image model put there would be offered to chat with, and
+	// hiding one would mean picking every chat model. A request that names
+	// one still draws with it, and so does the one Settings › Images
+	// names: a hidden pick is shown as picked, and said to be hidden.
+	HiddenDrawers []string `json:"hiddenDrawers,omitempty"`
 	// Off switches the provider off without removing it: its keys and
 	// settings stay, but agents aren't given its models, no request,
 	// routing group or fallback goes to it, and its balance isn't asked,
@@ -761,6 +772,8 @@ func withPicks(a, pk Provider) Provider {
 	// the extra body fields written for it, which a ChatGPT account's
 	// requests take (WithExtraBody, magpie-releases#18)
 	a.ExtraBody = pk.ExtraBody
+	// and the image models unticked in its editor (HiddenDrawers)
+	a.HiddenDrawers = pk.HiddenDrawers
 	return a
 }
 
@@ -888,7 +901,7 @@ func Save(p Provider) error {
 		if p.ID == "kiro" {
 			key = p.Key
 		}
-		p = Provider{ID: p.ID, Key: key, Models: p.Models, NoModels: p.NoModels, PickedFrom: p.PickedFrom, Delisted: p.Delisted, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, CapStop: p.CapStop, CapCareful: p.CapCareful, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, PriceRate: p.PriceRate, QuotaRest: p.QuotaRest, QuotaResetAt: p.QuotaResetAt, RestCap: p.RestCap, PinUpstream: p.PinUpstream, NativeCompaction: p.NativeCompaction, PromptAsWritten: p.PromptAsWritten, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
+		p = Provider{ID: p.ID, Key: key, Models: p.Models, NoModels: p.NoModels, PickedFrom: p.PickedFrom, Delisted: p.Delisted, Unlisted: p.Unlisted, HiddenDrawers: p.HiddenDrawers, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, CapStop: p.CapStop, CapCareful: p.CapCareful, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, PriceRate: p.PriceRate, QuotaRest: p.QuotaRest, QuotaResetAt: p.QuotaResetAt, RestCap: p.RestCap, PinUpstream: p.PinUpstream, NativeCompaction: p.NativeCompaction, PromptAsWritten: p.PromptAsWritten, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
 	} else {
 		p.AccountProxies = keyProxies(p) // a provider of keys proxies each key apart
 		if subscriptionID(p.ID) && !stored(p.ID) {
@@ -1097,6 +1110,9 @@ func AddCopy(p Provider, from string) (string, error) {
 		p.Fallback = slices.Clone(src.Fallback)
 	}
 	p.Unlisted = p.Unlisted || src.Unlisted
+	if p.HiddenDrawers == nil {
+		p.HiddenDrawers = slices.Clone(src.HiddenDrawers)
+	}
 	p.Searches = p.Searches || src.Searches
 	p.Unredacted = p.Unredacted || src.Unredacted
 	p.NativeCompaction = p.NativeCompaction || src.NativeCompaction

@@ -447,6 +447,10 @@ type settingsJSON struct {
 	// magpie listed it, is its one GPT Image (gateway.ListedDrawer, #1865)
 	ImageGenShown  string     `json:"imageGenShown,omitempty"`
 	ImageGenModels []modelRef `json:"imageGenModels"`
+	// the ImageGen the user picked is one unticked in its provider's
+	// editor since (provider.HiddenDrawers): it still draws, and is
+	// listed, as picked, with the row saying it is hidden
+	ImageGenHidden bool `json:"imageGenHidden,omitempty"`
 	// the web search APIs a model's search goes to when no provider can
 	// search (#419), their keys masked; the ones that can be added; and
 	// the provider that searches first, if one does
@@ -721,7 +725,12 @@ func settingsState() settingsJSON {
 		if !p.On() || p.DecideOnly() {
 			continue
 		}
+		// those unticked in its editor left out, but the one picked here
+		// (321sssrt on X): a hidden pick still draws, and shows as picked
 		for _, m := range gateway.Drawers(p) {
+			if p.DrawerHidden(m.ID) && gateway.ListedDrawer(s.ImageGen) != p.ID+"/"+m.ID {
+				continue
+			}
 			name := m.Name
 			if name == "" {
 				name = m.ID
@@ -732,6 +741,7 @@ func settingsState() settingsJSON {
 	if v := gateway.ListedDrawer(s.ImageGen); v != s.ImageGen {
 		s.ImageGenShown = v
 	}
+	s.ImageGenHidden = gateway.DrawerHidden(s.ImageGen)
 	// the Codex subagents row's warning: magpie's multi-agent V1 doesn't reach
 	// Codex where its own multi_agent_v2 is on in the config magpie routes, and
 	// magpie writes nothing there — the setting is the user's to turn off

@@ -1009,6 +1009,32 @@ Covered by `TestAutoVisionPassesOverOneOut`,
 `TestAutoVisionTierAmongThoseWithAllowance`, `TestSpentModelAcrossAccounts`,
 `TestVisionDoesNotAskSpentDescriber` and `TestSearcherPassesOverOneOut`.
 
+## Hidden image models
+
+A provider's editor lists its image models (`gateway.Drawers`, the
+`drawIds` of `/api/providers`) apart from its chat models, each ticked.
+Unticking one saves its id in `provider.HiddenDrawers` (providers.json,
+and an account's picks entry through `withPicks`). It is a deny list
+beside `Models`, not an entry in it: an image id in `Models` would be
+offered to agents to chat with, and the allow list would make hiding one
+picking every chat model by hand. A Save that leaves `hiddenDrawers` out
+keeps the old list; `[]` ticks them all again.
+
+`gateway.OfferedDrawers` is `Drawers` less the hidden ones. It is what
+lists image models to pick from or picks among: `AutoDrawer`,
+`drawerObjects` (another magpie's `X-Magpie-Drawers` list) and Aside's
+image options. Settings › Images (`settingsState`) leaves them out too,
+except the one picked there. A hidden model still draws: `resolveDrawing`
+and `drawingModel` read `Drawers`, so a request that names one, or a
+Settings › Images pick made before it was hidden, draws as before. That
+pick stays listed as picked, and `imageGenHidden` puts a line under the
+row that it is unticked and leaves the list once another is picked.
+Refusing a model outright is Disabled models, below. Video models aren't
+listed in the editor, so there is nothing to hide there.
+
+Covered by `TestHiddenDrawerLeavesListsButStillDraws`,
+`TestImageModelsHidden` and `internal/gui/tests/image-models-hide.test.cjs`.
+
 ## Disabled models
 
 Settings › Models › Disabled models, `magpie model disable|enable|disabled`

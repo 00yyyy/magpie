@@ -247,8 +247,10 @@ type providerJSON struct {
 	Exposed   int         `json:"exposed"`           // how many reach the agents
 	Draws     int         `json:"draws,omitempty"`   // how many of its models draw images (gateway.Drawers)
 	DrawIDs   []string    `json:"drawIds,omitempty"` // those models' ids, listed apart in its editor
-	Unlisted  bool        `json:"unlisted"`          // its models serve only through routing groups
-	NoModels  bool        `json:"noModels"`          // Select none: none of its models served (#1818)
+	// those of them unticked in its editor (provider.HiddenDrawers)
+	HiddenDrawers []string `json:"hiddenDrawers,omitempty"`
+	Unlisted      bool     `json:"unlisted"` // its models serve only through routing groups
+	NoModels      bool     `json:"noModels"` // Select none: none of its models served (#1818)
 	// Groups are the routing groups ("group/<id>") each of its models is
 	// in, by model id: what an unlisted one is still used through, and the
 	// editor names those in none
@@ -827,6 +829,11 @@ func providerInfoWith(p provider.Provider, agents []agentUse, desktop map[string
 		out.DrawIDs = append(out.DrawIDs, m.ID)
 	}
 	out.Draws = len(out.DrawIDs)
+	for _, id := range out.DrawIDs {
+		if p.DrawerHidden(id) {
+			out.HiddenDrawers = append(out.HiddenDrawers, id)
+		}
+	}
 	if t, ok := p.Listed(); ok {
 		out.Fetched = &t
 	}
@@ -1408,6 +1415,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				// back to Smart (fflake33 on Discord)
 				pr.Routing, pr.Affinity, pr.Sink = in.Routing, in.Affinity, in.Sink
 				pr.Unlisted = in.Unlisted
+				pr.HiddenDrawers = in.HiddenDrawers
 				pr.AccountProxies = in.AccountProxies
 				if in.Name != "" {
 					pr.Name = in.Name
@@ -1602,6 +1610,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.AccountCaps, in.AccountWindowCaps = old.AccountCaps, old.AccountWindowCaps
 					in.AccountConcurrency = old.AccountConcurrency
 					in.AccountNames = old.AccountNames // with accountname
+				}
+				// the image models unticked in its editor likewise: []
+				// shows them all (321sssrt on X)
+				if in.HiddenDrawers == nil && old != nil {
+					in.HiddenDrawers = old.HiddenDrawers
 				}
 				// a Zhipu key's team likewise: {} clears it
 				if in.ZhipuTeam == nil && old != nil {
