@@ -553,9 +553,16 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 			fail(maskStatus(err), err.Error())
 			return
 		}
-		noteMasked(r, "image", hits, d.Prompt, 0, p.ID, call.Model)
+		// the Routing page lists it as it does a chat, each account or
+		// member asked a try of its one route (sideRoute)
+		var grp *GroupRef
+		if isGroup {
+			grp = groupRef(g, ms)
+		}
+		side := s.beginSide(r, start, call.Model, p.ID, grp)
+		side.masked(noteMasked(r, "image", hits, d.Prompt, side.id(), p.ID, call.Model))
 		call.Provider, call.To = p.ID, provider.Chat
-		ctx, cancel := drawWithin(r.Context(), drawTimeout())
+		ctx, cancel := drawWithin(withSide(r.Context(), side), drawTimeout())
 		defer cancel()
 		// the account that drew, or refused last, is the one recorded
 		var (
@@ -588,7 +595,8 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 		if p.Account == nil && p.Key != "" {
 			providerKeyID, providerKeyName = provider.KeyID(p.Key), p.KeyName
 		}
-		appendUsage(r, usage.Record{Operation: "generate_content", Time: start, Agent: call.Agent, Via: call.Via, Provider: p.ID, Host: p.Where(), Model: model, Requested: call.Model, ProviderKeyID: providerKeyID, ProviderKeyName: providerKeyName, ProviderAccount: accountOf(p),
+		side.end(p, model, call.Status, err, Usage{Input: out.Input, Output: out.Output})
+		appendUsage(r, usage.Record{RouteID: side.id(), Operation: "generate_content", Time: start, Agent: call.Agent, Via: call.Via, Provider: p.ID, Host: p.Where(), Model: model, Requested: call.Model, ProviderKeyID: providerKeyID, ProviderKeyName: providerKeyName, ProviderAccount: accountOf(p),
 			Input: out.Input, Output: out.Output, Millis: call.Millis, Status: call.Status, Session: sessionOf(r.Header)})
 		if err != nil {
 			call.Error = err.Error()
@@ -918,7 +926,9 @@ func viaFor(p provider.Provider, model string) drawVia {
 func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider.Provider, model string, d drawing) (provider.Provider, drawn, int, time.Time, error) {
 	if p.Account == nil && p.Key == "" {
 		// no key and no account (a local ollama): nothing to go over
+		tried := sideOf(ctx).try(candidateOf(p, model))
 		out, code, err := s.draw(ctx, p, model, d)
+		tried(code, err)
 		return p, out, code, time.Time{}, err
 	}
 	q := p
@@ -970,7 +980,9 @@ func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider
 	var err error
 	for i, c := range cs {
 		p = c.p
+		tried := sideOf(ctx).try(c)
 		out, code, err = s.draw(ctx, p, model, d)
+		tried(code, err)
 		if err != nil && ctx.Err() == nil {
 			restDrawer(c, code, err.Error())
 		}
