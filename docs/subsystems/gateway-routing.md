@@ -458,7 +458,11 @@ a key out of quota, fflake33 on Discord) is asked the same way, at
 In order), `probeOne` leaves out all but the resting one back soonest, and
 `serveDecideTries` / `askDecideTries` ask each in turn as for a group, a
 refused one resting. Before, every call went to its first key, whatever the
-others' state. A gateway key held to some accounts is asked only on those
+others' state. As a classifier, every try shares the one classifier's wait
+(Settings' Classifier timeout, "its provider's failover included"): once a
+try spends it, the rest are neither asked nor rested. Each try was given
+the whole wait before, so a request was held a wait per key or member
+before its route began (`TestDecisionTriesShareTheClassifierWait`). A gateway key held to some accounts is asked only on those
 (`allowedCandidates`), and refused 403 when none of them serves the model.
 `TestDecisionProviderKeysFailOver`.
 [`embeddings.go`](../../internal/gateway/embeddings.go) relays retrieval
