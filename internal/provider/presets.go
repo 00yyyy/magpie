@@ -105,6 +105,10 @@ type Region struct {
 	Embeddings []string `json:"embeddings,omitempty"`
 	Drawers    []string `json:"drawers,omitempty"`
 	Videos     []string `json:"videos,omitempty"`
+	// Images says which of Models take images, as the vendor's own list
+	// says, for a plan whose /models doesn't list its models: a model
+	// it leaves out is judged as before (models.dev, the user's say).
+	Images map[string]bool `json:"-"`
 	// Decide is the region's decision API, for a preset that routes groups
 	Decide string `json:"decide,omitempty"`
 }
@@ -128,6 +132,19 @@ func bailianWorkspace(region string) string {
 var arkPlanModels = []string{"ark-code-latest", "doubao-seed-evolving", "doubao-seed-2.1-pro", "doubao-seed-2.1-lite",
 	"doubao-seed-2.0-mini", "minimax-m3", "glm-5.3", "glm-5.3-flash", "deepseek-v4.1-flash", "deepseek-v4.1-flash-economy", "deepseek-v4-flash", "deepseek-v4-pro",
 	"kimi-k2.8-preview", "kimi-k3", "kimi-k3.1-pro"}
+
+// arkPlanImages are which of arkPlanModels take images, as Ark's own
+// /api/coding/v3/models says of the dated model each one is (its
+// input_modalities, 10-29): models.dev's resellers disagree on
+// doubao-seed-2.1-pro and say nothing of 2.1-lite, so magpie took them for
+// text-only and had every image of theirs described by another model
+// first, a minute or more before the first token (tongzhenbao on X). The
+// ones Ark's list doesn't name (ark-code-latest, glm-5.3, kimi-k3,
+// kimi-k2.8-preview, minimax-m3) are left to models.dev.
+var arkPlanImages = map[string]bool{
+	"doubao-seed-evolving": true, "doubao-seed-2.1-pro": true, "doubao-seed-2.1-lite": true, "doubao-seed-2.0-mini": true, "kimi-k3.1-pro": true,
+	"glm-5.3-flash": false, "deepseek-v4.1-flash": false, "deepseek-v4.1-flash-economy": false, "deepseek-v4-flash": false, "deepseek-v4-pro": false,
+}
 
 // alibabaPlanModels are the text models of Alibaba's Token Plan, the same
 // on the Qwen AI platform's and on Bailian's, as their overviews list them.
@@ -344,10 +361,10 @@ var presets = []PresetDef{
 		Website: "https://www.volcengine.com/docs/82379/1925114", KeysURL: "https://ark.volcengine.com/region:cn-beijing/apikey",
 		RegionLabel: "Plan", KeyPlans: true, Regions: []Region{
 			{ID: "coding", Name: "Coding Plan", Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", Responses: "https://ark.cn-beijing.volces.com/api/coding/v3", Anthropic: "https://ark.cn-beijing.volces.com/api/coding",
-				Models:     arkPlanModels,
+				Models: arkPlanModels, Images: arkPlanImages,
 				Embeddings: []string{"doubao-embedding-vision"}},
 			{ID: "agent", Name: "Agent Plan", Chat: "https://ark.cn-beijing.volces.com/api/plan/v3", Responses: "https://ark.cn-beijing.volces.com/api/plan/v3", Anthropic: "https://ark.cn-beijing.volces.com/api/plan",
-				Models:     arkPlanModels,
+				Models: arkPlanModels, Images: arkPlanImages,
 				Embeddings: []string{"doubao-embedding-vision"},
 				Drawers:    []string{"doubao-seedream-5-0-pro", "doubao-seedream-5.0-flash"},
 				Videos:     []string{"doubao-seedance-2.0", "doubao-seedance-2.0-fast", "doubao-seedance-2.0-mini", "doubao-seedance-2.5"}},

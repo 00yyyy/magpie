@@ -200,3 +200,26 @@ func TestVolcenginePlanModelsAsDocumented(t *testing.T) {
 		t.Fatalf("a user's picks %v exposed as %v", p.Models, got)
 	}
 }
+
+// What Ark's list says of a plan model's images names a model of the
+// plan, and reaches the plan's models (tongzhenbao on X).
+func TestArkPlanImagesAreThePlans(t *testing.T) {
+	for id := range arkPlanImages {
+		if !slices.Contains(arkPlanModels, id) {
+			t.Errorf("arkPlanImages names %q, which isn't a plan model", id)
+		}
+	}
+	p, err := FromPreset("volcengine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range p.planModels(nil) {
+		want, ok := arkPlanImages[m.ID]
+		switch {
+		case !ok && m.ImageInput != nil:
+			t.Errorf("%s: Ark's list doesn't name it, but it is marked %v", m.ID, *m.ImageInput)
+		case ok && (m.ImageInput == nil || *m.ImageInput != want || m.Images != want):
+			t.Errorf("%s: images %v (%v), want %v", m.ID, m.Images, m.ImageInput, want)
+		}
+	}
+}
