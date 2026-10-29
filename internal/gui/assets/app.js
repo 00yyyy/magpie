@@ -662,7 +662,7 @@ function renderAgents() {
     if (kind) {
       // Claude Code's tiers, subagents and auto mode have rows of their own
       // when opened
-      if (a.id === "claude") {
+      if (kindOf(a) === "claude") {
         for (const f of a.fields.filter((f) => TIERS.includes(f.label) || f.label === "subagents" || f.label === SUB_EFFORT || f.label === AUTO_MODE)) extras.querySelector(`[data-key="${CSS.escape(f.key)}"]`)?.remove();
         extras.querySelector('[data-key="tiers"]')?.remove();
       }
@@ -1114,13 +1114,17 @@ function connectable(a) {
   return !a.import && (!!connectField(a) || !!a.models?.listed);
 }
 
+// kindOf is the agent an id names, its WSL twin (claude@wsl:Ubuntu) too:
+// a twin has the same rows and words as the agent itself (cybercaius)
+const kindOf = (a) => a.id.split("@wsl:")[0];
+
 // PICKS_IN is where an agent picks a model itself, for the words under it.
 const PICKS_IN = { codex: "/model", claude: "/model", opencode: "/models", pi: "/model", droid: "/model", kimi: "/model", grok: "/model", "minimax-code": "/model", dsh: "/model", crush: "ctrl+p", omp: "/model", qwen: "/model", mimocode: "/model", deveco: "/models" };
 
 function connectSaid(a) {
   if (!a.wired) return t("Not connected · {agent} uses its own settings", { agent: a.name });
   if (menuFromList(a)) return t("Connected · {n} models in {agent}'s model menu", { n: a.models.shown, agent: a.name });
-  const at = PICKS_IN[a.id];
+  const at = PICKS_IN[kindOf(a)];
   return at ? t("Connected · pick magpie's models with {cmd} in {agent}", { cmd: at, agent: a.name }) : t("Connected · magpie's models are in {agent}'s model list", { agent: a.name });
 }
 
@@ -1138,7 +1142,7 @@ const CONNECTED_HOW = {
 function connectedSaid(a, c) {
   const plain = t("{agent} is connected to magpie", { agent: a.name });
   if (a.native && c?.how === "joined") return t("{agent} is connected to magpie", { agent: a.name });
-  if (c?.how === "joined") return t("{agent} is connected to magpie · it stays on its own last pick; magpie's models join its {cmd}", { agent: a.name, cmd: PICKS_IN[a.id] || "/model" });
+  if (c?.how === "joined") return t("{agent} is connected to magpie · it stays on its own last pick; magpie's models join its {cmd}", { agent: a.name, cmd: PICKS_IN[kindOf(a)] || "/model" });
   const now = state.agents.find((x) => x.id === a.id);
   const f = now && startField(now);
   const model = f?.value ? optionFor(f, f.value)?.label || f.value : "";
@@ -1267,7 +1271,7 @@ function connectKind(a) {
   if (a.cliMissing) return "no";
   if (a.import) return "link";
   if (connectable(a)) return "ok";
-  if (NATIVE_ONLY[a.id]) return "no";
+  if (NATIVE_ONLY[kindOf(a)]) return "no";
   if (a.fields.length && !anyMagpieModels()) return "empty";
   return "";
 }
@@ -1330,7 +1334,7 @@ function connectLine(a, kind) {
   line.append(dot, words);
   const say = (s, cls) => { words.textContent = s; if (cls) line.classList.add(cls); };
   // the reason wraps, never cut short: it is the row's only words
-  if (kind === "no") { say(t(NATIVE_ONLY[a.id]), NATIVE_ONLY[a.id] ? "why" : ""); return line; }
+  if (kind === "no") { say(t(NATIVE_ONLY[kindOf(a)]), NATIVE_ONLY[kindOf(a)] ? "why" : ""); return line; }
   if (kind === "link") {
     if (a.added == null) say(t("Opens {name} to add magpie as a provider — confirm it there", { name: a.name }));
     else if (a.added) say(t("Added · magpie is a provider in {agent}", { agent: a.name }), "on");
@@ -1345,7 +1349,7 @@ function connectLine(a, kind) {
   }
   if (!a.wired) {
     const src = a.source || "";
-    if (a.id === "agy") say(t("Not connected · once connected, start it with magpie's command"));
+    if (kindOf(a) === "agy") say(t("Not connected · once connected, start it with magpie's command"));
     // not connected, yet through magpie for account failover (#1385): it
     // read as Codex on its own while magpie served every request, so the
     // line says why, and the accounts that turn it off are a click away
@@ -1393,7 +1397,7 @@ function connectLine(a, kind) {
     return line;
   }
   if (staleNow(a)) {
-    if (a.id === "claude") say(t("Connected · new sessions take it"));
+    if (kindOf(a) === "claude") say(t("Connected · new sessions take it"));
     else {
       const { text, title } = staleSaid(a);
       say(text, "wait");
@@ -1407,10 +1411,10 @@ function connectLine(a, kind) {
     words.append(pre, el("b", "", t("{n} new", { n: fresh })), post || "");
     return line;
   }
-  const at = PICKS_IN[a.id];
+  const at = PICKS_IN[kindOf(a)];
   if (menuFromList(a)) say(connectSaid(a));
-  else if (a.id === "claude") say(t("Connected · switch the opus · sonnet · haiku tiers in /model"));
-  else if (NO_PICKER.has(a.id)) say(t("Connected · starts on the model picked here")); else if (at && a.models) say(t("Connected · {n} models in {agent}'s {cmd}", { n: a.models.shown, agent: a.name, cmd: at }));
+  else if (kindOf(a) === "claude") say(t("Connected · switch the opus · sonnet · haiku tiers in /model"));
+  else if (NO_PICKER.has(kindOf(a))) say(t("Connected · starts on the model picked here")); else if (at && a.models) say(t("Connected · {n} models in {agent}'s {cmd}", { n: a.models.shown, agent: a.name, cmd: at }));
   else say(connectSaid(a));
   return line;
 }
@@ -1483,12 +1487,12 @@ function startButton(a, f, fieldBtn) {
     b.onclick = (ev) => openPicker(a, f, b, ev, (o) => !!o.ref);
   } else if (!a.wired) {
     b.title += "\n" + t("Pick one of magpie's models: {agent} is connected and starts on it", { agent: a.name });
-  } else if (!f.value && a.id !== "claude") {
+  } else if (!f.value && kindOf(a) !== "claude") {
     b.querySelector(".v").textContent = t("Its last pick");
     b.title = t("Unset, {agent} starts on its own last pick", { agent: a.name });
   }
   // Codex's is the very value its /model picks: one choice
-  if (a.wired && a.id === "codex") b.title += "\n" + t("The same choice as {agent}'s {cmd}: change it here or there", { agent: a.name, cmd: PICKS_IN.codex });
+  if (a.wired && kindOf(a) === "codex") b.title += "\n" + t("The same choice as {agent}'s {cmd}: change it here or there", { agent: a.name, cmd: PICKS_IN.codex });
   return b;
 }
 
@@ -1979,15 +1983,15 @@ function connectPanel(a, { fields, fieldBtn }) {
   };
   const code = (s) => el("code", "ag-code", s);
   // where it picks, and when the copies running take it
-  const at = PICKS_IN[a.id];
-  if (at || STARTS_WITH.has(a.id)) {
+  const at = PICKS_IN[kindOf(a)];
+  if (at || STARTS_WITH.has(kindOf(a))) {
     const parts = [];
     // the command in the words as code, wherever the language puts it
     const said = (s, cmd) => { const [pre, post] = t(s, { agent: a.name }).split("{cmd}"); return line(pre, code(cmd), post || ""); };
-    if (a.id === "claude") parts.push(said("New sessions take it; switch the tiers in {cmd}.", "/model"));
+    if (kindOf(a) === "claude") parts.push(said("New sessions take it; switch the tiers in {cmd}.", "/model"));
     // its own models still there beside magpie's (Codex on ChatGPT)
     else if (a.joined) parts.push(said("Reopen {agent}: its own models stay in {cmd}, and magpie's join them.", at));
-    else if (STARTS_WITH.has(a.id)) parts.push(said("Reopen {agent}, then pick any model in {cmd}.", at));
+    else if (STARTS_WITH.has(kindOf(a))) parts.push(said("Reopen {agent}, then pick any model in {cmd}.", at));
     else parts.push(said("Pick any model in {agent}'s {cmd}.", at));
     if (staleNow(a)) {
       const w = line();
@@ -2031,7 +2035,7 @@ function connectPanel(a, { fields, fieldBtn }) {
   const bots = a.fields.filter(hermesBot);
   if (bots.length) kv(t("Other profiles"), ...bots.map((f) => line(el("span", "ag-tier", f.label), fieldBtn(f, "ag-pick"), el("span", "ag-hint", "hermes -p " + f.label))));
   // Claude Code's tiers, each with the /model that picks it
-  if (a.id === "claude") {
+  if (kindOf(a) === "claude") {
     const tiers = a.fields.filter((f) => TIERS.includes(f.label) && f.options.length);
     const hint = { opus: "/model opus", sonnet: "/model sonnet", haiku: "/model haiku", fable: "/model fable" };
     const also = { sonnet: " · " + t("the default tier"), haiku: " · " + t("also for small background tasks") };
@@ -2122,7 +2126,7 @@ function connectPanel(a, { fields, fieldBtn }) {
   if (a.native) for (const [key, detail] of Object.entries(a.native.fields || {})) {
     if (detail.detail) { const f = a.fields.find((x) => x.key === key); kv(t(f?.label || key), line(t(detail.detail))); }
   }
-  if (CONNECT_COST[a.id]) kv(t("Once connected"), line(t(CONNECT_COST[a.id])));
+  if (CONNECT_COST[kindOf(a)]) kv(t("Once connected"), line(t(CONNECT_COST[kindOf(a)])));
   // its own settings, the rows Settings had (agentPrefRows), here where
   // the agent is; shown once they are read, so none opens on a default
   const own = agentPrefsOf(a);
@@ -2252,7 +2256,7 @@ function askDisconnect(a) {
     go.disabled = previewBlocked;
   }, (err) => { if (!a.native) { show(null); return; } previewBlocked = true; go.disabled = true; body.replaceChildren(el("p", "lib-confirm", t(err.message))); });
   ed.append(body);
-  if (a.id === "codex") ed.append(el("p", "ag-note", t("magpie's provider table stays, so sessions opened on magpie's models still open")));
+  if (kindOf(a) === "codex") ed.append(el("p", "ag-note", t("magpie's provider table stays, so sessions opened on magpie's models still open")));
   const bar = el("div", "bar");
   const go = el("button", "text primary danger-fill", t("Disconnect and restore"));
   go.disabled = previewBlocked;
@@ -2285,7 +2289,7 @@ function askDisconnect(a) {
   };
   const cancel = el("button", "text", t("Cancel"));
   cancel.onclick = cancelAsk;
-  bar.append(STARTS_WITH.has(a.id) ? el("span", "ag-bar-note", t("Running {agent} copies take it once reopened", { agent: a.name })) : el("span"), el("span", "grow"), cancel, go);
+  bar.append(STARTS_WITH.has(kindOf(a)) ? el("span", "ag-bar-note", t("Running {agent} copies take it once reopened", { agent: a.name })) : el("span"), el("span", "grow"), cancel, go);
   ed.append(bar);
   confirmAsk = ed;
   openModal(ed);
@@ -3865,7 +3869,7 @@ const LEAD_PICKS = "The model a subagent starts on when Codex's lead names none;
 // own model:, then that variable, then the session's (2.1.306), so it is
 // its pick, not "same as model" (KorenKrita on Discord)
 const CLAUDE_PICKS = "Claude Code's lead, or a subagent's own definition, may name a model or tier for it; a model set here is for the subagents that name none";
-const claudePicks = (a, f) => leadPicks(a, f) && a.id === "claude";
+const claudePicks = (a, f) => leadPicks(a, f) && kindOf(a) === "claude";
 // Codex's two subagent squares read alike (the owner, HoGee_xxl on X): the
 // card shows the subagent model alone, saying what each does. A pick there takes away [agents] default_subagent_model too (the
 // backend), and one left in the config is said on it until then. With no
@@ -3940,7 +3944,7 @@ function menuTitle(f) {
 // tab, at the effort its request asks for
 function subEffortTitle(a, f, opt) {
   return t("{label}: {value}", { label: t(f.label), value: effortName(opt || { value: f.value }) }) +
-    (f.value ? "" : "\n" + t(a.id === "claude" || a.id.split("@wsl:")[0] === "claude-desktop" ? "the effort Claude Code asks for" : "the session's effort, or the subagent model's own default"));
+    (f.value ? "" : "\n" + t(kindOf(a) === "claude" || kindOf(a) === "claude-desktop" ? "the effort Claude Code asks for" : "the session's effort, or the subagent model's own default"));
 }
 
 // agentPrefsButton: the panel's line that opens the agent's own settings
@@ -5655,7 +5659,7 @@ function asideAccount(a, f) {
 function leavesMagpie(a, field, value, opt) {
   if (a?.native || !a?.wired || !connectable(a)) return false;
   // Reasonix restores each role separately; either role can keep its provider.
-  if (a.id === "reasonix" && value === "") {
+  if (kindOf(a) === "reasonix" && value === "") {
     return !!optionFor(field, field.value)?.ref && !a.fields.some((f) => f !== field && optionFor(f, f.value)?.ref);
   }
   if (field !== (startField(a) || connectField(a))) return false;
@@ -5672,7 +5676,7 @@ function askLeave(a, field, value, opt) {
   const head = el("div", "ehead");
   head.append(icon(a.icon), el("b", "", t("Take {agent} off magpie?", { agent: a.name })));
   ed.append(head);
-  ed.append(el("p", "lib-confirm", value === "" && a.id === "reasonix"
+  ed.append(el("p", "lib-confirm", value === "" && kindOf(a) === "reasonix"
     ? t("Restores {agent}'s previous {field} selection. Magpie's provider and private credential are removed when neither executor nor planner uses them.", { agent: a.name, field: t(field.label) })
     : value === ""
     ? t("Default is {agent} as installed: magpie's endpoint and models come out, and {agent} starts on its own default model. What it had before magpie isn't put back; Disconnect and restore does that.", { agent: a.name })
@@ -5686,7 +5690,7 @@ function askLeave(a, field, value, opt) {
   go.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); setPick(a, field, value, opt); };
   const cancel = el("button", "text", t("Cancel"));
   cancel.onclick = cancelAsk;
-  bar.append(STARTS_WITH.has(a.id) ? el("span", "ag-bar-note", t("Running {agent} copies take it once reopened", { agent: a.name })) : el("span"), el("span", "grow"), cancel);
+  bar.append(STARTS_WITH.has(kindOf(a)) ? el("span", "ag-bar-note", t("Running {agent} copies take it once reopened", { agent: a.name })) : el("span"), el("span", "grow"), cancel);
   if (value === "") {
     const restore = el("button", "text", t("Disconnect and restore"));
     restore.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); askDisconnect(a); };
