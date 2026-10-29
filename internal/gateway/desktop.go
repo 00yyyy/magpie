@@ -9,10 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/desktopdir"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -489,9 +493,16 @@ func desktopTurn(asked string, body []byte, byClaudeCode, bySubagent bool) strin
 	}
 	if desktopProbe(body) {
 		// Desktop's check that the gateway answers, as it starts and from
-		// Test connection: on its default model, never the model of
-		// whichever session last ran (desktopPicked), which may be days
-		// old and on another provider
+		// Test connection: on the model the user chose in Desktop's own
+		// menu (desktopChosen), else its default model; never the model
+		// of whichever session last ran (desktopPicked) on its own,
+		// which may be days old and on another provider
+		if m := desktopChosen(); m != "" {
+			if m == asked {
+				return asked
+			}
+			return m
+		}
 		if m := desktopDefault(asked); m != "" {
 			return m
 		}
@@ -673,6 +684,93 @@ func desktopDefault(asked string) string {
 	return shown[0].ID
 }
 
+// desktopSelectorRoots are the Claude-3p folders Desktop keeps its model
+// menus' choices in (desktopChosen): every set desktopdir finds. A test
+// sets its own.
+var desktopSelectorRoots = func() []string {
+	home, _ := os.UserHomeDir()
+	var out []string
+	for _, d := range desktopdir.Sets(desktopdir.OS, home, appdir.Getenv) {
+		if d.ThreeP != "" {
+			out = append(out, d.ThreeP)
+		}
+	}
+	return out
+}
+
+// desktopSurfaces are Desktop's model menus (bC in its app.asar 2.7032),
+// in the order desktopChosen takes them: its Code tab first, the one
+// magpie's users run, then Cowork, which can be turned off, then Chat.
+var desktopSurfaces = []string{"code", "cowork", "chat"}
+
+// desktopChosen is the model the user chose in one of Claude Desktop's
+// model menus that magpie still serves, by magpie's id for it, "" for
+// none. Desktop keeps each menu's choice in its userData (Claude-3p in
+// its 3p mode), in
+// local-agent-mode-sessions/<account>/<org>/cowork_account_settings.json:
+//
+//	{"__model_selector_state":{"code":{"model":<id>},"cowork":{…},"chat":{…}}}
+//
+// (wLt and zLt in its app.asar 2.7032, written as a menu's choice
+// changes; the newest such file is read). Desktop's check names a model
+// by its name (desktopProbe), so a chat on DeepSeek in the Code tab had
+// its check go to the first model listed, another provider's
+// (cybercaius on Discord, v0.1.2033). Of the menus' choices, the one the
+// last session ran on (desktopPicked) comes first, then desktopSurfaces'
+// order. Read only for the check, as Desktop starts and from Test
+// connection; a file not read or not parsed is no choice (desktopDefault).
+func desktopChosen() string {
+	var path string
+	var newest time.Time
+	for _, root := range desktopSelectorRoots() {
+		found, _ := filepath.Glob(filepath.Join(root, "local-agent-mode-sessions", "*", "*", "cowork_account_settings.json"))
+		for _, f := range found {
+			if fi, err := os.Stat(f); err == nil && fi.Mode().IsRegular() && (path == "" || fi.ModTime().After(newest)) {
+				path, newest = f, fi.ModTime()
+			}
+		}
+	}
+	if path == "" {
+		return ""
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var v struct {
+		State map[string]struct {
+			Model string `json:"model"`
+		} `json:"__model_selector_state"`
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return ""
+	}
+	var chosen []string
+	for _, s := range desktopSurfaces {
+		// Desktop's id for it (claudeLooking), as magpie serves it
+		m := unprefixed(strings.TrimSpace(v.State[s].Model))
+		if m != "" && !unserved(m) && !slices.Contains(chosen, m) {
+			chosen = append(chosen, m)
+		}
+	}
+	if len(chosen) == 0 {
+		return ""
+	}
+	desktopPicked.Lock()
+	if p := desktopPickedPath(); desktopPicked.from != p {
+		b, _ := os.ReadFile(p)
+		desktopPicked.model, desktopPicked.from = strings.TrimSpace(string(b)), p
+	}
+	picked := desktopPicked.model
+	desktopPicked.Unlock()
+	for _, m := range chosen {
+		if picked != "" && strings.TrimSuffix(m, "[1m]") == strings.TrimSuffix(unprefixed(picked), "[1m]") {
+			return m
+		}
+	}
+	return chosen[0]
+}
+
 // desktopProbe: the request is Claude Desktop's check that a gateway
 // answers, which it runs as it starts and from its gateway settings' Test
 // connection (lWt in its app.asar, 2.7032):
@@ -681,7 +779,8 @@ func desktopDefault(asked string) string {
 //
 // on the shortest id of /v1/models with haiku in it, else sonnet, else
 // opus (YT): a model Desktop picks by its name, not one the user chose.
-// It is asked of Desktop's default model instead (desktopDefault, the
+// It is asked of the model chosen in Desktop's menus (desktopChosen),
+// else of Desktop's default model (desktopDefault, the
 // first listed: "the default model (the first listed model)", as its
 // settings say). Sent as a title is, to the model the last session ran
 // on, it went to a relay's GPT model the user had left days before and
