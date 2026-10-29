@@ -205,6 +205,12 @@ func knownSpans(s string, o Options) []span {
 			if best != nil && len(k.v) <= len(best.v) || !strings.HasPrefix(s[i:], k.v) || !standsAlone(k.kind, s, i, i+len(k.v)) {
 				continue
 			}
+			if packageAt(s, i, i+len(k.v)) {
+				// the module an import loads, a manifest's dependency:
+				// what masked it before had taken a package's name for a
+				// secret (dniray, v0.1.1965)
+				continue
+			}
 			best = &known[s[i:i+minKnown]][j]
 		}
 		if best != nil {
