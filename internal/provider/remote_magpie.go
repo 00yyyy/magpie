@@ -109,6 +109,7 @@ func (p *Provider) remoteMagpieEndpoints() {
 
 // listHeaders are the headers p's model list is asked with: a remote
 // magpie is asked for its image, video and decision models too, and its prices.
+// Its key goes as x-api-key whatever the user's headers say (remoteKey).
 // A list is no turn of a conversation: ${sessionId} and ${threadId} in a
 // value are an id of the list's own (conversation.go).
 func (p Provider) listHeaders() map[string]string {
@@ -119,6 +120,11 @@ func (p Provider) listHeaders() map[string]string {
 	h = maps.Clone(h)
 	if h == nil {
 		h = map[string]string{}
+	}
+	for k := range h {
+		if strings.EqualFold(k, "x-api-key") {
+			delete(h, k)
+		}
 	}
 	h[DrawersHeader] = "1"
 	h[VideomakersHeader] = "1"
