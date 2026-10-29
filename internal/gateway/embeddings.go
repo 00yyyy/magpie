@@ -199,7 +199,8 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 			return
 		}
 		what := "embeddings"
-		if _, audio := req.(*audioForm); audio {
+		switch req.(type) {
+		case *audioForm, *speechRequest:
 			what = "audio"
 		}
 		// the record names the try that had it last, not the first
@@ -240,8 +241,20 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		// the headers of the vendor's reply passed on (#4145)
 		var heard heardHeaders
 		ctx = withReplySink(ctx, c.p.ID, heard.put)
-		b, got, code, err := s.retrieveAs(ctx, c.p, base+path, ctype, out)
-		cancel()
+		var b []byte
+		var got string
+		var code int
+		var res *http.Response // a streamed answer, not read yet
+		if st, ok := req.(streamedRetrieval); ok && st.streams() {
+			res, b, got, code, err = s.retrieveOpen(ctx, c.p, base+path, ctype, "", out)
+		} else {
+			b, got, code, err = s.retrieveAs(ctx, c.p, base+path, ctype, out)
+		}
+		if res == nil {
+			cancel()
+		} else {
+			defer cancel() // once the answer is copied
+		}
 		tried(code, err)
 		call.Millis = time.Since(start).Milliseconds()
 		if err != nil && !last && r.Context().Err() == nil {
@@ -250,6 +263,19 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		}
 		call.Status = code
 		in, outTokens := retrievedTokens(b), answeredTokens(b)
+		if res != nil {
+			// passed on as it comes: audio, or SSE, is never held whole
+			heard.into(w.Header())
+			w.Header().Set("Content-Type", req.answerType(got))
+			w.WriteHeader(code)
+			var cut error
+			in, outTokens, cut = copyAnswer(w, res.Body)
+			res.Body.Close()
+			call.Millis = time.Since(start).Milliseconds()
+			if cut != nil {
+				call.Error = "the answer was cut off: " + cut.Error()
+			}
+		}
 		call.Usage.Input, call.Usage.Output = in, outTokens
 		call.Fallback = strings.Join(skipped, "; ")
 		providerKeyID, providerKeyName := "", ""
@@ -271,6 +297,9 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 			return
 		}
 		s.record(call)
+		if res != nil {
+			return
+		}
 		heard.into(w.Header())
 		w.Header().Set("Content-Type", req.answerType(got))
 		w.WriteHeader(code)
@@ -312,14 +341,34 @@ func (s *Server) retrieveFrom(ctx context.Context, p provider.Provider, url stri
 // retrieveAs is retrieveFrom with a body of its own Content-Type, a
 // multipart form's with its boundary; it also gives the answer's.
 func (s *Server) retrieveAs(ctx context.Context, p provider.Provider, url, ctype string, body []byte) ([]byte, string, int, error) {
+	accept := ""
+	if ctype == "application/json" {
+		accept = "application/json"
+	}
+	res, b, got, code, err := s.retrieveOpen(ctx, p, url, ctype, accept, body)
+	if res == nil {
+		return b, got, code, err
+	}
+	defer res.Body.Close()
+	b, err = io.ReadAll(io.LimitReader(res.Body, 256<<20))
+	if err != nil {
+		return nil, "", 502, err
+	}
+	return b, got, code, nil
+}
+
+// retrieveOpen posts body as retrieveAs does, with an Accept of its own
+// (none when empty). A success's answer is left unread in res, for the
+// caller to read and close; a failure's is read into b, res nil.
+func (s *Server) retrieveOpen(ctx context.Context, p provider.Provider, url, ctype, accept string, body []byte) (*http.Response, []byte, string, int, error) {
 	ctx = s.metered(p.Via(ctx), p, "") // counted against its MaxRPM (rpm.go)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, "", 500, err
+		return nil, nil, "", 500, err
 	}
 	req.Header.Set("Content-Type", ctype)
-	if ctype == "application/json" {
-		req.Header.Set("Accept", "application/json")
+	if accept != "" {
+		req.Header.Set("Accept", accept)
 	}
 	// magpie's, or the agent's own where the provider passes it on (#1851)
 	stampUA(ctx, p, req.Header)
@@ -328,30 +377,30 @@ func (s *Server) retrieveAs(ctx context.Context, p provider.Provider, url, ctype
 		passOnCaller(ctx, req)
 	}
 	if err := p.Sign(ctx, req, provider.Chat, body); err != nil {
-		return nil, "", 502, err
+		return nil, nil, "", 502, err
 	}
 	res, err := p.Do(s.client, req)
 	heardReply(ctx, p, res)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, "", 504, fmt.Errorf("%s didn't answer in %s", p.Name, retrieveTimeout)
+			return nil, nil, "", 504, fmt.Errorf("%s didn't answer in %s", p.Name, retrieveTimeout)
 		}
-		return nil, "", 502, err
+		return nil, nil, "", 502, err
+	}
+	got := res.Header.Get("Content-Type")
+	if res.StatusCode < 300 {
+		return res, nil, got, res.StatusCode, nil
 	}
 	defer res.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(res.Body, 256<<20))
 	if err != nil {
-		return nil, "", 502, err
+		return nil, nil, "", 502, err
 	}
-	got := res.Header.Get("Content-Type")
-	if res.StatusCode >= 300 {
-		hint := ""
-		if res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusMethodNotAllowed {
-			hint = " — " + p.Name + " may not serve this API"
-		}
-		return b, got, res.StatusCode, fmt.Errorf("%s: %d %s%s%s", provider.HostOf(url), res.StatusCode, http.StatusText(res.StatusCode), errorSaid(b), hint)
+	hint := ""
+	if res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusMethodNotAllowed {
+		hint = " — " + p.Name + " may not serve this API"
 	}
-	return b, got, res.StatusCode, nil
+	return nil, b, got, res.StatusCode, fmt.Errorf("%s: %d %s%s%s", provider.HostOf(url), res.StatusCode, http.StatusText(res.StatusCode), errorSaid(b), hint)
 }
 
 // retrievedTokens is what an answer says it counted: OpenAI's

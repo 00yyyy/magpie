@@ -1961,6 +1961,7 @@ It exposes:
 | `/v1/messages/count_tokens` | Anthropic token counting |
 | `/v1beta/models/{model}:generateContent` | Google Gemini (also `:streamGenerateContent`, `:countTokens`) |
 | `/v1/audio/transcriptions`, `/v1/audio/translations` | OpenAI speech to text (multipart, passed through) |
+| `/v1/audio/speech`       | OpenAI text to speech (JSON in, the vendor's audio or SSE streamed back) |
 | `/v1/models`, `/v1beta/models` | the catalog            |
 | `/v1/codex/models`       | the catalog as Codex's `model_catalog_url` reads it ([Codex on another computer](#providers-and-the-gateway)) |
 | `/api/version`, `/api/tags`, `/api/show` | the catalog as an Ollama server lists it, for a client that takes a custom endpoint only as Ollama (below) |
@@ -2024,7 +2025,19 @@ models are named `provider/model`.
   provider's own id, and a `prompt` masked as your redaction settings say.
   The answer comes back in the vendor's own format (`json`, `text`, `srt`,
   `vtt`). A provider with no OpenAI-style API is refused; one that has no
-  such endpoint answers its own 404. Text to speech is not served.
+  such endpoint answers its own 404.
+- Text to speech (`/v1/audio/speech`) takes OpenAI's JSON body
+  (`model`, `input`, `voice`, `response_format`, `speed`, `instructions`,
+  `stream_format`), its `model` a magpie id such as
+  `openai/gpt-4o-mini-tts` or `groq/playai-tts`. The body goes to that
+  provider's OpenAI-style base with only the model set to the provider's
+  own id; any other field (Mistral's `voice_id`) goes as sent. The answer
+  is passed on as it comes, in the vendor's own type: audio (`mp3`,
+  `opus`, `aac`, `flac`, `wav`, `pcm`), SSE for `stream_format: "sse"`,
+  or the vendor's own JSON (Mistral answers `{"audio_data": base64}`).
+  `input` and `instructions` are masked as your redaction settings say;
+  the answer is audio, so a masked value is read aloud as its
+  placeholder.
 - Every reply names who answered in `X-Magpie-Provider` (the provider)
   and `X-Magpie-Model` (`provider/model`), and so does the usage log.
 
