@@ -123,6 +123,18 @@ func (p Provider) PluginProvider() string {
 	return p.Account.plugin.ID
 }
 
+// OpenAIBase is where p takes the OpenAI-shaped requests that are no chat
+// (embeddings, rerank, speech, transcriptions): its Chat base, and a
+// plugin's fetch under plugin://<id>/v1 whatever API its chat models are
+// spoken on, for the plugin to answer or put in its vendor's shape
+// (XYenon's Google AI Studio plugin: Gemini's embedContent, its TTS).
+func (p Provider) OpenAIBase() string {
+	if p.IsPlugin() {
+		return pluginBase + p.Account.plugin.ID + "/v1"
+	}
+	return p.Base(Chat)
+}
+
 // PluginOpenAICompatible is whether p is a plugin's provider that speaks
 // model on an OpenAI-compatible API (@ai-sdk/openai-compatible), whose
 // other routes, the images API among them, its fetch sends under the same

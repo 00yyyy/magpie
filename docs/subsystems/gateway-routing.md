@@ -471,7 +471,8 @@ before its route began (`TestDecisionTriesShareTheClassifierWait`). A gateway ke
 (`allowedCandidates`), and refused 403 when none of them serves the model.
 `TestDecisionProviderKeysFailOver`.
 [`embeddings.go`](../../internal/gateway/embeddings.go) relays retrieval
-bodies and options (`serveRetrieval`), and
+bodies and options (`serveRetrieval`, under `Provider.OpenAIBase`: a
+plugin's fetch whatever API its chat models are on), and
 [`transcribe.go`](../../internal/gateway/transcribe.go) speech-to-text's
 multipart forms through it as sent, rewriting only the model and a masked
 prompt under the form's own boundary (#2053), and

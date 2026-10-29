@@ -212,7 +212,7 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 	for i, c := range tries {
 		last := i == len(tries)-1
 		call.Provider, went = c.p.ID, c.model
-		base := strings.TrimRight(c.p.Base(provider.Chat), "/")
+		base := strings.TrimRight(c.p.OpenAIBase(), "/")
 		tried := side.try(c)
 		if base == "" {
 			msg := fmt.Sprintf("%s has no OpenAI-style API for %s", c.p.Name, path)
