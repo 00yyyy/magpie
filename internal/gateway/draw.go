@@ -90,7 +90,7 @@ func drawer() (string, bool) {
 		return "", false
 	case "":
 	default:
-		if pickedMissing(v) == "" {
+		if drawerMissing(v) == "" {
 			return v, true
 		}
 	}
@@ -109,7 +109,44 @@ func Drawer() string {
 // when magpie can't find it any more, so that AutoDrawer's draws in its
 // place, as VisionMissing is Image recognition's. "" when none is named,
 // it is off, or it resolves.
-func DrawerMissing() string { return pickedMissing(settings.Load().ImageGen) }
+func DrawerMissing() string { return drawerMissing(settings.Load().ImageGen) }
+
+// drawerMissing is v, an Image generation pick, when magpie can't draw
+// with it: pickedMissing's, and a routing group ("group/<id>", 7up6666 on
+// X) none of whose members draws any more.
+func drawerMissing(v string) string {
+	if m := pickedMissing(v); m != "" || !provider.IsGroupRef(v) {
+		return m
+	}
+	if !GroupDraws(v) {
+		return v
+	}
+	return ""
+}
+
+// GroupDraws is whether the routing group ref ("group/<id>") has a member
+// that draws: a model among its provider's Drawers. Such a group may be
+// picked in Settings › Images, and draws on those members in its routing's
+// order, moving on while one fails (drawingGroup, #2005).
+func GroupDraws(ref string) bool {
+	_, ms, ok := provider.FindGroup(ref)
+	if !ok {
+		return false
+	}
+	for _, m := range ms {
+		if drawsModel(m.Provider, m.Model) {
+			return true
+		}
+	}
+	return false
+}
+
+// drawsModel is whether model is one of p's Drawers, a ChatGPT account's
+// other GPT Image names as its one (ListedDrawer).
+func drawsModel(p provider.Provider, model string) bool {
+	_, id, _ := strings.Cut(ListedDrawer(p.ID+"/"+model), "/")
+	return slices.ContainsFunc(Drawers(p), func(m catalog.Model) bool { return m.ID == id })
+}
 
 func resolveDrawing(id string) (provider.Provider, string, bool) {
 	if strings.Contains(id, "/") {
