@@ -312,6 +312,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const can = web ? 22 : 23, on = web ? 18 : 19;
         assert.equal(await lead(), w("{on} of {all} agents use the library's servers through magpie", { on, all: can }));
         assert.equal(await sheet.locator(".lib-hubsearch input").count(), 1);
+        // the owner: the glass and the placeholder sat above the field's
+        // middle. Both are centred in the box, the placeholder's own line too
+        const mid = await sheet.locator(".lib-hubsearch").evaluate((b) => {
+          const c = (r) => (r.top + r.bottom) / 2, box = b.getBoundingClientRect(), inp = b.querySelector("input");
+          const ir = inp.getBoundingClientRect(), cs = getComputedStyle(inp);
+          // where the text's line sits inside the input: its padding and line box
+          const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2;
+          const top = ir.top + parseFloat(cs.borderTopWidth) + parseFloat(cs.paddingTop);
+          const inner = ir.height - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth) - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+          return { box: c(box), glass: c(b.querySelector("svg").getBoundingClientRect()), input: c(ir), text: top + inner / 2, inTop: ir.top - box.top, inBottom: box.bottom - ir.bottom, line, inner };
+        });
+        for (const k of ["glass", "input", "text"]) assert.ok(Math.abs(mid[k] - mid.box) <= 0.5, `the search's ${k} is ${(mid[k] - mid.box).toFixed(2)}px off the box's middle: ${JSON.stringify(mid)}`);
+        assert.ok(mid.inTop >= 0 && mid.inBottom >= 0, `the input runs out of its box: ${JSON.stringify(mid)}`);
         assert.deepEqual(await sheet.locator(".lib-hubgrp").evaluateAll((gs) => gs.map((g) => [g.dataset.group, g.querySelectorAll(".lib-hubagent").length, g.querySelectorAll(".lib-hubfolded").length])),
           [["off", 4, 0], ["on", 0, 1], ["kept", 0, 1]]);
         assert.equal((await sheet.locator('.lib-hubgrp[data-group="on"] .lib-hubfolded .name').textContent()).trim(),

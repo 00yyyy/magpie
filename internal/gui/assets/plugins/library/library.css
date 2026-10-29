@@ -30,6 +30,8 @@ body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; --bleed
   }
   body.web .lib-tabs { max-width: 100%; flex-wrap: wrap; }
   body.web .lib-more, body.web .lib-discover, body.web .lib-backups { flex: none; }
+  /* a phone's inputs are 44pt with 16px text: the search box grows round it */
+  body.web .editor.lib-hubsheet label.lib-hubsearch { height: 44px; border-radius: 10px; }
 }
 /* a window too narrow for the tabs and the buttons beside them (Discover,
    Library folder, Backups) on one line has the buttons on a line of their own, at
@@ -87,8 +89,11 @@ body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; --bleed
 .lib-hubsheet .lib-hubapps { align-self: center; text-align: center; font-weight: 400; color: var(--fg-2); }
 .lib-hubsub { margin: 0; font-size: 12px; color: var(--muted); text-wrap: balance; }
 .lib-hubsub > span { display: inline-block; }
-.lib-hubsearch { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 7px; background: var(--pill); color: var(--muted); }
-.lib-hubsearch input { flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; font: inherit; font-size: 13px; color: var(--fg); outline: none; box-shadow: none; }
+/* a label in an .editor: its form rows' padding-top, right-aligned 12px
+   text (more under body.web) would push the glass and the text off the
+   middle, so the box says its own */
+.editor.lib-hubsheet label.lib-hubsearch { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 7px; background: var(--pill); color: var(--muted); text-align: left; font-size: 13px; }
+.editor.lib-hubsheet .lib-hubsearch input { flex: 1; min-width: 0; height: 100%; min-height: 0; margin: 0; border: 0; padding: 0; background: transparent; font: inherit; font-size: 13px; color: var(--fg); outline: none; box-shadow: none; }
 .lib-hubsheet .lib-hubsearch input:is(:focus, :focus-visible) { border: 0; box-shadow: none; outline: none; }
 .lib-hubsearch input::-webkit-search-cancel-button { -webkit-appearance: none; }
 .lib-hubsearch:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
