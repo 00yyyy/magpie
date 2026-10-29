@@ -86,6 +86,14 @@ type Settings struct {
 	// DockNever keeps magpie out of the Dock and Command-Tab even while
 	// its window is open, the Hide choice. Dock wins over it.
 	DockNever bool `json:"dockNever,omitempty"`
+	// DockSettled says this file's Dock choice is read with With window as
+	// the default. A file written before that (v0.1.2060) has none, and
+	// Hide was its default, stored as nothing: a user who chose Hide can't
+	// be told from one who never chose, so such a file with no choice is
+	// read as Hide (settleDock), never moved into the Dock by the new
+	// default. A new install, with no file, is settled from the start.
+	// Every save writes it.
+	DockSettled bool `json:"dockSettled,omitempty"`
 	// Proxy for magpie's own requests to vendors: "" follows the
 	// environment and then the system, "direct" uses none, anything else
 	// is the proxy (http://, https:// or socks5://; host:port means http).
@@ -1158,7 +1166,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.GatewayConversations = cur.GatewayConversations
 	s.UIFont, s.CodeFont = cur.UIFont, cur.CodeFont
 	s.Window, s.Proxy, s.Port, s.Dock, s.DockWindow, s.Lightweight = cur.Window, cur.Proxy, cur.Port, cur.Dock, cur.DockWindow, cur.Lightweight
-	s.DockNever = cur.DockNever
+	s.DockNever, s.DockSettled = cur.DockNever, cur.DockSettled
 	s.ProxyCustom = cur.ProxyCustom
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost
@@ -1322,11 +1330,26 @@ func loadChecked() (Settings, error) {
 	b, err := through("settings", Path(), func(b []byte) ([]byte, error) { return b, nil })
 	if err != nil {
 		if os.IsNotExist(err) {
+			// a new install: With window is its default
+			s.DockSettled = true
 			return s.normal(), nil
 		}
-		return s.normal(), fmt.Errorf("could not read settings at %s: %w", Path(), err)
+		return s.settleDock().normal(), fmt.Errorf("could not read settings at %s: %w", Path(), err)
 	}
 	return parse(b)
+}
+
+// settleDock reads a Dock choice written before With window was the
+// default (DockSettled unset) as that magpie did: no choice is Hide.
+func (s Settings) settleDock() Settings {
+	if s.DockSettled {
+		return s
+	}
+	if !s.Dock && !s.DockWindow && !s.DockNever {
+		s.DockNever = true
+	}
+	s.DockSettled = true
+	return s
 }
 
 // parsed is the last settings.json that parsed whole and what it read as,
@@ -1358,6 +1381,7 @@ func parse(b []byte) (Settings, error) {
 	parses.Add(1)
 	perr := json.Unmarshal(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")), &s)
 	if perr == nil {
+		s = s.settleDock()
 		// only what parsed whole is kept: a last good generation read in
 		// its place is read again, as is a file that can't be read at all
 		parsed.Lock()
@@ -1373,7 +1397,7 @@ func parse(b []byte) (Settings, error) {
 	} else if len(bytes.TrimSpace(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")))) != 0 {
 		err = fmt.Errorf("could not read settings at %s: %w", Path(), perr)
 	}
-	return s.normal(), err
+	return s.settleDock().normal(), err
 }
 
 // parses counts settings.json's parses (Parses).
@@ -1564,7 +1588,10 @@ func UseRedactModel(name string) error {
 // save is called under fileMu. Only the consent setter may replace recording.
 func save(s Settings, recording bool) error {
 	defer filememo.Forget() // read again, where a request holds it
-	s = s.normal()
+	// what is written is settled: a Settings read from an older file was
+	// settled as it was read, and one made without reading has its Dock
+	// choice read as that file's would be
+	s = s.settleDock().normal()
 	if !slices.Contains(Themes, s.Theme) {
 		return fmt.Errorf("theme must be one of %v, not %q", Themes, s.Theme)
 	}
