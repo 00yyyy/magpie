@@ -2779,7 +2779,8 @@ var keepsSeal = map[string]bool{`"reasoning"`: true, `"compaction"`: true, `"com
 // forVendor is a Responses request as Codex sends it to a provider not
 // OpenAI's: without its messages' internal metadata, a call's
 // encrypted_function_args, stream_options' reasoning_summary_delivery,
-// configuration_update items, output.encrypted_content in its include,
+// configuration_update items (the last one's effort at the top instead),
+// output.encrypted_content in its include,
 // and the sealed output (encrypted_content) on a message or call that an
 // OpenAI model wrote earlier in the conversation.
 // A relay that checks it is Codex's turned the lot away ("invalid codex
@@ -2819,6 +2820,7 @@ func forVendor(p provider.Provider, body []byte) []byte {
 		}
 	}
 	if items, err := rawArray(q["input"]); err == nil {
+		updated := "" // the effort the agent changed to mid-thread
 		out := items[:0]
 		for _, raw := range items {
 			it, err := rawObject(raw)
@@ -2828,6 +2830,9 @@ func forVendor(p provider.Provider, body []byte) []byte {
 			}
 			if string(it["type"]) == `"configuration_update"` {
 				changed = true
+				if e := updateEffort(raw); e != "" {
+					updated = e
+				}
 				continue
 			}
 			_, meta := it["internal_chat_message_metadata_passthrough"]
@@ -2847,6 +2852,12 @@ func forVendor(p provider.Provider, body []byte) []byte {
 		}
 		if changed {
 			q["input"], _ = marshalPlain(out)
+		}
+		// the items go, the change they made stays: at the top, which is
+		// all this vendor reads
+		if reasoning, err := rawObject(q["reasoning"]); updated != "" && err == nil && reasoning != nil {
+			reasoning["effort"], _ = json.Marshal(updated)
+			q["reasoning"], _ = marshalPlain(reasoning)
 		}
 	}
 	if !changed {
