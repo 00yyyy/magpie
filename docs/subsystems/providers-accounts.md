@@ -160,6 +160,20 @@ that the upstream does not list are named against all listed names and ids;
 listed models keep their `Available` names unchanged
 ([`Exposed`](../../internal/provider/models.go)).
 
+A listed model's window, reply limit and levels come from the vendor's
+list first; only what it leaves out is filled from models.dev. `Decorate`
+matches the provider's own catalog by id, then by the same model under
+another spelling (`catalog.SameModel`, the rule routing groups use): Ark's
+`glm-5-3-flash-260828` takes its plan catalog's `glm-5.3-flash`.
+`ContextOf`, `OutputOf`, `EffortsOf`, `Thinks`, `SeesImages` and
+`ListedBy` try another spelling last, only when no spelling matches as
+given (`normalFor`, the spelling most entries list: Ark's
+`kimi-k3-1-pro-261024` reads as `kimi-k3.1-pro`; `TestOtherSpellingLimits`).
+The id stays the upstream's, and its name isn't borrowed. A price never is:
+`PricedBy` matches only as before (`TestOtherSpellingIsNotPriced`). The
+usage report sends a model id only when models.dev knows it as written
+(`KnowsAsWritten`).
+
 ## Constraints and failure behavior
 
 An allowance deliberately not requested (a saved Claude account outside
