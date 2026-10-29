@@ -50,8 +50,6 @@ magpie.plugin("library", (ctx) => {
     subagent: "M6 3a2.2 2.2 0 1 0 0 4.4A2.2 2.2 0 0 0 6 3z M2 13c.5-2.2 2-3.4 4-3.4s3.5 1.2 4 3.4 M11.5 7.5a1.5 1.5 0 1 0 0 .01 M10.2 12.5c.3-1.3 1.1-2 2.3-2s1.6.5 1.9 1.4",
     // a clock with an arrow going back round it, as macOS draws backups
     backup: "M3.2 8a4.8 4.8 0 1 0 1.4-3.4 M2.8 2.6v2.4h2.4 M8 5.3V8l1.9 1.2",
-    // one point that four lines meet at: the MCP hub (#2679)
-    hub: "M8 6.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6z M8 2.5v3.7 M8 9.8v3.7 M2.5 8h3.7 M9.8 8h3.7",
     power: "M8 2.5v5 M4.7 4.6a4.8 4.8 0 1 0 6.6 0",
   };
 
@@ -91,6 +89,13 @@ magpie.plugin("library", (ctx) => {
     });
   }
 
+  // the hub's mark: magpie's bird, the one server each agent is given
+  // (the owner didn't like a made-up glyph for it)
+  function hubMark() {
+    const g = el("span", "lib-glyph lib-hubmark");
+    g.innerHTML = '<svg viewBox="0 0 44 44" aria-hidden="true"><use href="#bird"/></svg>';
+    return g;
+  }
   function glyph(d, cls = "lib-glyph") {
     const g = el("span", cls);
     g.append(svg(d, 16, 1.3));
@@ -1647,7 +1652,7 @@ magpie.plugin("library", (ctx) => {
       ? t("Each agent is given one server, magpie, in place of these. magpie runs each server once for all of them and hands each call to it, as server__tool. Restart an agent for it to read the change.")
       : t("Serve every server through magpie: each agent is given one server, magpie, in place of these, and any other app connects at one address.")));
     if (lib.mcpHub) who.append(el("div", "sub lib-hubstats", hubStats()));
-    row.append(glyph(GLYPH.hub), who, toggle(!!lib.mcpHub, t("MCP hub"), (on) =>
+    row.append(hubMark(), who, toggle(!!lib.mcpHub, t("MCP hub"), (on) =>
       change("servers/hub", { on }, on
         ? t("The agents are given magpie's one MCP server — restart them to use it")
         : t("The agents are given each server's own entry again — restart them to use it"))));
@@ -1657,7 +1662,10 @@ magpie.plugin("library", (ctx) => {
     // the one address any other app connects at
     const at = el("div", "row lib-row lib-hubat");
     const aw = el("div", "who");
-    aw.append(el("div", "name", t("Other apps")));
+    // what it is, not who: the hub's address (the owner: "Other apps" over
+    // an address read as nonsense); who connects there is in the tooltip
+    aw.append(el("div", "name", t("Hub address")));
+    aw.title = t("Any other app, as Cursor or VS Code, connects here for every server in the library");
     const u = el("div", "sub mono lib-hubURL", hubURL());
     u.title = hubURL();
     aw.append(u);
@@ -1681,11 +1689,13 @@ magpie.plugin("library", (ctx) => {
     }
     return out;
   }
+  // magpie's own image server is given as it is, never through the hub: it
+  // asks its agent for the project's folder (inHub in mcp_hub.go)
+  const isSelf = (s) => s.transport === "stdio" && s.args?.[0] === "mcp" && s.args?.[1] === "image";
   // what the hub serves: its servers, their tools as far as checked, and
   // the agents given it
   function hubStats() {
-    // magpie's own image server is given as it is, never through the hub
-    const servers = lib.servers.filter((s) => !(s.transport === "stdio" && s.args?.[0] === "mcp" && s.args?.[1] === "image"));
+    const servers = lib.servers.filter((s) => !isSelf(s));
     const parts = [servers.length === 1 ? t("1 server") : t("{n} servers", { n: servers.length })];
     const known = servers.filter((s) => health.get(s.name)?.h?.state === "ok");
     if (known.length) {
@@ -1694,6 +1704,9 @@ magpie.plugin("library", (ctx) => {
     }
     const given = hubAgents().filter((a) => a.hub === "on").map((a) => a.name);
     if (given.length) parts.push(t("in {agents}", { agents: given.length > 3 ? t("{first} and {n} more", { first: given.slice(0, 2).join(", "), n: given.length - 2 }) : given.join(", ") }));
+    // the owner, counting two servers and seeing one: where the other went
+    const own = lib.servers.find(isSelf);
+    if (own) parts.push(t("{name} is given to each agent directly", { name: own.name }));
     return parts.join(" · ");
   }
   const hubURL = () => mcpAddress(state.settings || {}, lib.hubPath.replace(/\/+$/, ""));
@@ -1714,10 +1727,10 @@ magpie.plugin("library", (ctx) => {
   function connectHub() {
     const url = hubURL();
     const json = (o) => JSON.stringify(o, null, 2);
-    const served = () => lib.servers.filter((s) => !(s.transport === "stdio" && s.args?.[0] === "mcp" && s.args?.[1] === "image"));
+    const served = () => lib.servers.filter((s) => !isSelf(s));
     const ed = el("div", "editor lib-editor lib-hubsheet");
     const head = el("div", "ehead");
-    head.append(glyph(GLYPH.hub), el("b", "", t("Connect an app")));
+    head.append(hubMark(), el("b", "", t("Connect an app")));
     ed.append(head);
     const pane = el("div", "lib-hubpane");
     const bar = el("div", "bar");
@@ -1848,6 +1861,8 @@ magpie.plugin("library", (ctx) => {
       const left = can.length - on.length;
       const sub = [left ? t("{n} more can be connected", { n: left }) : t("Each server runs once, for all of them")];
       if (kept.length) sub.push(kept.length === 1 ? t("1 keeps each server's own entry") : t("{n} keep each server's own entry", { n: kept.length }));
+      const own = lib.servers.find(isSelf);
+      if (own) sub.push(t("{name} is given to each agent directly", { name: own.name }));
       // each part whole on its line, the dot kept with the part before it
       const line = el("p", "lib-hubsub");
       sub.forEach((x, i) => line.append(...(i ? [" "] : []), el("span", "", x + (i < sub.length - 1 ? "\u00a0·" : ""))));

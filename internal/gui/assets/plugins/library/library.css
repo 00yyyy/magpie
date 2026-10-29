@@ -134,6 +134,9 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 /* the glyph at the front of a row: drawn, in the text colour */
 .lib-glyph { flex: none; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--fg-2); background: var(--pill); }
 .lib-glyph svg { width: 15px; height: 15px; }
+/* the hub's mark: magpie's bird on the glyph's tile */
+.lib-glyph.lib-hubmark { color: var(--fg); }
+.lib-glyph.lib-hubmark svg { width: 17px; height: 17px; }
 .lib-rtk-logo .mask { width: 20px; height: 20px; background: currentColor; -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; }
 .mk-icon.lib-logo { flex: none; width: 26px; height: 26px; border-radius: 7px; }
 .lib-editor .ehead .mk-icon.lib-logo { width: 24px; height: 24px; }
