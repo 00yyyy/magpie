@@ -152,7 +152,9 @@ go test -tags nogui ./internal/edit -run 'BOM|CRLF'
 go test -tags nogui ./internal/agent ./internal/proc -run 'ClaudeCloud|TestT3CodeSaysAClaudeCloudSwitch|TestLoginEnvClaudeProvidersNotSet'
 go test -tags nogui ./internal/agent -run '^TestAnte'
 go test -tags nogui ./internal/agent -run 'AionUi|Cindy'
-go test -tags nogui ./internal/gui -run 'TestAionUiImportRow|TestImportStatusUnreadableIsUnknown|TestLodyImportHandoff'
+go test -tags nogui ./internal/agent -run 'AppLink|CommandProgram|SystemLinkHandler'
+go test -tags nogui ./internal/gui -run 'TestAionUiImportRow|TestImportStatusUnreadableIsUnknown|TestLodyImportHandoff|TestImportLinkNothingOpens'
+go test -tags nogui ./internal/cli -run 'TestImportAddSaysNothingOpensIt'
 node --test internal/gui/tests/import-row.test.cjs
 go test -tags nogui ./internal/agent -run '^TestAstrBot'
 go test -tags nogui ./internal/agent -run '^TestJcode'
@@ -226,6 +228,38 @@ can't be read, or a stopped WSL distro's, is unknown, never "not added"
 (`TestCindyHasClosedWALAndUnreadable`, `TestImportStatusUnreadableIsUnknown`).
 Reopening the link lets Lody handle duplicates.
 Bub requires its separately installed ACP plugin.
+
+## Whether anything opens an import link
+
+Windows' rundll32, macOS' `open` and xdg-open are started and not waited
+on, so an import link that nothing here opens (the app never registered its
+scheme, or the program it registered is gone) did nothing at all, and
+nothing said so (sungt, 10-29: Cindy's Add magpie on Windows "spins, no
+response"). [`applink.go`](../../internal/agent/applink.go)'s
+`agent.OpenAppLink` asks the system first, without opening anything:
+Windows reads `HKEY_CLASSES_ROOT\<scheme>\shell\open\command` (what
+Electron's `setAsDefaultProtocolClient` writes) and then the user's
+`UrlAssociations\<scheme>\UserChoice`; macOS asks Launch Services
+(`LSCopyDefaultApplicationURLForURL`, cgo builds only); Linux asks
+`xdg-mime query default x-scheme-handler/<scheme>`. Only "none", or a
+registered program whose full path isn't there, refuses the link with
+`agent.NoLinkHandlerError`; a key with no command of its own (a packaged
+app's), a bare program name, KDE's empty answer, no xdg-mime, a build
+without cgo or a failed read is unknown, and the link is handed over as
+before. `/api/open` checks Cindy's, AionUi's and Lody's links this way
+(Lody's after `agent.OpenLody`'s desktop entry), and `fail` answers
+`code: "no_link_handler"` with `app`, `exe` and `said`, an i18n.js key
+from `linkSaid` (the one with ` ({exe})` when a gone program is named),
+which `api()` puts through `t()` with the reply's fields, as it does
+`bunSaid`'s. The Agents page's import button awaits the call and says what
+came of it: "Sent to {name}: confirm adding magpie there" (handed over,
+not seen to open), that reason in the reader's language, or any other
+error's own text. `magpie <app> add` returns the same error instead of
+"✓ opened" (`TestOpenAppLinkSaysNothingOpensIt`,
+`TestSystemLinkHandlerNoSuchScheme`, `TestImportLinkNothingOpens`,
+`TestLinkSaidIsTranslated`, `TestImportAddSaysNothingOpensIt`,
+`import-row.test.cjs`). Whether the app
+then shows its confirmation is the app's own and is not read.
 
 ## AionUi add-provider link
 

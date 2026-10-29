@@ -151,7 +151,7 @@ async function api(path, body, heads, signal) {
       err.message = t("None of magpie's models is left in {agent}'s model list: pick one under Model list → Pick, then connect {agent}", { agent: data.agent });
     }
     if (data?.why) err.why = data.why; // a failed move's reason, said in the reader's language
-    if (data?.code === "bun_unstartable") err.message = t(data.said); // bunSaid in api.go: an i18n.js key
+    if (data?.said) err.message = t(data.said, data); // an i18n.js key (api.go)
     // an account the agent is signed in to, refused removal while it has
     // another: said in the reader's language
     if (data?.code === "signed_in") {
@@ -2706,7 +2706,7 @@ function importButton(a) {
   b.onclick = (ev) => {
     ev.stopPropagation();
     if (web) location.href = a.import;
-    else api("open", { url: a.import });
+    else api("open", { url: a.import }).then(() => status(t("Sent to {name}: confirm adding magpie there", a), "ok"), (e) => status(e.message, "err"));
   };
   return b;
 }
