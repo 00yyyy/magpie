@@ -48,6 +48,19 @@ counts as in its list, and on `/api/sessions/delete`, a native session is any
 session file the agent keeps, one nothing was said in too, with no limit
 (`sessions.NativeIDs`); one pass over the agents' files (`sessions.Manage`)
 reads only the agent shown and the agents with gateway sessions (#2776).
+It answers before a first read of a long history (hey_boyce on X: the page
+stood on its placeholder rows on its first open). A file it would read whole
+(no parse kept, an older index, a file written over, or a Claude Code or
+Codex parse that can't be read on after a restart) is read behind the
+answer once more than `quickBytes` (32 MB) of them is waiting; until then its
+row stands on the parse kept, or on a glance at its first 256 KB (id,
+folder, first prompt, start) and, for Claude Code, the titles in its last
+64 KB, with its last activity the file's time. Such a row has `pending:
+true` and no counts, the page asks again every 1.5 s until none is, and a
+glance is never saved in the index (`savable`) nor taken by a refresh as a
+parse (`parsed`). See
+[`internal/sessions/manage_quick.go`](../../internal/sessions/manage_quick.go),
+`TestManageAnswersBeforeFirstReads` and `sessions-pending-fill.test.cjs`.
 Gateway projections have no path,
 resume command or terminal action: the agent's own files of them are not on
 this computer. Their rows carry `gateway: true`; the Sessions page groups them
